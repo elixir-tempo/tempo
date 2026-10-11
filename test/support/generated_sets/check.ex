@@ -35,22 +35,33 @@ defmodule Tempo.GeneratedSets.Check do
     |> Enum.flat_map(&reported/1)
   end
 
-  defp reported({{:ok, findings}, %{text: text}}),
-    do: Enum.map(findings, fn {property, detail} -> {property, text, detail} end)
+  defp reported({{:ok, findings}, %{text: text}}) do
+    Enum.map(findings, fn {property, detail} -> {property, text, detail} end)
+  end
 
-  defp reported({{:exit, reason}, %{text: text}}), do: [{:raises, text, raised(reason)}]
+  defp reported({{:exit, reason}, %{text: text}}) do
+    [{:raises, text, raised(reason)}]
+  end
 
   # The exception and where it was raised, for a report a reader can act on.
-  defp raised({%{__exception__: true} = exception, [_ | _] = stack}),
-    do: {exception.__struct__, stack |> Enum.take(3) |> Enum.map(&frame/1)}
+  defp raised({%{__exception__: true} = exception, [_ | _] = stack}) do
+    {exception.__struct__,
+     stack
+     |> Enum.take(3)
+     |> Enum.map(&frame/1)}
+  end
 
-  defp raised(reason), do: reason
+  defp raised(reason) do
+    reason
+  end
 
-  defp frame({module, function, arity, location}) when is_list(arity),
-    do: frame({module, function, Enum.count(arity), location})
+  defp frame({module, function, arity, location}) when is_list(arity) do
+    frame({module, function, Enum.count(arity), location})
+  end
 
-  defp frame({module, function, arity, location}),
-    do: "#{inspect(module)}.#{function}/#{arity}:#{location[:line]}"
+  defp frame({module, function, arity, location}) do
+    "#{inspect(module)}.#{function}/#{arity}:#{location[:line]}"
+  end
 
   ## The form: read, or refused
 
@@ -63,7 +74,9 @@ defmodule Tempo.GeneratedSets.Check do
     end
   end
 
-  defp shown(value), do: inspect(value, limit: :infinity)
+  defp shown(value) do
+    inspect(value, limit: :infinity)
+  end
 
   ## What is written reads back as the same value
 
@@ -79,10 +92,15 @@ defmodule Tempo.GeneratedSets.Check do
 
   # `inspect/1` writes the sigil, whose text is what is read, or a call
   # where the sigil cannot hold the value's calendar.
-  defp shown_reads_back("~o\"" <> rest, value),
-    do: rest |> String.trim_trailing("\"") |> reads_back(value, :inspect)
+  defp shown_reads_back("~o\"" <> rest, value) do
+    rest
+    |> String.trim_trailing("\"")
+    |> reads_back(value, :inspect)
+  end
 
-  defp shown_reads_back(_a_call, _value), do: []
+  defp shown_reads_back(_a_call, _value) do
+    []
+  end
 
   defp reads_back(text, value, by) do
     case Tempo.from_iso8601(text) do
@@ -110,7 +128,9 @@ defmodule Tempo.GeneratedSets.Check do
     end
   end
 
-  defp members(_no_members, _value), do: []
+  defp members(_no_members, _value) do
+    []
+  end
 
   defp each_alone(texts, read) do
     Enum.reduce_while(texts, {:ok, []}, fn text, {:ok, alone} ->
@@ -121,7 +141,9 @@ defmodule Tempo.GeneratedSets.Check do
     end)
   end
 
-  defp entry_alone({:member, text}), do: Tempo.from_iso8601(text)
+  defp entry_alone({:member, text}) do
+    Tempo.from_iso8601(text)
+  end
 
   defp entry_alone({:range, first, last}) do
     with {:ok, first} <- Tempo.from_iso8601(first),
@@ -143,32 +165,54 @@ defmodule Tempo.GeneratedSets.Check do
   # A set of whole values holds its members as they are read alone, in any
   # order. A set of years is read into the year of one value, which names
   # the members' spans.
-  defp set_members(%Tempo.Set{set: held}, alone), do: same_members(held, alone)
-  defp set_members(%Tempo{} = value, alone), do: same_spans(value, alone)
-  defp set_members(other, _alone), do: [{:member, {:no_set, shown(other)}}]
+  defp set_members(%Tempo.Set{set: held}, alone) do
+    same_members(held, alone)
+  end
+
+  defp set_members(%Tempo{} = value, alone) do
+    same_spans(value, alone)
+  end
+
+  defp set_members(other, _alone) do
+    [{:member, {:no_set, shown(other)}}]
+  end
 
   # One of the values a set in a unit names is a set of the values; all of
   # them is one value that holds them, which names their spans.
-  defp unit_members(:one, %Tempo.Set{type: :one, set: held}, alone),
-    do: same_members(held, alone)
-
-  defp unit_members(:all, %Tempo{} = value, alone), do: same_spans(value, alone)
-  defp unit_members(_type, other, _alone), do: [{:member, {:no_set, shown(other)}}]
-
-  defp same_members(held, alone) do
-    if in_order(held) == in_order(alone),
-      do: [],
-      else: [{:member, {:members, shown(held), :alone, shown(alone)}}]
+  defp unit_members(:one, %Tempo.Set{type: :one, set: held}, alone) do
+    same_members(held, alone)
   end
 
-  defp in_order(values), do: values |> Enum.map(&shown/1) |> Enum.sort()
+  defp unit_members(:all, %Tempo{} = value, alone) do
+    same_spans(value, alone)
+  end
+
+  defp unit_members(_type, other, _alone) do
+    [{:member, {:no_set, shown(other)}}]
+  end
+
+  defp same_members(held, alone) do
+    if in_order(held) == in_order(alone) do
+      []
+    else
+      [{:member, {:members, shown(held), :alone, shown(alone)}}]
+    end
+  end
+
+  defp in_order(values) do
+    values
+    |> Enum.map(&shown/1)
+    |> Enum.sort()
+  end
 
   defp same_spans(value, alone) do
     with {:ok, spans} <- spans(value),
          {:ok, expected} <- spans_of_each(alone) do
-      if merged(spans) == merged(expected),
-        do: [],
-        else: [{:member, {:spans, shown(value), merged(spans), :alone, merged(expected)}}]
+      if merged(spans) == merged(expected) do
+        []
+      else
+        [{:member, {:spans, shown(value), merged(spans), :alone, merged(expected)}}]
+      end
     else
       :unanchored -> same_values(value, alone)
       {:error, reason} -> [{:member, {:no_span, shown(value), reason}}]
@@ -205,7 +249,9 @@ defmodule Tempo.GeneratedSets.Check do
     end
   end
 
-  defp spans(%Tempo{}), do: :unanchored
+  defp spans(%Tempo{}) do
+    :unanchored
+  end
 
   # A range of years runs from the start of its first to the end of its last.
   defp spans(%Tempo.Range{first: %Tempo{} = first, last: %Tempo{} = last}) do
@@ -216,10 +262,13 @@ defmodule Tempo.GeneratedSets.Check do
     end
   end
 
-  defp spans(other), do: {:error, {:no_value, shown(other)}}
+  defp spans(other) do
+    {:error, {:no_value, shown(other)}}
+  end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
   # Spans in order, those that touch or overlap made one, so that a value
   # that holds a range and one that lists its members name the same spans.
@@ -230,8 +279,11 @@ defmodule Tempo.GeneratedSets.Check do
     |> Enum.reverse()
   end
 
-  defp merge({from, to}, [{last_from, last_to} | rest]) when from <= last_to,
-    do: [{last_from, max(to, last_to)} | rest]
+  defp merge({from, to}, [{last_from, last_to} | rest]) when from <= last_to do
+    [{last_from, max(to, last_to)} | rest]
+  end
 
-  defp merge(span, merged), do: [span | merged]
+  defp merge(span, merged) do
+    [span | merged]
+  end
 end

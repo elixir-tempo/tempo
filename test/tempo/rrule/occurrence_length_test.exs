@@ -28,8 +28,9 @@ defmodule Tempo.RRule.OccurrenceLengthTest do
 
   @epoch ~N[0000-01-01 00:00:00]
 
-  defp microseconds(%NaiveDateTime{} = moment),
-    do: NaiveDateTime.diff(moment, @epoch, :microsecond)
+  defp microseconds(%NaiveDateTime{} = moment) do
+    NaiveDateTime.diff(moment, @epoch, :microsecond)
+  end
 
   # The spans of the occurrences, each from its start to its end.
   defp spans({:ok, rule}) do

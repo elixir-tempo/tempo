@@ -124,7 +124,9 @@ defmodule Tempo.Network.TimePeriod do
   """
   @spec new(term(), keyword()) :: {:ok, t()} | {:error, Exception.t()}
   def new(id, options \\ []) do
-    id |> built(options) |> Calendars.outside()
+    id
+    |> built(options)
+    |> Calendars.outside()
   end
 
   # A period is built for a caller, of what the caller gives: a bound given
@@ -200,8 +202,13 @@ defmodule Tempo.Network.TimePeriod do
 
   """
   @spec year(date_bound()) :: integer() | nil
-  def year(nil), do: nil
-  def year(%Tempo{time: time}), do: Keyword.get(time, :year)
+  def year(nil) do
+    nil
+  end
+
+  def year(%Tempo{time: time}) do
+    Keyword.get(time, :year)
+  end
 
   # --- options ---------------------------------------------------
 
@@ -210,74 +217,145 @@ defmodule Tempo.Network.TimePeriod do
 
   defp known_options(options) do
     if Keyword.keyword?(options) do
-      options |> Keyword.keys() |> Enum.find(&(&1 not in @options)) |> unknown_option()
+      options
+      |> Keyword.keys()
+      |> Enum.find(&(&1 not in @options))
+      |> unknown_option()
     else
       {:error, invalid("takes a keyword list of options, not #{Calendars.inspect(options)}")}
     end
   end
 
-  defp unknown_option(nil), do: :ok
+  defp unknown_option(nil) do
+    :ok
+  end
 
-  defp unknown_option(key) when is_map_key(@renamed, key),
-    do:
-      {:error,
-       invalid(
-         "takes #{Calendars.inspect(@renamed[key])} where 1.x took #{Calendars.inspect(key)}"
-       )}
+  defp unknown_option(key) when is_map_key(@renamed, key) do
+    {:error,
+     invalid("takes #{Calendars.inspect(@renamed[key])} where 1.x took #{Calendars.inspect(key)}")}
+  end
 
-  defp unknown_option(key),
-    do:
-      {:error,
-       invalid(
-         "does not take #{Calendars.inspect(key)}; its options are #{Calendars.inspect(@options)}"
-       )}
+  defp unknown_option(key) do
+    {:error,
+     invalid(
+       "does not take #{Calendars.inspect(key)}; its options are #{Calendars.inspect(@options)}"
+     )}
+  end
 
-  defp name_option(name) when is_binary(name) or is_nil(name), do: {:ok, name}
+  defp name_option(name) when is_binary(name) or is_nil(name) do
+    {:ok, name}
+  end
 
-  defp name_option(name),
-    do: {:error, invalid("takes a string :name, not #{Calendars.inspect(name)}")}
+  defp name_option(name) do
+    {:error, invalid("takes a string :name, not #{Calendars.inspect(name)}")}
+  end
 
-  defp metadata_option(metadata) when is_map(metadata), do: {:ok, metadata}
+  defp metadata_option(metadata) when is_map(metadata) do
+    {:ok, metadata}
+  end
 
-  defp metadata_option(metadata),
-    do: {:error, invalid("takes a map as :metadata, not #{Calendars.inspect(metadata)}")}
+  defp metadata_option(metadata) do
+    {:error, invalid("takes a map as :metadata, not #{Calendars.inspect(metadata)}")}
+  end
 
-  defp invalid(phrase), do: ArgumentError.exception("Tempo.Network.TimePeriod.new/2 #{phrase}.")
+  defp invalid(phrase) do
+    ArgumentError.exception("Tempo.Network.TimePeriod.new/2 #{phrase}.")
+  end
 
   # --- bound normalisation ---------------------------------------
 
   # No constraint supplied.
-  defp date_bounds(nil), do: {:ok, {nil, nil}}
-  defp date_bounds({:not_before, value}), do: bounds(to_tempo(value), {:ok, nil})
-  defp date_bounds({:not_after, value}), do: bounds({:ok, nil}, to_tempo(value))
-  defp date_bounds({lower, upper}), do: bounds(to_tempo(lower), to_tempo(upper))
-  defp date_bounds(exact), do: bounds(to_tempo(exact), to_tempo(exact))
+  defp date_bounds(nil) do
+    {:ok, {nil, nil}}
+  end
 
-  defp duration_bounds(nil), do: {:ok, {nil, nil}}
-  defp duration_bounds({:at_least, value}), do: bounds(to_duration(value), {:ok, nil})
-  defp duration_bounds({:at_most, value}), do: bounds({:ok, nil}, to_duration(value))
-  defp duration_bounds({min, max}), do: bounds(to_duration(min), to_duration(max))
-  defp duration_bounds(exact), do: bounds(to_duration(exact), to_duration(exact))
+  defp date_bounds({:not_before, value}) do
+    bounds(to_tempo(value), {:ok, nil})
+  end
 
-  defp bounds({:ok, lower}, {:ok, upper}), do: {:ok, {lower, upper}}
-  defp bounds({:error, _reason} = error, _upper), do: error
-  defp bounds(_lower, {:error, _reason} = error), do: error
+  defp date_bounds({:not_after, value}) do
+    bounds({:ok, nil}, to_tempo(value))
+  end
 
-  defp to_tempo(nil), do: {:ok, nil}
-  defp to_tempo(%Tempo{} = value), do: {:ok, value}
-  defp to_tempo(year) when is_integer(year), do: parsed("#{year}Y", Tempo, year)
-  defp to_tempo(string) when is_binary(string), do: parsed(string, Tempo, string)
+  defp date_bounds({lower, upper}) do
+    bounds(to_tempo(lower), to_tempo(upper))
+  end
 
-  defp to_tempo(other),
-    do: {:error, invalid("takes a date as a bound, not #{Calendars.inspect(other)}")}
+  defp date_bounds(exact) do
+    bounds(to_tempo(exact), to_tempo(exact))
+  end
 
-  defp to_duration(nil), do: {:ok, nil}
-  defp to_duration(%Tempo.Duration{} = value), do: {:ok, value}
-  defp to_duration(years) when is_integer(years), do: parsed("P#{years}Y", Tempo.Duration, years)
-  defp to_duration(string) when is_binary(string), do: parsed(string, Tempo.Duration, string)
+  defp duration_bounds(nil) do
+    {:ok, {nil, nil}}
+  end
 
-  defp to_duration(other),
-    do: {:error, invalid("takes a duration as a bound, not #{Calendars.inspect(other)}")}
+  defp duration_bounds({:at_least, value}) do
+    bounds(to_duration(value), {:ok, nil})
+  end
+
+  defp duration_bounds({:at_most, value}) do
+    bounds({:ok, nil}, to_duration(value))
+  end
+
+  defp duration_bounds({min, max}) do
+    bounds(to_duration(min), to_duration(max))
+  end
+
+  defp duration_bounds(exact) do
+    bounds(to_duration(exact), to_duration(exact))
+  end
+
+  defp bounds({:ok, lower}, {:ok, upper}) do
+    {:ok, {lower, upper}}
+  end
+
+  defp bounds({:error, _reason} = error, _upper) do
+    error
+  end
+
+  defp bounds(_lower, {:error, _reason} = error) do
+    error
+  end
+
+  defp to_tempo(nil) do
+    {:ok, nil}
+  end
+
+  defp to_tempo(%Tempo{} = value) do
+    {:ok, value}
+  end
+
+  defp to_tempo(year) when is_integer(year) do
+    parsed("#{year}Y", Tempo, year)
+  end
+
+  defp to_tempo(string) when is_binary(string) do
+    parsed(string, Tempo, string)
+  end
+
+  defp to_tempo(other) do
+    {:error, invalid("takes a date as a bound, not #{Calendars.inspect(other)}")}
+  end
+
+  defp to_duration(nil) do
+    {:ok, nil}
+  end
+
+  defp to_duration(%Tempo.Duration{} = value) do
+    {:ok, value}
+  end
+
+  defp to_duration(years) when is_integer(years) do
+    parsed("P#{years}Y", Tempo.Duration, years)
+  end
+
+  defp to_duration(string) when is_binary(string) do
+    parsed(string, Tempo.Duration, string)
+  end
+
+  defp to_duration(other) do
+    {:error, invalid("takes a duration as a bound, not #{Calendars.inspect(other)}")}
+  end
 
   # A string or a number read as a date or a duration, which must parse
   # to the kind of value the bound needs.
@@ -291,6 +369,11 @@ defmodule Tempo.Network.TimePeriod do
     end
   end
 
-  defp describe(Tempo), do: "date"
-  defp describe(Tempo.Duration), do: "duration"
+  defp describe(Tempo) do
+    "date"
+  end
+
+  defp describe(Tempo.Duration) do
+    "duration"
+  end
 end

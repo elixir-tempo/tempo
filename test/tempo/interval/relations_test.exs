@@ -53,7 +53,9 @@ defmodule Tempo.Interval.RelationsTest do
 
     property "is an involution" do
       check all(set <- relation_set()) do
-        assert set |> Allen.inverse() |> Allen.inverse() == set
+        assert set
+               |> Allen.inverse()
+               |> Allen.inverse() == set
       end
     end
 

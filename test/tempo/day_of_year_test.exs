@@ -12,20 +12,36 @@ defmodule Tempo.DayOfYearTest do
   alias Tempo.UnanchoredError
 
   # The date of each of a year's days, worked out with `Date` and no Tempo.
-  defp dates(year, days), do: for(day <- days, do: Date.add(Date.new!(year, 1, 1), day - 1))
+  defp dates(year, days) do
+    for(day <- days, do: Date.add(Date.new!(year, 1, 1), day - 1))
+  end
 
   # The dates a value's walk yields, a set's members start on, or a range of
   # some one date runs between.
-  defp walked(%Tempo{} = value), do: Enum.map(value, &date/1)
+  defp walked(%Tempo{} = value) do
+    Enum.map(value, &date/1)
+  end
 
-  defp walked(%IntervalSet{} = set),
-    do: set |> IntervalSet.members() |> Enum.map(&(&1 |> Interval.from() |> date()))
+  defp walked(%IntervalSet{} = set) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(
+      &(&1
+        |> Interval.from()
+        |> date())
+    )
+  end
 
-  defp walked(%Tempo.Set{type: :one, set: [%Tempo.Range{first: first, last: last}]}),
-    do: {date(first), date(last)}
+  defp walked(%Tempo.Set{type: :one, set: [%Tempo.Range{first: first, last: last}]}) do
+    {date(first), date(last)}
+  end
 
   defp date(%Tempo{} = value) do
-    {:ok, date} = value |> Tempo.trunc(:day) |> Tempo.to_date()
+    {:ok, date} =
+      value
+      |> Tempo.trunc(:day)
+      |> Tempo.to_date()
+
     date
   end
 
@@ -221,7 +237,12 @@ defmodule Tempo.DayOfYearTest do
     test "from a masked one by months or years is each of its days, a step on" do
       for step <- [[month: 1], [year: 1], [month: -2]] do
         days = Tempo.shift(~o"2026Y1XXO", step)
-        expected = 2026 |> dates(100..199) |> Enum.map(&Date.shift(&1, step)) |> Enum.uniq()
+
+        expected =
+          2026
+          |> dates(100..199)
+          |> Enum.map(&Date.shift(&1, step))
+          |> Enum.uniq()
 
         assert %IntervalSet{} = days
         assert {step, days_named(days)} == {step, Enum.sort(expected, Date)}
@@ -230,7 +251,10 @@ defmodule Tempo.DayOfYearTest do
 
     defp days_named(%IntervalSet{} = set) do
       for member <- IntervalSet.members(set),
-          {:ok, last} = member |> Interval.to() |> Tempo.to_date(),
+          {:ok, last} =
+            member
+            |> Interval.to()
+            |> Tempo.to_date(),
           day <- Date.range(date(Interval.from(member)), Date.add(last, -1)) do
         day
       end

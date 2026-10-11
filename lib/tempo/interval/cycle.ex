@@ -57,11 +57,17 @@ defmodule Tempo.Interval.Cycle do
 
   """
   @spec cyclic?(Interval.t()) :: boolean()
-  def cyclic?(%Interval{from: %Tempo{time: [{:year, year} | _rest]}, to: %Tempo{}}),
-    do: year == :any
+  def cyclic?(%Interval{from: %Tempo{time: [{:year, year} | _rest]}, to: %Tempo{}}) do
+    year == :any
+  end
 
-  def cyclic?(%Interval{from: %Tempo{}, to: %Tempo{}}), do: true
-  def cyclic?(%Interval{}), do: false
+  def cyclic?(%Interval{from: %Tempo{}, to: %Tempo{}}) do
+    true
+  end
+
+  def cyclic?(%Interval{}) do
+    false
+  end
 
   @doc """
   The parts of an interval, each inside one turn of its cycle.
@@ -101,8 +107,9 @@ defmodule Tempo.Interval.Cycle do
   """
   @spec parts(Interval.t()) :: {:ok, [Interval.t()]} | {:error, Exception.t()}
   def parts(%Interval{from: %Tempo{time: [{:year, year} | _rest]}, to: %Tempo{}} = interval)
-      when year != :any,
-      do: {:ok, [interval]}
+      when year != :any do
+    {:ok, [interval]}
+  end
 
   def parts(%Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
     case Compare.order(from, to) do
@@ -112,7 +119,9 @@ defmodule Tempo.Interval.Cycle do
     end
   end
 
-  def parts(%Interval{} = interval), do: {:ok, [interval]}
+  def parts(%Interval{} = interval) do
+    {:ok, [interval]}
+  end
 
   defp cut_at_end(%Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
     {from_year, from_time} = split_unspecified_year(from.time)
@@ -122,9 +131,11 @@ defmodule Tempo.Interval.Cycle do
       {:ok, end_time} ->
         first = %{interval | to: %{from | time: from_year ++ end_time}}
 
-        if at_start?(to_time),
-          do: {:ok, [first]},
-          else: {:ok, [first, %{interval | from: %{to | time: to_year ++ start_of(to_time)}}]}
+        if at_start?(to_time) do
+          {:ok, [first]}
+        else
+          {:ok, [first, %{interval | from: %{to | time: to_year ++ start_of(to_time)}}]}
+        end
 
       :no_cycle ->
         {:error, no_cycle_error(interval)}
@@ -189,9 +200,11 @@ defmodule Tempo.Interval.Cycle do
   """
   @spec wrapped(Interval.t()) :: Interval.t()
   def wrapped(%Interval{} = interval) do
-    if ends_turn?(interval),
-      do: %{interval | to: next_turn_start(interval)},
-      else: interval
+    if ends_turn?(interval) do
+      %{interval | to: next_turn_start(interval)}
+    else
+      interval
+    end
   end
 
   @doc """
@@ -221,14 +234,20 @@ defmodule Tempo.Interval.Cycle do
     last = List.last(parts)
 
     if at_start?(elem(split_unspecified_year(from_time), 1)) and ends_turn?(last) do
-      middle = parts |> tl() |> Enum.drop(-1)
+      middle =
+        parts
+        |> tl()
+        |> Enum.drop(-1)
+
       Enum.map(middle, &wrapped/1) ++ [%{last | to: first.to}]
     else
       Enum.map(parts, &wrapped/1)
     end
   end
 
-  def joined(parts), do: Enum.map(parts, &wrapped/1)
+  def joined(parts) do
+    Enum.map(parts, &wrapped/1)
+  end
 
   @doc """
   Whether an interval, as `parts/1` gives it, ends where its cycle does.
@@ -249,15 +268,18 @@ defmodule Tempo.Interval.Cycle do
 
   """
   @spec ends_turn?(Interval.t()) :: boolean()
-  def ends_turn?(%Interval{from: %Tempo{time: [{:year, year} | _rest]}}) when year != :any,
-    do: false
+  def ends_turn?(%Interval{from: %Tempo{time: [{:year, year} | _rest]}}) when year != :any do
+    false
+  end
 
   def ends_turn?(%Interval{from: %Tempo{} = from, to: %Tempo{time: to_time}}) do
     {_year, to_units} = split_unspecified_year(to_time)
     at_end?(to_units, from.calendar)
   end
 
-  def ends_turn?(%Interval{}), do: false
+  def ends_turn?(%Interval{}) do
+    false
+  end
 
   @doc """
   The start of the cycle's next turn, written as the end of an interval
@@ -348,8 +370,13 @@ defmodule Tempo.Interval.Cycle do
     end)
   end
 
-  defp split_unspecified_year([{:year, :any} = year | rest]), do: {[year], rest}
-  defp split_unspecified_year(time), do: {[], time}
+  defp split_unspecified_year([{:year, :any} = year | rest]) do
+    {[year], rest}
+  end
+
+  defp split_unspecified_year(time) do
+    {[], time}
+  end
 
   # The end of the cycle a time list is on: its leading unit one past the last
   # value it takes with nothing before it, and each unit after it at its first.
@@ -360,12 +387,17 @@ defmodule Tempo.Interval.Cycle do
     end
   end
 
-  defp end_of_cycle([], _calendar), do: :no_cycle
+  defp end_of_cycle([], _calendar) do
+    :no_cycle
+  end
 
-  defp at_end?([{unit, value} | rest], calendar),
-    do: last_value(unit, calendar) == {:ok, value - 1} and at_start?(rest)
+  defp at_end?([{unit, value} | rest], calendar) do
+    last_value(unit, calendar) == {:ok, value - 1} and at_start?(rest)
+  end
 
-  defp at_end?([], _calendar), do: false
+  defp at_end?([], _calendar) do
+    false
+  end
 
   # The last value a unit takes with no unit before it, in the year that has
   # the most: the twelfth month, a Hebrew thirteenth, hour 23, the seventh
@@ -377,12 +409,21 @@ defmodule Tempo.Interval.Cycle do
     end
   end
 
-  defp start_of(time), do: Enum.map(time, &minimum/1)
+  defp start_of(time) do
+    Enum.map(time, &minimum/1)
+  end
 
-  defp minimum({:microsecond, {_value, precision}}), do: {:microsecond, {0, precision}}
-  defp minimum({unit, _value}), do: {unit, Compare.unit_minimum(unit)}
+  defp minimum({:microsecond, {_value, precision}}) do
+    {:microsecond, {0, precision}}
+  end
 
-  defp at_start?(time), do: Enum.all?(time, &(&1 == minimum(&1)))
+  defp minimum({unit, _value}) do
+    {unit, Compare.unit_minimum(unit)}
+  end
+
+  defp at_start?(time) do
+    Enum.all?(time, &(&1 == minimum(&1)))
+  end
 
   # A bare day or week has no cycle of one length: the days of no month, the
   # weeks of no year.

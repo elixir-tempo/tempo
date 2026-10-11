@@ -152,9 +152,17 @@ defmodule Tempo.RecurrenceSet do
   # The error for a member a set cannot hold, or `nil`: a set holds
   # intervals (recurrences or concrete), values, nested sets and
   # conditional members, and a conditional names what it needs.
-  defp member_error(%Tempo.Interval{}), do: nil
-  defp member_error(%Tempo{}), do: nil
-  defp member_error(%__MODULE__{}), do: nil
+  defp member_error(%Tempo.Interval{}) do
+    nil
+  end
+
+  defp member_error(%Tempo{}) do
+    nil
+  end
+
+  defp member_error(%__MODULE__{}) do
+    nil
+  end
 
   defp member_error(%Conditional{member: member} = conditional) do
     if Conditional.valid?(conditional) do
@@ -164,8 +172,9 @@ defmodule Tempo.RecurrenceSet do
     end
   end
 
-  defp member_error(member),
-    do: ConversionError.exception(value: member, reason: :recurrence_set_member)
+  defp member_error(member) do
+    ConversionError.exception(value: member, reason: :recurrence_set_member)
+  end
 
   @doc """
   Returns the set's members, in the order they were given.
@@ -188,7 +197,9 @@ defmodule Tempo.RecurrenceSet do
 
   """
   @spec members(t()) :: [member()]
-  def members(%__MODULE__{members: members}), do: members
+  def members(%__MODULE__{members: members}) do
+    members
+  end
 
   @doc """
   Keeps only the members for which `fun` returns a truthy value, as
@@ -350,5 +361,7 @@ defmodule Tempo.RecurrenceSet do
 
   """
   @spec metadata(t()) :: map()
-  def metadata(%__MODULE__{metadata: metadata}), do: metadata
+  def metadata(%__MODULE__{metadata: metadata}) do
+    metadata
+  end
 end

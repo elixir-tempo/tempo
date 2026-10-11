@@ -41,12 +41,16 @@ defmodule Tempo.ResolutionError do
       "calendar #{Calendars.name(cal)} — no finer unit is defined."
   end
 
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{operation: op, current: current, target: target})
       when not is_nil(op) and not is_nil(current) and not is_nil(target) do
     "#{op} from #{Calendars.inspect(current)} to #{Calendars.inspect(target)} is not valid"
   end
 
-  def message(%__MODULE__{}), do: "Resolution operation failed"
+  def message(%__MODULE__{}) do
+    "Resolution operation failed"
+  end
 end

@@ -49,7 +49,9 @@ defmodule Tempo.RRule.OtherCalendarTest do
   # A rule read with each week start, and with none.
   @read ["", ";WKST=MO", ";WKST=WE", ";WKST=SU"]
 
-  defp read(text, calendar), do: Tempo.from_iso8601!(text, calendar)
+  defp read(text, calendar) do
+    Tempo.from_iso8601!(text, calendar)
+  end
 
   # When each occurrence of a recurrence starts.
   defp starts(recurrence) do
@@ -62,7 +64,11 @@ defmodule Tempo.RRule.OtherCalendarTest do
   end
 
   defp gregorian_date(%Tempo{} = value) do
-    {:ok, date} = value |> day() |> Tempo.to_date()
+    {:ok, date} =
+      value
+      |> day()
+      |> Tempo.to_date()
+
     Date.convert!(date, Calendar.ISO)
   end
 
@@ -77,7 +83,9 @@ defmodule Tempo.RRule.OtherCalendarTest do
 
   # The start an RFC 5545 reader is given with a rule: the Gregorian date of
   # the recurrence's first day.
-  defp gregorian_start(%Interval{from: from}), do: Tempo.from_date(gregorian_date(from))
+  defp gregorian_start(%Interval{from: from}) do
+    Tempo.from_date(gregorian_date(from))
+  end
 
   # The occurrences a written rule has for a reader of RFC 5545.
   defp read_in_gregorian(written, recurrence) do

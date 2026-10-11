@@ -178,8 +178,13 @@ defmodule Tempo.Interval.CompositionTest do
     end)
   end
 
-  defp edge(:lt, from, to), do: [{from, to, -1}]
-  defp edge(:eq, from, to), do: [{from, to, 0}, {to, from, 0}]
+  defp edge(:lt, from, to) do
+    [{from, to, -1}]
+  end
+
+  defp edge(:eq, from, to) do
+    [{from, to, 0}, {to, from, 0}]
+  end
 
   defp satisfiable?(edges) do
     edges
@@ -192,7 +197,12 @@ defmodule Tempo.Interval.CompositionTest do
 
   defp initial_distances do
     for from <- @nodes, to <- @nodes, into: %{} do
-      {{from, to}, if(from == to, do: 0, else: :inf)}
+      {{from, to},
+       if from == to do
+         0
+       else
+         :inf
+       end}
     end
   end
 
@@ -200,7 +210,12 @@ defmodule Tempo.Interval.CompositionTest do
     for k <- @nodes, i <- @nodes, j <- @nodes, reduce: distances do
       acc ->
         via = add(Map.get(acc, {i, k}), Map.get(acc, {k, j}))
-        if less?(via, Map.get(acc, {i, j})), do: Map.put(acc, {i, j}, via), else: acc
+
+        if less?(via, Map.get(acc, {i, j})) do
+          Map.put(acc, {i, j}, via)
+        else
+          acc
+        end
     end
   end
 
@@ -208,16 +223,37 @@ defmodule Tempo.Interval.CompositionTest do
     Enum.all?(@nodes, fn node -> Map.get(distances, {node, node}, 0) >= 0 end)
   end
 
-  defp tighten(:inf, weight), do: weight
-  defp tighten(current, weight), do: min(current, weight)
+  defp tighten(:inf, weight) do
+    weight
+  end
 
-  defp add(:inf, _weight), do: :inf
-  defp add(_weight, :inf), do: :inf
-  defp add(left, right), do: left + right
+  defp tighten(current, weight) do
+    min(current, weight)
+  end
 
-  defp less?(_left, :inf), do: true
-  defp less?(:inf, _right), do: false
-  defp less?(left, right), do: left < right
+  defp add(:inf, _weight) do
+    :inf
+  end
+
+  defp add(_weight, :inf) do
+    :inf
+  end
+
+  defp add(left, right) do
+    left + right
+  end
+
+  defp less?(_left, :inf) do
+    true
+  end
+
+  defp less?(:inf, _right) do
+    false
+  end
+
+  defp less?(left, right) do
+    left < right
+  end
 
   # A ground interval [start, start + length) as a Tempo value, in years.
   defp interval(start, length) do

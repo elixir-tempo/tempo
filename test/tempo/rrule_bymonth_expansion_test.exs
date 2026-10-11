@@ -19,8 +19,13 @@ defmodule Tempo.RRuleByMonthExpansionTest do
 
   defp expand(rule, from, options \\ [])
 
-  defp expand(rule, %Date{} = from, options), do: expand(rule, Tempo.from_elixir(from), options)
-  defp expand(rule, from, options), do: dates(RRule.parse!(rule, from: from), options)
+  defp expand(rule, %Date{} = from, options) do
+    expand(rule, Tempo.from_elixir(from), options)
+  end
+
+  defp expand(rule, from, options) do
+    dates(RRule.parse!(rule, from: from), options)
+  end
 
   # The day each occurrence of a recurrence starts on.
   defp dates(recurrence, options \\ []) do
@@ -28,7 +33,12 @@ defmodule Tempo.RRuleByMonthExpansionTest do
 
     set
     |> IntervalSet.members()
-    |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_date() |> elem(1)))
+    |> Enum.map(
+      &(&1
+        |> Interval.from()
+        |> Tempo.to_date()
+        |> elem(1))
+    )
   end
 
   @late_days [28, 29, 30, 31]
@@ -155,8 +165,9 @@ defmodule Tempo.RRuleByMonthExpansionTest do
     # Cheshvan (month 2) has 29 or 30 days depending on the year;
     # month 13 exists only in leap years (5787, 5790, 5793 here).
 
-    defp hebrew_expand(rule, iso),
-      do: starts(RRule.parse!(rule, from: Tempo.from_iso8601!(iso, Hebrew)))
+    defp hebrew_expand(rule, iso) do
+      starts(RRule.parse!(rule, from: Tempo.from_iso8601!(iso, Hebrew)))
+    end
 
     defp starts(recurrence) do
       {:ok, set} = Tempo.to_interval(recurrence)

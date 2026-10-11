@@ -30,8 +30,9 @@ defmodule Tempo.OneOccurrenceTest do
   ## The measure
 
   # The first Sunday on or after a day.
-  defp sunday_from(%Date{} = day),
-    do: Enum.find(Date.range(day, Date.add(day, 6)), &(Date.day_of_week(&1) == 7))
+  defp sunday_from(%Date{} = day) do
+    Enum.find(Date.range(day, Date.add(day, 6)), &(Date.day_of_week(&1) == 7))
+  end
 
   # The day as the span `Tempo.to_interval/2` gives an occurrence of a day.
   defp day_span(%Date{} = day) do
@@ -40,10 +41,17 @@ defmodule Tempo.OneOccurrenceTest do
   end
 
   # The spans a conversion gives, whichever of an interval and a set it is.
-  defp spans({:ok, %Interval{} = one}), do: [one]
-  defp spans({:ok, %IntervalSet{} = set}), do: IntervalSet.members(set)
+  defp spans({:ok, %Interval{} = one}) do
+    [one]
+  end
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp spans({:ok, %IntervalSet{} = set}) do
+    IntervalSet.members(set)
+  end
+
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   # The Sundays from 1 January 2019, one of them and two.
   @one "R1/2019-01-01/P1D/FL7KN"
@@ -68,7 +76,12 @@ defmodule Tempo.OneOccurrenceTest do
       assert sunday == ~D[2019-01-06]
 
       for {window, first, last} <- @windows do
-        expected = if sunday in Date.range(first, last), do: [day_span(sunday)], else: []
+        expected =
+          if sunday in Date.range(first, last) do
+            [day_span(sunday)]
+          else
+            []
+          end
 
         assert {window, spans(Tempo.to_interval(read(@one), within: read(window)))} ==
                  {window, expected}

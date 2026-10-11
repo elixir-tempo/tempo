@@ -77,7 +77,9 @@ defmodule Tempo.Parser.Duration.Test do
       assert {:ok, %Tempo.Duration{time: [second: {1230, [significant_digits: 2]}]}} =
                Tempo.from_iso8601("PT1230S2S")
 
-      assert Tempo.from_iso8601("PT-1230S2S") |> elem(1) |> Map.fetch!(:time) ==
+      assert Tempo.from_iso8601("PT-1230S2S")
+             |> elem(1)
+             |> Map.fetch!(:time) ==
                [second: {-1230, [significant_digits: 2]}]
 
       assert {:ok, %Tempo.Duration{}} = Tempo.from_iso8601("PT{1,2}S")

@@ -49,7 +49,12 @@ defmodule Tempo.EnumerationConformance.Test do
       # `2022Y` has no explicit enumerator. The implicit enumerator
       # chosen by `Unit.implicit_enumerator/2` for year-only on a
       # month-based calendar is month. Enumeration walks 12 months.
-      assert {:ok, list} = take(~o"2022Y" |> Tempo.to_iso8601!())
+      assert {:ok, list} =
+               take(
+                 ~o"2022Y"
+                 |> Tempo.to_iso8601!()
+               )
+
       assert [_, _, _] = list
       assert Enum.all?(list, fn %Tempo{time: [year: 2022, month: _]} -> true end)
     end
@@ -158,7 +163,11 @@ defmodule Tempo.EnumerationConformance.Test do
 
     test "a day mask enumerates every valid day, including single digits (`2020-06-XX`)" do
       tempo = Tempo.from_iso8601!("2020-06-XX")
-      days = tempo |> Enum.map(& &1.time[:day]) |> Enum.sort()
+
+      days =
+        tempo
+        |> Enum.map(& &1.time[:day])
+        |> Enum.sort()
 
       assert days == Enum.to_list(1..30)
       # `count/1` must agree with the reduce-based walk, not the coarser

@@ -52,7 +52,9 @@ defmodule Tempo.DayLeftOutTest do
   ## The measure
 
   # A day is left out where the clock of its zone shows none of its hours.
-  defp left_out?(%Date{} = date, zone), do: Enum.all?(0..23, &skipped?(date, &1, zone))
+  defp left_out?(%Date{} = date, zone) do
+    Enum.all?(0..23, &skipped?(date, &1, zone))
+  end
 
   defp skipped?(date, hour, zone) do
     {:ok, time} = Time.new(hour, 30, 0)
@@ -61,30 +63,47 @@ defmodule Tempo.DayLeftOutTest do
     match?({:gap, _before, _after}, DateTime.from_naive(reading, zone))
   end
 
-  defp days_of_year(year), do: Date.range(Date.new!(year, 1, 1), Date.new!(year, 12, 31))
+  defp days_of_year(year) do
+    Date.range(Date.new!(year, 1, 1), Date.new!(year, 12, 31))
+  end
 
   # The dates from `first` to `last` that the zone has.
-  defp shown(first, last, zone),
-    do: first |> Date.range(last) |> Enum.reject(&left_out?(&1, zone))
+  defp shown(first, last, zone) do
+    first
+    |> Date.range(last)
+    |> Enum.reject(&left_out?(&1, zone))
+  end
 
   # The date itself where its zone has it, or the first it has in the
   # direction of a step.
   defp settled(date, direction, zone) do
-    if left_out?(date, zone),
-      do: settled(Date.add(date, direction), direction, zone),
-      else: date
+    if left_out?(date, zone) do
+      settled(Date.add(date, direction), direction, zone)
+    else
+      date
+    end
   end
 
-  defp direction(amount) when amount < 0, do: -1
-  defp direction(_amount), do: 1
+  defp direction(amount) when amount < 0 do
+    -1
+  end
+
+  defp direction(_amount) do
+    1
+  end
 
   ## Values and what they are read as
 
-  defp zoned(%Date{} = date, zone),
-    do: Tempo.from_iso8601!("#{Date.to_iso8601(date)}[#{zone}]")
+  defp zoned(%Date{} = date, zone) do
+    Tempo.from_iso8601!("#{Date.to_iso8601(date)}[#{zone}]")
+  end
 
   defp month_of(%Date{} = date, zone) do
-    month = date.month |> Integer.to_string() |> String.pad_leading(2, "0")
+    month =
+      date.month
+      |> Integer.to_string()
+      |> String.pad_leading(2, "0")
+
     Tempo.from_iso8601!("#{date.year}-#{month}[#{zone}]")
   end
 
@@ -93,14 +112,18 @@ defmodule Tempo.DayLeftOutTest do
     date
   end
 
-  defp dates_of(%Interval{} = span),
-    do: {date_of(Interval.from(span)), date_of(Interval.to(span))}
+  defp dates_of(%Interval{} = span) do
+    {date_of(Interval.from(span)), date_of(Interval.to(span))}
+  end
 
-  defp spans({:ok, %IntervalSet{} = set}), do: Enum.map(IntervalSet.members(set), &dates_of/1)
+  defp spans({:ok, %IntervalSet{} = set}) do
+    Enum.map(IntervalSet.members(set), &dates_of/1)
+  end
 
   # Each day as the span the zone gives it: to the next day it has.
-  defp day_spans(dates, zone),
-    do: Enum.map(dates, &{&1, settled(Date.add(&1, 1), 1, zone)})
+  defp day_spans(dates, zone) do
+    Enum.map(dates, &{&1, settled(Date.add(&1, 1), 1, zone)})
+  end
 
   defp occurrence_starts(text) do
     text
@@ -110,12 +133,21 @@ defmodule Tempo.DayLeftOutTest do
     |> starts_of()
   end
 
-  defp starts_of(spans), do: Enum.map(spans, &elem(&1, 0))
+  defp starts_of(spans) do
+    Enum.map(spans, &elem(&1, 0))
+  end
 
-  defp selector(text), do: Tempo.from_iso8601!(text)
+  defp selector(text) do
+    Tempo.from_iso8601!(text)
+  end
 
-  defp numbered(days, numbers), do: Enum.filter(days, &(&1.day in numbers))
-  defp on_weekday(days, weekday), do: Enum.filter(days, &(Date.day_of_week(&1) == weekday))
+  defp numbered(days, numbers) do
+    Enum.filter(days, &(&1.day in numbers))
+  end
+
+  defp on_weekday(days, weekday) do
+    Enum.filter(days, &(Date.day_of_week(&1) == weekday))
+  end
 
   describe "the days a zone leaves out" do
     test "are those the clock shows no hour of" do
@@ -183,7 +215,10 @@ defmodule Tempo.DayLeftOutTest do
 
         assert {zone, Enum.count(span)} == {zone, Enum.count(days)}
 
-        assert {zone, span |> Enum.slice(1, 4) |> Enum.map(&date_of/1)} ==
+        assert {zone,
+                span
+                |> Enum.slice(1, 4)
+                |> Enum.map(&date_of/1)} ==
                  {zone, Enum.slice(days, 1, 4)}
 
         for {date, index} <- Enum.with_index(days) do
@@ -305,7 +340,11 @@ defmodule Tempo.DayLeftOutTest do
 
         starts = for step <- 0..2, do: settled(Date.shift(day, month: step), 1, zone)
 
-        assert {zone, recurrence |> Tempo.to_interval(within: window) |> spans() |> starts_of()} ==
+        assert {zone,
+                recurrence
+                |> Tempo.to_interval(within: window)
+                |> spans()
+                |> starts_of()} ==
                  {zone, starts}
       end
     end
@@ -466,7 +505,10 @@ defmodule Tempo.DayLeftOutTest do
         |> on_weekday(5)
         |> Enum.take(3)
 
-      assert fridays |> IntervalSet.walk() |> Enum.take(3) |> Enum.map(&dates_of/1) ==
+      assert fridays
+             |> IntervalSet.walk()
+             |> Enum.take(3)
+             |> Enum.map(&dates_of/1) ==
                day_spans(expected, "Pacific/Apia")
     end
   end

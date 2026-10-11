@@ -44,10 +44,14 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   @doc false
   # The state of a lazy set of the members a generator gives.
   @spec state(Enumerable.t()) :: t()
-  def state(members), do: %__MODULE__{members: members, calendar: Calendars.default()}
+  def state(members) do
+    %__MODULE__{members: members, calendar: Calendars.default()}
+  end
 
   @impl true
-  def from_list(intervals, _options), do: state(intervals)
+  def from_list(intervals, _options) do
+    state(intervals)
+  end
 
   @impl true
   @spec to_list(term()) :: no_return()
@@ -65,7 +69,9 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   end
 
   @impl true
-  def bounded?(_state), do: false
+  def bounded?(_state) do
+    false
+  end
 
   @impl true
   @spec count(term()) :: no_return()
@@ -74,11 +80,16 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   end
 
   @impl true
-  def empty?(%__MODULE__{members: members}), do: Enum.take(members, 1) == []
+  def empty?(%__MODULE__{members: members}) do
+    Enum.take(members, 1) == []
+  end
 
   @impl true
   def first(%__MODULE__{members: members, calendar: calendar}) do
-    first = members |> Enum.take(1) |> List.first()
+    first =
+      members
+      |> Enum.take(1)
+      |> List.first()
 
     if Calendars.outside?(calendar) do
       Calendars.outside(first)

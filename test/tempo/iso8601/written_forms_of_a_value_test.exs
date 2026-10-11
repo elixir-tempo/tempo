@@ -40,10 +40,14 @@ defmodule Tempo.Iso8601.WrittenFormsOfAValueTest do
     {"second", "T10H30M", "S", 0..59}
   ]
 
-  defp read?(text), do: match?({:ok, _value}, Tempo.from_iso8601(text))
+  defp read?(text) do
+    match?({:ok, _value}, Tempo.from_iso8601(text))
+  end
 
   # The values about the ends of a range, on both sides of each.
-  defp about(first..last//_), do: [first, first + 1, last - 1, last, last + 1, last + 5, 99]
+  defp about(first..last//_) do
+    [first, first + 1, last - 1, last, last + 1, last + 5, 99]
+  end
 
   describe "a value written with a margin of error or with significant digits" do
     test "is read where the value alone is one its unit takes, and refused where it is not" do

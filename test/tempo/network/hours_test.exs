@@ -19,7 +19,9 @@ defmodule Tempo.Network.HoursTest do
     propagated.periods[id]
   end
 
-  defp new_york(iso), do: Tempo.from_iso8601!(iso <> "[America/New_York]")
+  defp new_york(iso) do
+    Tempo.from_iso8601!(iso <> "[America/New_York]")
+  end
 
   describe "a schedule in hours" do
     test "runs each task for its hours and finds the critical path" do

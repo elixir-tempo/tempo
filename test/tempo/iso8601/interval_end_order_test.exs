@@ -40,12 +40,24 @@ defmodule Tempo.Iso8601.IntervalEndOrderTest do
   ## The measure
 
   defp to_say(from_starts, to_starts, compare) do
-    if compare.(to_starts, from_starts) == :lt, do: :refused, else: :read
+    if compare.(to_starts, from_starts) == :lt do
+      :refused
+    else
+      :read
+    end
   end
 
-  defp said({:ok, %Interval{}}), do: :read
-  defp said({:ok, %Tempo.Set{}}), do: :read
-  defp said({:error, %IntervalEndpointsError{operation: :validate}}), do: :refused
+  defp said({:ok, %Interval{}}) do
+    :read
+  end
+
+  defp said({:ok, %Tempo.Set{}}) do
+    :read
+  end
+
+  defp said({:error, %IntervalEndpointsError{operation: :validate}}) do
+    :refused
+  end
 
   describe "an interval written with a year at each end" do
     test "is read where its end does not start before its start, and refused where it does" do

@@ -48,21 +48,45 @@ defmodule Tempo.RRule.SparseWalkTest do
 
   defp text(%{freq: freq, every: every, parts: parts, until: until}) do
     ["FREQ=" <> Map.fetch!(@frequencies, freq)]
-    |> Kernel.++(if every == 1, do: [], else: ["INTERVAL=#{every}"])
+    |> Kernel.++(
+      if every == 1 do
+        []
+      else
+        ["INTERVAL=#{every}"]
+      end
+    )
     |> Kernel.++(Enum.map(parts, &part_text/1))
     |> Kernel.++(["UNTIL=" <> Calendar.strftime(until, "%Y%m%dT%H%M%S")])
     |> Enum.join(";")
   end
 
-  defp part_text({:month, months}), do: "BYMONTH=" <> Enum.join(months, ",")
-  defp part_text({:day, days}), do: "BYMONTHDAY=" <> Enum.join(days, ",")
-  defp part_text({:year_day, days}), do: "BYYEARDAY=" <> Enum.join(days, ",")
-  defp part_text({:hour, hours}), do: "BYHOUR=" <> Enum.join(hours, ",")
-  defp part_text({:minute, minutes}), do: "BYMINUTE=" <> Enum.join(minutes, ",")
-  defp part_text({:second, seconds}), do: "BYSECOND=" <> Enum.join(seconds, ",")
+  defp part_text({:month, months}) do
+    "BYMONTH=" <> Enum.join(months, ",")
+  end
 
-  defp part_text({:weekday, days}),
-    do: "BYDAY=" <> Enum.map_join(days, ",", &Enum.at(@weekdays, &1 - 1))
+  defp part_text({:day, days}) do
+    "BYMONTHDAY=" <> Enum.join(days, ",")
+  end
+
+  defp part_text({:year_day, days}) do
+    "BYYEARDAY=" <> Enum.join(days, ",")
+  end
+
+  defp part_text({:hour, hours}) do
+    "BYHOUR=" <> Enum.join(hours, ",")
+  end
+
+  defp part_text({:minute, minutes}) do
+    "BYMINUTE=" <> Enum.join(minutes, ",")
+  end
+
+  defp part_text({:second, seconds}) do
+    "BYSECOND=" <> Enum.join(seconds, ",")
+  end
+
+  defp part_text({:weekday, days}) do
+    "BYDAY=" <> Enum.map_join(days, ",", &Enum.at(@weekdays, &1 - 1))
+  end
 
   ## The rule by brute force
 
@@ -80,25 +104,48 @@ defmodule Tempo.RRule.SparseWalkTest do
     |> Enum.filter(&(NaiveDateTime.compare(&1, until) != :gt))
   end
 
-  defp holds?({:month, months}, instant), do: instant.month in months
-  defp holds?({:weekday, days}, instant), do: Date.day_of_week(instant) in days
-  defp holds?({:hour, hours}, instant), do: instant.hour in hours
-  defp holds?({:minute, minutes}, instant), do: instant.minute in minutes
-  defp holds?({:second, seconds}, instant), do: instant.second in seconds
+  defp holds?({:month, months}, instant) do
+    instant.month in months
+  end
+
+  defp holds?({:weekday, days}, instant) do
+    Date.day_of_week(instant) in days
+  end
+
+  defp holds?({:hour, hours}, instant) do
+    instant.hour in hours
+  end
+
+  defp holds?({:minute, minutes}, instant) do
+    instant.minute in minutes
+  end
+
+  defp holds?({:second, seconds}, instant) do
+    instant.second in seconds
+  end
 
   # A day of the month counted from its end is a number below zero, and so
   # is a day of the year.
-  defp holds?({:day, days}, instant),
-    do: instant.day in days or (instant.day - Date.days_in_month(instant) - 1) in days
+  defp holds?({:day, days}, instant) do
+    instant.day in days or (instant.day - Date.days_in_month(instant) - 1) in days
+  end
 
   defp holds?({:year_day, days}, instant) do
     day = Date.day_of_year(instant)
-    days_in_year = if Date.leap_year?(instant), do: 366, else: 365
+
+    days_in_year =
+      if Date.leap_year?(instant) do
+        366
+      else
+        365
+      end
 
     day in days or (day - days_in_year - 1) in days
   end
 
-  defp expanded(instant, []), do: [instant]
+  defp expanded(instant, []) do
+    [instant]
+  end
 
   defp expanded(instant, [{unit, values} | finer]) do
     for value <- values,
@@ -111,7 +158,10 @@ defmodule Tempo.RRule.SparseWalkTest do
   defp occurrences(rule) do
     with {:ok, recurrence} <- RRule.parse(text(rule), from: Tempo.from_elixir(rule.start)),
          {:ok, %IntervalSet{} = set} <- Tempo.to_interval(recurrence) do
-      {:ok, set |> IntervalSet.members() |> Enum.map(&instant/1)}
+      {:ok,
+       set
+       |> IntervalSet.members()
+       |> Enum.map(&instant/1)}
     end
   end
 
@@ -164,9 +214,9 @@ defmodule Tempo.RRule.SparseWalkTest do
      "Australia/Lord_Howe", 30}
   ]
 
-  defp text(freq, parts),
-    do:
-      Enum.join(["FREQ=" <> Map.fetch!(@frequencies, freq) | Enum.map(parts, &part_text/1)], ";")
+  defp text(freq, parts) do
+    Enum.join(["FREQ=" <> Map.fetch!(@frequencies, freq) | Enum.map(parts, &part_text/1)], ";")
+  end
 
   # Each instant of the frequency from the start, as many seconds on as
   # have passed, kept where every part holds on the zone's clock.
@@ -175,18 +225,24 @@ defmodule Tempo.RRule.SparseWalkTest do
     |> DateTime.to_unix()
     |> Stream.iterate(&(&1 + Map.fetch!(@step, freq)))
     |> Stream.filter(fn unix ->
-      on_the_clock = unix |> DateTime.from_unix!() |> DateTime.shift_zone!(zone)
+      on_the_clock =
+        unix
+        |> DateTime.from_unix!()
+        |> DateTime.shift_zone!(zone)
+
       Enum.all?(parts, &holds?(&1, on_the_clock))
     end)
     |> Enum.take(count)
   end
 
   # A start as it is written with its zone, and with its offset beside it.
-  defp read(%DateTime{time_zone: zone} = start, :zone),
-    do: read(NaiveDateTime.to_iso8601(DateTime.to_naive(start)) <> "[#{zone}]")
+  defp read(%DateTime{time_zone: zone} = start, :zone) do
+    read(NaiveDateTime.to_iso8601(DateTime.to_naive(start)) <> "[#{zone}]")
+  end
 
-  defp read(%DateTime{time_zone: zone} = start, :offset_and_zone),
-    do: read(DateTime.to_iso8601(start) <> "[#{zone}]")
+  defp read(%DateTime{time_zone: zone} = start, :offset_and_zone) do
+    read(DateTime.to_iso8601(start) <> "[#{zone}]")
+  end
 
   defp read(text) do
     {:ok, value} = Tempo.from_iso8601(text)
@@ -266,7 +322,9 @@ defmodule Tempo.RRule.SparseWalkTest do
 
       mornings = for day <- 0..29, do: NaiveDateTime.add(~N[2026-01-01 09:00:00], day, :day)
 
-      assert set |> IntervalSet.members() |> Enum.map(&instant/1) == mornings
+      assert set
+             |> IntervalSet.members()
+             |> Enum.map(&instant/1) == mornings
     end
 
     test "is each 29 February that is a Monday" do
@@ -286,7 +344,11 @@ defmodule Tempo.RRule.SparseWalkTest do
           )
 
         {:ok, %IntervalSet{} = set} = Tempo.to_interval(rule)
-        days = set |> IntervalSet.members() |> Enum.map(&NaiveDateTime.to_date(instant(&1)))
+
+        days =
+          set
+          |> IntervalSet.members()
+          |> Enum.map(&NaiveDateTime.to_date(instant(&1)))
 
         assert {frequency, days} == {frequency, Enum.take(mondays, 3)}
       end
@@ -393,7 +455,13 @@ defmodule Tempo.RRule.SparseWalkTest do
         candidate = %Interval{from: start, to: Tempo.shift(start, day: 1)}
 
         next = Enum.find(1..7, &(Date.day_of_week(Date.add(date, &1)) in [1, 5]))
-        expected = if Date.day_of_week(date) in [1, 5], do: nil, else: {:in_days, next}
+
+        expected =
+          if Date.day_of_week(date) in [1, 5] do
+            nil
+          else
+            {:in_days, next}
+          end
 
         assert {day, expected} == {day, days_on && {:in_days, days_on}}
         assert {day, Selection.rules_out(candidate, weekdays, :day)} == {day, expected}
@@ -537,10 +605,13 @@ defmodule Tempo.RRule.SparseWalkTest do
           do: date
     end
 
-    defp months_of(:year, parts, _first), do: Keyword.fetch!(parts, :month)
+    defp months_of(:year, parts, _first) do
+      Keyword.fetch!(parts, :month)
+    end
 
-    defp months_of(:month, parts, first),
-      do: Enum.filter([first.month], &(&1 in Keyword.get(parts, :month, 1..12)))
+    defp months_of(:month, parts, first) do
+      Enum.filter([first.month], &(&1 in Keyword.get(parts, :month, 1..12)))
+    end
 
     test "is told of a rule of years or months by what it steps by and starts on" do
       frequencies = %{year: "YEARLY", month: "MONTHLY"}
@@ -555,13 +626,18 @@ defmodule Tempo.RRule.SparseWalkTest do
         {:ok, recurrence} = RRule.parse(rule, from: Tempo.from_date(start))
         {:ok, %IntervalSet{} = set} = Tempo.to_interval(recurrence)
 
-        days = set |> IntervalSet.members() |> Enum.map(&NaiveDateTime.to_date(instant(&1)))
+        days =
+          set
+          |> IntervalSet.members()
+          |> Enum.map(&NaiveDateTime.to_date(instant(&1)))
 
         assert {rule, start, days} == {rule, start, Enum.take(stepped_dates(stepped), 2)}
       end
 
       # Some of them have no date, and some have.
-      assert @stepped |> Enum.map(&(stepped_dates(&1) == [])) |> Enum.frequencies() ==
+      assert @stepped
+             |> Enum.map(&(stepped_dates(&1) == []))
+             |> Enum.frequencies() ==
                %{true => 9, false => 8}
     end
 

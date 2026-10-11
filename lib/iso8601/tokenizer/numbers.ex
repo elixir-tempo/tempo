@@ -96,8 +96,13 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   defp fraction_or_significant(combinator) do
     combinator
     |> choice([
-      fraction() |> optional(exponent() |> optional(significant())),
-      optional(exponent()) |> optional(significant())
+      fraction()
+      |> optional(
+        exponent()
+        |> optional(significant())
+      ),
+      optional(exponent())
+      |> optional(significant())
     ])
   end
 
@@ -252,20 +257,30 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
       |> concat(fraction_digits())
       |> reduce(:fraction_range),
       fraction_digits()
-      |> repeat(ignore(string(",")) |> concat(fraction_digits()))
+      |> repeat(
+        ignore(string(","))
+        |> concat(fraction_digits())
+      )
       |> reduce(:fraction_list)
     ])
     |> ignore(string("}"))
     |> unwrap_and_tag(:fractions)
   end
 
-  defp fraction_digits, do: times(ascii_char([?0..?9]), min: 1) |> reduce(:reduce_fraction)
+  defp fraction_digits do
+    times(ascii_char([?0..?9]), min: 1)
+    |> reduce(:reduce_fraction)
+  end
 
   @doc false
-  def fraction_range([first, last]), do: {:range, first, last}
+  def fraction_range([first, last]) do
+    {:range, first, last}
+  end
 
   @doc false
-  def fraction_list(fractions), do: fractions
+  def fraction_list(fractions) do
+    fractions
+  end
 
   def positive_integer_or_integer_set(tag, opts) do
     choice([
@@ -305,7 +320,9 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
-      optional(negative()) |> exact_integer(opts) |> reduce(:form_number)
+      optional(negative())
+      |> exact_integer(opts)
+      |> reduce(:form_number)
     ])
     |> ignore(string(indicator))
     |> unwrap_and_tag(tag)
@@ -363,7 +380,10 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
 
   # A decimal sign and a digit after a fraction's digits. A comma is one
   # only outside a set, where it separates the members.
-  defp second_fraction, do: decimal_sign() |> ascii_char([?0..?9])
+  defp second_fraction do
+    decimal_sign()
+    |> ascii_char([?0..?9])
+  end
 
   # A decimal fraction of a time of day's last unit. A time shift may follow
   # it, and one behind UTC starts with a minus sign (`10:30:45.5-03:30`), so
@@ -390,7 +410,8 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
         choice([
           decimal_separator(),
           ascii_char([?], ?}]),
-          dash() |> lookahead_not(time_shift_digits())
+          dash()
+          |> lookahead_not(time_shift_digits())
         ])
       )
     ])
@@ -403,9 +424,13 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # or the solidus of an interval follows.
   defp time_shift_digits do
     choice([
-      integer(2) |> ascii_char([?:]) |> integer(2),
-      integer(4) |> lookahead_not(ascii_char([?0..?9])),
-      integer(2) |> choice([eos(), ascii_char([?[, ?/])])
+      integer(2)
+      |> ascii_char([?:])
+      |> integer(2),
+      integer(4)
+      |> lookahead_not(ascii_char([?0..?9])),
+      integer(2)
+      |> choice([eos(), ascii_char([?[, ?/])])
     ])
   end
 
@@ -447,16 +472,20 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # `Tempo.Duration.build/1` lifts into sign-consistent `:second` +
   # `:microsecond` components; a whole second stays an integer.
   def form_duration_second([?-, integer, {:fraction, {digits, count}}])
-      when is_integer(integer),
-      do: {:signed_fraction, -1, integer, {digits, count}}
+      when is_integer(integer) do
+    {:signed_fraction, -1, integer, {digits, count}}
+  end
 
   def form_duration_second([integer, {:fraction, {digits, count}}])
-      when is_integer(integer),
-      do: {:signed_fraction, 1, integer, {digits, count}}
+      when is_integer(integer) do
+    {:signed_fraction, 1, integer, {digits, count}}
+  end
 
   # Any other number is formed as another duration unit's is: a whole second,
   # one given to significant digits (`PT1230S2S`), a mask or a set.
-  def form_duration_second(number), do: form_number(number)
+  def form_duration_second(number) do
+    form_number(number)
+  end
 
   def form_number([number]) when is_number(number) do
     number
@@ -514,7 +543,11 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   end
 
   def form_number([integer, {:exponent, exponent} | rest]) do
-    form_number([(integer * :math.pow(10, exponent)) |> trunc | rest])
+    form_number([
+      (integer * :math.pow(10, exponent))
+      |> trunc
+      | rest
+    ])
   end
 
   def form_number([integer, {:significant, significant}]) do
@@ -550,7 +583,14 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     # arithmetic. Clock seconds are never negative, so this only
     # affects durations.
     {micro_value, precision} = Microsecond.from_fraction(fraction, digit_count)
-    microsecond = if value < 0, do: {-micro_value, precision}, else: {micro_value, precision}
+
+    microsecond =
+      if value < 0 do
+        {-micro_value, precision}
+      else
+        {micro_value, precision}
+      end
+
     [{:second, value}, {:microsecond, microsecond} | apply_fraction(rest)]
   end
 

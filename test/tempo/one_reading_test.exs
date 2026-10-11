@@ -174,7 +174,10 @@ defmodule Tempo.OneReadingTest do
   # The hour a clock shows twice was yielded twice for each value of a time
   # in it, in turn, so `Enum.count/1` and `Enum.to_list/1` disagreed.
   defp offsets_walked(value) do
-    value |> Enum.to_list() |> Enum.map(&Compare.offset_seconds(&1.shift)) |> Enum.uniq()
+    value
+    |> Enum.to_list()
+    |> Enum.map(&Compare.offset_seconds(&1.shift))
+    |> Enum.uniq()
   end
 
   describe "the walk of a wall time a clock shows twice" do
@@ -189,7 +192,10 @@ defmodule Tempo.OneReadingTest do
 
       # A value written with an offset is walked in the shape it wrote it,
       # so its first second is the value's own start.
-      assert second |> Enum.to_list() |> Enum.map(& &1.shift) |> Enum.uniq() ==
+      assert second
+             |> Enum.to_list()
+             |> Enum.map(& &1.shift)
+             |> Enum.uniq() ==
                [[hour: 1, minute: 0]]
 
       assert hd(Enum.to_list(second)) ==

@@ -509,12 +509,18 @@ defmodule Tempo.JSCalendarTest do
     )
   end
 
-  defp starts({:ok, %IntervalSet{} = set}),
-    do: Enum.map(IntervalSet.members(set), &Tempo.Interval.from/1)
+  defp starts({:ok, %IntervalSet{} = set}) do
+    Enum.map(IntervalSet.members(set), &Tempo.Interval.from/1)
+  end
 
   defp dates({:ok, %IntervalSet{} = set}) do
     for member <- IntervalSet.members(set) do
-      {:ok, date} = member |> Tempo.Interval.from() |> Tempo.trunc(:day) |> Tempo.to_date()
+      {:ok, date} =
+        member
+        |> Tempo.Interval.from()
+        |> Tempo.trunc(:day)
+        |> Tempo.to_date()
+
       date
     end
   end

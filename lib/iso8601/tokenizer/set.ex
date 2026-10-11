@@ -37,7 +37,8 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
 
   defcombinator :integer_or_integer_set,
                 choice([
-                  integer(min: 1) |> unwrap_and_tag(:nth),
+                  integer(min: 1)
+                  |> unwrap_and_tag(:nth),
                   parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
                   parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one})
                 ])
@@ -180,7 +181,10 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
                   |> choice([
                     # An end with its higher order components left out, in
                     # the two forms a value is not written in on its own.
-                    lookahead(integer(2) |> string("T"))
+                    lookahead(
+                      integer(2)
+                      |> string("T")
+                    )
                     |> parsec({Tempo.Iso8601.Tokenizer.Date, :day_and_time_endpoint}),
                     parsec({Tempo.Iso8601.Tokenizer.Date, :bare_number_endpoint}),
                     parsec({Tempo.Iso8601.Tokenizer.Date, :qualified_endpoint}),
@@ -256,7 +260,8 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
   # from the same place, and every selection inside it as many times again:
   # four opened one inside the next (`LLLL`) took over a minute to refuse.
   defcombinator :selection,
-                read_once(:selection, "L") |> label("selection"),
+                read_once(:selection, "L")
+                |> label("selection"),
                 export_combinator: true
 
   defcombinator :selection_read_before, read_before(:selection), export_combinator: true
@@ -275,7 +280,10 @@ defmodule Tempo.Iso8601.Tokenizer.Set do
   defcombinator :selection_refused, refused(:selection), export_combinator: true
 
   defcombinator :duration_parser,
-                optional(negative() |> replace({:direction, :negative}))
+                optional(
+                  negative()
+                  |> replace({:direction, :negative})
+                )
                 |> ignore(string("P"))
                 |> concat(parsec({Tempo.Iso8601.Tokenizer.Set, :duration_elements_p}))
                 |> tag(:duration)

@@ -19,13 +19,18 @@ defmodule Tempo.Iso8601.FractionOfAUnitTest do
   alias Tempo.InvalidDateError
   alias Tempo.ParseError
 
-  defp read(text), do: Tempo.from_iso8601(text)
+  defp read(text) do
+    Tempo.from_iso8601(text)
+  end
 
   # The value a moment is, written to the hour or to the minute.
-  defp at(%NaiveDateTime{} = moment, resolution),
-    do: {:ok, Tempo.from_elixir(moment, resolution: resolution)}
+  defp at(%NaiveDateTime{} = moment, resolution) do
+    {:ok, Tempo.from_elixir(moment, resolution: resolution)}
+  end
 
-  defp seconds_of(days), do: round(days * 86_400)
+  defp seconds_of(days) do
+    round(days * 86_400)
+  end
 
   describe "a fraction of a day of a month" do
     test "is so much of that day, the month's last among them" do
@@ -90,9 +95,21 @@ defmodule Tempo.Iso8601.FractionOfAUnitTest do
   describe "a fraction of a year before 0" do
     test "is so much of that year, as of a later one" do
       for year <- [-1985, -1984, -44, -1] do
-        days = if Date.leap_year?(Date.new!(year, 1, 1)), do: 366, else: 365
+        days =
+          if Date.leap_year?(Date.new!(year, 1, 1)) do
+            366
+          else
+            365
+          end
+
         moment = NaiveDateTime.add(NaiveDateTime.new!(year, 1, 1, 0, 0, 0), seconds_of(days / 2))
-        resolution = if moment.hour == 0, do: :day, else: :hour
+
+        resolution =
+          if moment.hour == 0 do
+            :day
+          else
+            :hour
+          end
 
         assert {year, read("#{year}.5Y")} == {year, at(moment, resolution)}
       end

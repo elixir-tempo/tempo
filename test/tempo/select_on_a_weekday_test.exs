@@ -27,8 +27,9 @@ defmodule Tempo.SelectOnAWeekdayTest do
   @june Date.range(~D[2026-06-01], ~D[2026-06-30])
   @week Date.range(~D[2026-06-15], ~D[2026-06-21])
 
-  defp microseconds(%NaiveDateTime{} = moment),
-    do: NaiveDateTime.diff(moment, @epoch, :microsecond)
+  defp microseconds(%NaiveDateTime{} = moment) do
+    NaiveDateTime.diff(moment, @epoch, :microsecond)
+  end
 
   defp selected(base, selector) do
     {:ok, set} = Tempo.select(base, selector)
@@ -110,7 +111,10 @@ defmodule Tempo.SelectOnAWeekdayTest do
     test "goes on without end from a base that has none" do
       {:ok, set} = Tempo.select(~o"2026-06-15/..", ~o"1KT9H/T17H")
 
-      assert set |> IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601!/1) ==
+      assert set
+             |> IntervalSet.walk()
+             |> Enum.take(3)
+             |> Enum.map(&Tempo.to_iso8601!/1) ==
                ["2026Y6M15DT9H/T17H", "2026Y6M22DT9H/T17H", "2026Y6M29DT9H/T17H"]
     end
 

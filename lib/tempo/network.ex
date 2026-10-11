@@ -54,7 +54,9 @@ defmodule Tempo.Network do
       {0, [], []}
 
   """
-  def new, do: %__MODULE__{}
+  def new do
+    %__MODULE__{}
+  end
 
   @doc """
   Add a time-period to the network.
@@ -254,7 +256,9 @@ defmodule Tempo.Network do
   # The first thing the builders could not add, or a relation of a type
   # the solver cannot read in a network built without them.
   @spec check(t()) :: :ok | {:error, Exception.t()}
-  def check(%__MODULE__{errors: [error | _rest]}), do: {:error, error}
+  def check(%__MODULE__{errors: [error | _rest]}) do
+    {:error, error}
+  end
 
   def check(%__MODULE__{relations: relations}) do
     case Enum.find(relations, &(not Relation.valid_type?(&1.type))) do
@@ -273,5 +277,7 @@ defmodule Tempo.Network do
     %{network | errors: network.errors ++ [exception]}
   end
 
-  defp record(network, message), do: record_error(network, ArgumentError.exception(message))
+  defp record(network, message) do
+    record_error(network, ArgumentError.exception(message))
+  end
 end

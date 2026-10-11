@@ -136,19 +136,36 @@ defmodule Tempo.IntervalSet.Backend do
       @behaviour Tempo.IntervalSet.Backend
 
       @impl true
-      def accepts(_intervals), do: :ok
+      def accepts(_intervals) do
+        :ok
+      end
 
       @impl true
-      def count(state), do: state |> to_list() |> length()
+      def count(state) do
+        state
+        |> to_list()
+        |> length()
+      end
 
       @impl true
-      def empty?(state), do: state |> walk() |> Enum.take(1) == []
+      def empty?(state) do
+        state
+        |> walk()
+        |> Enum.take(1) == []
+      end
 
       @impl true
-      def first(state), do: state |> walk() |> Enum.take(1) |> List.first()
+      def first(state) do
+        state
+        |> walk()
+        |> Enum.take(1)
+        |> List.first()
+      end
 
       @impl true
-      def overlapping(state, _seconds_range), do: to_list(state)
+      def overlapping(state, _seconds_range) do
+        to_list(state)
+      end
 
       defoverridable accepts: 1, count: 1, empty?: 1, first: 1, overlapping: 2
     end

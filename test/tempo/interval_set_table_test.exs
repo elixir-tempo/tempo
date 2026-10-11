@@ -26,7 +26,9 @@ defmodule Tempo.IntervalSetTableTest do
   end
 
   test "a set's rows are its members' from, to and metadata", %{holidays: holidays} do
-    assert holidays |> Table.to_rows() |> Enum.to_list() == [
+    assert holidays
+           |> Table.to_rows()
+           |> Enum.to_list() == [
              %{from: ~o"2026-12-25", to: ~o"2026-12-26", name: "Christmas Day", substitute: nil},
              %{from: ~o"2026-12-28", to: ~o"2026-12-29", name: "Boxing Day", substitute: true}
            ]

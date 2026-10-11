@@ -41,6 +41,11 @@ defmodule Tempo.ZonedTempoError do
     "Operation requires a floating Tempo (this value already carries a zone or offset)"
   end
 
-  defp describe_operation(atom) when is_atom(atom), do: Atom.to_string(atom)
-  defp describe_operation(string) when is_binary(string), do: string
+  defp describe_operation(atom) when is_atom(atom) do
+    Atom.to_string(atom)
+  end
+
+  defp describe_operation(string) when is_binary(string) do
+    string
+  end
 end

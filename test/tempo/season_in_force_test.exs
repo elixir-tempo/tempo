@@ -29,15 +29,19 @@ defmodule Tempo.SeasonInForceTest do
     before = Application.get_env(:ex_tempo, :default_territory)
 
     on_exit(fn ->
-      if before,
-        do: Application.put_env(:ex_tempo, :default_territory, before),
-        else: Application.delete_env(:ex_tempo, :default_territory)
+      if before do
+        Application.put_env(:ex_tempo, :default_territory, before)
+      else
+        Application.delete_env(:ex_tempo, :default_territory)
+      end
     end)
 
     :ok
   end
 
-  defp in_force(territory), do: Application.put_env(:ex_tempo, :default_territory, territory)
+  defp in_force(territory) do
+    Application.put_env(:ex_tempo, :default_territory, territory)
+  end
 
   describe "the application's default territory" do
     test "is where a season is given its dates when none is named" do

@@ -33,7 +33,11 @@ defmodule Tempo.RRule.LastDayTest do
     {:ok, set} = Tempo.to_interval(recurrence)
 
     for occurrence <- IntervalSet.members(set) do
-      {:ok, date} = occurrence |> Interval.from() |> Tempo.to_date()
+      {:ok, date} =
+        occurrence
+        |> Interval.from()
+        |> Tempo.to_date()
+
       date
     end
   end
@@ -45,7 +49,9 @@ defmodule Tempo.RRule.LastDayTest do
     dates(RRule.parse!(rule, from: from))
   end
 
-  defp recurrence(text), do: Tempo.from_iso8601!(text)
+  defp recurrence(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   # Whether one BYMONTHDAY says a day in each of a year's months: the day
   # itself where every month has it, or the last day where it is at or past
@@ -59,8 +65,13 @@ defmodule Tempo.RRule.LastDayTest do
   end
 
   # An answer that is the writer's error for a recurrence no one rule says.
-  defp no_one_rule({:error, %ConversionError{target: :rrule}} = refused), do: refused
-  defp no_one_rule(_written), do: :refused
+  defp no_one_rule({:error, %ConversionError{target: :rrule}} = refused) do
+    refused
+  end
+
+  defp no_one_rule(_written) do
+    :refused
+  end
 
   describe "a recurrence that steps by months and selects no day" do
     test "is written as a rule that lists the days it does" do

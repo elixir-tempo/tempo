@@ -124,7 +124,11 @@ defmodule Tempo.ExplainCoverageTest do
   end
 
   describe "ANSI formatter colours each part type" do
-    defp ansi(value), do: value |> Explain.explain() |> Explain.to_ansi()
+    defp ansi(value) do
+      value
+      |> Explain.explain()
+      |> Explain.to_ansi()
+    end
 
     test "qualification, extended, calendar, metadata and member parts all render" do
       assert ansi(~o"2020?Y") =~ "2020"

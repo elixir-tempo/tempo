@@ -85,47 +85,97 @@ defmodule Tempo.RRule.YearlyPartsTest do
     end
   end
 
-  defp holds?({:month, months}, date), do: date.month in months
-  defp holds?({:weekday, weekdays}, date), do: Date.day_of_week(date) in weekdays
-  defp holds?({:event, name}, date), do: Event.date(name, date.year) == {:ok, date}
-  defp holds?({:start_day, day}, date), do: date.day == day
+  defp holds?({:month, months}, date) do
+    date.month in months
+  end
 
-  defp holds?({:day_of_month, days}, date),
-    do: counted?(date.day, days, Date.days_in_month(date))
+  defp holds?({:weekday, weekdays}, date) do
+    Date.day_of_week(date) in weekdays
+  end
 
-  defp holds?({:day_of_year, days}, date),
-    do: counted?(Date.day_of_year(date), days, days_in_year(date))
+  defp holds?({:event, name}, date) do
+    Event.date(name, date.year) == {:ok, date}
+  end
+
+  defp holds?({:start_day, day}, date) do
+    date.day == day
+  end
+
+  defp holds?({:day_of_month, days}, date) do
+    counted?(date.day, days, Date.days_in_month(date))
+  end
+
+  defp holds?({:day_of_year, days}, date) do
+    counted?(Date.day_of_year(date), days, days_in_year(date))
+  end
 
   # A day is counted from the start of its period or, by a negative number,
   # from its end.
-  defp counted?(day, days, last), do: day in days or (day - last - 1) in days
+  defp counted?(day, days, last) do
+    day in days or (day - last - 1) in days
+  end
 
-  defp days_in_year(date), do: if(Date.leap_year?(date), do: 366, else: 365)
+  defp days_in_year(date) do
+    if Date.leap_year?(date) do
+      366
+    else
+      365
+    end
+  end
 
   # The rule as an RRULE, and with an event, which RFC 5545 has no part for,
   # as an ISO 8601-2 selection.
   defp read(parts, start) do
-    if Keyword.has_key?(parts, :event),
-      do:
-        Tempo.from_iso8601("R/#{Date.to_iso8601(start)}/P1Y/FL#{Enum.map_join(parts, &iso/1)}N"),
-      else: RRule.parse(rrule(parts), from: Tempo.from_date(start))
+    if Keyword.has_key?(parts, :event) do
+      Tempo.from_iso8601("R/#{Date.to_iso8601(start)}/P1Y/FL#{Enum.map_join(parts, &iso/1)}N")
+    else
+      RRule.parse(rrule(parts), from: Tempo.from_date(start))
+    end
   end
 
-  defp rrule(parts),
-    do: Enum.join(["FREQ=YEARLY" | Enum.map(parts, &by_part/1)], ";")
+  defp rrule(parts) do
+    Enum.join(["FREQ=YEARLY" | Enum.map(parts, &by_part/1)], ";")
+  end
 
-  defp by_part({:month, months}), do: "BYMONTH=#{Enum.join(months, ",")}"
-  defp by_part({:day_of_year, days}), do: "BYYEARDAY=#{Enum.join(days, ",")}"
-  defp by_part({:day_of_month, days}), do: "BYMONTHDAY=#{Enum.join(days, ",")}"
-  defp by_part({:weekday, [7]}), do: "BYDAY=SU"
+  defp by_part({:month, months}) do
+    "BYMONTH=#{Enum.join(months, ",")}"
+  end
 
-  defp iso({:month, months}), do: "#{set(months)}M"
-  defp iso({:day_of_year, days}), do: "#{set(days)}O"
-  defp iso({:event, name}), do: "(#{name})e"
-  defp iso({:weekday, weekdays}), do: "#{set(weekdays)}K"
+  defp by_part({:day_of_year, days}) do
+    "BYYEARDAY=#{Enum.join(days, ",")}"
+  end
 
-  defp set([value]), do: Integer.to_string(value)
-  defp set(values), do: "{#{Enum.join(values, ",")}}"
+  defp by_part({:day_of_month, days}) do
+    "BYMONTHDAY=#{Enum.join(days, ",")}"
+  end
+
+  defp by_part({:weekday, [7]}) do
+    "BYDAY=SU"
+  end
+
+  defp iso({:month, months}) do
+    "#{set(months)}M"
+  end
+
+  defp iso({:day_of_year, days}) do
+    "#{set(days)}O"
+  end
+
+  defp iso({:event, name}) do
+    "(#{name})e"
+  end
+
+  defp iso({:weekday, weekdays}) do
+    "#{set(weekdays)}K"
+  end
+
+  defp set([value]) do
+    Integer.to_string(value)
+  end
+
+  defp set(values) do
+    "{#{Enum.join(values, ",")}}"
+  end
 
   # The day each occurrence of a rule is, in the years measured. An
   # occurrence a rule's parts name is one day long.
@@ -133,8 +183,16 @@ defmodule Tempo.RRule.YearlyPartsTest do
     {:ok, set} = Tempo.to_interval(rule, within: ~o"2026Y/2030Y")
 
     for occurrence <- IntervalSet.members(set) do
-      {:ok, date} = occurrence |> Interval.from() |> Tempo.to_date()
-      {:ok, next} = occurrence |> Interval.to() |> Tempo.to_date()
+      {:ok, date} =
+        occurrence
+        |> Interval.from()
+        |> Tempo.to_date()
+
+      {:ok, next} =
+        occurrence
+        |> Interval.to()
+        |> Tempo.to_date()
+
       {date, Date.diff(next, date)}
     end
   end
@@ -194,7 +252,11 @@ defmodule Tempo.RRule.YearlyPartsTest do
 
         selected =
           for occurrence <- IntervalSet.members(set) do
-            {:ok, date} = occurrence |> Interval.from() |> Tempo.to_date()
+            {:ok, date} =
+              occurrence
+              |> Interval.from()
+              |> Tempo.to_date()
+
             date
           end
 

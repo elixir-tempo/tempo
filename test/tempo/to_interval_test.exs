@@ -266,7 +266,12 @@ defmodule Tempo.ToInterval.Test do
 
     test "a candidate with no day drops out, as a set's does" do
       {:ok, set} = Tempo.to_interval(~o"2026-XX-3X")
-      months = set |> IntervalSet.members() |> Enum.map(& &1.from.time[:month]) |> Enum.uniq()
+
+      months =
+        set
+        |> IntervalSet.members()
+        |> Enum.map(& &1.from.time[:month])
+        |> Enum.uniq()
 
       assert months == [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     end
@@ -468,10 +473,14 @@ defmodule Tempo.ToInterval.Test do
     end
   end
 
-  defp ymd(year, month, day), do: [year: year, month: month, day: day]
+  defp ymd(year, month, day) do
+    [year: year, month: month, day: day]
+  end
 
   # One mid-month day's span.
-  defp ymd_span(year, month, day), do: {ymd(year, month, day), ymd(year, month, day + 1)}
+  defp ymd_span(year, month, day) do
+    {ymd(year, month, day), ymd(year, month, day + 1)}
+  end
 
   defp spans(%IntervalSet{} = set) do
     for %Interval{from: from, to: to} <- IntervalSet.members(set), do: {from.time, to.time}
@@ -572,7 +581,9 @@ defmodule Tempo.ToInterval.Test do
   end
 
   describe "unanchored time-of-day groups materialise to a relative interval" do
-    defp group(time), do: %Tempo{calendar: Calendar.ISO, time: time}
+    defp group(time) do
+      %Tempo{calendar: Calendar.ISO, time: time}
+    end
 
     test "a minute group materialises to its relative span" do
       {:ok, interval} = Tempo.to_interval(group(hour: 16, minute: {:group, 1..15}))
@@ -761,8 +772,15 @@ defmodule Tempo.ToInterval.Test do
         {:ok, tempo} = Tempo.from_iso8601(unquote(input))
         {:ok, interval} = Tempo.to_interval(tempo)
 
-        implicit_times = tempo |> Enum.to_list() |> Enum.map(& &1.time)
-        explicit_times = interval |> Enum.to_list() |> Enum.map(& &1.time)
+        implicit_times =
+          tempo
+          |> Enum.to_list()
+          |> Enum.map(& &1.time)
+
+        explicit_times =
+          interval
+          |> Enum.to_list()
+          |> Enum.map(& &1.time)
 
         assert implicit_times == explicit_times,
                "implicit and explicit iteration diverge for #{unquote(input)}\n" <>

@@ -140,14 +140,20 @@ defmodule Tempo.RRule do
   @spec parse(binary(), keyword()) :: {:ok, Tempo.Interval.t()} | {:error, term()}
   def parse(rrule, options \\ [])
 
-  def parse("RRULE:" <> rest, options), do: parse(rest, options)
+  def parse("RRULE:" <> rest, options) do
+    parse(rest, options)
+  end
 
   def parse(rrule, options) when is_binary(rrule) do
-    rrule |> parsed(Calendars.inside(options)) |> Calendars.outside()
+    rrule
+    |> parsed(Calendars.inside(options))
+    |> Calendars.outside()
   end
 
   # What is read is a string: any other value is an error and no raise.
-  def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
+  def parse(not_a_string, _options) do
+    {:error, {:not_a_string, not_a_string}}
+  end
 
   # A rule is text, which shows no value by which a caller's call can be
   # told from one of the library's, so `parse/2` is the caller's: what it is
@@ -165,16 +171,26 @@ defmodule Tempo.RRule do
   # the recurrence built from it was one nothing expands:
   # `Tempo.to_interval/2` handed it back as it was, with no occurrences and
   # no error. How long an occurrence is, is `:duration` or `:base_to`.
-  defp one_start(nil), do: :ok
-  defp one_start(%Tempo{}), do: :ok
-  defp one_start(other), do: {:error, {:invalid_from, other}}
+  defp one_start(nil) do
+    :ok
+  end
+
+  defp one_start(%Tempo{}) do
+    :ok
+  end
+
+  defp one_start(other) do
+    {:error, {:invalid_from, other}}
+  end
 
   # RFC 7529 §4.1: "The SKIP rule part MUST NOT be present unless the RSCALE
   # rule part is present."
   defp skip_with_rscale(parts) do
-    if Keyword.has_key?(parts, :skip) and not Keyword.has_key?(parts, :rscale),
-      do: {:error, {:skip_without_rscale, Keyword.fetch!(parts, :skip)}},
-      else: :ok
+    if Keyword.has_key?(parts, :skip) and not Keyword.has_key?(parts, :rscale) do
+      {:error, {:skip_without_rscale, Keyword.fetch!(parts, :skip)}}
+    else
+      :ok
+    end
   end
 
   @doc """
@@ -238,7 +254,9 @@ defmodule Tempo.RRule do
   @spec to_string(Tempo.Interval.t() | term()) ::
           {:ok, String.t()} | {:error, ConversionError.t()}
   def to_string(value) do
-    value |> Calendars.inside() |> Encoder.encode()
+    value
+    |> Calendars.inside()
+    |> Encoder.encode()
   end
 
   @doc """
@@ -318,16 +336,41 @@ defmodule Tempo.RRule do
     end
   end
 
-  defp parse_kv("UNTIL", value), do: parse_until(value)
+  defp parse_kv("UNTIL", value) do
+    parse_until(value)
+  end
 
-  defp parse_kv("BYMONTH", value), do: with_month_list(value)
-  defp parse_kv("BYMONTHDAY", value), do: with_int_list(value, :bymonthday)
-  defp parse_kv("BYYEARDAY", value), do: with_int_list(value, :byyearday)
-  defp parse_kv("BYWEEKNO", value), do: with_int_list(value, :byweekno)
-  defp parse_kv("BYHOUR", value), do: with_int_list(value, :byhour)
-  defp parse_kv("BYMINUTE", value), do: with_int_list(value, :byminute)
-  defp parse_kv("BYSECOND", value), do: with_int_list(value, :bysecond)
-  defp parse_kv("BYSETPOS", value), do: with_int_list(value, :bysetpos)
+  defp parse_kv("BYMONTH", value) do
+    with_month_list(value)
+  end
+
+  defp parse_kv("BYMONTHDAY", value) do
+    with_int_list(value, :bymonthday)
+  end
+
+  defp parse_kv("BYYEARDAY", value) do
+    with_int_list(value, :byyearday)
+  end
+
+  defp parse_kv("BYWEEKNO", value) do
+    with_int_list(value, :byweekno)
+  end
+
+  defp parse_kv("BYHOUR", value) do
+    with_int_list(value, :byhour)
+  end
+
+  defp parse_kv("BYMINUTE", value) do
+    with_int_list(value, :byminute)
+  end
+
+  defp parse_kv("BYSECOND", value) do
+    with_int_list(value, :bysecond)
+  end
+
+  defp parse_kv("BYSETPOS", value) do
+    with_int_list(value, :bysetpos)
+  end
 
   defp parse_kv("BYDAY", value) do
     parts =
@@ -373,7 +416,9 @@ defmodule Tempo.RRule do
     end
   end
 
-  defp parse_kv(key, _value), do: {:error, {:unknown_rule_part, key}}
+  defp parse_kv(key, _value) do
+    {:error, {:unknown_rule_part, key}}
+  end
 
   defp parse_byday_entry(entry) do
     with {ordinal, weekday} <- split_byday(entry),
@@ -438,8 +483,13 @@ defmodule Tempo.RRule do
     |> months_read()
   end
 
-  defp months_read({:ok, months}), do: {:ok, {:bymonth, Enum.reverse(months)}}
-  defp months_read({:error, _reason} = error), do: error
+  defp months_read({:ok, months}) do
+    {:ok, {:bymonth, Enum.reverse(months)}}
+  end
+
+  defp months_read({:error, _reason} = error) do
+    error
+  end
 
   # UNTIL is basic-format ISO 8601: YYYYMMDD or YYYYMMDDTHHMMSSZ.
   # We round-trip it through `Tempo.from_iso8601/1` to get a proper
@@ -475,24 +525,36 @@ defmodule Tempo.RRule do
     with {:ok, from} <- Rule.start_in_rscale(rule, Keyword.get(options, :from)),
          {:ok, base_to} <- end_in_rscale(rule, Keyword.get(options, :base_to)),
          :ok <- carries_its_calendar(rule, from) do
-      {:ok, options |> Keyword.put(:from, from) |> Keyword.put(:base_to, base_to)}
+      {:ok,
+       options
+       |> Keyword.put(:from, from)
+       |> Keyword.put(:base_to, base_to)}
     end
   end
 
-  defp end_in_rscale(rule, %Tempo{} = base_to), do: Rule.start_in_rscale(rule, base_to)
-  defp end_in_rscale(_rule, other), do: {:ok, other}
+  defp end_in_rscale(rule, %Tempo{} = base_to) do
+    Rule.start_in_rscale(rule, base_to)
+  end
+
+  defp end_in_rscale(_rule, other) do
+    {:ok, other}
+  end
 
   # A rule of another calendar with no start says which calendar its months
   # and days are in by the parts that select them. One with no such part has
   # nothing to say it with, and would be counted in the Gregorian.
   defp carries_its_calendar(%Rule{rscale: calendar} = rule, nil)
        when not is_nil(calendar) and not is_notation(calendar) do
-    if is_nil(Rule.to_selection(rule, nil)),
-      do: {:error, {:rscale_without_a_start, calendar}},
-      else: :ok
+    if is_nil(Rule.to_selection(rule, nil)) do
+      {:error, {:rscale_without_a_start, calendar}}
+    else
+      :ok
+    end
   end
 
-  defp carries_its_calendar(_rule, _from), do: :ok
+  defp carries_its_calendar(_rule, _from) do
+    :ok
+  end
 
   defp do_build(freq_unit, parts, options) do
     interval = Keyword.get(parts, :interval, 1)
@@ -502,7 +564,12 @@ defmodule Tempo.RRule do
 
     cadence = %Tempo.Duration{time: [{freq_unit, interval}]}
 
-    recurrence = if is_integer(count), do: count, else: :infinity
+    recurrence =
+      if is_integer(count) do
+        count
+      else
+        :infinity
+      end
 
     repeat_rule = build_repeat_rule(parts, from)
 
@@ -550,7 +617,11 @@ defmodule Tempo.RRule do
   end
 
   defp put_if_given(metadata, key, value, valid?) do
-    if valid?.(value), do: Map.put(metadata, key, value), else: metadata
+    if valid?.(value) do
+      Map.put(metadata, key, value)
+    else
+      metadata
+    end
   end
 
   # The parsed `BY*` parts become the `%Tempo{}` selection carried in the
@@ -558,5 +629,7 @@ defmodule Tempo.RRule do
   # build that selection through `Tempo.RRule.Rule.to_selection/1` — the single
   # source of truth for the RRULE → selection token vocabulary (documented there)
   # — so the two paths cannot drift.
-  defp build_repeat_rule(parts, from), do: Rule.to_selection(struct(Rule, parts), from)
+  defp build_repeat_rule(parts, from) do
+    Rule.to_selection(struct(Rule, parts), from)
+  end
 end

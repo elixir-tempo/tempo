@@ -181,7 +181,9 @@ defmodule Tempo.ScheduleTest do
       assert Exception.message(error) =~ "does not take :finish"
 
       assert {:error, %ArgumentError{}} =
-               Schedule.new() |> Schedule.task(:a, :duration) |> Schedule.solve()
+               Schedule.new()
+               |> Schedule.task(:a, :duration)
+               |> Schedule.solve()
     end
 
     test "a :within that is no window" do
@@ -203,7 +205,9 @@ defmodule Tempo.ScheduleTest do
       assert {:error, %ArgumentError{}} = solve_with(deadline: :tomorrow)
 
       assert {:error, %ArgumentError{}} =
-               Schedule.new() |> Schedule.task(:a, duration: "two days") |> Schedule.solve()
+               Schedule.new()
+               |> Schedule.task(:a, duration: "two days")
+               |> Schedule.solve()
     end
   end
 end

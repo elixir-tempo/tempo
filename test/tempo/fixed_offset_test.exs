@@ -58,7 +58,11 @@ defmodule Tempo.FixedOffsetTest do
   end
 
   # The value at an instant, written in UTC.
-  defp at_instant(unix), do: unix |> DateTime.from_unix!() |> Tempo.from_elixir()
+  defp at_instant(unix) do
+    unix
+    |> DateTime.from_unix!()
+    |> Tempo.from_elixir()
+  end
 
   describe "a DateTime whose time zone is a fixed offset" do
     test "is the time it names, with the offset as its shift and no zone" do

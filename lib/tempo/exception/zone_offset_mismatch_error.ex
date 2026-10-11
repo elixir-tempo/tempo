@@ -46,14 +46,25 @@ defmodule Tempo.ZoneOffsetMismatchError do
   end
 
   # A value with no year is at no one reading to name.
-  defp at_the_reading(nil), do: ""
-  defp at_the_reading(wall_time), do: " at #{wall_time}"
+  defp at_the_reading(nil) do
+    ""
+  end
+
+  defp at_the_reading(wall_time) do
+    " at #{wall_time}"
+  end
 
   @doc false
   # Format an offset in seconds as a signed `±HH:MM` string.
   @spec format_offset(integer()) :: String.t()
   def format_offset(seconds) when is_integer(seconds) do
-    sign = if seconds < 0, do: "-", else: "+"
+    sign =
+      if seconds < 0 do
+        "-"
+      else
+        "+"
+      end
+
     total_minutes = div(abs(seconds), 60)
     hours = div(total_minutes, 60)
     minutes = rem(total_minutes, 60)
@@ -61,5 +72,7 @@ defmodule Tempo.ZoneOffsetMismatchError do
     "#{sign}#{pad(hours)}:#{pad(minutes)}"
   end
 
-  defp pad(value), do: String.pad_leading(Integer.to_string(value), 2, "0")
+  defp pad(value) do
+    String.pad_leading(Integer.to_string(value), 2, "0")
+  end
 end

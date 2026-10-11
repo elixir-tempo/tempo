@@ -63,7 +63,9 @@ defmodule Tempo.Interval.CycleTest do
     test "the two parts of a span that runs through the cycle's end are joined" do
       {:ok, parts} = Cycle.parts(~o"12M/2M")
 
-      assert parts |> Enum.reverse() |> Cycle.joined() == [~o"12M/2M"]
+      assert parts
+             |> Enum.reverse()
+             |> Cycle.joined() == [~o"12M/2M"]
     end
   end
 
@@ -108,13 +110,19 @@ defmodule Tempo.Interval.CycleTest do
 
     test "coalescing keeps the last hour, and joins a span through the cycle's end" do
       {:ok, late} = Tempo.to_interval_set(~o"T{22,23}H")
-      [evening] = late |> IntervalSet.coalesce() |> IntervalSet.members()
+
+      [evening] =
+        late
+        |> IntervalSet.coalesce()
+        |> IntervalSet.members()
 
       assert {Tempo.hour(evening.from), Tempo.hour(evening.to)} == {22, 0}
 
       night = IntervalSet.new!([~o"T22H/T2H", ~o"T1H/T3H"])
 
-      assert night |> IntervalSet.coalesce() |> IntervalSet.members() == [~o"T22H/T3H"]
+      assert night
+             |> IntervalSet.coalesce()
+             |> IntervalSet.members() == [~o"T22H/T3H"]
     end
 
     test "Interval.new/2 takes what the parser reads, and with a year refuses what has no extent" do
@@ -150,7 +158,10 @@ defmodule Tempo.Interval.CycleTest do
       assert Enum.count(~o"T10H30M/T10H30M") == 1440
       assert Enum.count(~o"1K/1K") == 7
 
-      assert ~o"T22H/T22H" |> Enum.map(&Tempo.hour/1) |> Enum.take(4) == [22, 23, 0, 1]
+      assert ~o"T22H/T22H"
+             |> Enum.map(&Tempo.hour/1)
+             |> Enum.take(4) == [22, 23, 0, 1]
+
       assert Enum.member?(~o"T10H/T10H", ~o"T5H")
     end
 
@@ -175,7 +186,9 @@ defmodule Tempo.Interval.CycleTest do
     test "coalesce/1 writes a set that covers the cycle as it" do
       halves = IntervalSet.new!([~o"T0H/T12H", ~o"T12H/T0H"])
 
-      assert halves |> IntervalSet.coalesce() |> IntervalSet.members() == [~o"T0H/T0H"]
+      assert halves
+             |> IntervalSet.coalesce()
+             |> IntervalSet.members() == [~o"T0H/T0H"]
     end
   end
 

@@ -236,7 +236,15 @@ defmodule Tempo.MixProject do
     end
   end
 
-  defp elixirc_paths(:test), do: ["lib", "mix", "test", "test/support"]
-  defp elixirc_paths(:dev), do: ["lib", "mix", "bench"]
-  defp elixirc_paths(_), do: ["lib"]
+  defp elixirc_paths(:test) do
+    ["lib", "mix", "test", "test/support"]
+  end
+
+  defp elixirc_paths(:dev) do
+    ["lib", "mix", "bench"]
+  end
+
+  defp elixirc_paths(_) do
+    ["lib"]
+  end
 end

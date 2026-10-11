@@ -123,13 +123,21 @@ defmodule Tempo.Validation do
   end
 
   defp written_alone({unit, {value, [{annotation, _} | _]}})
-       when is_integer(value) and annotation in [:margin_of_error, :significant_digits],
-       do: {unit, value}
+       when is_integer(value) and annotation in [:margin_of_error, :significant_digits] do
+    {unit, value}
+  end
 
-  defp written_alone(unit), do: unit
+  defp written_alone(unit) do
+    unit
+  end
 
-  defp refusal_of({:error, _reason} = refused), do: refused
-  defp refusal_of(_valid), do: :ok
+  defp refusal_of({:error, _reason} = refused) do
+    refused
+  end
+
+  defp refusal_of(_valid) do
+    :ok
+  end
 
   # A year the calendar does not have is no year to read: the Julian
   # calendar's year before 1 is -1, and it has no year 0
@@ -165,12 +173,25 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp in_years_of_the_calendar(units, _calendar), do: {:ok, units}
+  defp in_years_of_the_calendar(units, _calendar) do
+    {:ok, units}
+  end
 
-  defp years_written(year) when is_integer(year), do: [year]
-  defp years_written(%Range{first: first, last: last}), do: [first, last]
-  defp years_written(years) when is_list(years), do: Enum.flat_map(years, &years_written/1)
-  defp years_written(_a_mask_or_a_group), do: []
+  defp years_written(year) when is_integer(year) do
+    [year]
+  end
+
+  defp years_written(%Range{first: first, last: last}) do
+    [first, last]
+  end
+
+  defp years_written(years) when is_list(years) do
+    Enum.flat_map(years, &years_written/1)
+  end
+
+  defp years_written(_a_mask_or_a_group) do
+    []
+  end
 
   defp no_such_year(year, calendar) do
     InvalidDateError.exception(
@@ -194,16 +215,22 @@ defmodule Tempo.Validation do
     |> reversed()
   end
 
-  defp reversed({:ok, members}), do: {:ok, Enum.reverse(members)}
-  defp reversed({:error, _reason} = error), do: error
+  defp reversed({:ok, members}) do
+    {:ok, Enum.reverse(members)}
+  end
+
+  defp reversed({:error, _reason} = error) do
+    error
+  end
 
   @doc false
   # Whether a value's units are written in a calendar other than its own, as a
   # month and a day are in a calendar of weeks, and so are converted when it is
   # validated.
   @spec written_in_another_calendar?(keyword(), module()) :: boolean()
-  def written_in_another_calendar?(units, calendar),
-    do: written_calendar(units, calendar) != calendar
+  def written_in_another_calendar?(units, calendar) do
+    written_calendar(units, calendar) != calendar
+  end
 
   # A calendar of weeks has no month or day of a month, so a date written for
   # one with them, or as a day of the year, is read in the calendar its
@@ -211,10 +238,15 @@ defmodule Tempo.Validation do
   # as Localize reads such a date: 15 June 2026 is day 1 of week 25. Only a
   # whole date converts. A month alone, or a set of days, names no week and no
   # day of one, and is an error.
-  defp resolve_as_written(units, calendar, calendar), do: resolve_units(units, calendar)
+  defp resolve_as_written(units, calendar, calendar) do
+    resolve_units(units, calendar)
+  end
 
-  defp resolve_as_written(units, written, calendar),
-    do: units |> resolve_units(written) |> convert_date(written, calendar)
+  defp resolve_as_written(units, written, calendar) do
+    units
+    |> resolve_units(written)
+    |> convert_date(written, calendar)
+  end
 
   # The units before a selection name the period it selects in, and are read
   # as they are with no selection after them: a month or a week its year
@@ -222,9 +254,11 @@ defmodule Tempo.Validation do
   # end is counted in its year. The selection and what follows it are read as
   # they are written.
   defp resolve_units(units, calendar) do
-    if selection_after_units?(units),
-      do: resolve_around_selection(units, calendar),
-      else: resolve_a_value(units, calendar)
+    if selection_after_units?(units) do
+      resolve_around_selection(units, calendar)
+    else
+      resolve_a_value(units, calendar)
+    end
   end
 
   defp resolve_a_value(units, calendar) do
@@ -246,13 +280,21 @@ defmodule Tempo.Validation do
 
   # Whether a selection follows at least one unit. Most values hold none, and
   # are left as the list they are.
-  defp selection_after_units?([_unit | rest]) when is_list(rest),
-    do: Enum.any?(rest, &selection?/1)
+  defp selection_after_units?([_unit | rest]) when is_list(rest) do
+    Enum.any?(rest, &selection?/1)
+  end
 
-  defp selection_after_units?(_units), do: false
+  defp selection_after_units?(_units) do
+    false
+  end
 
-  defp selection?({:selection, _parts}), do: true
-  defp selection?(_unit), do: false
+  defp selection?({:selection, _parts}) do
+    true
+  end
+
+  defp selection?(_unit) do
+    false
+  end
 
   @clock_units [:hour, :minute, :second]
   @units_of_days [:year, :month, :week]
@@ -267,17 +309,27 @@ defmodule Tempo.Validation do
   # counted in the unit before it (`2018Y20GT12HU`, the twentieth twelve
   # hours of the year).
   defp first_of_skipped_date_units(units, calendar) do
-    if skips_a_date_unit?(units), do: with_skipped_date_units(units, calendar), else: units
+    if skips_a_date_unit?(units) do
+      with_skipped_date_units(units, calendar)
+    else
+      units
+    end
   end
 
   # Whether a clock unit follows a year, a month or a week directly. Most
   # values skip nothing, and are left as the list they are.
   defp skips_a_date_unit?([{unit, _}, {clock, value} | _rest])
-       when unit in @units_of_days and clock in @clock_units,
-       do: not match?({:group, _members}, value)
+       when unit in @units_of_days and clock in @clock_units do
+    not match?({:group, _members}, value)
+  end
 
-  defp skips_a_date_unit?([_unit | rest]), do: skips_a_date_unit?(rest)
-  defp skips_a_date_unit?(_units), do: false
+  defp skips_a_date_unit?([_unit | rest]) do
+    skips_a_date_unit?(rest)
+  end
+
+  defp skips_a_date_unit?(_units) do
+    false
+  end
 
   # A month's first day is asked of the calendar with its year, which counts
   # the month from the day the year begins (`UnitValues.with_first_day/2`).
@@ -285,15 +337,18 @@ defmodule Tempo.Validation do
          [{:year, year}, {:month, month}, {clock, _value} = time | rest],
          calendar
        )
-       when is_integer(year) and is_integer(month) and clock in @clock_units,
-       do: UnitValues.with_first_day([year: year, month: month], calendar) ++ [time | rest]
+       when is_integer(year) and is_integer(month) and clock in @clock_units do
+    UnitValues.with_first_day([year: year, month: month], calendar) ++ [time | rest]
+  end
 
   defp with_skipped_date_units([{unit, _} = date_unit, {clock, _value} = time | rest], calendar)
-       when unit in @units_of_days and clock in @clock_units,
-       do: first_day_of(date_unit, calendar) ++ [time | rest]
+       when unit in @units_of_days and clock in @clock_units do
+    first_day_of(date_unit, calendar) ++ [time | rest]
+  end
 
-  defp with_skipped_date_units([unit | rest], calendar),
-    do: [unit | with_skipped_date_units(rest, calendar)]
+  defp with_skipped_date_units([unit | rest], calendar) do
+    [unit | with_skipped_date_units(rest, calendar)]
+  end
 
   # A year's first day is the first of its first month, as the calendar
   # gives them, or of its first week in a calendar of weeks.
@@ -307,11 +362,21 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp first_day_of({:month, month}, _calendar), do: [month: group_start(month), day: 1]
-  defp first_day_of({:week, week}, _calendar), do: [week: group_start(week), day_of_week: 1]
+  defp first_day_of({:month, month}, _calendar) do
+    [month: group_start(month), day: 1]
+  end
 
-  defp group_start({:group, %Range{first: first}}) when is_integer(first), do: first
-  defp group_start(value), do: value
+  defp first_day_of({:week, week}, _calendar) do
+    [week: group_start(week), day_of_week: 1]
+  end
+
+  defp group_start({:group, %Range{first: first}}) when is_integer(first) do
+    first
+  end
+
+  defp group_start(value) do
+    value
+  end
 
   # A unit after a group counts from the group's start (ISO 8601-2 §5.4.2),
   # which makes the group one value. A group after a group is one value only
@@ -320,12 +385,16 @@ defmodule Tempo.Validation do
   # units that still hold a group before a whole unit are resolved again,
   # until they stop changing.
   defp settle_groups(units, calendar) when is_list(units) do
-    if group_before_whole_unit?(units),
-      do: resolve_again(units, calendar),
-      else: units
+    if group_before_whole_unit?(units) do
+      resolve_again(units, calendar)
+    else
+      units
+    end
   end
 
-  defp settle_groups(error, _calendar), do: error
+  defp settle_groups(error, _calendar) do
+    error
+  end
 
   defp resolve_again(units, calendar) do
     case resolve(units, calendar) do
@@ -335,11 +404,17 @@ defmodule Tempo.Validation do
   end
 
   defp group_before_whole_unit?([{_unit, {:group, %Range{}}}, {_finer, value} | _rest])
-       when is_integer(value),
-       do: true
+       when is_integer(value) do
+    true
+  end
 
-  defp group_before_whole_unit?([_unit | rest]), do: group_before_whole_unit?(rest)
-  defp group_before_whole_unit?([]), do: false
+  defp group_before_whole_unit?([_unit | rest]) do
+    group_before_whole_unit?(rest)
+  end
+
+  defp group_before_whole_unit?([]) do
+    false
+  end
 
   # Each date unit of a date written again in other units is worked out from
   # all of the units it was written with, so a qualification of any of them
@@ -354,16 +429,20 @@ defmodule Tempo.Validation do
        when is_list(resolved) do
     case Qualification.whole(tempo) do
       nil ->
-        if written != calendar or qualified_unit_gone?(tempo, resolved),
-          do: Qualification.rewritten(tempo, resolved),
-          else: tempo
+        if written != calendar or qualified_unit_gone?(tempo, resolved) do
+          Qualification.rewritten(tempo, resolved)
+        else
+          tempo
+        end
 
       qualification ->
         %{tempo | qualifications: Qualification.complete(resolved, qualification)}
     end
   end
 
-  defp qualify_converted(tempo, _resolved, _written, _calendar), do: tempo
+  defp qualify_converted(tempo, _resolved, _written, _calendar) do
+    tempo
+  end
 
   defp qualified_unit_gone?(%Tempo{qualifications: qualifications}, resolved) do
     units = for entry <- resolved, is_tuple(entry), do: elem(entry, 0)
@@ -375,27 +454,40 @@ defmodule Tempo.Validation do
   defp written_calendar(units, calendar) when is_list(units) do
     reading = reading_calendar(calendar)
 
-    if reading != calendar and Enum.any?(units, &month_or_day?/1),
-      do: reading,
-      else: calendar
+    if reading != calendar and Enum.any?(units, &month_or_day?/1) do
+      reading
+    else
+      calendar
+    end
   end
 
-  defp written_calendar(_units, calendar), do: calendar
+  defp written_calendar(_units, calendar) do
+    calendar
+  end
 
-  defp month_or_day?({unit, _value}) when unit in [:month, :day, :day_of_year], do: true
-  defp month_or_day?(_other_unit), do: false
+  defp month_or_day?({unit, _value}) when unit in [:month, :day, :day_of_year] do
+    true
+  end
+
+  defp month_or_day?(_other_unit) do
+    false
+  end
 
   # The calendar a calendar's dates are read in, as it answers: itself, or
   # Elixir's `Calendar.ISO` for one of Calendrical's calendars of weeks. That
   # is a calendar named to Tempo by another library, as a caller names it,
   # and it comes in as a caller's does.
-  defp reading_calendar(calendar), do: Calendars.inside(calendar.parsing_calendar())
+  defp reading_calendar(calendar) do
+    Calendars.inside(calendar.parsing_calendar())
+  end
 
   # A date that does not exist as it is written (30 February) is an
   # `InvalidDateError` from resolving it. One that exists and cannot be
   # converted, being less than a whole date, is a `ConversionError`, as it is
   # from `Tempo.to_calendar/2`.
-  defp convert_date({:error, _reason} = error, _written, _calendar), do: error
+  defp convert_date({:error, _reason} = error, _written, _calendar) do
+    error
+  end
 
   defp convert_date(
          [{:year, year}, {:month, month}, {:day, day} | rest] = units,
@@ -439,7 +531,9 @@ defmodule Tempo.Validation do
     end)
   end
 
-  defp collapse_single_member_sets(units), do: units
+  defp collapse_single_member_sets(units) do
+    units
+  end
 
   # A set of one member as it is written is its member before the value is
   # read, so that it is read as its member is: a week and the one day of it
@@ -462,7 +556,9 @@ defmodule Tempo.Validation do
     end)
   end
 
-  defp sets_of_one_as_their_member(units), do: units
+  defp sets_of_one_as_their_member(units) do
+    units
+  end
 
   # A count-from-the-end bound on a unit whose extent is fixed — the
   # clock units and the day-of-week — can always be resolved, because
@@ -479,7 +575,9 @@ defmodule Tempo.Validation do
     end)
   end
 
-  defp resolve_fixed_extent_negatives(units, _calendar), do: units
+  defp resolve_fixed_extent_negatives(units, _calendar) do
+    units
+  end
 
   defp resolve_fixed_extent(%Range{first: first, last: last} = range, unit, calendar)
        when first < 0 or last < 0 do
@@ -500,7 +598,9 @@ defmodule Tempo.Validation do
     Enum.map(value, &resolve_fixed_extent(&1, unit, calendar))
   end
 
-  defp resolve_fixed_extent(value, _unit, _calendar), do: value
+  defp resolve_fixed_extent(value, _unit, _calendar) do
+    value
+  end
 
   # An endpoint validates against its own calendar when it carries one —
   # a per-endpoint IXDTF `u-ca` suffix can make one endpoint of an
@@ -510,7 +610,9 @@ defmodule Tempo.Validation do
     calendar
   end
 
-  defp endpoint_calendar(_endpoint, default), do: default
+  defp endpoint_calendar(_endpoint, default) do
+    default
+  end
 
   # ISO 8601 expects an interval's end to follow its start, so an end
   # that starts before its start does is refused: `2026/2025`, and an end
@@ -545,13 +647,16 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp validate_endpoint_order(_from, _to), do: :ok
+  defp validate_endpoint_order(_from, _to) do
+    :ok
+  end
 
   # Orderable: anchored (has a year, so a UTC start exists) and fully
   # concrete (every component is a plain integer or a microsecond
   # `{value, precision}` pair — no mask, group, range, or set).
-  defp orderable?(%Tempo{time: time}),
-    do: List.keymember?(time, :year, 0) and Enum.all?(time, &concrete?/1)
+  defp orderable?(%Tempo{time: time}) do
+    List.keymember?(time, :year, 0) and Enum.all?(time, &concrete?/1)
+  end
 
   # A group of a set is an entry of three elements, and no one number.
   #
@@ -561,13 +666,21 @@ defmodule Tempo.Validation do
   # the order of its seasons where they are given one
   # (`Tempo.Iso8601.Group.resolve_seasons/2`), and is read here whatever the
   # territory in force.
-  defp concrete?({:season, _season}), do: false
-  defp concrete?({_unit, value}) when is_integer(value), do: true
+  defp concrete?({:season, _season}) do
+    false
+  end
 
-  defp concrete?({_unit, {value, precision}}) when is_integer(value) and is_integer(precision),
-    do: true
+  defp concrete?({_unit, value}) when is_integer(value) do
+    true
+  end
 
-  defp concrete?(_several), do: false
+  defp concrete?({_unit, {value, precision}}) when is_integer(value) and is_integer(precision) do
+    true
+  end
+
+  defp concrete?(_several) do
+    false
+  end
 
   # Resolution is the process of pre-calculating concrete
   # time units from groups whereever possible.
@@ -614,9 +727,11 @@ defmodule Tempo.Validation do
   def resolve([{unit, {:group, %Range{} = range}}, {unit, value} | rest], calendar)
       when is_integer(value) do
     within =
-      if value < 0,
-        do: range.last + value + 1,
-        else: range.first + value - Tempo.Math.unit_minimum(unit)
+      if value < 0 do
+        range.last + value + 1
+      else
+        range.first + value - Tempo.Math.unit_minimum(unit)
+      end
 
     if within in range do
       resolve([{unit, within} | rest], calendar)
@@ -658,7 +773,9 @@ defmodule Tempo.Validation do
     with {:ok, _first_month} <- conform(months.first, 1..months_in_year//1),
          months = months.first..min(months.last, months_in_year)//1,
          days_in_group =
-           months |> Enum.map(&calendar.days_in_month(year, &1)) |> Enum.sum(),
+           months
+           |> Enum.map(&calendar.days_in_month(year, &1))
+           |> Enum.sum(),
          {:ok, day} <- conform(day, 1..days_in_group//1),
          {:ok, month, day} <- month_and_day(year, months, day, calendar) do
       resolve([{:year, year}, {:month, month}, {:day, day} | rest], calendar)
@@ -704,8 +821,9 @@ defmodule Tempo.Validation do
   # ordinal day, as a monthless day after a year is. A set of them stays a
   # day of the year, each resolved when the set is expanded.
   def resolve([{:year, year}, {:day_of_year, day} | rest], calendar)
-      when is_integer(year) and is_number(day),
-      do: resolve([{:year, year}, {:day, day} | rest], calendar)
+      when is_integer(year) and is_number(day) do
+    resolve([{:year, year}, {:day, day} | rest], calendar)
+  end
 
   def resolve([{:year, year}, {:day_of_year, days}], calendar)
       when is_integer(year) and (is_list(days) or is_struct(days, Range)) do
@@ -724,7 +842,13 @@ defmodule Tempo.Validation do
     %{first: first, last: last} = days_of_year
     days_in_year = calendar.days_in_year(year)
     last = min(last, days_in_year)
-    day = if day < 0, do: last + day + 1, else: first + day - 1
+
+    day =
+      if day < 0 do
+        last + day + 1
+      else
+        first + day - 1
+      end
 
     if first in 1..days_in_year//1 and day <= last do
       %{year: year, month: month, day: day} = calendar.date_from_day_of_year(year, day)
@@ -753,7 +877,13 @@ defmodule Tempo.Validation do
       when is_integer(year) and is_integer(hour) do
     %{first: first, last: last} = hours_of_year
     last = min(last, calendar.days_in_year(year) * @hours_per_day - 1)
-    hour_of_year = if hour < 0, do: last + hour + 1, else: first + hour
+
+    hour_of_year =
+      if hour < 0 do
+        last + hour + 1
+      else
+        first + hour
+      end
 
     with {:ok, hour_of_year} <- conform(hour_of_year, first..last//1) do
       day_of_year = div(hour_of_year, @hours_per_day) + 1
@@ -835,8 +965,9 @@ defmodule Tempo.Validation do
 
   # An unspecified traditional month (`X*m`) is any month of its year, however
   # the calendar numbers them, so it is an unspecified month.
-  def resolve([{:traditional_month, :any} | rest], calendar),
-    do: resolve([{:month, :any} | rest], calendar)
+  def resolve([{:traditional_month, :any} | rest], calendar) do
+    resolve([{:month, :any} | rest], calendar)
+  end
 
   # An intercalary month `{n, :leap}` (parsed from `<n>+m`) resolves to its
   # ordinal position for the year against a calendar with leap months; the rest of
@@ -998,7 +1129,14 @@ defmodule Tempo.Validation do
       resolve([{:year, int_year}], calendar)
     else
       days = Math.round(days_in_year * fraction_of_year, @rounding_precision)
-      days = if trunc(days) == days, do: trunc(days), else: days
+
+      days =
+        if trunc(days) == days do
+          trunc(days)
+        else
+          days
+        end
+
       resolve([{:year, int_year}, {:day, days + 1}], calendar)
     end
   end
@@ -1016,7 +1154,14 @@ defmodule Tempo.Validation do
     else
       days_in_month = calendar.days_in_month(year, int_month)
       days = Math.round(days_in_month * fraction_of_month, @rounding_precision)
-      days = if trunc(days) == days, do: trunc(days), else: days
+
+      days =
+        if trunc(days) == days do
+          trunc(days)
+        else
+          days
+        end
+
       resolve([{:year, year}, {:month, int_month}, {:day, days + 1}], calendar)
     end
   end
@@ -1030,7 +1175,14 @@ defmodule Tempo.Validation do
       resolve([{:year, year}, {:day, int_day}], calendar)
     else
       hours = Math.round(@hours_per_day * fraction_of_day, @rounding_precision)
-      hours = if trunc(hours) == hours, do: trunc(hours), else: hours
+
+      hours =
+        if trunc(hours) == hours do
+          trunc(hours)
+        else
+          hours
+        end
+
       resolve([{:year, year}, {:day, int_day}, {:hour, hours}], calendar)
     end
   end
@@ -1043,7 +1195,14 @@ defmodule Tempo.Validation do
       resolve([{:day, int_day}], calendar)
     else
       hours = Math.round(@hours_per_day * fraction_of_day, @rounding_precision)
-      hours = if trunc(hours) == hours, do: trunc(hours), else: hours
+
+      hours =
+        if trunc(hours) == hours do
+          trunc(hours)
+        else
+          hours
+        end
+
       resolve([{:day, int_day}, {:hour, hours}], calendar)
     end
   end
@@ -1305,15 +1464,27 @@ defmodule Tempo.Validation do
 
   # Whether a year of a calendar has a month of this number, as the
   # calendar lists the months of the year.
-  defp month_of_year?(year, month, calendar),
-    do: Enum.any?(calendar.month_numbers(year), &(month in &1))
+  defp month_of_year?(year, month, calendar) do
+    Enum.any?(calendar.month_numbers(year), &(month in &1))
+  end
 
   ### Helpers
 
-  defp fraction_of(:month), do: "a month with no year"
-  defp fraction_of(:day_of_year), do: "a day of the year with no year"
-  defp fraction_of(:day_of_week), do: "a day of the week"
-  defp fraction_of(_week), do: "a week"
+  defp fraction_of(:month) do
+    "a month with no year"
+  end
+
+  defp fraction_of(:day_of_year) do
+    "a day of the year with no year"
+  end
+
+  defp fraction_of(:day_of_week) do
+    "a day of the week"
+  end
+
+  defp fraction_of(_week) do
+    "a week"
+  end
 
   # The units that count from 1, so that 0 names none of them.
   @counted_from_one [:month, :week, :calendar_week, :day, :day_of_year, :day_of_week]
@@ -1351,7 +1522,9 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp resolve_after_a_group_of_a_set(units, calendar), do: resolve(units, calendar)
+  defp resolve_after_a_group_of_a_set(units, calendar) do
+    resolve(units, calendar)
+  end
 
   # The most fractions of a second a range may name. A value holds each
   # fraction it names, so a range is listed as it is read: a thousand is each
@@ -1384,8 +1557,9 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp microseconds_written({:range, _first, _last} = written),
-    do: fractions_error(written, "are not written with as many digits as each other")
+  defp microseconds_written({:range, _first, _last} = written) do
+    fractions_error(written, "are not written with as many digits as each other")
+  end
 
   defp microseconds_written([{_fraction, digits} | _rest] = written) do
     cond do
@@ -1396,11 +1570,17 @@ defmodule Tempo.Validation do
         fractions_error(written, "are finer than a microsecond")
 
       true ->
-        {:ok, written |> Enum.map(&microsecond_written/1) |> Enum.sort() |> Enum.dedup()}
+        {:ok,
+         written
+         |> Enum.map(&microsecond_written/1)
+         |> Enum.sort()
+         |> Enum.dedup()}
     end
   end
 
-  defp microsecond_written({fraction, digits}), do: Microsecond.from_fraction(fraction, digits)
+  defp microsecond_written({fraction, digits}) do
+    Microsecond.from_fraction(fraction, digits)
+  end
 
   defp fractions_error(written, what_is_wrong) do
     {:error,
@@ -1412,18 +1592,27 @@ defmodule Tempo.Validation do
      )}
   end
 
-  defp fractions_text({:range, first, last}),
-    do: fraction_text(first) <> ".." <> fraction_text(last)
+  defp fractions_text({:range, first, last}) do
+    fraction_text(first) <> ".." <> fraction_text(last)
+  end
 
   # The first few of a long list say what was written.
   defp fractions_text(written) do
     {shown, more} = Enum.split(written, @fractions_shown)
     text = Enum.map_join(shown, ",", &fraction_text/1)
-    if more == [], do: text, else: text <> ",…"
+
+    if more == [] do
+      text
+    else
+      text <> ",…"
+    end
   end
 
-  defp fraction_text({fraction, digits}),
-    do: fraction |> Integer.to_string() |> String.pad_leading(digits, "0")
+  defp fraction_text({fraction, digits}) do
+    fraction
+    |> Integer.to_string()
+    |> String.pad_leading(digits, "0")
+  end
 
   # A group is kept as declared, so it renders as written; one that
   # starts beyond its container (months 13..15 of a twelve-month year)
@@ -1438,15 +1627,21 @@ defmodule Tempo.Validation do
   # A group of days is kept as declared (the last group of eleven days
   # in February is days 23..33); a component within it resolves against
   # the days the month has.
-  defp resolve_day_group(days, _max_days, [], _calendar), do: [{:day, {:group, days}}]
+  defp resolve_day_group(days, _max_days, [], _calendar) do
+    [{:day, {:group, days}}]
+  end
 
-  defp resolve_day_group(days, max_days, rest, calendar),
-    do: resolve([{:day, {:group, %{days | last: min(max_days, days.last)}}} | rest], calendar)
+  defp resolve_day_group(days, max_days, rest, calendar) do
+    resolve([{:day, {:group, %{days | last: min(max_days, days.last)}}} | rest], calendar)
+  end
 
-  defp prepend_year_month(_year, _month, {:error, reason}), do: {:error, reason}
+  defp prepend_year_month(_year, _month, {:error, reason}) do
+    {:error, reason}
+  end
 
-  defp prepend_year_month(year, month, resolved),
-    do: [{:year, year}, {:month, month} | resolved]
+  defp prepend_year_month(year, month, resolved) do
+    [{:year, year}, {:month, month} | resolved]
+  end
 
   # The days of a month of a year, which `Tempo.UnitValues` counts. A month
   # the year does not have (a thirteenth, in a Hebrew year of twelve) is
@@ -1531,8 +1726,9 @@ defmodule Tempo.Validation do
      )}
   end
 
-  defp traditional_numbers({:ok, valid}, :any, _read_as),
-    do: {:ok, UnitValues.named(1..-1//1, valid)}
+  defp traditional_numbers({:ok, valid}, :any, _read_as) do
+    {:ok, UnitValues.named(1..-1//1, valid)}
+  end
 
   defp traditional_numbers({:ok, valid}, {:mask, digits}, read_as) do
     case Mask.matching(UnitValues.named(1..-1//1, valid), digits) do
@@ -1546,15 +1742,23 @@ defmodule Tempo.Validation do
          do: {:ok, UnitValues.named(resolved, valid)}
   end
 
-  defp kind_of_month(:leap_month), do: "leap month"
-  defp kind_of_month(:traditional_month), do: "traditional month"
+  defp kind_of_month(:leap_month) do
+    "leap month"
+  end
+
+  defp kind_of_month(:traditional_month) do
+    "traditional month"
+  end
 
   # What an error says the month was read as: a traditional month, or the
   # intercalary one that follows it.
-  defp read_as(:numbered, year, calendar),
-    do: [unit: :traditional_month, year: year, calendar: calendar]
+  defp read_as(:numbered, year, calendar) do
+    [unit: :traditional_month, year: year, calendar: calendar]
+  end
 
-  defp read_as(:leap, year, calendar), do: [unit: :leap_month, year: year, calendar: calendar]
+  defp read_as(:leap, year, calendar) do
+    [unit: :leap_month, year: year, calendar: calendar]
+  end
 
   defp no_month_matches_error(digits, valid, read_as) do
     written = Enum.map_join(digits, &mask_digit/1)
@@ -1577,47 +1781,72 @@ defmodule Tempo.Validation do
   # thirty days. A value is held to the months its year has
   # (`traditional_months_named/4`); a rule selects in each year what it has.
   @spec traditional_month_places(module(), term(), term()) :: [pos_integer()]
-  def traditional_month_places(calendar, year, {written, :leap}) when is_integer(year),
-    do: places_matched(written, UnitValues.traditional_months(year, calendar, :leap))
+  def traditional_month_places(calendar, year, {written, :leap}) when is_integer(year) do
+    places_matched(written, UnitValues.traditional_months(year, calendar, :leap))
+  end
 
-  def traditional_month_places(calendar, year, written) when is_integer(year),
-    do: places_matched(written, UnitValues.traditional_months(year, calendar, :numbered))
+  def traditional_month_places(calendar, year, written) when is_integer(year) do
+    places_matched(written, UnitValues.traditional_months(year, calendar, :numbered))
+  end
 
-  def traditional_month_places(_calendar, _no_one_year, _written), do: []
+  def traditional_month_places(_calendar, _no_one_year, _written) do
+    []
+  end
 
   defp places_matched(written, places) do
-    case places |> Enum.map(&elem(&1, 0)) |> UnitValues.as_values() do
-      {:ok, valid} -> written |> numbers_matched(valid) |> Enum.map(&place_of(&1, places))
-      {:error, :no_period} -> []
+    case places
+         |> Enum.map(&elem(&1, 0))
+         |> UnitValues.as_values() do
+      {:ok, valid} ->
+        written
+        |> numbers_matched(valid)
+        |> Enum.map(&place_of(&1, places))
+
+      {:error, :no_period} ->
+        []
     end
   end
 
-  defp numbers_matched(:any, valid), do: UnitValues.named(1..-1//1, valid)
+  defp numbers_matched(:any, valid) do
+    UnitValues.named(1..-1//1, valid)
+  end
 
-  defp numbers_matched({:mask, digits}, valid),
-    do: Mask.matching(UnitValues.named(1..-1//1, valid), digits)
+  defp numbers_matched({:mask, digits}, valid) do
+    Mask.matching(UnitValues.named(1..-1//1, valid), digits)
+  end
 
   defp numbers_matched(written, valid)
-       when is_integer(written) or is_list(written) or is_struct(written, Range),
-       do: UnitValues.named(written, valid)
+       when is_integer(written) or is_list(written) or is_struct(written, Range) do
+    UnitValues.named(written, valid)
+  end
 
-  defp numbers_matched(_what_names_no_month, _valid), do: []
+  defp numbers_matched(_what_names_no_month, _valid) do
+    []
+  end
 
   # An intercalary month is a traditional month to the value that holds it,
   # whatever its error calls it.
-  defp places_or_refusal({:ok, numbers}, places), do: {:ok, places_named(numbers, places)}
+  defp places_or_refusal({:ok, numbers}, places) do
+    {:ok, places_named(numbers, places)}
+  end
 
-  defp places_or_refusal({:error, %InvalidDateError{unit: :leap_month} = error}, _places),
-    do: {:error, %{error | unit: :traditional_month}}
+  defp places_or_refusal({:error, %InvalidDateError{unit: :leap_month} = error}, _places) do
+    {:error, %{error | unit: :traditional_month}}
+  end
 
-  defp places_or_refusal({:error, %InvalidDateError{}} = refusal, _places), do: refusal
+  defp places_or_refusal({:error, %InvalidDateError{}} = refusal, _places) do
+    refusal
+  end
 
   # One month is the month it is, and several are a set as the parser reads
   # one.
-  defp places_named([number], places), do: place_of(number, places)
+  defp places_named([number], places) do
+    place_of(number, places)
+  end
 
-  defp places_named(numbers, places),
-    do: Parser.reduce_list(Enum.map(numbers, &place_of(&1, places)))
+  defp places_named(numbers, places) do
+    Parser.reduce_list(Enum.map(numbers, &place_of(&1, places)))
+  end
 
   defp place_of(number, places) do
     {^number, place} = List.keyfind(places, number, 0)
@@ -1669,7 +1898,9 @@ defmodule Tempo.Validation do
 
   # With no one year there is no year to place a month in, and a month is
   # the number it is written with.
-  def ordinal_month_from_traditional(_calendar, _no_one_year, month), do: {:ok, month}
+  def ordinal_month_from_traditional(_calendar, _no_one_year, month) do
+    {:ok, month}
+  end
 
   @doc """
   Names the month at a place in a year as its calendar names it.
@@ -1690,7 +1921,9 @@ defmodule Tempo.Validation do
     end
   end
 
-  def traditional_month_from_ordinal(_calendar, _year, _month), do: :error
+  def traditional_month_from_ordinal(_calendar, _year, _month) do
+    :error
+  end
 
   # The maximum day number a month can hold across all years — the
   # bound for validating a yearless partial: the last day of the year the
@@ -1720,12 +1953,25 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp resolve_under_years(units, calendar), do: resolve(units, calendar)
+  defp resolve_under_years(units, calendar) do
+    resolve(units, calendar)
+  end
 
-  defp counts_from_end?(value) when is_integer(value), do: value < 0
-  defp counts_from_end?(%Range{first: first, last: last}), do: first < 0 or last < 0
-  defp counts_from_end?(values) when is_list(values), do: Enum.any?(values, &counts_from_end?/1)
-  defp counts_from_end?(_value), do: false
+  defp counts_from_end?(value) when is_integer(value) do
+    value < 0
+  end
+
+  defp counts_from_end?(%Range{first: first, last: last}) do
+    first < 0 or last < 0
+  end
+
+  defp counts_from_end?(values) when is_list(values) do
+    Enum.any?(values, &counts_from_end?/1)
+  end
+
+  defp counts_from_end?(_value) do
+    false
+  end
 
   # A yearless month's day, bounded by the month's longest length across years
   # (see `max_day_in_month/2`). A month whose length cannot be bounded without
@@ -1743,16 +1989,18 @@ defmodule Tempo.Validation do
   # with its fraction was held to the month's days, so a fraction of the
   # month's last day was refused as past it, and so was a fraction of a
   # month that lands on its last day (`1985Y12.99M`).
-  defp conform_day(day, _days, _year, _month, _calendar) when is_float(day) and day < 0,
-    do: {:error, negative_fraction_error(:day, day)}
+  defp conform_day(day, _days, _year, _month, _calendar) when is_float(day) and day < 0 do
+    {:error, negative_fraction_error(:day, day)}
+  end
 
   defp conform_day(day, days, year, month, calendar) when is_float(day) do
     options = [unit: :day, year: year, month: month, calendar: calendar]
     with {:ok, _whole_day} <- conform(trunc(day), days, options), do: {:ok, day}
   end
 
-  defp conform_day(day, days, year, month, calendar),
-    do: conform(day, days, unit: :day, year: year, month: month, calendar: calendar)
+  defp conform_day(day, days, year, month, calendar) do
+    conform(day, days, unit: :day, year: year, month: month, calendar: calendar)
+  end
 
   defp negative_fraction_error(unit, fraction) do
     ParseError.exception(
@@ -1763,10 +2011,21 @@ defmodule Tempo.Validation do
     )
   end
 
-  defp counted_back(:hour), do: "an hour"
-  defp counted_back(:day_of_year), do: "a day of the year"
-  defp counted_back(:day_of_week), do: "a day of the week"
-  defp counted_back(unit), do: "a #{unit}"
+  defp counted_back(:hour) do
+    "an hour"
+  end
+
+  defp counted_back(:day_of_year) do
+    "a day of the year"
+  end
+
+  defp counted_back(:day_of_week) do
+    "a day of the week"
+  end
+
+  defp counted_back(unit) do
+    "a #{unit}"
+  end
 
   defp yearless_month_and_day(month, day, rest, calendar) do
     case {max_day_in_month(calendar, month), counted_in_any_year?(day, month, calendar)} do
@@ -1798,10 +2057,21 @@ defmodule Tempo.Validation do
       match?({:ok, days, days}, UnitValues.in_any_year(:day, [month: month], calendar))
   end
 
-  defp names_zero?(0), do: true
-  defp names_zero?(%Range{first: first, last: last}), do: first == 0 or last == 0
-  defp names_zero?(values) when is_list(values), do: Enum.any?(values, &names_zero?/1)
-  defp names_zero?(_value), do: false
+  defp names_zero?(0) do
+    true
+  end
+
+  defp names_zero?(%Range{first: first, last: last}) do
+    first == 0 or last == 0
+  end
+
+  defp names_zero?(values) when is_list(values) do
+    Enum.any?(values, &names_zero?/1)
+  end
+
+  defp names_zero?(_value) do
+    false
+  end
 
   defp zeroth_error(unit) do
     InvalidDateError.exception(
@@ -1811,9 +2081,17 @@ defmodule Tempo.Validation do
     )
   end
 
-  defp zeroth_noun(:day_of_year), do: "day of the year"
-  defp zeroth_noun(:calendar_week), do: "week"
-  defp zeroth_noun(unit), do: Atom.to_string(unit)
+  defp zeroth_noun(:day_of_year) do
+    "day of the year"
+  end
+
+  defp zeroth_noun(:calendar_week) do
+    "week"
+  end
+
+  defp zeroth_noun(unit) do
+    Atom.to_string(unit)
+  end
 
   # A month of no year, no further from either end than the most months a
   # year of its calendar has. One counted from the end is kept as written
@@ -1824,16 +2102,17 @@ defmodule Tempo.Validation do
   defp bounded_months({:month, months} = component, calendar) do
     case max_months_in_year(calendar) do
       {:ok, max} ->
-        if months_within?(months, max),
-          do: component,
-          else:
-            {:error,
-             InvalidDateError.exception(
-               unit: :month,
-               value: months,
-               valid_range: 1..max,
-               calendar: calendar
-             )}
+        if months_within?(months, max) do
+          component
+        else
+          {:error,
+           InvalidDateError.exception(
+             unit: :month,
+             value: months,
+             valid_range: 1..max,
+             calendar: calendar
+           )}
+        end
 
       :unknown ->
         component
@@ -1850,19 +2129,31 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp months_within?(month, max) when is_integer(month), do: abs(month) <= max
+  defp months_within?(month, max) when is_integer(month) do
+    abs(month) <= max
+  end
 
-  defp months_within?(%Range{first: first, last: last}, max),
-    do: abs(first) <= max and abs(last) <= max
+  defp months_within?(%Range{first: first, last: last}, max) do
+    abs(first) <= max and abs(last) <= max
+  end
 
-  defp months_within?(months, max) when is_list(months),
-    do: Enum.all?(months, &months_within?(&1, max))
+  defp months_within?(months, max) when is_list(months) do
+    Enum.all?(months, &months_within?(&1, max))
+  end
 
-  defp months_within?(_month, _max), do: true
+  defp months_within?(_month, _max) do
+    true
+  end
 
   # Whether a week date is kept as the calendar's own week and day, or is
   # the date of a calendar of months.
-  defp week_dates(calendar), do: if(Tempo.week_based_calendar?(calendar), do: :week, else: :month)
+  defp week_dates(calendar) do
+    if Tempo.week_based_calendar?(calendar) do
+      :week
+    else
+      :month
+    end
+  end
 
   def year_week_day(year, week, day, rest, :month, calendar) do
     case UnitValues.date_from_iso_week(year, week, day, calendar) do
@@ -1910,7 +2201,9 @@ defmodule Tempo.Validation do
     end
   end
 
-  def calendar_date_from_week_date(value), do: value
+  def calendar_date_from_week_date(value) do
+    value
+  end
 
   @doc false
   # A value that names a year and a day of it, as the date it names: what
@@ -1930,7 +2223,9 @@ defmodule Tempo.Validation do
     end
   end
 
-  def calendar_date_from_ordinal_date(value), do: value
+  def calendar_date_from_ordinal_date(value) do
+    value
+  end
 
   @doc false
   # A value that names a year and a traditional month of it, as the month it
@@ -1948,10 +2243,17 @@ defmodule Tempo.Validation do
     end
   end
 
-  def month_from_traditional_month(value), do: value
+  def month_from_traditional_month(value) do
+    value
+  end
 
-  defp prepend_year(_year, {:error, reason}), do: {:error, reason}
-  defp prepend_year(year, resolved), do: [{:year, year} | resolved]
+  defp prepend_year(_year, {:error, reason}) do
+    {:error, reason}
+  end
+
+  defp prepend_year(year, resolved) do
+    [{:year, year} | resolved]
+  end
 
   # The `month`th month of a group of years, counted on from the group's
   # first day by Calendrical, so a thirteen-month year counts as the
@@ -1972,7 +2274,9 @@ defmodule Tempo.Validation do
   # first of its first month in most years, and 25 March in 1751 in
   # `Calendrical.Reform.England`, the year that calendar changes its new
   # year's day in.
-  defp first_day_of_year(year, calendar), do: UnitValues.first_date([year: year], calendar)
+  defp first_day_of_year(year, calendar) do
+    UnitValues.first_date([year: year], calendar)
+  end
 
   # The `day`th day of a group of months, counted on from the group's
   # first day by Calendrical: the first of its first month, or the first
@@ -2004,15 +2308,19 @@ defmodule Tempo.Validation do
   # day of 2027-02", where it was "29 is not valid".
   def conform(written, valid, read_as \\ [])
 
-  def conform(written, %Range{} = valid, read_as), do: conform_to(written, valid, read_as)
+  def conform(written, %Range{} = valid, read_as) do
+    conform_to(written, valid, read_as)
+  end
 
   # Values a calendar lists apart from one another: the days of a month with
   # days missing in it.
-  def conform(written, [%Range{} | _] = valid, read_as),
-    do: conform_to(written, valid, read_as)
+  def conform(written, [%Range{} | _] = valid, read_as) do
+    conform_to(written, valid, read_as)
+  end
 
-  def conform(written, not_values, read_as),
-    do: not_valid_error(written, not_values, nil, read_as)
+  def conform(written, not_values, read_as) do
+    not_valid_error(written, not_values, nil, read_as)
+  end
 
   defp conform_to(written, valid, read_as) do
     case UnitValues.resolve(written, valid) do
@@ -2038,11 +2346,15 @@ defmodule Tempo.Validation do
 
   # The unit, the year, the month and the calendar of what was read, on an
   # error that says its own reason.
-  defp named({:error, %InvalidDateError{} = error}, read_as), do: {:error, struct(error, read_as)}
+  defp named({:error, %InvalidDateError{} = error}, read_as) do
+    {:error, struct(error, read_as)}
+  end
 
   # " for a day of 2027-02", and " in Calendrical.Hebrew" for a calendar
   # other than the Gregorian.
-  defp read_as_text([]), do: ""
+  defp read_as_text([]) do
+    ""
+  end
 
   defp read_as_text(read_as) do
     " for " <>
@@ -2050,74 +2362,140 @@ defmodule Tempo.Validation do
       calendar_text(read_as[:calendar])
   end
 
-  defp unit_text(:day_of_year, year, _month) when is_integer(year),
-    do: "a day of the year #{year}"
+  defp unit_text(:day_of_year, year, _month) when is_integer(year) do
+    "a day of the year #{year}"
+  end
 
-  defp unit_text(unit, year, month), do: unit_name(unit) <> period_text(unit, year, month)
+  defp unit_text(unit, year, month) do
+    unit_name(unit) <> period_text(unit, year, month)
+  end
 
-  defp unit_name(:day), do: "a day"
-  defp unit_name(:month), do: "a month"
-  defp unit_name(:traditional_month), do: "a traditional month"
-  defp unit_name(:leap_month), do: "a leap month"
-  defp unit_name(:week), do: "a week"
-  defp unit_name(:day_of_year), do: "a day of the year"
-  defp unit_name(:day_of_week), do: "a day of the week"
-  defp unit_name(:hour), do: "an hour"
-  defp unit_name(:minute), do: "a minute"
-  defp unit_name(:second), do: "a second"
-  defp unit_name(unit), do: "a #{unit}"
+  defp unit_name(:day) do
+    "a day"
+  end
 
-  defp period_text(:day, year, month) when is_integer(year) and is_integer(month),
-    do: " of #{year}-#{pad2(month)}"
+  defp unit_name(:month) do
+    "a month"
+  end
 
-  defp period_text(:day, nil, month) when is_integer(month), do: " of month #{month}"
+  defp unit_name(:traditional_month) do
+    "a traditional month"
+  end
+
+  defp unit_name(:leap_month) do
+    "a leap month"
+  end
+
+  defp unit_name(:week) do
+    "a week"
+  end
+
+  defp unit_name(:day_of_year) do
+    "a day of the year"
+  end
+
+  defp unit_name(:day_of_week) do
+    "a day of the week"
+  end
+
+  defp unit_name(:hour) do
+    "an hour"
+  end
+
+  defp unit_name(:minute) do
+    "a minute"
+  end
+
+  defp unit_name(:second) do
+    "a second"
+  end
+
+  defp unit_name(unit) do
+    "a #{unit}"
+  end
+
+  defp period_text(:day, year, month) when is_integer(year) and is_integer(month) do
+    " of #{year}-#{pad2(month)}"
+  end
+
+  defp period_text(:day, nil, month) when is_integer(month) do
+    " of month #{month}"
+  end
 
   defp period_text(unit, year, _month)
-       when unit in [:month, :traditional_month, :leap_month, :week] and is_integer(year),
-       do: " of #{year}"
+       when unit in [:month, :traditional_month, :leap_month, :week] and is_integer(year) do
+    " of #{year}"
+  end
 
-  defp period_text(_unit, _year, _month), do: ""
+  defp period_text(_unit, _year, _month) do
+    ""
+  end
 
   # A unit that is no calendar's to count (an hour) is read in none, and a
   # calendar that is the notation's is not named.
-  defp calendar_text(calendar) when is_nil(calendar) or is_notation(calendar), do: ""
+  defp calendar_text(calendar) when is_nil(calendar) or is_notation(calendar) do
+    ""
+  end
 
-  defp calendar_text(calendar), do: " in #{Calendars.name(calendar)}"
+  defp calendar_text(calendar) do
+    " in #{Calendars.name(calendar)}"
+  end
 
-  defp last_value(%Range{last: last}), do: last
-  defp last_value(ranges) when is_list(ranges), do: ranges |> List.last() |> last_value()
+  defp last_value(%Range{last: last}) do
+    last
+  end
+
+  defp last_value(ranges) when is_list(ranges) do
+    ranges
+    |> List.last()
+    |> last_value()
+  end
 
   # What an error says of the values a unit takes: what they are, or that
   # there are none (a year a composite calendar does not have has no months
   # and no days).
   defp valid_values_text(%Range{first: first, last: last, step: step})
-       when (step > 0 and first > last) or (step < 0 and first < last),
-       do: "There are no valid values"
+       when (step > 0 and first > last) or (step < 0 and first < last) do
+    "There are no valid values"
+  end
 
-  defp valid_values_text(valid), do: "The valid values are #{values_text(valid)}"
+  defp valid_values_text(valid) do
+    "The valid values are #{values_text(valid)}"
+  end
 
   # The values a unit takes, as an error names them: a range, or the ranges
   # of a month with days missing in it (`1..2 and 14..30`).
-  defp values_text(%Range{} = range), do: Calendars.inspect(range)
+  defp values_text(%Range{} = range) do
+    Calendars.inspect(range)
+  end
 
-  defp values_text([%Range{} | _] = ranges),
-    do: Enum.map_join(ranges, " and ", &Calendars.inspect/1)
+  defp values_text([%Range{} | _] = ranges) do
+    Enum.map_join(ranges, " and ", &Calendars.inspect/1)
+  end
 
-  defp values_text(other), do: Calendars.inspect(other)
+  defp values_text(other) do
+    Calendars.inspect(other)
+  end
 
   # A set that held a count from the end is, once the count is taken, the
   # set written with the numbers: in order, its neighbours joined and none
   # twice, as the parser reads one. `{28..30,-1}D` in January is `{28..31}D`,
   # and `T{-1,0}H` is `T{0,23}H`.
   defp as_its_numbers(written, resolved) when is_list(written) do
-    if counts_from_end?(written) and Enum.all?(resolved, &number_or_range?/1),
-      do: Parser.reduce_list(resolved),
-      else: resolved
+    if counts_from_end?(written) and Enum.all?(resolved, &number_or_range?/1) do
+      Parser.reduce_list(resolved)
+    else
+      resolved
+    end
   end
 
-  defp as_its_numbers(_written, resolved), do: resolved
+  defp as_its_numbers(_written, resolved) do
+    resolved
+  end
 
-  defp number_or_range?(member), do: is_integer(member) or is_struct(member, Range)
+  defp number_or_range?(member) do
+    is_integer(member) or is_struct(member, Range)
+  end
 
   # A range runs up from its first value, as an interval does. One whose
   # ends are counted to a first value after its last (`{-1..1}D`, the last
@@ -2151,10 +2529,21 @@ defmodule Tempo.Validation do
      )}
   end
 
-  defp mask_digit(:X), do: "X"
-  defp mask_digit(:negative), do: "-"
-  defp mask_digit(digit) when is_integer(digit), do: Integer.to_string(digit)
-  defp mask_digit(digits) when is_list(digits), do: "{" <> Enum.join(digits, ",") <> "}"
+  defp mask_digit(:X) do
+    "X"
+  end
+
+  defp mask_digit(:negative) do
+    "-"
+  end
+
+  defp mask_digit(digit) when is_integer(digit) do
+    Integer.to_string(digit)
+  end
+
+  defp mask_digit(digits) when is_list(digits) do
+    "{" <> Enum.join(digits, ",") <> "}"
+  end
 
   defp not_valid_error(value, valid, valid_range, read_as) do
     named(
@@ -2245,10 +2634,17 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp validate_leap_second(_units, _tempo), do: :ok
+  defp validate_leap_second(_units, _tempo) do
+    :ok
+  end
 
-  defp pad2(n) when n < 10, do: "0#{n}"
-  defp pad2(n), do: Integer.to_string(n)
+  defp pad2(n) when n < 10 do
+    "0#{n}"
+  end
+
+  defp pad2(n) do
+    Integer.to_string(n)
+  end
 
   defp fetch_unit(units, unit) do
     case List.keyfind(units, unit, 0) do
@@ -2264,7 +2660,9 @@ defmodule Tempo.Validation do
   # −12 (Pacific/Midway pre-2011), so ±24h is permissive.
   @max_offset_minutes 24 * 60
 
-  defp validate_time_shift(nil), do: :ok
+  defp validate_time_shift(nil) do
+    :ok
+  end
 
   # A time shift is hours, minutes and seconds from the hour down, each a
   # whole number and any left out, with its sign on the first unit that is
@@ -2290,13 +2688,22 @@ defmodule Tempo.Validation do
     Enum.all?(shift, &shift_unit?/1) and in_shift_order?(Enum.map(shift, &elem(&1, 0)))
   end
 
-  defp shift_units?(_no_units), do: false
+  defp shift_units?(_no_units) do
+    false
+  end
 
-  defp shift_unit?({unit, amount}) when unit in @shift_units and is_integer(amount), do: true
-  defp shift_unit?(_other), do: false
+  defp shift_unit?({unit, amount}) when unit in @shift_units and is_integer(amount) do
+    true
+  end
+
+  defp shift_unit?(_other) do
+    false
+  end
 
   # From the hour down, each unit once.
-  defp in_shift_order?(units), do: units == Enum.filter(@shift_units, &(&1 in units))
+  defp in_shift_order?(units) do
+    units == Enum.filter(@shift_units, &(&1 in units))
+  end
 
   # The units after the first that is not zero take its sign, so none of
   # them is written with one.
@@ -2369,7 +2776,13 @@ defmodule Tempo.Validation do
   end
 
   defp format_offset(minutes) do
-    sign = if minutes < 0, do: "-", else: "+"
+    sign =
+      if minutes < 0 do
+        "-"
+      else
+        "+"
+      end
+
     m = abs(minutes)
     "#{sign}#{div(m, 60)}:#{pad2(rem(m, 60))}"
   end
@@ -2450,10 +2863,17 @@ defmodule Tempo.Validation do
     end
   end
 
-  def validate_zone_existence(_other), do: :ok
+  def validate_zone_existence(_other) do
+    :ok
+  end
 
-  defp a_set?({_unit, [_ | _]}), do: true
-  defp a_set?(_one_value), do: false
+  defp a_set?({_unit, [_ | _]}) do
+    true
+  end
+
+  defp a_set?(_one_value) do
+    false
+  end
 
   # A value that holds a set in a unit names each value the set does, and is
   # refused where one of them is a reading the clock skips the whole of, as
@@ -2466,21 +2886,31 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp check_in_zone(tempo, zone, false),
-    do: tempo |> Zone.in_gregorian() |> check_wall_time_in_zone(zone)
+  defp check_in_zone(tempo, zone, false) do
+    tempo
+    |> Zone.in_gregorian()
+    |> check_wall_time_in_zone(zone)
+  end
 
-  defp written_reading({date, _time}, :day), do: written_date(date)
+  defp written_reading({date, _time}, :day) do
+    written_date(date)
+  end
 
-  defp written_reading({date, {hour, _minute, _second}}, :hour),
-    do: "#{written_date(date)}T#{pad2(hour)}"
+  defp written_reading({date, {hour, _minute, _second}}, :hour) do
+    "#{written_date(date)}T#{pad2(hour)}"
+  end
 
-  defp written_reading({date, {hour, minute, second}}, _minute_or_second),
-    do: "#{written_date(date)}T#{pad2(hour)}:#{pad2(minute)}:#{pad2(second)}"
+  defp written_reading({date, {hour, minute, second}}, _minute_or_second) do
+    "#{written_date(date)}T#{pad2(hour)}:#{pad2(minute)}:#{pad2(second)}"
+  end
 
-  defp zone_id(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) and zone != "",
-    do: zone
+  defp zone_id(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) and zone != "" do
+    zone
+  end
 
-  defp zone_id(_), do: nil
+  defp zone_id(_) do
+    nil
+  end
 
   # A value names no time in its zone where the clock skips every reading
   # it spans: a minute or a second inside a gap, the hour a spring-forward
@@ -2521,7 +2951,9 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp check_wall_time_in_zone(%Tempo{}, _zone), do: :ok
+  defp check_wall_time_in_zone(%Tempo{}, _zone) do
+    :ok
+  end
 
   # The gap a reading of the wall clock falls in, or `nil`: a reading the
   # clock shows, once or twice (a fall-back's repeated hour is accepted, and
@@ -2539,12 +2971,16 @@ defmodule Tempo.Validation do
   # A value is skipped whole where the gap that holds its first reading
   # holds its last too, so the last is asked only where the first is in one:
   # nearly every value is asked once.
-  defp skipped_whole(nil, _last, _written, _zone), do: :ok
+  defp skipped_whole(nil, _last, _written, _zone) do
+    :ok
+  end
 
   defp skipped_whole(gap, last, written, zone) do
-    if gap_at(zone, last) == gap,
-      do: {:error, skipped_error(written, zone)},
-      else: :ok
+    if gap_at(zone, last) == gap do
+      {:error, skipped_error(written, zone)}
+    else
+      :ok
+    end
   end
 
   defp skipped_error(written, zone) do
@@ -2563,21 +2999,34 @@ defmodule Tempo.Validation do
   # unit, is no one span that a gap could hold; one that holds a set is
   # asked apart (`check_in_zone/3`).
   defp wall_readings(time) do
-    if Enum.all?(time, &one_reading?/1),
-      do: dated_readings(time),
-      else: :no_one_span
+    if Enum.all?(time, &one_reading?/1) do
+      dated_readings(time)
+    else
+      :no_one_span
+    end
   end
 
   @wall_units [:year, :month, :day, :hour, :minute, :second]
 
-  defp one_reading?({unit, value}) when unit in @wall_units and is_integer(value), do: true
-  defp one_reading?({:microsecond, {_value, _precision}}), do: true
-  defp one_reading?(_a_set_a_mask_or_a_group), do: false
+  defp one_reading?({unit, value}) when unit in @wall_units and is_integer(value) do
+    true
+  end
 
-  defp dated_readings([{:year, year}, {:month, month}, {:day, day} | clock]),
-    do: clock_readings({year, month, day}, List.keydelete(clock, :microsecond, 0))
+  defp one_reading?({:microsecond, {_value, _precision}}) do
+    true
+  end
 
-  defp dated_readings(_no_date), do: :no_one_span
+  defp one_reading?(_a_set_a_mask_or_a_group) do
+    false
+  end
+
+  defp dated_readings([{:year, year}, {:month, month}, {:day, day} | clock]) do
+    clock_readings({year, month, day}, List.keydelete(clock, :microsecond, 0))
+  end
+
+  defp dated_readings(_no_date) do
+    :no_one_span
+  end
 
   defp clock_readings({year, month, day} = date, []) do
     {:ok, {date, {0, 0, 0}}, {date, {23, 59, 59}}, "#{year}-#{pad2(month)}-#{pad2(day)}"}
@@ -2594,7 +3043,11 @@ defmodule Tempo.Validation do
     {:ok, reading, reading, "#{written_date(date)}T#{pad2(hour)}:#{pad2(minute)}:#{pad2(second)}"}
   end
 
-  defp clock_readings(_date, _other_units), do: :no_one_span
+  defp clock_readings(_date, _other_units) do
+    :no_one_span
+  end
 
-  defp written_date({year, month, day}), do: "#{year}-#{pad2(month)}-#{pad2(day)}"
+  defp written_date({year, month, day}) do
+    "#{year}-#{pad2(month)}-#{pad2(day)}"
+  end
 end

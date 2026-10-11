@@ -17,8 +17,13 @@ defmodule Tempo.Network.SolverTest do
     }
   end
 
-  defp duration_years(nil), do: nil
-  defp duration_years(%Tempo.Duration{time: time}), do: Keyword.get(time, :year)
+  defp duration_years(nil) do
+    nil
+  end
+
+  defp duration_years(%Tempo.Duration{time: time}) do
+    Keyword.get(time, :year)
+  end
 
   # Two grounded periods a = [a1, a2) and b = [b1, b2) as integer years.
   defp ground(a1, a2, b1, b2) do
@@ -281,7 +286,9 @@ defmodule Tempo.Network.SolverTest do
         end
 
       # Every relation bounds `b` at one end at least.
-      assert traces |> Enum.map(&elem(&1, 0)) |> Enum.uniq() == relations
+      assert traces
+             |> Enum.map(&elem(&1, 0))
+             |> Enum.uniq() == relations
 
       {:ok, boundary} =
         Solver.trace(related({:boundary, :end, :at_or_before, :start}), {:start, :b})
@@ -371,7 +378,8 @@ defmodule Tempo.Network.SolverTest do
 
     test "an unknown period returns {:error, :unknown_period}" do
       assert {:error, :unknown_period} =
-               ground(1200, 1250, 1230, 1280) |> Solver.relation(:a, :missing)
+               ground(1200, 1250, 1230, 1280)
+               |> Solver.relation(:a, :missing)
     end
 
     property "on grounded periods it entails one relation, matching Tempo.relation/2" do

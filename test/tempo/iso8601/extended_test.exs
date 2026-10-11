@@ -551,7 +551,11 @@ defmodule Tempo.Iso8601.Extended.Test do
       refute Tempo.floating?(interval.to)
       assert interval.to.shift == interval.from.shift
 
-      assert {:ok, reparsed} = interval |> Tempo.to_iso8601!() |> Tempo.from_iso8601()
+      assert {:ok, reparsed} =
+               interval
+               |> Tempo.to_iso8601!()
+               |> Tempo.from_iso8601()
+
       assert reparsed == interval
     end
 

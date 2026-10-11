@@ -41,7 +41,9 @@ defmodule Tempo.Duration.NegateTest do
 
     property "negating twice is the identity" do
       check all(d <- duration()) do
-        assert d |> Duration.negate() |> Duration.negate() == d
+        assert d
+               |> Duration.negate()
+               |> Duration.negate() == d
       end
     end
 
@@ -69,8 +71,16 @@ defmodule Tempo.Duration.NegateTest do
       end
     end
 
-    defp opposite(:earlier), do: :later
-    defp opposite(:later), do: :earlier
-    defp opposite(:same), do: :same
+    defp opposite(:earlier) do
+      :later
+    end
+
+    defp opposite(:later) do
+      :earlier
+    end
+
+    defp opposite(:same) do
+      :same
+    end
   end
 end

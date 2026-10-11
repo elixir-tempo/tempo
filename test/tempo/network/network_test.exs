@@ -84,7 +84,9 @@ defmodule Tempo.NetworkTest do
         |> Network.add_sequence([:k1, :k2])
         |> Network.add_relation(:immediately_precedes, :k1, :k2)
 
-      assert Map.keys(network.periods) |> Enum.sort() == [:k1, :k2]
+      assert Map.keys(network.periods)
+             |> Enum.sort() == [:k1, :k2]
+
       assert network.sequences == [[:k1, :k2]]
       assert [%Relation{type: :immediately_precedes, from: :k1, to: :k2}] = network.relations
     end

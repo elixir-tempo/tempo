@@ -36,11 +36,15 @@ defmodule Tempo.RRuleError do
     "#{reason} — #{detail}"
   end
 
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{reason: reason}) when is_atom(reason) and not is_nil(reason) do
     "RRULE error: #{reason}"
   end
 
-  def message(%__MODULE__{}), do: "RRULE error"
+  def message(%__MODULE__{}) do
+    "RRULE error"
+  end
 end

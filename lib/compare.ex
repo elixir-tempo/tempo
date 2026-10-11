@@ -86,7 +86,9 @@ defmodule Tempo.Compare do
 
   """
   @spec compare_time(keyword(), keyword()) :: :lt | :eq | :gt
-  def compare_time([], []), do: :eq
+  def compare_time([], []) do
+    :eq
+  end
 
   # Microseconds compare by VALUE only. Precision (digit count) sets
   # the interval width, not the instant ordering: `{120000, 2}` (.12)
@@ -102,11 +104,19 @@ defmodule Tempo.Compare do
   end
 
   def compare_time([{:microsecond, {v, _p}} | rest], []) do
-    if v > 0, do: :gt, else: compare_time(rest, [])
+    if v > 0 do
+      :gt
+    else
+      compare_time(rest, [])
+    end
   end
 
   def compare_time([], [{:microsecond, {v, _p}} | rest]) do
-    if v > 0, do: :lt, else: compare_time([], rest)
+    if v > 0 do
+      :lt
+    else
+      compare_time([], rest)
+    end
   end
 
   def compare_time([{unit, v} | rest], []) do
@@ -146,11 +156,21 @@ defmodule Tempo.Compare do
     end
   end
 
-  def compare_time(_, _), do: :eq
+  def compare_time(_, _) do
+    :eq
+  end
 
-  defp from_minimum(v1, v2, _a, _b) when v1 < v2, do: :lt
-  defp from_minimum(v1, v2, _a, _b) when v1 > v2, do: :gt
-  defp from_minimum(_v1, _v2, a, b), do: compare_time(a, b)
+  defp from_minimum(v1, v2, _a, _b) when v1 < v2 do
+    :lt
+  end
+
+  defp from_minimum(v1, v2, _a, _b) when v1 > v2 do
+    :gt
+  end
+
+  defp from_minimum(_v1, _v2, a, b) do
+    compare_time(a, b)
+  end
 
   # How coarse a unit is, by level: the units of one level are the same
   # stretch of time on different axes, and no one of them is skipped where
@@ -186,12 +206,29 @@ defmodule Tempo.Compare do
 
   """
   @spec unit_minimum(atom()) :: integer()
-  def unit_minimum(:month), do: 1
-  def unit_minimum(:day), do: 1
-  def unit_minimum(:week), do: 1
-  def unit_minimum(:day_of_year), do: 1
-  def unit_minimum(:day_of_week), do: 1
-  def unit_minimum(_), do: 0
+  def unit_minimum(:month) do
+    1
+  end
+
+  def unit_minimum(:day) do
+    1
+  end
+
+  def unit_minimum(:week) do
+    1
+  end
+
+  def unit_minimum(:day_of_year) do
+    1
+  end
+
+  def unit_minimum(:day_of_week) do
+    1
+  end
+
+  def unit_minimum(_) do
+    0
+  end
 
   @doc false
   # Which of two dates is the earlier day, by the days their calendars count
@@ -276,10 +313,16 @@ defmodule Tempo.Compare do
         %Tempo{time: [{:year, b_year} | b_rest]} = b
       )
       when is_integer(a_year) and is_integer(b_year) do
-    if whole_units?(a_rest) and whole_units?(b_rest), do: :ok, else: orderable_read(a, b)
+    if whole_units?(a_rest) and whole_units?(b_rest) do
+      :ok
+    else
+      orderable_read(a, b)
+    end
   end
 
-  def orderable(%Tempo{} = a, %Tempo{} = b), do: orderable_read(a, b)
+  def orderable(%Tempo{} = a, %Tempo{} = b) do
+    orderable_read(a, b)
+  end
 
   defp orderable_read(a, b) do
     with {:ok, _order} <- order(a, b), do: :ok
@@ -312,7 +355,11 @@ defmodule Tempo.Compare do
     end
   end
 
-  defp converted_start(value), do: value |> Tempo.to_interval() |> span_start(value)
+  defp converted_start(value) do
+    value
+    |> Tempo.to_interval()
+    |> span_start(value)
+  end
 
   # The first value is one value, and starts where it is a point or where
   # its own span does. Where the walk gives none, or cannot say, the
@@ -325,11 +372,21 @@ defmodule Tempo.Compare do
   end
 
   defp start_of_one(%Tempo{time: time} = first, value) do
-    if point?(time), do: {:ok, first}, else: first |> Tempo.to_interval() |> span_start(value)
+    if point?(time) do
+      {:ok, first}
+    else
+      first
+      |> Tempo.to_interval()
+      |> span_start(value)
+    end
   end
 
   defp span_start({:ok, %Interval{from: %Tempo{time: time} = start}}, value) do
-    if point?(time), do: {:ok, start}, else: {:error, no_start_error(value)}
+    if point?(time) do
+      {:ok, start}
+    else
+      {:error, no_start_error(value)}
+    end
   end
 
   defp span_start({:ok, %IntervalSet{} = set}, value) do
@@ -339,8 +396,13 @@ defmodule Tempo.Compare do
     end
   end
 
-  defp span_start({:ok, _no_start}, value), do: {:error, no_start_error(value)}
-  defp span_start({:error, _exception} = error, _value), do: error
+  defp span_start({:ok, _no_start}, value) do
+    {:error, no_start_error(value)}
+  end
+
+  defp span_start({:error, _exception} = error, _value) do
+    error
+  end
 
   defp no_start_error(value) do
     ConversionError.exception(
@@ -357,78 +419,135 @@ defmodule Tempo.Compare do
   # (`X*Y`) is no year, so the units after it name a point as they do with no
   # year written.
   @spec point?(list()) :: boolean()
-  def point?([{:year, :any} | rest]), do: point_units?(rest)
-  def point?(time), do: point_units?(time)
+  def point?([{:year, :any} | rest]) do
+    point_units?(rest)
+  end
 
-  defp point_units?([{:year, year} | rest]) when is_integer(year), do: point_units?(rest)
+  def point?(time) do
+    point_units?(time)
+  end
+
+  defp point_units?([{:year, year} | rest]) when is_integer(year) do
+    point_units?(rest)
+  end
 
   # A season of 21 to 24 has no dates until it has a hemisphere, so it is no
   # point: it is read as the start of the span `Tempo.to_interval/1` gives
   # it, in the hemisphere of the territory in force.
-  defp point_units?([{:season, _season} | _rest]), do: false
+  defp point_units?([{:season, _season} | _rest]) do
+    false
+  end
 
-  defp point_units?([{_unit, value} | rest]) when is_integer(value) and value >= 0,
-    do: point_units?(rest)
+  defp point_units?([{_unit, value} | rest]) when is_integer(value) and value >= 0 do
+    point_units?(rest)
+  end
 
   defp point_units?([{:microsecond, {value, precision}} | rest])
-       when is_integer(value) and is_integer(precision),
-       do: point_units?(rest)
+       when is_integer(value) and is_integer(precision) do
+    point_units?(rest)
+  end
 
   defp point_units?([{_unit, {value, [margin_of_error: _margin]}} | rest])
-       when is_integer(value),
-       do: point_units?(rest)
+       when is_integer(value) do
+    point_units?(rest)
+  end
 
-  defp point_units?([]), do: true
-  defp point_units?(_time), do: false
+  defp point_units?([]) do
+    true
+  end
+
+  defp point_units?(_time) do
+    false
+  end
 
   # A point as comparing reads it: its margin of error dropped, and an
   # unspecified year dropped with it, since `X*Y6M` is the June of no year in
   # particular, as `6M` is.
   defp crisp_point(%Tempo{} = value) do
     with {:ok, %Tempo{time: time} = point} <- start_point(value) do
-      {:ok, %{point | time: time |> drop_margin_of_error() |> drop_unspecified_year()}}
+      {:ok,
+       %{
+         point
+         | time:
+             time
+             |> drop_margin_of_error()
+             |> drop_unspecified_year()
+       }}
     end
   end
 
-  defp drop_unspecified_year([{:year, :any} | rest]), do: rest
-  defp drop_unspecified_year(time), do: time
+  defp drop_unspecified_year([{:year, :any} | rest]) do
+    rest
+  end
+
+  defp drop_unspecified_year(time) do
+    time
+  end
 
   # Whether each unit of a time list is a whole number as it stands, so that
   # the list needs no reading before it is compared. The year is the one
   # unit that may be below zero.
-  defp whole?([{:year, year} | rest]) when is_integer(year), do: whole_units?(rest)
-  defp whole?(time), do: whole_units?(time)
+  defp whole?([{:year, year} | rest]) when is_integer(year) do
+    whole_units?(rest)
+  end
+
+  defp whole?(time) do
+    whole_units?(time)
+  end
 
   # A season's number is no place in the year (`point?/1`).
-  defp whole_units?([{:season, _season} | _rest]), do: false
+  defp whole_units?([{:season, _season} | _rest]) do
+    false
+  end
 
-  defp whole_units?([{_unit, value} | rest]) when is_integer(value) and value >= 0,
-    do: whole_units?(rest)
+  defp whole_units?([{_unit, value} | rest]) when is_integer(value) and value >= 0 do
+    whole_units?(rest)
+  end
 
   defp whole_units?([{:microsecond, {value, precision}} | rest])
-       when is_integer(value) and is_integer(precision),
-       do: whole_units?(rest)
+       when is_integer(value) and is_integer(precision) do
+    whole_units?(rest)
+  end
 
-  defp whole_units?([]), do: true
-  defp whole_units?(_time), do: false
+  defp whole_units?([]) do
+    true
+  end
+
+  defp whole_units?(_time) do
+    false
+  end
 
   # Two values share a line to be ordered on when both have a year, or neither
   # has and they lead with the same unit: the rule the set operations and the
   # certainty functions hold their operands to. A month with no year and a
   # dated day have no order, and neither have a week and a month of no year.
-  defp same_line?([{unit, _a} | _a_rest], [{unit, _b} | _b_rest]), do: true
-  defp same_line?([], []), do: true
-  defp same_line?(_a_time, _b_time), do: false
-
-  defp one_line(%Tempo{time: a_time} = a, %Tempo{time: b_time} = b) do
-    if same_line?(a_time, b_time), do: :ok, else: {:error, no_line_error(a, b)}
+  defp same_line?([{unit, _a} | _a_rest], [{unit, _b} | _b_rest]) do
+    true
   end
 
-  defp no_line_error(%Tempo{time: [{:year, _year} | _rest]}, %Tempo{} = unanchored),
-    do: UnanchoredError.exception(value: unanchored, reason: :comparison)
+  defp same_line?([], []) do
+    true
+  end
 
-  defp no_line_error(%Tempo{} = unanchored, %Tempo{time: [{:year, _year} | _rest]}),
-    do: UnanchoredError.exception(value: unanchored, reason: :comparison)
+  defp same_line?(_a_time, _b_time) do
+    false
+  end
+
+  defp one_line(%Tempo{time: a_time} = a, %Tempo{time: b_time} = b) do
+    if same_line?(a_time, b_time) do
+      :ok
+    else
+      {:error, no_line_error(a, b)}
+    end
+  end
+
+  defp no_line_error(%Tempo{time: [{:year, _year} | _rest]}, %Tempo{} = unanchored) do
+    UnanchoredError.exception(value: unanchored, reason: :comparison)
+  end
+
+  defp no_line_error(%Tempo{} = unanchored, %Tempo{time: [{:year, _year} | _rest]}) do
+    UnanchoredError.exception(value: unanchored, reason: :comparison)
+  end
 
   defp no_line_error(%Tempo{} = a, %Tempo{} = b) do
     UnanchoredError.exception(
@@ -439,8 +558,13 @@ defmodule Tempo.Compare do
     )
   end
 
-  defp leading_unit(%Tempo{time: [{unit, _value} | _rest]}), do: unit
-  defp leading_unit(%Tempo{}), do: nil
+  defp leading_unit(%Tempo{time: [{unit, _value} | _rest]}) do
+    unit
+  end
+
+  defp leading_unit(%Tempo{}) do
+    nil
+  end
 
   defp order_points(%Tempo{} = a, %Tempo{} = b) do
     if structural?(a, b) do
@@ -468,13 +592,20 @@ defmodule Tempo.Compare do
   # kept, `Tempo.TimeZoneDatabase.changes/3`), the two are compared as the
   # moments they are.
   defp order_in_one_zone(a, b, order) do
-    if across_a_change?(a, b),
-      do: compare_via_utc(a, b),
-      else: order_of(order)
+    if across_a_change?(a, b) do
+      compare_via_utc(a, b)
+    else
+      order_of(order)
+    end
   end
 
-  defp order_of(:lt), do: :earlier
-  defp order_of(:gt), do: :later
+  defp order_of(:lt) do
+    :earlier
+  end
+
+  defp order_of(:gt) do
+    :later
+  end
 
   # More than any offset a zone has had, and any change of one.
   @a_day_or_so 27 * 3_600
@@ -492,7 +623,9 @@ defmodule Tempo.Compare do
     end
   end
 
-  defp across_a_change?(_a, _b), do: false
+  defp across_a_change?(_a, _b) do
+    false
+  end
 
   # Structural comparison of the time lists is calendar-blind — `5786`
   # (Hebrew) would read as later than `2025` (Gregorian) — so it is only
@@ -513,10 +646,16 @@ defmodule Tempo.Compare do
 
   # Two values with no year are ordered by their fields, and by nothing else:
   # in different zones or calendars they have no year to be projected through.
-  defp one_frame(%Tempo{time: [{:year, _year} | _rest]}, %Tempo{}), do: :ok
+  defp one_frame(%Tempo{time: [{:year, _year} | _rest]}, %Tempo{}) do
+    :ok
+  end
 
   defp one_frame(%Tempo{} = a, %Tempo{} = b) do
-    if structural?(a, b), do: :ok, else: {:error, no_frame_error(a, b)}
+    if structural?(a, b) do
+      :ok
+    else
+      {:error, no_frame_error(a, b)}
+    end
   end
 
   defp no_frame_error(%Tempo{} = a, %Tempo{} = b) do
@@ -554,10 +693,13 @@ defmodule Tempo.Compare do
 
   # A value with no one start to ask about (a set or a mask of months or of
   # days) is asked of its year, and one with no one year of nothing.
-  defp year_begins_with_its_firsts?(year, calendar) when is_integer(year),
-    do: UnitValues.year_begins_with_first_month?(year, calendar)
+  defp year_begins_with_its_firsts?(year, calendar) when is_integer(year) do
+    UnitValues.year_begins_with_first_month?(year, calendar)
+  end
 
-  defp year_begins_with_its_firsts?(_no_one_year, _calendar), do: true
+  defp year_begins_with_its_firsts?(_no_one_year, _calendar) do
+    true
+  end
 
   # Two anchored time lists on different sub-year axes (week vs month vs
   # ordinal day) cannot be compared structurally — route them through the
@@ -565,23 +707,44 @@ defmodule Tempo.Compare do
   # path: they have no year to project through, and the set-operations
   # layer already rejects cross-axis unanchored operands upstream.
   defp comparable_axes?(time_a, time_b, calendar) do
-    if Keyword.has_key?(time_a, :year) and Keyword.has_key?(time_b, :year),
-      do: same_axis?(date_axis(time_a), date_axis(time_b), calendar),
-      else: true
+    if Keyword.has_key?(time_a, :year) and Keyword.has_key?(time_b, :year) do
+      same_axis?(date_axis(time_a), date_axis(time_b), calendar)
+    else
+      true
+    end
   end
 
   # A value with no unit under its year starts where the year's first month
   # does, and its first day. It starts where the year's first week does only
   # in a calendar of weeks: ISO 8601's first week of 2027 starts on 4 January,
   # so `2027` and `2027-W01` are not one moment.
-  defp same_axis?(axis, axis, _calendar), do: true
-  defp same_axis?(:none, :week, calendar), do: week_based?(calendar)
-  defp same_axis?(:week, :none, calendar), do: week_based?(calendar)
-  defp same_axis?(:none, _axis, _calendar), do: true
-  defp same_axis?(_axis, :none, _calendar), do: true
-  defp same_axis?(_axis, _another_axis, _calendar), do: false
+  defp same_axis?(axis, axis, _calendar) do
+    true
+  end
 
-  defp week_based?(calendar), do: Tempo.week_based_calendar?(calendar)
+  defp same_axis?(:none, :week, calendar) do
+    week_based?(calendar)
+  end
+
+  defp same_axis?(:week, :none, calendar) do
+    week_based?(calendar)
+  end
+
+  defp same_axis?(:none, _axis, _calendar) do
+    true
+  end
+
+  defp same_axis?(_axis, :none, _calendar) do
+    true
+  end
+
+  defp same_axis?(_axis, _another_axis, _calendar) do
+    false
+  end
+
+  defp week_based?(calendar) do
+    Tempo.week_based_calendar?(calendar)
+  end
 
   # `:week` marks the week-of-year axis only when no `:month` qualifies
   # it — `[year, month, week]` is a week *of the month*, which lives on
@@ -696,7 +859,10 @@ defmodule Tempo.Compare do
 
   def compare(%Tempo{} = a, %Tempo{} = b, _options) do
     one_frame!(a, b)
-    a |> compare_endpoints(b) |> from_endpoint_order()
+
+    a
+    |> compare_endpoints(b)
+    |> from_endpoint_order()
   end
 
   def compare(%Tempo.Duration{} = a, %Tempo.Duration{} = b, options) do
@@ -725,38 +891,97 @@ defmodule Tempo.Compare do
   # order with one that has: the pair `Tempo.relation/2` refuses.
   defp one_frame!(%Tempo{} = a, %Tempo{} = b) do
     if Tempo.floating?(a) != Tempo.floating?(b) do
-      floating = if Tempo.floating?(a), do: a, else: b
+      floating =
+        if Tempo.floating?(a) do
+          a
+        else
+          b
+        end
+
       raise FloatingTempoError.exception(operation: :compare, value: floating)
     end
 
     :ok
   end
 
-  defp from_endpoint_order(:earlier), do: :lt
-  defp from_endpoint_order(:same), do: :eq
-  defp from_endpoint_order(:later), do: :gt
+  defp from_endpoint_order(:earlier) do
+    :lt
+  end
 
-  defp from_magnitudes(a, b) when a < b, do: :lt
-  defp from_magnitudes(a, b) when a > b, do: :gt
-  defp from_magnitudes(_a, _b), do: :eq
+  defp from_endpoint_order(:same) do
+    :eq
+  end
+
+  defp from_endpoint_order(:later) do
+    :gt
+  end
+
+  defp from_magnitudes(a, b) when a < b do
+    :lt
+  end
+
+  defp from_magnitudes(a, b) when a > b do
+    :gt
+  end
+
+  defp from_magnitudes(_a, _b) do
+    :eq
+  end
 
   # An unbounded `from` starts before every stated instant; an
   # unbounded `to` ends after every stated instant. Two unbounded
   # endpoints on the same side are indistinguishable.
-  defp compare_bound(same, same, _side, _options), do: :eq
-  defp compare_bound(:undefined, _b, :from, _options), do: :lt
-  defp compare_bound(_a, :undefined, :from, _options), do: :gt
-  defp compare_bound(:undefined, _b, :to, _options), do: :gt
-  defp compare_bound(_a, :undefined, :to, _options), do: :lt
-  defp compare_bound(nil, _b, :to, _options), do: :gt
-  defp compare_bound(_a, nil, :to, _options), do: :lt
-  defp compare_bound(a, b, _side, options), do: compare(a, b, options)
+  defp compare_bound(same, same, _side, _options) do
+    :eq
+  end
 
-  defp kind_of(%Tempo{}), do: "a Tempo"
-  defp kind_of(%Tempo.Duration{}), do: "a Tempo.Duration"
-  defp kind_of(%Interval{}), do: "a Tempo.Interval"
-  defp kind_of(%IntervalSet{}), do: "a Tempo.IntervalSet"
-  defp kind_of(other), do: Calendars.inspect(other)
+  defp compare_bound(:undefined, _b, :from, _options) do
+    :lt
+  end
+
+  defp compare_bound(_a, :undefined, :from, _options) do
+    :gt
+  end
+
+  defp compare_bound(:undefined, _b, :to, _options) do
+    :gt
+  end
+
+  defp compare_bound(_a, :undefined, :to, _options) do
+    :lt
+  end
+
+  defp compare_bound(nil, _b, :to, _options) do
+    :gt
+  end
+
+  defp compare_bound(_a, nil, :to, _options) do
+    :lt
+  end
+
+  defp compare_bound(a, b, _side, options) do
+    compare(a, b, options)
+  end
+
+  defp kind_of(%Tempo{}) do
+    "a Tempo"
+  end
+
+  defp kind_of(%Tempo.Duration{}) do
+    "a Tempo.Duration"
+  end
+
+  defp kind_of(%Interval{}) do
+    "a Tempo.Interval"
+  end
+
+  defp kind_of(%IntervalSet{}) do
+    "a Tempo.IntervalSet"
+  end
+
+  defp kind_of(other) do
+    Calendars.inspect(other)
+  end
 
   @doc """
   Drop the `margin_of_error` annotation from every component of a time
@@ -791,18 +1016,33 @@ defmodule Tempo.Compare do
   # read one wall clock as two different instants, so they must project
   # to UTC; comparing their wall-clock lists directly would wrongly
   # report them equal.
-  defp zones_compatible?(a, b), do: same_zone_id?(a, b) and same_offset?(a, b)
+  defp zones_compatible?(a, b) do
+    same_zone_id?(a, b) and same_offset?(a, b)
+  end
 
-  defp same_zone_id?(%Tempo{extended: a}, %Tempo{extended: b}), do: zone_id(a) == zone_id(b)
+  defp same_zone_id?(%Tempo{extended: a}, %Tempo{extended: b}) do
+    zone_id(a) == zone_id(b)
+  end
 
-  defp zone_id(nil), do: nil
-  defp zone_id(%{zone_id: zone_id}), do: zone_id
+  defp zone_id(nil) do
+    nil
+  end
 
-  defp same_offset?(%Tempo{shift: a}, %Tempo{shift: b}),
-    do: shift_seconds(a) == shift_seconds(b)
+  defp zone_id(%{zone_id: zone_id}) do
+    zone_id
+  end
 
-  defp shift_seconds(nil), do: nil
-  defp shift_seconds(shift), do: shift_to_seconds(shift)
+  defp same_offset?(%Tempo{shift: a}, %Tempo{shift: b}) do
+    shift_seconds(a) == shift_seconds(b)
+  end
+
+  defp shift_seconds(nil) do
+    nil
+  end
+
+  defp shift_seconds(shift) do
+    shift_to_seconds(shift)
+  end
 
   defp compare_via_utc(%Tempo{time: [{:year, _year} | _rest]} = a, %Tempo{} = b) do
     a_secs = to_utc_seconds(a)
@@ -818,7 +1058,9 @@ defmodule Tempo.Compare do
     end
   end
 
-  defp compare_via_utc(%Tempo{} = a, %Tempo{} = b), do: raise(no_frame_error(a, b))
+  defp compare_via_utc(%Tempo{} = a, %Tempo{} = b) do
+    raise(no_frame_error(a, b))
+  end
 
   defp compare_microsecond_values(a, b) do
     case {microsecond_value(a), microsecond_value(b)} do
@@ -903,10 +1145,16 @@ defmodule Tempo.Compare do
   # A value as the point with a year it is projected from. Most values given
   # to the projection are that already, so they are passed through unread.
   defp dated_point!(%Tempo{time: [{:year, year} | rest]} = value) when is_integer(year) do
-    if whole_units?(rest), do: value, else: read_dated_point!(value)
+    if whole_units?(rest) do
+      value
+    else
+      read_dated_point!(value)
+    end
   end
 
-  defp dated_point!(%Tempo{} = value), do: read_dated_point!(value)
+  defp dated_point!(%Tempo{} = value) do
+    read_dated_point!(value)
+  end
 
   defp read_dated_point!(%Tempo{} = value) do
     case crisp_point(value) do
@@ -979,9 +1227,11 @@ defmodule Tempo.Compare do
         %Tempo{extended: %{zone_offset: minutes}, shift: [_ | _] = shift} = tempo
       )
       when is_integer(minutes) do
-    if shift_to_seconds(shift) == minutes * 60,
-      do: :ok,
-      else: {:error, offset_zone_mismatch(tempo, shift_to_seconds(shift), minutes * 60)}
+    if shift_to_seconds(shift) == minutes * 60 do
+      :ok
+    else
+      {:error, offset_zone_mismatch(tempo, shift_to_seconds(shift), minutes * 60)}
+    end
   end
 
   def validate_zone_offset(%Tempo{extended: extended, shift: shift} = tempo) do
@@ -989,10 +1239,19 @@ defmodule Tempo.Compare do
     stated = explicit_offset_seconds(extended, shift)
 
     cond do
-      is_nil(zone_id) or zone_id == "" -> :ok
-      is_nil(stated) -> :ok
-      not Tempo.anchored?(tempo) -> :ok
-      true -> tempo |> span_starts() |> check_zone_offsets(zone_id, stated)
+      is_nil(zone_id) or zone_id == "" ->
+        :ok
+
+      is_nil(stated) ->
+        :ok
+
+      not Tempo.anchored?(tempo) ->
+        :ok
+
+      true ->
+        tempo
+        |> span_starts()
+        |> check_zone_offsets(zone_id, stated)
     end
   end
 
@@ -1008,12 +1267,18 @@ defmodule Tempo.Compare do
   # The reading a value is written with, where it has a year to be read by.
   defp wall_time_written(%Tempo{time: [{:year, year} | _rest] = time, calendar: calendar})
        when is_integer(year) and year >= 1 do
-    if whole_units?(time),
-      do: time |> wall_seconds(year, calendar) |> wall_seconds_to_iso(),
-      else: nil
+    if whole_units?(time) do
+      time
+      |> wall_seconds(year, calendar)
+      |> wall_seconds_to_iso()
+    else
+      nil
+    end
   end
 
-  defp wall_time_written(%Tempo{}), do: nil
+  defp wall_time_written(%Tempo{}) do
+    nil
+  end
 
   @doc false
   # Whether a time shift states the time in UTC and says nothing of a local
@@ -1022,8 +1287,13 @@ defmodule Tempo.Compare do
   # 9557 §2.2 has `Z` mean that "the time in UTC is known, but the offset to
   # local time is unknown", where `+00:00` says that local time is UTC's.
   @spec no_local_offset?(keyword() | nil) :: boolean()
-  def no_local_offset?(hour: 0), do: true
-  def no_local_offset?(_shift), do: false
+  def no_local_offset?(hour: 0) do
+    true
+  end
+
+  def no_local_offset?(_shift) do
+    false
+  end
 
   # The moments a zoned value's offset is checked at: the value when it is one
   # point, and otherwise the start of each span it names (`2026-{01,07}-15`
@@ -1032,21 +1302,35 @@ defmodule Tempo.Compare do
   #
   # A season of 21 to 24 has no moment until it has a hemisphere, and is not
   # given one to be read.
-  defp span_starts(%Tempo{time: [{:year, _year}, {:season, _season} | _rest]}), do: []
+  defp span_starts(%Tempo{time: [{:year, _year}, {:season, _season} | _rest]}) do
+    []
+  end
 
   defp span_starts(%Tempo{time: time} = tempo) do
-    if point?(time), do: [tempo], else: tempo |> Tempo.to_interval() |> starts_of()
+    if point?(time) do
+      [tempo]
+    else
+      tempo
+      |> Tempo.to_interval()
+      |> starts_of()
+    end
   end
 
-  defp starts_of({:ok, %Interval{from: %Tempo{} = start}}), do: [start]
+  defp starts_of({:ok, %Interval{from: %Tempo{} = start}}) do
+    [start]
+  end
 
   defp starts_of({:ok, %IntervalSet{} = set}) do
-    if IntervalSet.bounded?(set),
-      do: for(%Interval{from: %Tempo{} = start} <- IntervalSet.members(set), do: start),
-      else: []
+    if IntervalSet.bounded?(set) do
+      for(%Interval{from: %Tempo{} = start} <- IntervalSet.members(set), do: start)
+    else
+      []
+    end
   end
 
-  defp starts_of(_no_spans), do: []
+  defp starts_of(_no_spans) do
+    []
+  end
 
   defp check_zone_offsets(starts, zone_id, stated) do
     Enum.reduce_while(starts, :ok, fn start, :ok ->
@@ -1079,11 +1363,13 @@ defmodule Tempo.Compare do
 
   # Pre-common-era: the IANA data has no rules to confirm or refute
   # the stated offset, so accept it rather than consult the database.
-  defp check_wall(wall, _zone_id, _stated, _spanned) when wall < @gregorian_seconds_year_1,
-    do: :ok
+  defp check_wall(wall, _zone_id, _stated, _spanned) when wall < @gregorian_seconds_year_1 do
+    :ok
+  end
 
-  defp check_wall(wall, zone_id, stated, spanned),
-    do: do_check_zone_offset(wall, zone_id, stated, spanned)
+  defp check_wall(wall, zone_id, stated, spanned) do
+    do_check_zone_offset(wall, zone_id, stated, spanned)
+  end
 
   defp do_check_zone_offset(wall, zone_id, stated, spanned) do
     # A reading the clock skips names no moment in the zone, so no offset
@@ -1099,12 +1385,15 @@ defmodule Tempo.Compare do
           [TimeZoneDatabase.total_offset(period)]
 
         {:ambiguous, first, second} ->
-          [first, second] |> Enum.map(&TimeZoneDatabase.total_offset/1)
+          [first, second]
+          |> Enum.map(&TimeZoneDatabase.total_offset/1)
 
         {:gap, _before, {later, gap_ends}} ->
-          if comes_out_within?(gap_ends, wall, spanned),
-            do: [TimeZoneDatabase.total_offset(later)],
-            else: []
+          if comes_out_within?(gap_ends, wall, spanned) do
+            [TimeZoneDatabase.total_offset(later)]
+          else
+            []
+          end
 
         _not_known ->
           []
@@ -1168,7 +1457,9 @@ defmodule Tempo.Compare do
         |> day_of(year, calendar)
 
       true ->
-        time |> start_ymd(year, calendar) |> day_of(year, calendar)
+        time
+        |> start_ymd(year, calendar)
+        |> day_of(year, calendar)
     end
   end
 
@@ -1188,22 +1479,30 @@ defmodule Tempo.Compare do
   # and then its count (`date_to_iso_days/3`). What is no date is counted as
   # its numbers stand, and a date that could not be computed as the year's
   # first: neither is raised for.
-  defp day_of({:ok, %Date{} = date}, year, calendar), do: day_of(date, year, calendar)
+  defp day_of({:ok, %Date{} = date}, year, calendar) do
+    day_of(date, year, calendar)
+  end
 
-  defp day_of(%Date{year: year, month: month, day: day, calendar: calendar}, _year, _calendar),
-    do: calendar.date_to_iso_days(year, month, day)
+  defp day_of(%Date{year: year, month: month, day: day, calendar: calendar}, _year, _calendar) do
+    calendar.date_to_iso_days(year, month, day)
+  end
 
   defp day_of({year, month, day}, _year, calendar)
        when is_integer(year) and is_integer(month) and is_integer(day) do
-    if calendar.valid_date?(year, month, day),
-      do: calendar.date_to_iso_days(year, month, day),
-      else: Calendars.default().date_to_iso_days(year, month, day)
+    if calendar.valid_date?(year, month, day) do
+      calendar.date_to_iso_days(year, month, day)
+    else
+      Calendars.default().date_to_iso_days(year, month, day)
+    end
   end
 
-  defp day_of({year, month, day}, _year, _calendar),
-    do: Calendars.default().date_to_iso_days(year, month, day)
+  defp day_of({year, month, day}, _year, _calendar) do
+    Calendars.default().date_to_iso_days(year, month, day)
+  end
 
-  defp day_of(_no_date, year, _calendar), do: Calendars.default().date_to_iso_days(year, 1, 1)
+  defp day_of(_no_date, year, _calendar) do
+    Calendars.default().date_to_iso_days(year, 1, 1)
+  end
 
   # The offset to subtract from wall-clock to get UTC. Priority:
   #
@@ -1258,7 +1557,9 @@ defmodule Tempo.Compare do
     shift_to_seconds(shift)
   end
 
-  defp resolve_offset_seconds(_extended, _shift, _wall, _spanned), do: 0
+  defp resolve_offset_seconds(_extended, _shift, _wall, _spanned) do
+    0
+  end
 
   # A reading the clock skips (a spring-forward, a day a zone leaves out) is
   # read with the offset before the gap, as RFC 5545 §3.3.5 reads it, so it
@@ -1277,15 +1578,20 @@ defmodule Tempo.Compare do
   defp skipped_offset({before, gap_starts}, {_later, gap_ends}, wall_seconds, spanned) do
     before = TimeZoneDatabase.total_offset(before)
 
-    if comes_out_within?(gap_ends, wall_seconds, spanned),
-      do: before + wall_seconds - gregorian_seconds(gap_starts),
-      else: before
+    if comes_out_within?(gap_ends, wall_seconds, spanned) do
+      before + wall_seconds - gregorian_seconds(gap_starts)
+    else
+      before
+    end
   end
 
-  defp comes_out_within?(_gap_ends, _wall_seconds, :infinity), do: true
+  defp comes_out_within?(_gap_ends, _wall_seconds, :infinity) do
+    true
+  end
 
-  defp comes_out_within?(gap_ends, wall_seconds, spanned),
-    do: gregorian_seconds(gap_ends) < wall_seconds + spanned
+  defp comes_out_within?(gap_ends, wall_seconds, spanned) do
+    gregorian_seconds(gap_ends) < wall_seconds + spanned
+  end
 
   # A change of a zone's clock, which the zone database dates in its own
   # calendar, in the same seconds.
@@ -1315,13 +1621,17 @@ defmodule Tempo.Compare do
     shift_to_seconds(shift)
   end
 
-  defp explicit_offset_seconds(_extended, _shift), do: nil
+  defp explicit_offset_seconds(_extended, _shift) do
+    nil
+  end
 
   @doc false
   # The signed offset in seconds denoted by a parsed ISO 8601 shift
   # list. Shared with `Tempo.to_datetime/1`'s conversion of a value
   # with an offset.
-  def offset_seconds(shift) when is_list(shift), do: shift_to_seconds(shift)
+  def offset_seconds(shift) when is_list(shift) do
+    shift_to_seconds(shift)
+  end
 
   # A shift carries its sign on its first non-zero component (`-05:30`
   # is `[hour: -5, minute: 30]`, `-00:30` is `[hour: 0, minute: -30]`),
@@ -1335,10 +1645,21 @@ defmodule Tempo.Compare do
     shift_sign(hour, minute, second) * (abs(hour) * 3600 + abs(minute) * 60 + abs(second))
   end
 
-  defp shift_sign(hour, _minute, _second) when hour < 0, do: -1
-  defp shift_sign(0, minute, _second) when minute < 0, do: -1
-  defp shift_sign(0, 0, second) when second < 0, do: -1
-  defp shift_sign(_hour, _minute, _second), do: 1
+  defp shift_sign(hour, _minute, _second) when hour < 0 do
+    -1
+  end
+
+  defp shift_sign(0, minute, _second) when minute < 0 do
+    -1
+  end
+
+  defp shift_sign(0, 0, second) when second < 0 do
+    -1
+  end
+
+  defp shift_sign(_hour, _minute, _second) do
+    1
+  end
 
   # `Keyword.get/3` returns `any()`, so any arithmetic on its result
   # widens to `number()` and propagates a stray `float()` into the

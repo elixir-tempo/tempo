@@ -24,7 +24,9 @@ defmodule Tempo.UnknownZoneError do
     "Unknown IANA time zone: #{Calendars.inspect(zone_id)}"
   end
 
-  def message(%__MODULE__{zone_id: nil}), do: "Unknown IANA time zone"
+  def message(%__MODULE__{zone_id: nil}) do
+    "Unknown IANA time zone"
+  end
 
   def message(%__MODULE__{zone_id: zone_id}) do
     "Unknown IANA time zone: #{Calendars.inspect(zone_id)}. A zone is named by a string, " <>

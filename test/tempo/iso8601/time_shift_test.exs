@@ -22,7 +22,9 @@ defmodule Tempo.Iso8601.TimeShiftTest do
   @wall ~N[2026-06-15 10:00:00]
 
   # The shift a text holds, written after a time of day in the explicit form.
-  defp shift_of(text), do: Tempo.from_iso8601!("2026Y6M15DT10H0M0S" <> text).shift
+  defp shift_of(text) do
+    Tempo.from_iso8601!("2026Y6M15DT10H0M0S" <> text).shift
+  end
 
   # The time in UTC of 10:00:00 on 15 June 2026 written with this shift.
   defp in_utc(text) do
@@ -30,7 +32,9 @@ defmodule Tempo.Iso8601.TimeShiftTest do
     DateTime.to_naive(utc)
   end
 
-  defp refused?(text), do: match?({:error, %ParseError{}}, Tempo.from_iso8601(text))
+  defp refused?(text) do
+    match?({:error, %ParseError{}}, Tempo.from_iso8601(text))
+  end
 
   describe "a time shift in the explicit form" do
     # ISO 8601-2 §7.4, examples 1, 2, 4 to 8, and §7.10: a unit that is zero

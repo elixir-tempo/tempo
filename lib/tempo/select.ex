@@ -395,9 +395,13 @@ defmodule Tempo.Select do
   # `Tempo.workdays/1` and `Tempo.weekends/1` return an error for a
   # territory they cannot resolve, so a pipeline reports that error.
 
-  def select(_base, {:error, _reason} = error), do: error
+  def select(_base, {:error, _reason} = error) do
+    error
+  end
 
-  def select(base, %Range{} = range), do: select(base, Enum.to_list(range))
+  def select(base, %Range{} = range) do
+    select(base, Enum.to_list(range))
+  end
 
   # ---- IntervalSet base: select within each member ----
 
@@ -412,17 +416,24 @@ defmodule Tempo.Select do
 
   def select(base, %Tempo.Workdays{weekdays: weekdays, except: except}) do
     with {:ok, %IntervalSet{} = days} <- select(base, day_of_week_selector(weekdays)) do
-      if IntervalSet.bounded?(days),
-        do: without_holidays(days, except, base),
-        else: lazily_without_holidays(days, except)
+      if IntervalSet.bounded?(days) do
+        without_holidays(days, except, base)
+      else
+        lazily_without_holidays(days, except)
+      end
     end
   end
 
   # ---- Tempo and Tempo.Set bases: select across the span they
   # convert to ----
 
-  def select(%Tempo{} = tempo, selector), do: select_converted(tempo, selector)
-  def select(%Tempo.Set{} = set, selector), do: select_converted(set, selector)
+  def select(%Tempo{} = tempo, selector) do
+    select_converted(tempo, selector)
+  end
+
+  def select(%Tempo.Set{} = set, selector) do
+    select_converted(set, selector)
+  end
 
   # ---- Interval base: select period by period ----
 
@@ -450,18 +461,22 @@ defmodule Tempo.Select do
      )}
   end
 
-  defp group_at_an_end?(%Interval{from: from, to: to}),
-    do: no_one_value?(from) or no_one_value?(to)
+  defp group_at_an_end?(%Interval{from: from, to: to}) do
+    no_one_value?(from) or no_one_value?(to)
+  end
 
   # An end that holds a set, a range or unspecified digits names several
   # values too (`2026Y{1,3}M/2026-06` is the span from each of two months,
   # `2026-XX/2027` the year), and the interval is what it converts to: it
   # was walked as it stood, and gave nothing. An end is one value where each
   # of its units is one number.
-  defp no_one_value?(%Tempo{time: time}) when is_list(time),
-    do: Enum.any?(time, fn {_unit, value} -> not is_integer(value) end)
+  defp no_one_value?(%Tempo{time: time}) when is_list(time) do
+    Enum.any?(time, fn {_unit, value} -> not is_integer(value) end)
+  end
 
-  defp no_one_value?(_open_or_none), do: false
+  defp no_one_value?(_open_or_none) do
+    false
+  end
 
   # The span is selected from as it is converted, and is not asked again
   # whether an end holds a group: one that still did would be selected from
@@ -515,18 +530,29 @@ defmodule Tempo.Select do
          {:ok, %IntervalSet{} = selected},
          %Interval{from: %Tempo{extended: %{zone_id: zone}}}
        )
-       when is_binary(zone) and zone != "",
-       do: through_members(selected, &as_the_clock_shows/1)
-
-  defp as_the_clock_shows(selected, _base), do: selected
-
-  defp as_the_clock_shows(%Interval{from: %Tempo{} = from} = selected) do
-    if Zone.shown?(from),
-      do: [selected |> ending_as_the_clock_shows() |> at_the_offsets_of_its_ends()],
-      else: []
+       when is_binary(zone) and zone != "" do
+    through_members(selected, &as_the_clock_shows/1)
   end
 
-  defp as_the_clock_shows(selected), do: [selected]
+  defp as_the_clock_shows(selected, _base) do
+    selected
+  end
+
+  defp as_the_clock_shows(%Interval{from: %Tempo{} = from} = selected) do
+    if Zone.shown?(from) do
+      [
+        selected
+        |> ending_as_the_clock_shows()
+        |> at_the_offsets_of_its_ends()
+      ]
+    else
+      []
+    end
+  end
+
+  defp as_the_clock_shows(selected) do
+    [selected]
+  end
 
   defp ending_as_the_clock_shows(%Interval{to: %Tempo{} = to} = selected) do
     case Zone.shown_by_the_clock(to) do
@@ -535,20 +561,30 @@ defmodule Tempo.Select do
     end
   end
 
-  defp ending_as_the_clock_shows(selected), do: selected
+  defp ending_as_the_clock_shows(selected) do
+    selected
+  end
 
   # A member selected from a base written with an offset is at the offset
   # its zone is at on each of its ends (`Tempo.Enumeration.Zone.at_its_offset/1`):
   # it took the base's, which is another's once the clock has changed.
   defp at_the_offsets_of_its_ends(
          %Interval{from: %Tempo{shift: [_ | _]} = from, to: to} = selected
-       ),
-       do: %{selected | from: Zone.at_its_offset(from), to: at_its_offset(to)}
+       ) do
+    %{selected | from: Zone.at_its_offset(from), to: at_its_offset(to)}
+  end
 
-  defp at_the_offsets_of_its_ends(selected), do: selected
+  defp at_the_offsets_of_its_ends(selected) do
+    selected
+  end
 
-  defp at_its_offset(%Tempo{} = to), do: Zone.at_its_offset(to)
-  defp at_its_offset(open_or_none), do: open_or_none
+  defp at_its_offset(%Tempo{} = to) do
+    Zone.at_its_offset(to)
+  end
+
+  defp at_its_offset(open_or_none) do
+    open_or_none
+  end
 
   # A set's members, each as the members `fun` gives for it, in a set that
   # is walked as the set is: at once where it is bounded, and member by
@@ -576,7 +612,9 @@ defmodule Tempo.Select do
   # What is selected from a base keeps the base's metadata — the school days
   # of a term are tagged with the term — and a selected member's own
   # metadata wins where the two share a key.
-  defp with_base_metadata(selected, metadata) when map_size(metadata) == 0, do: selected
+  defp with_base_metadata(selected, metadata) when map_size(metadata) == 0 do
+    selected
+  end
 
   defp with_base_metadata({:ok, %IntervalSet{} = set}, metadata) do
     tagged = &%{&1 | metadata: Map.merge(metadata, &1.metadata)}
@@ -595,16 +633,22 @@ defmodule Tempo.Select do
     end
   end
 
-  defp with_base_metadata(error, _metadata), do: error
+  defp with_base_metadata(error, _metadata) do
+    error
+  end
 
   # A set's selection keeps the set's own metadata.
-  defp with_set_metadata({:ok, %IntervalSet{} = selected}, metadata),
-    do: {:ok, %{selected | metadata: metadata}}
+  defp with_set_metadata({:ok, %IntervalSet{} = selected}, metadata) do
+    {:ok, %{selected | metadata: metadata}}
+  end
 
-  defp with_set_metadata(error, _metadata), do: error
+  defp with_set_metadata(error, _metadata) do
+    error
+  end
 
-  defp day_of_week_selector(weekdays),
-    do: %Tempo{time: [day_of_week: weekdays], calendar: Calendars.default()}
+  defp day_of_week_selector(weekdays) do
+    %Tempo{time: [day_of_week: weekdays], calendar: Calendars.default()}
+  end
 
   # The days no holiday falls on, the holidays converted within the base.
   defp without_holidays(days, except, base) do
@@ -636,11 +680,16 @@ defmodule Tempo.Select do
   # walked for ever, and what asked for the next workday was never answered.
   @most_days_off_in_a_row Tempo.Limit.days_off_in_a_row()
 
-  defp kept_or_passed(_day, passed, _except) when passed > @most_days_off_in_a_row,
-    do: {:halt, passed}
+  defp kept_or_passed(_day, passed, _except) when passed > @most_days_off_in_a_row do
+    {:halt, passed}
+  end
 
   defp kept_or_passed(day, passed, except) do
-    if holiday?(day, except), do: {[], passed + 1}, else: {[day], 0}
+    if holiday?(day, except) do
+      {[], passed + 1}
+    else
+      {[day], 0}
+    end
   end
 
   defp holiday?(day, except) do
@@ -683,8 +732,9 @@ defmodule Tempo.Select do
     with {:ok, _order} <- Compare.order(from, to), do: {:closed, interval}
   end
 
-  defp span(%Interval{from: %Tempo{}, to: :undefined, duration: nil, recurrence: 1} = interval),
-    do: {:open_end, interval}
+  defp span(%Interval{from: %Tempo{}, to: :undefined, duration: nil, recurrence: 1} = interval) do
+    {:open_end, interval}
+  end
 
   defp span(%Interval{} = interval) do
     case Tempo.to_interval(interval) do
@@ -704,15 +754,23 @@ defmodule Tempo.Select do
 
   # A closed span's selection. A day-of-week selector keeps the span's
   # matching days; any other applies to each period of the span in turn.
-  defp select_closed(_span, []), do: IntervalSet.new([], coalesce: false)
+  defp select_closed(_span, []) do
+    IntervalSet.new([], coalesce: false)
+  end
 
   defp select_closed(span, selector) do
     case weekdays_of_whole_days(span, selector) do
       {:ok, weekdays} ->
-        span |> weekdays_in(weekdays) |> Enum.to_list() |> IntervalSet.new(coalesce: false)
+        span
+        |> weekdays_in(weekdays)
+        |> Enum.to_list()
+        |> IntervalSet.new(coalesce: false)
 
       :no ->
-        span |> periods() |> collect(&period_selection(&1, selector)) |> selection_set()
+        span
+        |> periods()
+        |> collect(&period_selection(&1, selector))
+        |> selection_set()
     end
   end
 
@@ -724,20 +782,27 @@ defmodule Tempo.Select do
   # hours that ran into the next day it selected the whole of a day the
   # span starts part way through.
   defp weekdays_of_whole_days(%Interval{from: from, to: to}, selector) do
-    if time_of_day?(from) or time_of_day?(to),
-      do: :no,
-      else: weekday_selector(selector)
+    if time_of_day?(from) or time_of_day?(to) do
+      :no
+    else
+      weekday_selector(selector)
+    end
   end
 
-  defp time_of_day?(%Tempo{time: time}) when is_list(time),
-    do: Enum.any?(time, &(is_tuple(&1) and elem(&1, 0) in [:hour, :minute, :second]))
+  defp time_of_day?(%Tempo{time: time}) when is_list(time) do
+    Enum.any?(time, &(is_tuple(&1) and elem(&1, 0) in [:hour, :minute, :second]))
+  end
 
-  defp time_of_day?(_open_or_no_end), do: false
+  defp time_of_day?(_open_or_no_end) do
+    false
+  end
 
   # An open-ended span's selection, as a lazy set: a day-of-week
   # selector's days from the span's first day on, or any other selector
   # applied to each period as the walk reaches it.
-  defp select_open_end(_span, []), do: IntervalSet.new([], coalesce: false)
+  defp select_open_end(_span, []) do
+    IntervalSet.new([], coalesce: false)
+  end
 
   defp select_open_end(span, selector) do
     case weekdays_of_whole_days(span, selector) do
@@ -751,9 +816,13 @@ defmodule Tempo.Select do
   # span of days that starts on none does (`lazy_weekdays/2`).
   defp lazily_by_period(%Interval{from: %Tempo{calendar: calendar} = from} = span, selector) do
     if weekday_selector(selector) != :no and
-         not match?({:ok, _day}, tempo_to_date(from, calendar)),
-       do: IntervalSet.new([], coalesce: false),
-       else: span |> periods() |> select_lazily(selector, &select_in_period/2)
+         not match?({:ok, _day}, tempo_to_date(from, calendar)) do
+      IntervalSet.new([], coalesce: false)
+    else
+      span
+      |> periods()
+      |> select_lazily(selector, &select_in_period/2)
+    end
   end
 
   # While one day of the week matches, the matching days never run out,
@@ -762,7 +831,10 @@ defmodule Tempo.Select do
   defp lazy_weekdays(%Interval{from: %Tempo{calendar: calendar} = from} = span, weekdays) do
     with [_ | _] <- weekdays,
          {:ok, _first_day} <- tempo_to_date(from, calendar) do
-      {:ok, span |> weekdays_in(weekdays) |> IntervalSet.lazy()}
+      {:ok,
+       span
+       |> weekdays_in(weekdays)
+       |> IntervalSet.lazy()}
     else
       _nothing_to_select -> IntervalSet.new([], coalesce: false)
     end
@@ -772,13 +844,17 @@ defmodule Tempo.Select do
   # `Tempo.weekends/1`, `~o"5K"`, or a list of them), and the ISO days
   # it names. One that names a time of day too (`~o"1KT10H"`) selects that
   # time on each of the days, period by period.
-  defp weekday_selector(%Tempo{time: [day_of_week: _days] = time, calendar: calendar}),
-    do: day_of_week_only(time, calendar)
+  defp weekday_selector(%Tempo{time: [day_of_week: _days] = time, calendar: calendar}) do
+    day_of_week_only(time, calendar)
+  end
 
-  defp weekday_selector([_ | _] = selectors),
-    do: Enum.reduce_while(selectors, {:ok, []}, &add_weekdays/2)
+  defp weekday_selector([_ | _] = selectors) do
+    Enum.reduce_while(selectors, {:ok, []}, &add_weekdays/2)
+  end
 
-  defp weekday_selector(_selector), do: :no
+  defp weekday_selector(_selector) do
+    :no
+  end
 
   defp add_weekdays(
          %Tempo{time: [day_of_week: _days] = time, calendar: calendar},
@@ -790,7 +866,9 @@ defmodule Tempo.Select do
     end
   end
 
-  defp add_weekdays(_selector, _weekdays), do: {:halt, :no}
+  defp add_weekdays(_selector, _weekdays) do
+    {:halt, :no}
+  end
 
   # The periods of a span at its start's resolution, as a stream of
   # `{:ok, period}`: the days of `~o"2026-06-15/.."`, the months of
@@ -802,10 +880,16 @@ defmodule Tempo.Select do
     Stream.unfold({:from, from}, &next_period(&1, to))
   end
 
-  defp next_period(:done, _to), do: nil
+  defp next_period(:done, _to) do
+    nil
+  end
 
   defp next_period({:from, start}, to) do
-    if starts_before?(start, to), do: period_at(start, to), else: nil
+    if starts_before?(start, to) do
+      period_at(start, to)
+    else
+      nil
+    end
   end
 
   defp period_at(start, to) do
@@ -834,13 +918,24 @@ defmodule Tempo.Select do
     )
   end
 
-  defp starts_before?(_start, :undefined), do: true
-  defp starts_before?(start, to), do: Compare.compare_endpoints(start, to) == :earlier
+  defp starts_before?(_start, :undefined) do
+    true
+  end
 
-  defp cut(period, :undefined), do: period
+  defp starts_before?(start, to) do
+    Compare.compare_endpoints(start, to) == :earlier
+  end
+
+  defp cut(period, :undefined) do
+    period
+  end
 
   defp cut(%Interval{to: period_end} = period, to) do
-    if Compare.compare_endpoints(period_end, to) == :later, do: %{period | to: to}, else: period
+    if Compare.compare_endpoints(period_end, to) == :later do
+      %{period | to: to}
+    else
+      period
+    end
   end
 
   # Each item's selection in turn, concatenated, stopping at the first
@@ -856,30 +951,54 @@ defmodule Tempo.Select do
     |> concatenated()
   end
 
-  defp concatenated({:ok, selected}), do: {:ok, selected |> Enum.reverse() |> Enum.concat()}
-  defp concatenated({:error, _reason} = error), do: error
+  defp concatenated({:ok, selected}) do
+    {:ok,
+     selected
+     |> Enum.reverse()
+     |> Enum.concat()}
+  end
 
-  defp selection_set({:ok, selected}), do: IntervalSet.new(selected, coalesce: false)
-  defp selection_set({:error, _reason} = error), do: error
+  defp concatenated({:error, _reason} = error) do
+    error
+  end
 
-  defp period_selection({:ok, period}, selector), do: select_in_period(period, selector)
-  defp period_selection({:error, _reason} = error, _selector), do: error
+  defp selection_set({:ok, selected}) do
+    IntervalSet.new(selected, coalesce: false)
+  end
+
+  defp selection_set({:error, _reason} = error) do
+    error
+  end
+
+  defp period_selection({:ok, period}, selector) do
+    select_in_period(period, selector)
+  end
+
+  defp period_selection({:error, _reason} = error, _selector) do
+    error
+  end
 
   # The selection in one period: the selector applied to the period,
   # keeping what starts in it, so no two periods select the same span
   # and nothing outside the span is selected.
-  defp select_in_period(period, selector) when is_function(selector, 1),
-    do: select_in_period(period, Calendars.inside(selector.(period)))
+  defp select_in_period(period, selector) when is_function(selector, 1) do
+    select_in_period(period, Calendars.inside(selector.(period)))
+  end
 
   defp select_in_period(period, selector) do
     with {:ok, %IntervalSet{} = selected} <- select_period(period, selector) do
-      {:ok, selected |> IntervalSet.members() |> starting_in(period, selector)}
+      {:ok,
+       selected
+       |> IntervalSet.members()
+       |> starting_in(period, selector)}
     end
   end
 
   # What each constraint of a list selects is kept by that constraint's own
   # span, where the list is resolved (`select_period/2`).
-  defp starting_in(members, _period, [%Tempo{} | _]), do: members
+  defp starting_in(members, _period, [%Tempo{} | _]) do
+    members
+  end
 
   defp starting_in(members, period, selector) do
     span = span_selected_in(period, selector)
@@ -938,7 +1057,9 @@ defmodule Tempo.Select do
     end
   end
 
-  defp span_selected_in(period, _selector), do: period
+  defp span_selected_in(period, _selector) do
+    period
+  end
 
   defp names_week?(%Tempo{time: time}) when is_list(time) do
     Enum.any?(time, fn
@@ -948,7 +1069,9 @@ defmodule Tempo.Select do
     end)
   end
 
-  defp names_week?(_selector), do: false
+  defp names_week?(_selector) do
+    false
+  end
 
   # A selected span with no place in the period's order (a day of no year
   # selected from a time of day) starts nowhere in it.
@@ -957,7 +1080,9 @@ defmodule Tempo.Select do
       match?({:ok, :earlier}, Compare.order(from, period_to))
   end
 
-  defp starts_in?(_selected, _period), do: false
+  defp starts_in?(_selected, _period) do
+    false
+  end
 
   # A member's selection, as a list. A lazy set's members are checked as
   # the walk reaches them, so one that is not a closed span stops it.
@@ -1017,28 +1142,51 @@ defmodule Tempo.Select do
     if passed?(from, horizon) or passed?(from, last) do
       {:halt, limits}
     else
-      base |> select_one.(selector) |> walked(limits)
+      base
+      |> select_one.(selector)
+      |> walked(limits)
     end
   end
 
-  defp walk_base(_error, limits, _selector, _select_one), do: {:halt, limits}
+  defp walk_base(_error, limits, _selector, _select_one) do
+    {:halt, limits}
+  end
 
-  defp walked({:ok, found}, {horizon, last}), do: {found, {horizon_after(horizon, found), last}}
-  defp walked({:error, _reason}, limits), do: {:halt, limits}
+  defp walked({:ok, found}, {horizon, last}) do
+    {found, {horizon_after(horizon, found), last}}
+  end
+
+  defp walked({:error, _reason}, limits) do
+    {:halt, limits}
+  end
 
   # The walk ends a thousand years after the last selection.
-  defp horizon_after(horizon, []), do: horizon
-  defp horizon_after(_horizon, found), do: found |> List.last() |> horizon_from()
+  defp horizon_after(horizon, []) do
+    horizon
+  end
 
-  defp horizon_from(%Interval{from: from}), do: Math.add(from, @horizon)
+  defp horizon_after(_horizon, found) do
+    found
+    |> List.last()
+    |> horizon_from()
+  end
 
-  defp passed?(_from, :none), do: false
+  defp horizon_from(%Interval{from: from}) do
+    Math.add(from, @horizon)
+  end
 
-  defp passed?(%Tempo{} = from, %Tempo{} = limit),
-    do: Compare.compare_endpoints(from, limit) != :earlier
+  defp passed?(_from, :none) do
+    false
+  end
+
+  defp passed?(%Tempo{} = from, %Tempo{} = limit) do
+    Compare.compare_endpoints(from, limit) != :earlier
+  end
 
   # A horizon beyond the calendar's range ends the walk.
-  defp passed?(_from, _no_horizon), do: true
+  defp passed?(_from, _no_horizon) do
+    true
+  end
 
   # The start of the year after the last one the selector names, when
   # every constraint in it names a year: nothing is selected after it.
@@ -1056,18 +1204,32 @@ defmodule Tempo.Select do
     end
   end
 
-  defp named_years(%Interval{from: %Tempo{} = from}), do: named_years(from)
+  defp named_years(%Interval{from: %Tempo{} = from}) do
+    named_years(from)
+  end
 
   defp named_years([_ | _] = constraints) do
     years = Enum.map(constraints, &named_years/1)
-    if :none in years, do: :none, else: Enum.concat(years)
+
+    if :none in years do
+      :none
+    else
+      Enum.concat(years)
+    end
   end
 
-  defp named_years(_selector), do: :none
+  defp named_years(_selector) do
+    :none
+  end
 
   # The selection in one period, by the selector's shape.
-  defp select_period(period, %Range{} = range), do: select_period(period, Enum.to_list(range))
-  defp select_period(_period, []), do: IntervalSet.new([], coalesce: false)
+  defp select_period(period, %Range{} = range) do
+    select_period(period, Enum.to_list(range))
+  end
+
+  defp select_period(_period, []) do
+    IntervalSet.new([], coalesce: false)
+  end
 
   # A list that starts with an index is a list of indices. What is none in
   # it (`[1, ~o"T9H/T12H"]`) was passed over, so the list selected by its
@@ -1081,8 +1243,9 @@ defmodule Tempo.Select do
 
   # A season of 21 to 24 has no dates as it is written, and selects as the
   # span it converts to (`select_projections/2`).
-  defp select_period(period, %Tempo{time: [{:year, _year}, {:season, _season}]} = season),
-    do: select_projections(period, [season])
+  defp select_period(period, %Tempo{time: [{:year, _year}, {:season, _season}]} = season) do
+    select_projections(period, [season])
+  end
 
   defp select_period(period, %Tempo{time: time} = constraint) do
     with :ok <- one_calendar(period, constraint) do
@@ -1101,8 +1264,11 @@ defmodule Tempo.Select do
   end
 
   defp select_period(period, [%Tempo{} | _] = constraints) do
-    with :ok <- one_calendar(period, constraints),
-         do: constraints |> collect(&select_in_period(period, &1)) |> selection_set()
+    with :ok <- one_calendar(period, constraints) do
+      constraints
+      |> collect(&select_in_period(period, &1))
+      |> selection_set()
+    end
   end
 
   defp select_period(period, [%Interval{} | _] = constraints) do
@@ -1110,11 +1276,17 @@ defmodule Tempo.Select do
          do: select_projections(period, constraints)
   end
 
-  defp select_period(period, fun) when is_function(fun, 1),
-    do: select_period(period, Calendars.inside(fun.(period)))
+  defp select_period(period, fun) when is_function(fun, 1) do
+    select_period(period, Calendars.inside(fun.(period)))
+  end
 
-  defp select_period(_period, {:error, _reason} = error), do: error
-  defp select_period(_period, selector), do: {:error, unrecognised_selector(selector)}
+  defp select_period(_period, {:error, _reason} = error) do
+    error
+  end
+
+  defp select_period(_period, selector) do
+    {:error, unrecognised_selector(selector)}
+  end
 
   # The units a rule counts, each with its place from the coarsest: a
   # period or a part of another unit (a fraction of a second, a group's) is
@@ -1141,9 +1313,11 @@ defmodule Tempo.Select do
          %Interval{from: %Tempo{} = from} = period,
          %Tempo{time: time} = constraint
        ) do
-    if resolved_as_a_rule?(time, from),
-      do: select_by_rule(period, %{constraint | time: [selection: time]}),
-      else: select_placed(period, constraint)
+    if resolved_as_a_rule?(time, from) do
+      select_by_rule(period, %{constraint | time: [selection: time]})
+    else
+      select_placed(period, constraint)
+    end
   end
 
   # A constraint whose units are whole numbers, or sets and ranges of them,
@@ -1161,17 +1335,22 @@ defmodule Tempo.Select do
       not within_a_week_of_a_month?(time, from)
   end
 
-  defp within_a_week_of_a_month?([_week, _finer | _rest] = time, %Tempo{time: [year: _, month: _]}),
-       do: List.keymember?(time, :week, 0)
+  defp within_a_week_of_a_month?([_week, _finer | _rest] = time, %Tempo{time: [year: _, month: _]}) do
+    List.keymember?(time, :week, 0)
+  end
 
-  defp within_a_week_of_a_month?(_time, _from), do: false
+  defp within_a_week_of_a_month?(_time, _from) do
+    false
+  end
 
   # A constraint placed on its period: its units are merged onto the
   # period's start, and what they name there is the value read. A week is
   # the one period that runs across a month or a year, so a month and a day
   # of it selected from a week are merged onto each month the week touches
   # (`on_each_period/3`).
-  defp select_placed(period, constraint), do: select_projections(period, [constraint])
+  defp select_placed(period, constraint) do
+    select_projections(period, [constraint])
+  end
 
   # A mask is each value its digits match, as it is in a selection (decided
   # 2026-10-08): `~o"1XD"` from June is its ten days from the 10th. Placed
@@ -1181,10 +1360,21 @@ defmodule Tempo.Select do
   # An unspecified unit (`~o"X*D"`) is every value the unit takes, as the
   # mask of as many digits is: placed on its period it was the one span the
   # period is, and from a day it selected nothing.
-  defp counted_unit?({unit, {:mask, mask}}) when is_list(mask), do: is_map_key(@coarseness, unit)
-  defp counted_unit?({unit, :any}), do: is_map_key(@coarseness, unit)
-  defp counted_unit?({unit, value}), do: is_map_key(@coarseness, unit) and counted?(value)
-  defp counted_unit?(_other), do: false
+  defp counted_unit?({unit, {:mask, mask}}) when is_list(mask) do
+    is_map_key(@coarseness, unit)
+  end
+
+  defp counted_unit?({unit, :any}) do
+    is_map_key(@coarseness, unit)
+  end
+
+  defp counted_unit?({unit, value}) do
+    is_map_key(@coarseness, unit) and counted?(value)
+  end
+
+  defp counted_unit?(_other) do
+    false
+  end
 
   # An ISO 8601-2 selection — a computed event, a §12.10 window, any
   # `L…N` — is a recurrence's rule, and what it selects in a period is that
@@ -1197,9 +1387,11 @@ defmodule Tempo.Select do
     with :ok <- week_of_month_built(rule, unit, from) do
       rule = in_calendar_of(rule, from)
 
-      if Selection.expands?(rule, freq) or week_of_month_rule?(rule, unit),
-        do: occurrences_in(period, rule, freq),
-        else: kept_or_dropped(period, rule, freq)
+      if Selection.expands?(rule, freq) or week_of_month_rule?(rule, unit) do
+        occurrences_in(period, rule, freq)
+      else
+        kept_or_dropped(period, rule, freq)
+      end
     end
   end
 
@@ -1227,7 +1419,9 @@ defmodule Tempo.Select do
   # one the resolver gave was walked as the one day. A day selected by its
   # weekday alone is such a value too (decided 2026-10-08), as the days a
   # weekday selector gives are (`day_interval/5`).
-  defp selected_in(value, _selection), do: Tempo.selected_in(value)
+  defp selected_in(value, _selection) do
+    Tempo.selected_in(value)
+  end
 
   # A rule that only keeps or drops its period is asked of the period itself,
   # the candidate the resolver answers for: no recurrence is walked, so a
@@ -1247,7 +1441,9 @@ defmodule Tempo.Select do
     end
   end
 
-  defp kept_or_dropped(period, rule, freq), do: occurrences_in(period, rule, freq)
+  defp kept_or_dropped(period, rule, freq) do
+    occurrences_in(period, rule, freq)
+  end
 
   # The rule as it is read in the period it is asked of
   # (`Tempo.RRule.Selection.read_in_its_period/1`), which a value with the
@@ -1264,19 +1460,24 @@ defmodule Tempo.Select do
   # (`merged_constraint_tempo/2`): a calendar of weeks has no month to
   # filter by.
   defp filters_in(selection, calendar) do
-    if Validation.written_in_another_calendar?(selection, calendar),
-      do: {:error, selects_by_month_error(calendar, selection)},
-      else: :ok
+    if Validation.written_in_another_calendar?(selection, calendar) do
+      {:error, selects_by_month_error(calendar, selection)}
+    else
+      :ok
+    end
   end
 
   # A week selected from a month is a week of the month, which the resolver
   # gives as the span of its dates: an occurrence within the month's weeks,
   # where every other part that only keeps or drops its period leaves the
   # period as it is.
-  defp week_of_month_rule?(%Tempo{time: [selection: selection]}, :month),
-    do: List.keymember?(selection, :week, 0)
+  defp week_of_month_rule?(%Tempo{time: [selection: selection]}, :month) do
+    List.keymember?(selection, :week, 0)
+  end
 
-  defp week_of_month_rule?(_rule, _unit), do: false
+  defp week_of_month_rule?(_rule, _unit) do
+    false
+  end
 
   # A week of the calendar's own numbering (`w`) is a week of its year, and
   # is not selected from a month: the refusal names what was asked
@@ -1289,7 +1490,9 @@ defmodule Tempo.Select do
     end
   end
 
-  defp week_of_month_built(_rule, _unit, _from), do: :ok
+  defp week_of_month_built(_rule, _unit, _from) do
+    :ok
+  end
 
   # A rule written in another calendar than the period's holds only what
   # selects in any calendar (`one_calendar/2`), and is resolved in the
@@ -1311,10 +1514,17 @@ defmodule Tempo.Select do
     end
   end
 
-  defp in_calendar_of(rule, _period_start), do: rule
+  defp in_calendar_of(rule, _period_start) do
+    rule
+  end
 
-  defp cadence_unit(unit) when unit in [:day_of_year, :day_of_week], do: :day
-  defp cadence_unit(unit), do: unit
+  defp cadence_unit(unit) when unit in [:day_of_year, :day_of_week] do
+    :day
+  end
+
+  defp cadence_unit(unit) do
+    unit
+  end
 
   # Units before a selection narrow the period first, and the selection
   # applies within what they select: `4ML1K1IN` is the first Monday of
@@ -1346,8 +1556,13 @@ defmodule Tempo.Select do
     end
   end
 
-  defp selection_unit?({:selection, _selection}), do: true
-  defp selection_unit?(_unit), do: false
+  defp selection_unit?({:selection, _selection}) do
+    true
+  end
+
+  defp selection_unit?(_unit) do
+    false
+  end
 
   defp unrecognised_selector(selector) do
     ArgumentError.exception(
@@ -1384,11 +1599,17 @@ defmodule Tempo.Select do
     end
   end
 
-  defp end_date(:undefined, _calendar), do: {:ok, :undefined}
-  defp end_date(to, calendar), do: tempo_to_date(to, calendar)
+  defp end_date(:undefined, _calendar) do
+    {:ok, :undefined}
+  end
 
-  defp next_day(%Date{} = date, :undefined),
-    do: {{date.year, date.month, date.day}, UnitValues.day_after(date)}
+  defp end_date(to, calendar) do
+    tempo_to_date(to, calendar)
+  end
+
+  defp next_day(%Date{} = date, :undefined) do
+    {{date.year, date.month, date.day}, UnitValues.day_after(date)}
+  end
 
   defp next_day(%Date{} = date, end_date) do
     case Compare.compare_days(date, end_date) do
@@ -1398,7 +1619,9 @@ defmodule Tempo.Select do
   end
 
   # Past the last day the calendar can express.
-  defp next_day(_no_date, _end_date), do: nil
+  defp next_day(_no_date, _end_date) do
+    nil
+  end
 
   defp tempo_to_date(%Tempo{time: time, calendar: calendar}, calendar) do
     if Keyword.has_key?(time, :week) do
@@ -1409,7 +1632,9 @@ defmodule Tempo.Select do
   end
 
   # An endpoint in another calendar than the span's start.
-  defp tempo_to_date(_endpoint, _calendar), do: :error
+  defp tempo_to_date(_endpoint, _calendar) do
+    :error
+  end
 
   # The day a span's end starts on: its day, or the first day of its month
   # or its year, which the calendar is asked for where the year does not
@@ -1573,14 +1798,26 @@ defmodule Tempo.Select do
   # as the span it converts to, in the hemisphere of the territory in force,
   # as a base that holds one is selected from.
   defp with_its_seasons_dated(constraint) do
-    if Group.abstract_season?(constraint),
-      do: constraint |> Tempo.to_interval() |> dated_spans(),
-      else: {:ok, [constraint]}
+    if Group.abstract_season?(constraint) do
+      constraint
+      |> Tempo.to_interval()
+      |> dated_spans()
+    else
+      {:ok, [constraint]}
+    end
   end
 
-  defp dated_spans({:ok, %Interval{} = span}), do: {:ok, [span]}
-  defp dated_spans({:ok, %IntervalSet{} = set}), do: {:ok, IntervalSet.members(set)}
-  defp dated_spans({:error, _reason} = error), do: error
+  defp dated_spans({:ok, %Interval{} = span}) do
+    {:ok, [span]}
+  end
+
+  defp dated_spans({:ok, %IntervalSet{} = set}) do
+    {:ok, IntervalSet.members(set)}
+  end
+
+  defp dated_spans({:error, _reason} = error) do
+    error
+  end
 
   # Merge a constraint Tempo's time units onto base's from-endpoint
   # — units specified on the constraint take precedence; others
@@ -1599,8 +1836,13 @@ defmodule Tempo.Select do
     c_time = read_in(c_time, base)
 
     case day_of_week_only(c_time, selector_calendar) do
-      {:ok, weekdays} -> base |> weekdays_in(weekdays) |> on_each_day(after_day_of_week(c_time))
-      :no -> project_merge(base, c_time)
+      {:ok, weekdays} ->
+        base
+        |> weekdays_in(weekdays)
+        |> on_each_day(after_day_of_week(c_time))
+
+      :no ->
+        project_merge(base, c_time)
     end
   end
 
@@ -1631,8 +1873,9 @@ defmodule Tempo.Select do
          %Interval{} = base,
          %Interval{from: from, recurrence: recurrence} = constraint
        )
-       when recurrence != 1 and from in [nil, :undefined],
-       do: occurrences_within(base, constraint)
+       when recurrence != 1 and from in [nil, :undefined] do
+    occurrences_within(base, constraint)
+  end
 
   # A span with no start runs from the period's start to its end: `../T17H`
   # is midnight to five of each day.
@@ -1640,12 +1883,16 @@ defmodule Tempo.Select do
          %Interval{from: %Tempo{} = period_start} = base,
          %Interval{from: :undefined, to: %Tempo{} = c_to, recurrence: 1} = constraint
        ) do
-    if weekday_alone?(c_to),
-      do: {:error, weekday_span_error(constraint)},
-      else: from_the_start(base, period_start, %{c_to | time: read_in(c_to.time, base)})
+    if weekday_alone?(c_to) do
+      {:error, weekday_span_error(constraint)}
+    else
+      from_the_start(base, period_start, %{c_to | time: read_in(c_to.time, base)})
+    end
   end
 
-  defp project_onto_base(_base, constraint), do: {:error, unrecognised_selector(constraint)}
+  defp project_onto_base(_base, constraint) do
+    {:error, unrecognised_selector(constraint)}
+  end
 
   defp from_the_start(base, period_start, c_to) do
     with %Tempo{} = span_to <- merged_start(base, c_to.time) do
@@ -1678,8 +1925,9 @@ defmodule Tempo.Select do
     end
   end
 
-  defp occurrences_or_to_the_end(_base, _c_from, constraint),
-    do: {:error, unrecognised_selector(constraint)}
+  defp occurrences_or_to_the_end(_base, _c_from, constraint) do
+    {:error, unrecognised_selector(constraint)}
+  end
 
   # A recurrence written with its first occurrence's end (`R3/T9H/T11H`) has
   # that end placed on the period as its start is.
@@ -1689,14 +1937,18 @@ defmodule Tempo.Select do
     end
   end
 
-  defp with_its_end_placed(_base, recurrence), do: {:ok, recurrence}
+  defp with_its_end_placed(_base, recurrence) do
+    {:ok, recurrence}
+  end
 
   # The occurrences of a recurrence that start within a period, as
   # `Tempo.to_interval_set/2` gives them within a window.
   defp occurrences_within(%Interval{} = period, %Interval{} = recurrence) do
     case Tempo.to_interval_set(recurrence, within: period) do
       {:ok, %IntervalSet{} = occurrences} ->
-        occurrences |> IntervalSet.members() |> Enum.map(&as_the_value_it_is/1)
+        occurrences
+        |> IntervalSet.members()
+        |> Enum.map(&as_the_value_it_is/1)
 
       {:error, _reason} = error ->
         error
@@ -1718,7 +1970,9 @@ defmodule Tempo.Select do
     end
   end
 
-  defp as_the_value_it_is(occurrence), do: occurrence
+  defp as_the_value_it_is(occurrence) do
+    occurrence
+  end
 
   # An end of a period written as finely as the end it is paired with, so a
   # span from 09:00 to the end of a day ends at the hour the next day starts.
@@ -1768,16 +2022,22 @@ defmodule Tempo.Select do
     end
   end
 
-  defp weekday_alone?(%Tempo{time: time, calendar: calendar}),
-    do: day_of_week_only(time, calendar) != :no
+  defp weekday_alone?(%Tempo{time: time, calendar: calendar}) do
+    day_of_week_only(time, calendar) != :no
+  end
 
-  defp weekday_alone?(_open_or_none), do: false
+  defp weekday_alone?(_open_or_none) do
+    false
+  end
 
   defp span_on_each_weekday(base, weekdays, %Interval{from: c_from, to: c_to} = constraint) do
     case end_on_the_same_day(c_from, c_to) do
       {:ok, c_to} ->
         on_the_day = %{constraint | from: without_day_of_week(c_from), to: c_to}
-        base |> weekdays_in(weekdays) |> gathered(&project_onto_base(&1, on_the_day))
+
+        base
+        |> weekdays_in(weekdays)
+        |> gathered(&project_onto_base(&1, on_the_day))
 
       :another_day ->
         {:error, weekday_span_error(constraint)}
@@ -1794,10 +2054,13 @@ defmodule Tempo.Select do
     end
   end
 
-  defp end_on_the_same_day(_c_from, open_or_none), do: {:ok, open_or_none}
+  defp end_on_the_same_day(_c_from, open_or_none) do
+    {:ok, open_or_none}
+  end
 
-  defp without_day_of_week(%Tempo{time: time} = value),
-    do: %{value | time: Keyword.delete(time, :day_of_week)}
+  defp without_day_of_week(%Tempo{time: time} = value) do
+    %{value | time: Keyword.delete(time, :day_of_week)}
+  end
 
   defp weekday_span_error(selector) do
     IntervalEndpointsError.exception(
@@ -1826,26 +2089,44 @@ defmodule Tempo.Select do
   # 45th is 14 February and the last 31 December. A calendar of weeks has no
   # months, and refuses a day of one where it is merged.
   defp read_in(c_time, %Interval{from: %Tempo{time: [{:year, _year}], calendar: calendar}}) do
-    if Tempo.week_based_calendar?(calendar),
-      do: c_time,
-      else: Selection.days_of_year_where_no_month(c_time)
+    if Tempo.week_based_calendar?(calendar) do
+      c_time
+    else
+      Selection.days_of_year_where_no_month(c_time)
+    end
   end
 
-  defp read_in(c_time, _period), do: c_time
+  defp read_in(c_time, _period) do
+    c_time
+  end
 
   # The units a constraint names after its weekday, merged onto each day the
   # weekday selects.
-  defp after_day_of_week(c_time), do: Keyword.delete(c_time, :day_of_week)
+  defp after_day_of_week(c_time) do
+    Keyword.delete(c_time, :day_of_week)
+  end
 
-  defp on_each_day(days, []), do: Enum.to_list(days)
-  defp on_each_day(days, units), do: gathered(days, &project_merge(&1, units))
+  defp on_each_day(days, []) do
+    Enum.to_list(days)
+  end
+
+  defp on_each_day(days, units) do
+    gathered(days, &project_merge(&1, units))
+  end
 
   # What `project` gives each period in turn, as one list, or the first error.
   defp gathered(periods, project) do
     Enum.reduce_while(periods, [], fn period, selected ->
       case project.(period) do
-        {:error, _reason} = error -> {:halt, error}
-        projected -> {:cont, selected ++ (projected |> List.wrap() |> Enum.reject(&is_nil/1))}
+        {:error, _reason} = error ->
+          {:halt, error}
+
+        projected ->
+          {:cont,
+           selected ++
+             (projected
+              |> List.wrap()
+              |> Enum.reject(&is_nil/1))}
       end
     end)
   end
@@ -1873,34 +2154,55 @@ defmodule Tempo.Select do
   # refuses a month or a day of one where it is merged.
   defp on_each_period(%Interval{} = base, c_time, project) do
     case periods_on_axis(base, c_time) do
-      {:ok, [^base]} -> project.(base)
-      {:ok, periods} -> periods |> gathered(project) |> each_once()
-      {:error, _not_built} = error -> error
+      {:ok, [^base]} ->
+        project.(base)
+
+      {:ok, periods} ->
+        periods
+        |> gathered(project)
+        |> each_once()
+
+      {:error, _not_built} = error ->
+        error
     end
   end
 
-  defp each_once(projected) when is_list(projected), do: Enum.uniq(projected)
-  defp each_once({:error, _reason} = error), do: error
+  defp each_once(projected) when is_list(projected) do
+    Enum.uniq(projected)
+  end
+
+  defp each_once({:error, _reason} = error) do
+    error
+  end
 
   defp periods_on_axis(%Interval{from: %Tempo{time: time, calendar: calendar}} = base, c_time) do
-    if Tempo.week_based_calendar?(calendar),
-      do: {:ok, [base]},
-      else: periods_on_axis(written_on(c_time), written_on(time), base, c_time)
+    if Tempo.week_based_calendar?(calendar) do
+      {:ok, [base]}
+    else
+      periods_on_axis(written_on(c_time), written_on(time), base, c_time)
+    end
   end
 
-  defp periods_on_axis(:ordinal, period_axis, base, _c_time) when period_axis in [:month, :week],
-    do: periods_touched(base, &[year: &1.year])
+  defp periods_on_axis(:ordinal, period_axis, base, _c_time)
+       when period_axis in [:month, :week] do
+    periods_touched(base, &[year: &1.year])
+  end
 
-  defp periods_on_axis(:month, :week, base, _c_time),
-    do: periods_touched(base, &[year: &1.year, month: &1.month])
+  defp periods_on_axis(:month, :week, base, _c_time) do
+    periods_touched(base, &[year: &1.year, month: &1.month])
+  end
 
   defp periods_on_axis(:week, :month, %Interval{from: from} = base, c_time) do
-    if week_of_month?(from, c_time),
-      do: {:ok, [base]},
-      else: NotBuilt.week_of_month(c_time, from)
+    if week_of_month?(from, c_time) do
+      {:ok, [base]}
+    else
+      NotBuilt.week_of_month(c_time, from)
+    end
   end
 
-  defp periods_on_axis(_axis, _period_axis, base, _c_time), do: {:ok, [base]}
+  defp periods_on_axis(_axis, _period_axis, base, _c_time) do
+    {:ok, [base]}
+  end
 
   # The axis a time list is written on below its year: the day of the year,
   # the week, or the month and its day. A year alone, a day of the week and a
@@ -1921,7 +2223,10 @@ defmodule Tempo.Select do
   defp periods_touched(%Interval{from: %Tempo{calendar: calendar} = from, to: to}, named) do
     with {:ok, %Date{} = first} <- tempo_to_date(from, calendar),
          {:ok, %Date{} = last} <- end_date(to, calendar) do
-      [first, last] |> Enum.map(named) |> Enum.uniq() |> periods_named(from)
+      [first, last]
+      |> Enum.map(named)
+      |> Enum.uniq()
+      |> periods_named(from)
     else
       _no_one_day -> {:ok, []}
     end
@@ -1948,7 +2253,9 @@ defmodule Tempo.Select do
   # four and two to four. It was refused, the ends having been merged as
   # they stood into a span that held the sets. A set at each end names no
   # one span for any value, and is refused still.
-  defp span_endpoint(%Interval{recurrence: recurrence}) when recurrence != 1, do: :point
+  defp span_endpoint(%Interval{recurrence: recurrence}) when recurrence != 1 do
+    :point
+  end
 
   defp span_endpoint(%Interval{from: %Tempo{} = from, to: nil, duration: %Duration{}} = selector) do
     case Enumeration.expand(from) do
@@ -1971,12 +2278,25 @@ defmodule Tempo.Select do
     with {:ok, values} <- Enumeration.expand(endpoint), do: {:each, which, values}
   end
 
-  defp span_end(%Interval{to: %Tempo{} = to}), do: {:to, to}
-  defp span_end(%Interval{to: nil, duration: %Duration{} = duration}), do: {:duration, duration}
-  defp span_end(%Interval{}), do: :point
+  defp span_end(%Interval{to: %Tempo{} = to}) do
+    {:to, to}
+  end
 
-  defp names_several?(%Tempo{} = value), do: Enumeration.names_each_value?(value)
-  defp names_several?(_no_value), do: false
+  defp span_end(%Interval{to: nil, duration: %Duration{} = duration}) do
+    {:duration, duration}
+  end
+
+  defp span_end(%Interval{}) do
+    :point
+  end
+
+  defp names_several?(%Tempo{} = value) do
+    Enumeration.names_each_value?(value)
+  end
+
+  defp names_several?(_no_value) do
+    false
+  end
 
   defp several_values_error(selector, end_name, value) do
     IntervalEndpointsError.exception(
@@ -2025,10 +2345,16 @@ defmodule Tempo.Select do
     end
   end
 
-  defp shown_span(_span_from, {:error, _reason} = error), do: error
+  defp shown_span(_span_from, {:error, _reason} = error) do
+    error
+  end
 
   defp span_with_some_time(%Tempo{} = from, %Tempo{} = to) do
-    if Compare.compare_endpoints(from, to) == :earlier, do: build_span(from, to), else: nil
+    if Compare.compare_endpoints(from, to) == :earlier do
+      build_span(from, to)
+    else
+      nil
+    end
   end
 
   # Both endpoints merge onto the same base member, so a window whose
@@ -2036,9 +2362,11 @@ defmodule Tempo.Select do
   # belongs to the following day. `:same` rolls too: "21:00 to 21:00"
   # reads as a full day, and a zero-extent interval is not a value.
   defp roll_past_midnight(%Tempo{} = span_from, %Tempo{} = span_to) do
-    if Compare.compare_endpoints(span_to, span_from) == :later,
-      do: span_to,
-      else: a_day_on(span_to)
+    if Compare.compare_endpoints(span_to, span_from) == :later do
+      span_to
+    else
+      a_day_on(span_to)
+    end
   end
 
   # The same reading of the clock on the day after, as it is written. A step
@@ -2079,15 +2407,19 @@ defmodule Tempo.Select do
          %Interval{from: %Tempo{calendar: calendar} = from} = base,
          c_time
        ) do
-    if Validation.written_in_another_calendar?(c_time, calendar),
-      do: {:error, selects_by_month_error(calendar, c_time)},
-      else: merged_onto(base, from, c_time)
+    if Validation.written_in_another_calendar?(c_time, calendar) do
+      {:error, selects_by_month_error(calendar, c_time)}
+    else
+      merged_onto(base, from, c_time)
+    end
   end
 
   defp merged_onto(base, from, c_time) do
-    if week_of_month?(from, c_time),
-      do: week_of_month(from, c_time),
-      else: merge_constraint(base, c_time)
+    if week_of_month?(from, c_time) do
+      week_of_month(from, c_time)
+    else
+      merge_constraint(base, c_time)
+    end
   end
 
   # A selector is a value of its own calendar. Its year, its month, its day
@@ -2107,14 +2439,17 @@ defmodule Tempo.Select do
     |> Enum.find_value(:ok, &of_another_calendar(&1, span_calendar))
   end
 
-  defp one_calendar(_period, _selectors), do: :ok
+  defp one_calendar(_period, _selectors) do
+    :ok
+  end
 
   # The error for a selector that holds a unit numbered by another calendar
   # than the span's, and `nil` for one that selects from the span.
   defp of_another_calendar(%Tempo{time: time, calendar: written} = selector, span_calendar)
        when is_list(time) do
-    if written != span_calendar and numbered_by_calendar?(time, written, span_calendar),
-      do: {:error, another_calendar_error(selector, written, span_calendar)}
+    if written != span_calendar and numbered_by_calendar?(time, written, span_calendar) do
+      {:error, another_calendar_error(selector, written, span_calendar)}
+    end
   end
 
   # A recurrence's rule is a selection, and is held to the span's calendar
@@ -2127,15 +2462,20 @@ defmodule Tempo.Select do
       counted_in_another_calendar(from, rule, span_calendar)
   end
 
-  defp of_another_calendar(_selector, _span_calendar), do: nil
+  defp of_another_calendar(_selector, _span_calendar) do
+    nil
+  end
 
   defp counted_in_another_calendar(from, %Tempo{calendar: written} = rule, span_calendar)
        when from in [nil, :undefined] do
-    if written != span_calendar,
-      do: {:error, another_calendar_error(rule, written, span_calendar)}
+    if written != span_calendar do
+      {:error, another_calendar_error(rule, written, span_calendar)}
+    end
   end
 
-  defp counted_in_another_calendar(_from, _rule_or_none, _span_calendar), do: nil
+  defp counted_in_another_calendar(_from, _rule_or_none, _span_calendar) do
+    nil
+  end
 
   @numbered_by_calendar [
     :year,
@@ -2155,11 +2495,14 @@ defmodule Tempo.Select do
 
   # ISO 8601's weeks are those of the notation's two calendars, of its dates
   # and of its week dates.
-  defp iso_weeks?(calendar), do: is_notation(calendar) or is_notation_weeks(calendar)
+  defp iso_weeks?(calendar) do
+    is_notation(calendar) or is_notation_weeks(calendar)
+  end
 
   # A selection's tokens are a rule's units, and a window in one holds dates.
-  defp unit_numbered_by_calendar?({:selection, selection}, same_weeks?),
-    do: Enum.any?(selection, &unit_numbered_by_calendar?(&1, same_weeks?))
+  defp unit_numbered_by_calendar?({:selection, selection}, same_weeks?) do
+    Enum.any?(selection, &unit_numbered_by_calendar?(&1, same_weeks?))
+  end
 
   defp unit_numbered_by_calendar?({:interval, %Interval{from: from, to: to}}, same_weeks?) do
     Enum.any?([from, to], fn
@@ -2171,12 +2514,17 @@ defmodule Tempo.Select do
     end)
   end
 
-  defp unit_numbered_by_calendar?({:week, _weeks}, same_weeks?), do: not same_weeks?
+  defp unit_numbered_by_calendar?({:week, _weeks}, same_weeks?) do
+    not same_weeks?
+  end
 
-  defp unit_numbered_by_calendar?(entry, _same_weeks?) when is_tuple(entry),
-    do: elem(entry, 0) in @numbered_by_calendar
+  defp unit_numbered_by_calendar?(entry, _same_weeks?) when is_tuple(entry) do
+    elem(entry, 0) in @numbered_by_calendar
+  end
 
-  defp unit_numbered_by_calendar?(_other, _same_weeks?), do: false
+  defp unit_numbered_by_calendar?(_other, _same_weeks?) do
+    false
+  end
 
   # A span in a calendar of weeks keeps the error that says what such a
   # calendar is selected by.
@@ -2236,10 +2584,13 @@ defmodule Tempo.Select do
     |> validated_merge(base_from)
   end
 
-  defp validated_merge({:ok, merged_time}, %Tempo{} = base_from),
-    do: validated_projection(%{base_from | time: merged_time})
+  defp validated_merge({:ok, merged_time}, %Tempo{} = base_from) do
+    validated_projection(%{base_from | time: merged_time})
+  end
 
-  defp validated_merge(:none, _base_from), do: nil
+  defp validated_merge(:none, _base_from) do
+    nil
+  end
 
   defp project_merge(%Interval{} = base, c_time) do
     case each_week_of_month(base, c_time) do
@@ -2281,7 +2632,9 @@ defmodule Tempo.Select do
     |> Enum.flat_map(&each_named(&1, :day_of_week, fn -> days_of_week_in(&1, calendar) end))
   end
 
-  defp each_week_of_month(_base, c_time), do: [c_time]
+  defp each_week_of_month(_base, c_time) do
+    [c_time]
+  end
 
   # A constraint for each value a set or a range names in `unit`, among the
   # values `values` gives it, and the constraint as it is where it names one
@@ -2306,19 +2659,24 @@ defmodule Tempo.Select do
   # A day of the week is named among a week's seven only under a week of a
   # month, where each is found among the week's dates.
   defp days_of_week_in(c_time, calendar) do
-    if List.keymember?(c_time, :week, 0),
-      do: UnitValues.in_period(:day_of_week, [], calendar),
-      else: {:error, :no_week}
+    if List.keymember?(c_time, :week, 0) do
+      UnitValues.in_period(:day_of_week, [], calendar)
+    else
+      {:error, :no_week}
+    end
   end
 
   # A week selected from a month is a week of that month, which the calendar
   # numbers (`Tempo.UnitValues.weeks_of_month/3`): one week, written as a
   # whole number, selected from a period that is a month.
   defp week_of_month?(%Tempo{time: [year: year, month: month]}, c_time)
-       when is_integer(year) and is_integer(month),
-       do: match?({:week, week} when is_integer(week), List.keyfind(c_time, :week, 0))
+       when is_integer(year) and is_integer(month) do
+    match?({:week, week} when is_integer(week), List.keyfind(c_time, :week, 0))
+  end
 
-  defp week_of_month?(_from, _c_time), do: false
+  defp week_of_month?(_from, _c_time) do
+    false
+  end
 
   # The week of the month a constraint names in its period, as a value
   # written with a week after its month is read (`2026Y6M2W`): the span of
@@ -2413,10 +2771,13 @@ defmodule Tempo.Select do
   # constraint on another axis than those is merged onto periods of
   # its own axis first (`on_each_period/3`), so none is off its axis
   # here.
-  defp prune_off_axis_defaults(base_time, c_time, base_resolution),
-    do: pruned_to_axis(base_time, axis_for_constraint(c_time), base_resolution)
+  defp prune_off_axis_defaults(base_time, c_time, base_resolution) do
+    pruned_to_axis(base_time, axis_for_constraint(c_time), base_resolution)
+  end
 
-  defp pruned_to_axis(base_time, :any, _base_resolution), do: base_time
+  defp pruned_to_axis(base_time, :any, _base_resolution) do
+    base_time
+  end
 
   defp pruned_to_axis(base_time, axis, base_resolution) do
     base_res_idx = unit_index(base_resolution) || -1
@@ -2491,7 +2852,9 @@ defmodule Tempo.Select do
     end
   end
 
-  defp named(_year, written, _context, _calendar), do: written
+  defp named(_year, written, _context, _calendar) do
+    written
+  end
 
   # The values named, each once however it is written: `{1,-31}D` names the
   # 1st of January once.
@@ -2506,28 +2869,47 @@ defmodule Tempo.Select do
   # A whole number, a range of them, or several of either: what
   # `Tempo.UnitValues.named/2` counts. A fraction, a mask and a group are
   # read by the conversion.
-  defp counted?(written) when is_integer(written) or is_struct(written, Range), do: true
+  defp counted?(written) when is_integer(written) or is_struct(written, Range) do
+    true
+  end
 
-  defp counted?([_ | _] = written),
-    do: Enum.all?(written, &(is_integer(&1) or is_struct(&1, Range)))
+  defp counted?([_ | _] = written) do
+    Enum.all?(written, &(is_integer(&1) or is_struct(&1, Range)))
+  end
 
-  defp counted?(_written), do: false
+  defp counted?(_written) do
+    false
+  end
 
   # A mask, and an unspecified unit, stand for each value their digits
   # match among those the unit takes.
-  defp masked?({:mask, mask}) when is_list(mask), do: true
-  defp masked?(:any), do: true
-  defp masked?(_written), do: false
-
-  defp one_value?({_unit, value}), do: is_integer(value)
-
-  defp unit_values(:day, context, calendar) do
-    if Keyword.has_key?(context, :month),
-      do: UnitValues.in_period(:day, context, calendar),
-      else: UnitValues.in_period(:day_of_year, context, calendar)
+  defp masked?({:mask, mask}) when is_list(mask) do
+    true
   end
 
-  defp unit_values(unit, context, calendar), do: UnitValues.in_period(unit, context, calendar)
+  defp masked?(:any) do
+    true
+  end
+
+  defp masked?(_written) do
+    false
+  end
+
+  defp one_value?({_unit, value}) do
+    is_integer(value)
+  end
+
+  defp unit_values(:day, context, calendar) do
+    if Keyword.has_key?(context, :month) do
+      UnitValues.in_period(:day, context, calendar)
+    else
+      UnitValues.in_period(:day_of_year, context, calendar)
+    end
+  end
+
+  defp unit_values(unit, context, calendar) do
+    UnitValues.in_period(unit, context, calendar)
+  end
 
   # After materialisation, `Tempo.to_interval/1` may pad the
   # endpoints with `hour: 0` (the natural start-of-day representation
@@ -2544,7 +2926,9 @@ defmodule Tempo.Select do
     }
   end
 
-  defp trim_iv_to_constraint(iv, _c_time), do: iv
+  defp trim_iv_to_constraint(iv, _c_time) do
+    iv
+  end
 
   # The projection's natural resolution is the finest unit the
   # CONSTRAINT specifies — `~o"12-25"` means "a day" (finest unit
@@ -2653,7 +3037,9 @@ defmodule Tempo.Select do
     end
   end
 
-  defp resolve_grouped_endpoints(other), do: other
+  defp resolve_grouped_endpoints(other) do
+    other
+  end
 
   defp find_group(time) do
     Enum.find_value(time, fn
@@ -2668,5 +3054,7 @@ defmodule Tempo.Select do
     %{new_to | calendar: old_to.calendar, extended: old_to.extended, shift: old_to.shift}
   end
 
-  defp merge_to_calendar(new_to, _), do: new_to
+  defp merge_to_calendar(new_to, _) do
+    new_to
+  end
 end

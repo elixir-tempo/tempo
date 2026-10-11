@@ -29,8 +29,9 @@ defmodule Tempo.SelectedTimeBesideAGapTest do
   ## The measure
 
   # The moment a clock time of a day is in the zone.
-  defp moment(%Date{} = day, %Time{} = time, zone),
-    do: DateTime.to_unix(DateTime.new!(day, time, zone)) + @epoch
+  defp moment(%Date{} = day, %Time{} = time, zone) do
+    DateTime.to_unix(DateTime.new!(day, time, zone)) + @epoch
+  end
 
   # The first moment the clock shows a reading of an hour of a day.
   defp first_shown(%Date{} = day, hour, zone) do
@@ -44,15 +45,21 @@ defmodule Tempo.SelectedTimeBesideAGapTest do
 
   # The moments an hour of a day runs between, as the clock shows it: from
   # its first reading to the first of the hour after it.
-  defp hour_shown(%Date{} = day, hour, zone),
-    do: {first_shown(day, hour, zone), first_shown(day, hour + 1, zone)}
+  defp hour_shown(%Date{} = day, hour, zone) do
+    {first_shown(day, hour, zone), first_shown(day, hour + 1, zone)}
+  end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
-  defp spans({:ok, %IntervalSet{} = set}), do: Enum.map(IntervalSet.members(set), &bounds/1)
+  defp spans({:ok, %IntervalSet{} = set}) do
+    Enum.map(IntervalSet.members(set), &bounds/1)
+  end
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   describe "the hour the clock skips the first half of" do
     test "is half an hour long, by the clock" do

@@ -83,7 +83,9 @@ defmodule Tempo.Iso8601.Tokenizer.Memo do
   end
 
   # A place in the text being read: how much of it is left.
-  defp place(rest), do: byte_size(rest)
+  defp place(rest) do
+    byte_size(rest)
+  end
 
   defp known(name, rest, context) do
     case Process.get(@table) do

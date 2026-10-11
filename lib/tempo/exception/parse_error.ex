@@ -30,7 +30,9 @@ defmodule Tempo.ParseError do
   end
 
   @impl true
-  def message(%__MODULE__{reason: "Could not parse " <> _rest = reason}), do: reason
+  def message(%__MODULE__{reason: "Could not parse " <> _rest = reason}) do
+    reason
+  end
 
   def message(%__MODULE__{input: nil, reason: reason}) when is_binary(reason) do
     reason
@@ -49,7 +51,15 @@ defmodule Tempo.ParseError do
     format_reason(reason)
   end
 
-  defp format_reason(nil), do: "parse failed"
-  defp format_reason(atom) when is_atom(atom), do: Atom.to_string(atom)
-  defp format_reason(string) when is_binary(string), do: string
+  defp format_reason(nil) do
+    "parse failed"
+  end
+
+  defp format_reason(atom) when is_atom(atom) do
+    Atom.to_string(atom)
+  end
+
+  defp format_reason(string) when is_binary(string) do
+    string
+  end
 end

@@ -12,7 +12,9 @@ defmodule Tempo.MicrosecondTest do
   # digit to more digits than a microsecond has.
   @written ~w(0 5 05 50 500 123 0123 000001 999999 000000 1234567 9999999 123456789012345)
 
-  defp read(digits), do: Microsecond.from_fraction(String.to_integer(digits), byte_size(digits))
+  defp read(digits) do
+    Microsecond.from_fraction(String.to_integer(digits), byte_size(digits))
+  end
 
   describe "from_fraction/2" do
     test "is the microsecond Elixir reads from the same digits" do

@@ -197,7 +197,11 @@ defmodule Tempo.EventTest do
         set
         |> IntervalSet.members()
         |> Enum.map(fn interval ->
-          {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+          {:ok, date} =
+            interval
+            |> Interval.from()
+            |> Tempo.to_date()
+
           Date.to_iso8601(date)
         end)
 
@@ -295,11 +299,16 @@ defmodule Tempo.EventTest do
         years = fn occurrences -> Enum.map(occurrences, &Tempo.year(Interval.from(&1))) end
 
         # Every equinox to the last year one is computed for.
-        assert equinoxes |> IntervalSet.walk() |> Enum.take(5) |> years.() ==
+        assert equinoxes
+               |> IntervalSet.walk()
+               |> Enum.take(5)
+               |> years.() ==
                  [2996, 2997, 2998, 2999, 3000]
 
         assert_raise EventError, ~r/cannot be computed for the year 3001/, fn ->
-          equinoxes |> IntervalSet.walk() |> Enum.take(6)
+          equinoxes
+          |> IntervalSet.walk()
+          |> Enum.take(6)
         end
       end
     end
@@ -353,7 +362,11 @@ defmodule Tempo.EventTest do
       {:ok, set} = Tempo.select(span, Tempo.from_iso8601!("L(#{event})eN"))
 
       for interval <- IntervalSet.members(set) do
-        {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+        {:ok, date} =
+          interval
+          |> Interval.from()
+          |> Tempo.to_date()
+
         date
       end
     end
@@ -361,7 +374,13 @@ defmodule Tempo.EventTest do
     test "is selected from the month it falls in, and from no other" do
       for event <- @in_periods, year <- 2024..2030, month <- 1..12 do
         {:ok, date} = Event.date(event, year)
-        in_the_month = if date.month == month, do: [date], else: []
+
+        in_the_month =
+          if date.month == month do
+            [date]
+          else
+            []
+          end
 
         assert {event, year, month, selected(Tempo.from_iso8601!("#{year}Y#{month}M"), event)} ==
                  {event, year, month, in_the_month}
@@ -434,7 +453,11 @@ defmodule Tempo.EventTest do
     set
     |> IntervalSet.members()
     |> Enum.map(fn interval ->
-      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      {:ok, date} =
+        interval
+        |> Interval.from()
+        |> Tempo.to_date()
+
       Date.to_iso8601(date)
     end)
   end

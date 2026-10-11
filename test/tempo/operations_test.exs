@@ -475,7 +475,11 @@ defmodule Tempo.Operations.Test do
   # written as a week, whose ends hold neither, had none, and one in another
   # calendar had its numbers read in the time of day's.
   describe "a time of day placed on a window written in other units" do
-    defp texts({:ok, set}), do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+    defp texts({:ok, set}) do
+      set
+      |> IntervalSet.members()
+      |> Enum.map(&Tempo.to_iso8601!/1)
+    end
 
     test "a Gregorian week is its seven days" do
       week = ~o"2026-W25"
@@ -629,9 +633,9 @@ defmodule Tempo.Operations.Test do
     # A calendar of weeks makes its years of weeks, so a year and a week of
     # it are on one axis as they stand. They were taken for two, and the
     # week could not be written as a date of a month.
-    defp ends(set),
-      do:
-        for(member <- IntervalSet.members(set), do: {Interval.from(member), Interval.to(member)})
+    defp ends(set) do
+      for(member <- IntervalSet.members(set), do: {Interval.from(member), Interval.to(member)})
+    end
 
     for calendar <- [Calendrical.ISOWeek, Calendrical.NRF] do
       @calendar calendar
@@ -1309,7 +1313,9 @@ defmodule Tempo.Operations.Test do
     end
 
     defp metadata_of(set) do
-      set |> IntervalSet.members() |> Enum.map(&Interval.metadata/1)
+      set
+      |> IntervalSet.members()
+      |> Enum.map(&Interval.metadata/1)
     end
 
     test "defaults to the left operand's metadata, unchanged from before the option existed",
@@ -1359,7 +1365,10 @@ defmodule Tempo.Operations.Test do
       {:ok, pairs} =
         Operations.intersection(context.alice, others, metadata: {:merge, accumulate})
 
-      assert pairs |> metadata_of() |> Enum.map(& &1.free) |> Enum.sort() ==
+      assert pairs
+             |> metadata_of()
+             |> Enum.map(& &1.free)
+             |> Enum.sort() ==
                [["Alice", "Bob"], ["Alice", "Carol"]]
 
       assert pairs
@@ -1422,7 +1431,9 @@ defmodule Tempo.Operations.Test do
     end
   end
 
-  defp canonical(%IntervalSet{intervals: intervals}), do: canonical_list(intervals)
+  defp canonical(%IntervalSet{intervals: intervals}) do
+    canonical_list(intervals)
+  end
 
   defp canonical_list(intervals) do
     Enum.map(intervals, &{Compare.to_utc_seconds(&1.from), Compare.to_utc_seconds(&1.to)})

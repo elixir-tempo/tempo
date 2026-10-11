@@ -57,10 +57,16 @@ defimpl Enumerable, for: Tempo.Interval do
     count(Calendars.inside(interval))
   end
 
-  def count(%Tempo.Interval{} = interval), do: interval |> as_it_spans() |> count_of()
+  def count(%Tempo.Interval{} = interval) do
+    interval
+    |> as_it_spans()
+    |> count_of()
+  end
 
-  defp count_of(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
-    do: raise(season_error(interval))
+  defp count_of(%Tempo.Interval{from: from, to: to} = interval)
+       when season?(from) or season?(to) do
+    raise(season_error(interval))
+  end
 
   defp count_of(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
     {:error, __MODULE__}
@@ -68,7 +74,9 @@ defimpl Enumerable, for: Tempo.Interval do
 
   # One occurrence that has a rule is a recurrence still: the occurrence is
   # the one its rule selects, and not the span from its start.
-  defp count_of(%Tempo.Interval{repeat_rule: %Tempo{}}), do: {:error, __MODULE__}
+  defp count_of(%Tempo.Interval{repeat_rule: %Tempo{}}) do
+    {:error, __MODULE__}
+  end
 
   defp count_of(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
     case stepped_count(interval, from, to) do
@@ -84,25 +92,33 @@ defimpl Enumerable, for: Tempo.Interval do
     raise endless_error(interval, "Enum.count/1")
   end
 
-  defp count_of(_interval), do: {:error, __MODULE__}
+  defp count_of(_interval) do
+    {:error, __MODULE__}
+  end
 
   @impl Enumerable
   def member?(interval, element) when is_outside(interval) or is_outside(element) do
     member?(Calendars.inside(interval), Calendars.inside(element))
   end
 
-  def member?(%Tempo.Interval{} = interval, element),
-    do: interval |> as_it_spans() |> member_of?(element)
+  def member?(%Tempo.Interval{} = interval, element) do
+    interval
+    |> as_it_spans()
+    |> member_of?(element)
+  end
 
   defp member_of?(%Tempo.Interval{from: from, to: to} = interval, _element)
-       when season?(from) or season?(to),
-       do: raise(season_error(interval))
+       when season?(from) or season?(to) do
+    raise(season_error(interval))
+  end
 
   defp member_of?(%Tempo.Interval{recurrence: recurrence}, _element) when recurrence != 1 do
     {:error, __MODULE__}
   end
 
-  defp member_of?(%Tempo.Interval{repeat_rule: %Tempo{}}, _element), do: {:error, __MODULE__}
+  defp member_of?(%Tempo.Interval{repeat_rule: %Tempo{}}, _element) do
+    {:error, __MODULE__}
+  end
 
   defp member_of?(
          %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval,
@@ -115,9 +131,11 @@ defimpl Enumerable, for: Tempo.Interval do
     # has no place on the time line to compare by, so the walk answers. So it
     # does for ends that are not in the order of their units.
     if dated?(from) and dated?(to) and dated?(element) and Tempo.Compare.structural?(from, to) and
-         not day_left_out?(from, unit),
-       do: stepped_member?(element, from, to, unit, calendar),
-       else: {:error, __MODULE__}
+         not day_left_out?(from, unit) do
+      stepped_member?(element, from, to, unit, calendar)
+    else
+      {:error, __MODULE__}
+    end
   end
 
   # The walk `Enum.member?/2` falls back to ends only when it finds the
@@ -130,15 +148,18 @@ defimpl Enumerable, for: Tempo.Interval do
     endless_member?(interval, from, element)
   end
 
-  defp member_of?(_interval, _element), do: {:error, __MODULE__}
+  defp member_of?(_interval, _element) do
+    {:error, __MODULE__}
+  end
 
   # A walk yields dated values from a dated start, one after another in
   # time. So what is no such value is no member, and one that is has its
   # answer in the step it would be, or in a walk that stops once it has
   # passed it. A start with no year comes round its axis for ever, with no
   # order to stop a search by, so the question is refused.
-  defp endless_member?(_interval, _from, element) when not is_struct(element, Tempo),
-    do: {:ok, false}
+  defp endless_member?(_interval, _from, element) when not is_struct(element, Tempo) do
+    {:ok, false}
+  end
 
   defp endless_member?(interval, %Tempo{calendar: calendar} = from, element) do
     unit = iteration_unit(interval, from)
@@ -208,24 +229,36 @@ defimpl Enumerable, for: Tempo.Interval do
     end
   end
 
-  defp dated?(%Tempo{time: time}),
-    do: Steps.whole_units?(time) and Keyword.has_key?(time, :year)
+  defp dated?(%Tempo{time: time}) do
+    Steps.whole_units?(time) and Keyword.has_key?(time, :year)
+  end
 
   @impl Enumerable
   def slice(interval) when is_outside(interval) do
-    interval |> Calendars.inside() |> slice() |> Calendars.outside_slice()
+    interval
+    |> Calendars.inside()
+    |> slice()
+    |> Calendars.outside_slice()
   end
 
-  def slice(%Tempo.Interval{} = interval), do: interval |> as_it_spans() |> slice_of()
+  def slice(%Tempo.Interval{} = interval) do
+    interval
+    |> as_it_spans()
+    |> slice_of()
+  end
 
-  defp slice_of(%Tempo.Interval{from: from, to: to} = interval) when season?(from) or season?(to),
-    do: raise(season_error(interval))
+  defp slice_of(%Tempo.Interval{from: from, to: to} = interval)
+       when season?(from) or season?(to) do
+    raise(season_error(interval))
+  end
 
   defp slice_of(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
     {:error, __MODULE__}
   end
 
-  defp slice_of(%Tempo.Interval{repeat_rule: %Tempo{}}), do: {:error, __MODULE__}
+  defp slice_of(%Tempo.Interval{repeat_rule: %Tempo{}}) do
+    {:error, __MODULE__}
+  end
 
   defp slice_of(
          %Tempo.Interval{from: %Tempo{calendar: calendar} = from, to: %Tempo{} = to} = interval
@@ -246,7 +279,9 @@ defimpl Enumerable, for: Tempo.Interval do
     raise endless_slice_error(interval)
   end
 
-  defp slice_of(_interval), do: {:error, __MODULE__}
+  defp slice_of(_interval) do
+    {:error, __MODULE__}
+  end
 
   # The steps in `[from, to)` in closed form, with the start filled to the
   # unit they are counted in. Ends that are not in the order of their units
@@ -276,13 +311,17 @@ defimpl Enumerable, for: Tempo.Interval do
   # are not counted by step arithmetic: the walk, which passes over the day,
   # answers. The days a zone leaves out are kept, so this asks nothing of
   # the zone database.
-  defp day_left_out?(%Tempo{extended: %{zone_id: zone}}, :day) when is_binary(zone),
-    do: TimeZoneDatabase.days_left_out(zone) != []
+  defp day_left_out?(%Tempo{extended: %{zone_id: zone}}, :day) when is_binary(zone) do
+    TimeZoneDatabase.days_left_out(zone) != []
+  end
 
-  defp day_left_out?(_from, _unit), do: false
+  defp day_left_out?(_from, _unit) do
+    false
+  end
 
-  defp iteration_unit(%Tempo.Interval{} = interval, %Tempo{} = from),
-    do: Tempo.Interval.granularity(%{interval | from: from})
+  defp iteration_unit(%Tempo.Interval{} = interval, %Tempo{} = from) do
+    Tempo.Interval.granularity(%{interval | from: from})
+  end
 
   defp slicer(from, unit, calendar) do
     fn start, length, step ->
@@ -296,21 +335,28 @@ defimpl Enumerable, for: Tempo.Interval do
     reduce(Calendars.inside(interval), acc, Calendars.outside_reducer(fun))
   end
 
-  def reduce(%Tempo.Interval{} = interval, acc, fun),
-    do: interval |> as_it_spans() |> reduce_as_written(acc, fun)
-
-  defp reduce_as_written(%Tempo.Interval{from: from, to: to} = interval, _acc, _fun)
-       when season?(from) or season?(to),
-       do: raise(season_error(interval))
-
-  defp reduce_as_written(%Tempo.Interval{} = interval, acc, fun) do
-    if occurrences?(interval),
-      do: reduce_occurrences(interval, acc, fun),
-      else: reduce_span(interval, acc, fun)
+  def reduce(%Tempo.Interval{} = interval, acc, fun) do
+    interval
+    |> as_it_spans()
+    |> reduce_as_written(acc, fun)
   end
 
-  defp season_error(interval),
-    do: Tempo.AbstractSeasonError.exception(value: interval, operation: "walk")
+  defp reduce_as_written(%Tempo.Interval{from: from, to: to} = interval, _acc, _fun)
+       when season?(from) or season?(to) do
+    raise(season_error(interval))
+  end
+
+  defp reduce_as_written(%Tempo.Interval{} = interval, acc, fun) do
+    if occurrences?(interval) do
+      reduce_occurrences(interval, acc, fun)
+    else
+      reduce_span(interval, acc, fun)
+    end
+  end
+
+  defp season_error(interval) do
+    Tempo.AbstractSeasonError.exception(value: interval, operation: "walk")
+  end
 
   # An end that holds a group (`2026Y1Q/2026Y2Q`, a quarter at each end)
   # names several months where a walk has one to start from and one to end
@@ -319,7 +365,11 @@ defimpl Enumerable, for: Tempo.Interval do
   # walked as the span it converts to: January to April. It raised, a step
   # having no one value to count from.
   defp as_it_spans(%Tempo.Interval{from: from, to: to} = interval) do
-    if group?(from) or group?(to), do: converted(interval), else: interval
+    if group?(from) or group?(to) do
+      converted(interval)
+    else
+      interval
+    end
   end
 
   defp converted(interval) do
@@ -329,18 +379,26 @@ defimpl Enumerable, for: Tempo.Interval do
     end
   end
 
-  defp group?(%Tempo{time: time}) when is_list(time),
-    do: Enum.any?(time, &match?({_unit, {:group, _values}}, &1))
+  defp group?(%Tempo{time: time}) when is_list(time) do
+    Enum.any?(time, &match?({_unit, {:group, _values}}, &1))
+  end
 
-  defp group?(_open_or_none), do: false
+  defp group?(_open_or_none) do
+    false
+  end
 
   # A recurring interval, or one with an end that holds a selection
   # (`2026Y6ML2KN/P1D`, a day from each Tuesday of June), names several spans
   # and enumerates as they do. So does one written with a duration from or
   # to an end that holds a set (`2026Y6M{1,15}D/P1D`), which is the span from
   # each of its values.
-  defp occurrences?(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1, do: true
-  defp occurrences?(%Tempo.Interval{repeat_rule: %Tempo{}}), do: true
+  defp occurrences?(%Tempo.Interval{recurrence: recurrence}) when recurrence != 1 do
+    true
+  end
+
+  defp occurrences?(%Tempo.Interval{repeat_rule: %Tempo{}}) do
+    true
+  end
 
   defp occurrences?(%Tempo.Interval{from: from, to: to, duration: duration}) do
     selects?(from) or selects?(to) or spans_from_each_value?(from, to, duration)
@@ -348,16 +406,29 @@ defimpl Enumerable, for: Tempo.Interval do
 
   # Written with a duration from or to an end that holds a set, or with two
   # ends one of which does.
-  defp spans_from_each_value?(from, to, nil), do: names_each_value?(from) != names_each_value?(to)
+  defp spans_from_each_value?(from, to, nil) do
+    names_each_value?(from) != names_each_value?(to)
+  end
 
-  defp spans_from_each_value?(from, to, _duration),
-    do: names_each_value?(from) or names_each_value?(to)
+  defp spans_from_each_value?(from, to, _duration) do
+    names_each_value?(from) or names_each_value?(to)
+  end
 
-  defp selects?(%Tempo{time: time}), do: List.keymember?(time, :selection, 0)
-  defp selects?(_no_endpoint), do: false
+  defp selects?(%Tempo{time: time}) do
+    List.keymember?(time, :selection, 0)
+  end
 
-  defp names_each_value?(%Tempo{} = endpoint), do: Tempo.Enumeration.names_each_value?(endpoint)
-  defp names_each_value?(_no_endpoint), do: false
+  defp selects?(_no_endpoint) do
+    false
+  end
+
+  defp names_each_value?(%Tempo{} = endpoint) do
+    Tempo.Enumeration.names_each_value?(endpoint)
+  end
+
+  defp names_each_value?(_no_endpoint) do
+    false
+  end
 
   # `to_interval/1` expands a bounded recurrence to an IntervalSet,
   # however it is written (a start and a duration, a start and an end,
@@ -385,15 +456,18 @@ defimpl Enumerable, for: Tempo.Interval do
          %Tempo.Interval{repeat_rule: nil} = one,
          acc,
          fun
-       ),
-       do: Enumerable.reduce(Tempo.IntervalSet.new!([one]), acc, fun)
+       ) do
+    Enumerable.reduce(Tempo.IntervalSet.new!([one]), acc, fun)
+  end
 
-  defp reduce_one_occurrence(interval, _one, _acc, _fun),
-    do: raise(no_occurrences_error(interval))
+  defp reduce_one_occurrence(interval, _one, _acc, _fun) do
+    raise(no_occurrences_error(interval))
+  end
 
   defp no_occurrences_error(%Tempo.Interval{recurrence: recurrence} = interval)
-       when recurrence != 1,
-       do: Tempo.ConversionError.exception(value: interval, reason: :recurring_interval)
+       when recurrence != 1 do
+    Tempo.ConversionError.exception(value: interval, reason: :recurring_interval)
+  end
 
   defp no_occurrences_error(interval) do
     Tempo.IntervalEndpointsError.exception(
@@ -427,7 +501,11 @@ defimpl Enumerable, for: Tempo.Interval do
        ) do
     # `P1M/1985-06` — duration + to. Compute the lower bound via
     # `Tempo.Math.subtract/2` and iterate as a closed interval.
-    start = to |> Math.subtract(duration) |> derived!(to)
+    start =
+      to
+      |> Math.subtract(duration)
+      |> derived!(to)
+
     walk(interval, fill_from(start, to, interval), to, acc, fun)
   end
 
@@ -444,7 +522,11 @@ defimpl Enumerable, for: Tempo.Interval do
     # `from + duration` — compute the upper bound and iterate as
     # a closed interval. This respects the duration bound; the
     # sequence terminates naturally.
-    computed_to = from |> Math.add(duration) |> derived!(from)
+    computed_to =
+      from
+      |> Math.add(duration)
+      |> derived!(from)
+
     walk(interval, fill_from(from, computed_to, interval), computed_to, acc, fun)
   end
 
@@ -488,53 +570,79 @@ defimpl Enumerable, for: Tempo.Interval do
   # A span in a named zone is walked by the time elapsed where its unit is
   # of the clock and the zone's changes land on its steps
   # (`Steps.clock_walk/4`), and by the readings of the wall clock otherwise.
-  defp walk_from({:ok, steps}, _start, _to, acc, fun),
-    do: Steps.reduce_clock_walk(steps, acc, fun)
+  defp walk_from({:ok, steps}, _start, _to, acc, fun) do
+    Steps.reduce_clock_walk(steps, acc, fun)
+  end
 
-  defp walk_from(:not_supported, start, to, acc, fun),
-    do: do_reduce({:at, start}, walk_end(start, to), acc, fun)
+  defp walk_from(:not_supported, start, to, acc, fun) do
+    do_reduce({:at, start}, walk_end(start, to), acc, fun)
+  end
 
   defp clock_walk(interval, %Tempo{calendar: calendar} = start, %Tempo{} = to) do
     unit = iteration_unit(%{interval | to: to}, start)
     Steps.clock_walk(start, to, unit, calendar)
   end
 
-  defp clock_walk(_interval, _start, _no_end), do: :not_supported
+  defp clock_walk(_interval, _start, _no_end) do
+    :not_supported
+  end
 
   # Whether an end is one point for a walk from `start` to stop at: each unit
   # one whole number, or unspecified where the start is unspecified too
   # (`X*Y12M31D/X*Y1M2D`, two days of whatever year).
-  defp stops_at?([{unit, :any} | rest], start),
-    do: List.keyfind(start, unit, 0) == {unit, :any} and stops_at?(rest, start)
+  defp stops_at?([{unit, :any} | rest], start) do
+    List.keyfind(start, unit, 0) == {unit, :any} and stops_at?(rest, start)
+  end
 
-  defp stops_at?([{:year, year} | rest], start) when is_integer(year), do: stops_at?(rest, start)
+  defp stops_at?([{:year, year} | rest], start) when is_integer(year) do
+    stops_at?(rest, start)
+  end
 
   defp stops_at?([{:microsecond, {value, precision}} | rest], start)
-       when is_integer(value) and is_integer(precision),
-       do: stops_at?(rest, start)
+       when is_integer(value) and is_integer(precision) do
+    stops_at?(rest, start)
+  end
 
-  defp stops_at?([{_unit, value} | rest], start) when is_integer(value) and value >= 0,
-    do: stops_at?(rest, start)
+  defp stops_at?([{_unit, value} | rest], start) when is_integer(value) and value >= 0 do
+    stops_at?(rest, start)
+  end
 
-  defp stops_at?([], _start), do: true
-  defp stops_at?(_several, _start), do: false
+  defp stops_at?([], _start) do
+    true
+  end
+
+  defp stops_at?(_several, _start) do
+    false
+  end
 
   # Whether a walk can step from a time list: one point, or one with an
   # unspecified year (`X*Y12M31D`), which a step carries over. Any other
   # unspecified unit (`2026YX*O`, every day of the year) names a span, as a
   # mask does, and is no one point to step from.
-  defp stepped_from?([{:year, :any} | rest]), do: stepped_from?(rest)
-  defp stepped_from?([{:year, year} | rest]) when is_integer(year), do: stepped_from?(rest)
+  defp stepped_from?([{:year, :any} | rest]) do
+    stepped_from?(rest)
+  end
+
+  defp stepped_from?([{:year, year} | rest]) when is_integer(year) do
+    stepped_from?(rest)
+  end
 
   defp stepped_from?([{:microsecond, {value, precision}} | rest])
-       when is_integer(value) and is_integer(precision),
-       do: stepped_from?(rest)
+       when is_integer(value) and is_integer(precision) do
+    stepped_from?(rest)
+  end
 
-  defp stepped_from?([{_unit, value} | rest]) when is_integer(value) and value >= 0,
-    do: stepped_from?(rest)
+  defp stepped_from?([{_unit, value} | rest]) when is_integer(value) and value >= 0 do
+    stepped_from?(rest)
+  end
 
-  defp stepped_from?([]), do: true
-  defp stepped_from?(_several), do: false
+  defp stepped_from?([]) do
+    true
+  end
+
+  defp stepped_from?(_several) do
+    false
+  end
 
   # Fill the walk's start down to the unit the walk steps by (no-op when
   # it is already at that resolution): the interval's explicit unit, or the
@@ -542,21 +650,29 @@ defimpl Enumerable, for: Tempo.Interval do
   # so the fill happens exactly once per walk. A start that is not one point
   # is left for the walk to refuse.
   defp fill_from(%Tempo{calendar: calendar, time: time} = from, to, interval) do
-    if stepped_from?(time),
-      do: Steps.fill_to_unit(from, iteration_unit(%{interval | to: to}, from), calendar),
-      else: from
+    if stepped_from?(time) do
+      Steps.fill_to_unit(from, iteration_unit(%{interval | to: to}, from), calendar)
+    else
+      from
+    end
   end
 
   # The end a duration is counted to from the other. One it cannot be
   # counted to (the day after `2M28D`, which depends on the year) leaves no
   # walk to make, and `Enumerable.reduce/3` has no error to return, so the
   # stepper's error is raised.
-  defp derived!(%Tempo{} = endpoint, _other), do: endpoint
-  defp derived!({:error, exception}, _other) when is_exception(exception), do: raise(exception)
+  defp derived!(%Tempo{} = endpoint, _other) do
+    endpoint
+  end
+
+  defp derived!({:error, exception}, _other) when is_exception(exception) do
+    raise(exception)
+  end
 
   # A value that holds unspecified digits steps to a set of candidates.
-  defp derived!(_several, other),
-    do: raise(Tempo.ConversionError.exception(value: other, reason: :grouped_component))
+  defp derived!(_several, other) do
+    raise(Tempo.ConversionError.exception(value: other, reason: :grouped_component))
+  end
 
   # Where a walk stops: at its end, or never when it has none. A span with
   # no year lies on an axis that comes round again — the hours of a day, the
@@ -579,7 +695,9 @@ defimpl Enumerable, for: Tempo.Interval do
     end
   end
 
-  defp walk_end(_start, to), do: to
+  defp walk_end(_start, to) do
+    to
+  end
 
   defp end_on_one_line(%Tempo{time: start_time} = start, %Tempo{time: to_time} = to) do
     cond do
@@ -592,9 +710,17 @@ defimpl Enumerable, for: Tempo.Interval do
   # A span with no year that ends where it starts is once round its axis
   # (`T0H/T0H`, the whole day), and one that ends before it starts runs off
   # the end of the axis and on to its end.
-  defp end_on_a_cycle(start, :eq, _to), do: {:turn, start}
-  defp end_on_a_cycle(start, :gt, to), do: {:round, start, to}
-  defp end_on_a_cycle(_start, :lt, to), do: to
+  defp end_on_a_cycle(start, :eq, _to) do
+    {:turn, start}
+  end
+
+  defp end_on_a_cycle(start, :gt, to) do
+    {:round, start, to}
+  end
+
+  defp end_on_a_cycle(_start, :lt, to) do
+    to
+  end
 
   defp cyclic?(time) do
     case List.keyfind(time, :year, 0) do
@@ -653,27 +779,41 @@ defimpl Enumerable, for: Tempo.Interval do
     end
   end
 
-  defp reached({:at, value}), do: value
-  defp reached({:after, value}), do: increment(value)
+  defp reached({:at, value}) do
+    value
+  end
+
+  defp reached({:after, value}) do
+    increment(value)
+  end
 
   # The value a step gives. A week of a calendar of months is stepped by its
   # own days, a week and a day of it, and each is given as the date it names,
   # as the walk of the week gives it and a value read is held.
-  defp yielded(%Tempo{time: [{:year, _year}, {:day_of_year, _day} | _rest]} = value),
-    do: Validation.calendar_date_from_ordinal_date(value)
+  defp yielded(%Tempo{time: [{:year, _year}, {:day_of_year, _day} | _rest]} = value) do
+    Validation.calendar_date_from_ordinal_date(value)
+  end
 
-  defp yielded(%Tempo{} = value), do: Validation.calendar_date_from_week_date(value)
+  defp yielded(%Tempo{} = value) do
+    Validation.calendar_date_from_week_date(value)
+  end
 
   # A whole turn ends where it starts, so its first value is given before
   # the walk can be past its end.
-  defp first_of_turn?({:at, _start}, {:turn, _same_start}), do: true
-  defp first_of_turn?(_position, _to), do: false
+  defp first_of_turn?({:at, _start}, {:turn, _same_start}) do
+    true
+  end
+
+  defp first_of_turn?(_position, _to) do
+    false
+  end
 
   # Emit each occurrence of a DST fall-back moment, threading the
   # accumulator and honouring halt/suspend, then advance past the
   # folded hour exactly once.
-  defp emit_fold([], current, to, acc, fun),
-    do: do_reduce({:after, current}, to, {:cont, acc}, fun)
+  defp emit_fold([], current, to, acc, fun) do
+    do_reduce({:after, current}, to, {:cont, acc}, fun)
+  end
 
   defp emit_fold([value | rest], current, to, acc, fun) do
     case fun.(value, acc) do
@@ -688,21 +828,29 @@ defimpl Enumerable, for: Tempo.Interval do
     end
   end
 
-  defp emit_fold_after_suspend(rest, current, to, fun, {:cont, acc}),
-    do: emit_fold(rest, current, to, acc, fun)
+  defp emit_fold_after_suspend(rest, current, to, fun, {:cont, acc}) do
+    emit_fold(rest, current, to, acc, fun)
+  end
 
-  defp emit_fold_after_suspend(_rest, _current, _to, _fun, {:halt, acc}),
-    do: {:halted, acc}
+  defp emit_fold_after_suspend(_rest, _current, _to, _fun, {:halt, acc}) do
+    {:halted, acc}
+  end
 
-  defp emit_fold_after_suspend(rest, current, to, fun, {:suspend, acc}),
-    do: {:suspended, acc, &emit_fold_after_suspend(rest, current, to, fun, &1)}
+  defp emit_fold_after_suspend(rest, current, to, fun, {:suspend, acc}) do
+    {:suspended, acc, &emit_fold_after_suspend(rest, current, to, fun, &1)}
+  end
 
   # Open-upper: `to` is `:undefined` (explicit `../` in source) or
   # `nil` (from+duration shape with no computed upper bound yet).
   # Both mean "no bound to check — never terminate on the upper".
 
-  defp past_end?(_current, :undefined), do: false
-  defp past_end?(_current, nil), do: false
+  defp past_end?(_current, :undefined) do
+    false
+  end
+
+  defp past_end?(_current, nil) do
+    false
+  end
 
   # Half-open `[from, to)` convention: the upper bound is EXCLUSIVE.
   # `current >= to` terminates. See `CLAUDE.md`:
@@ -716,12 +864,14 @@ defimpl Enumerable, for: Tempo.Interval do
     end
   end
 
-  defp past_end?(%Tempo{} = current, {:as_moments, %Tempo{} = to}),
-    do: Tempo.Compare.compare_endpoints(current, to) != :earlier
+  defp past_end?(%Tempo{} = current, {:as_moments, %Tempo{} = to}) do
+    Tempo.Compare.compare_endpoints(current, to) != :earlier
+  end
 
   # A whole turn is past its end when it is back at its start.
-  defp past_end?(%Tempo{time: current}, {:turn, %Tempo{time: start}}),
-    do: compare_time(current, start) == :eq
+  defp past_end?(%Tempo{time: current}, {:turn, %Tempo{time: start}}) do
+    compare_time(current, start) == :eq
+  end
 
   # A walk that comes round is past its end once it is at or after it and
   # before its start again.
@@ -738,7 +888,9 @@ defimpl Enumerable, for: Tempo.Interval do
   # Both lists are assumed sorted descending-by-unit (the invariant
   # the tokenizer and `Unit.sort/2` maintain).
 
-  defp compare_time([], []), do: :eq
+  defp compare_time([], []) do
+    :eq
+  end
 
   # Microseconds compare by value only — precision sets interval width,
   # not instant ordering (`.12` and `.120` are the same moment).
@@ -751,11 +903,19 @@ defimpl Enumerable, for: Tempo.Interval do
   end
 
   defp compare_time([{:microsecond, {v, _p}} | rest], []) do
-    if v > 0, do: :gt, else: compare_time(rest, [])
+    if v > 0 do
+      :gt
+    else
+      compare_time(rest, [])
+    end
   end
 
   defp compare_time([], [{:microsecond, {v, _p}} | rest]) do
-    if v > 0, do: :lt, else: compare_time([], rest)
+    if v > 0 do
+      :lt
+    else
+      compare_time([], rest)
+    end
   end
 
   defp compare_time([{unit, v} | rest], []) do
@@ -789,11 +949,15 @@ defimpl Enumerable, for: Tempo.Interval do
   # Mismatched units at the same position (e.g. week vs month) —
   # conservative bailout. A well-formed interval has endpoints
   # using the same unit vocabulary.
-  defp compare_time(_, _), do: :eq
+  defp compare_time(_, _) do
+    :eq
+  end
 
   # Delegates to `Tempo.Math.unit_minimum/1` — see that module's
   # docstring for the start-of-unit semantics.
-  defp unit_minimum(unit), do: Math.unit_minimum(unit)
+  defp unit_minimum(unit) do
+    Math.unit_minimum(unit)
+  end
 
   # Advance a Tempo by 1 unit at its declared resolution, carrying
   # over into coarser units as needed. Delegates to `Tempo.Math`.

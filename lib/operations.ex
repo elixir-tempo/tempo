@@ -179,12 +179,16 @@ defmodule Tempo.Operations do
   # takes its second operand.
   defp parts(%IntervalSet{} = set) do
     with {:ok, turns} <- turns(set) do
-      {:ok, turns |> Enum.flat_map(fn {_member, parts} -> parts end) |> in_order()}
+      {:ok,
+       turns
+       |> Enum.flat_map(fn {_member, parts} -> parts end)
+       |> in_order()}
     end
   end
 
-  defp in_order(parts),
-    do: Enum.sort(parts, &(Compare.compare_endpoints(&1.from, &2.from) != :later))
+  defp in_order(parts) do
+    Enum.sort(parts, &(Compare.compare_endpoints(&1.from, &2.from) != :later))
+  end
 
   # A set with each member that runs through its cycle's end cut there, as
   # `align/3` returns it.
@@ -214,16 +218,23 @@ defmodule Tempo.Operations do
   # A member the other operand does not cut is the member, as it is written.
   defp cut_member({member, parts}, b_parts, sweep) do
     left = sweep.(parts, b_parts)
-    if same_spans?(left, parts), do: [member], else: as_spans(left)
+
+    if same_spans?(left, parts) do
+      [member]
+    else
+      as_spans(left)
+    end
   end
 
   # The members of the first set that overlap the second, or that do not,
   # each kept whole: one of a set with no year overlaps where a part of it
   # does.
   defp kept_members(%IntervalSet{} = a_set, %IntervalSet{} = b_set, mode) do
-    if on_cycle?(a_set) or on_cycle?(b_set),
-      do: kept_on_cycle(a_set, b_set, mode),
-      else: {:ok, sweep_members(IntervalSet.members(a_set), IntervalSet.members(b_set), mode)}
+    if on_cycle?(a_set) or on_cycle?(b_set) do
+      kept_on_cycle(a_set, b_set, mode)
+    else
+      {:ok, sweep_members(IntervalSet.members(a_set), IntervalSet.members(b_set), mode)}
+    end
   end
 
   defp kept_on_cycle(a_set, b_set, mode) do
@@ -258,9 +269,11 @@ defmodule Tempo.Operations do
   defp shared_by_pair(member, a_parts, b_parts, resolve) do
     case sweep_intersection(a_parts, b_parts, resolve) do
       [%Interval{metadata: metadata} | _rest] = shared ->
-        if same_spans?(shared, a_parts),
-          do: [%Interval{from: member.from, to: member.to, metadata: metadata}],
-          else: as_spans(shared)
+        if same_spans?(shared, a_parts) do
+          [%Interval{from: member.from, to: member.to, metadata: metadata}]
+        else
+          as_spans(shared)
+        end
 
       [] ->
         []
@@ -274,29 +287,40 @@ defmodule Tempo.Operations do
     parts = joined_where_they_meet(parts)
 
     length(left) == length(parts) and
-      left |> Enum.zip(parts) |> Enum.all?(&same_extent?/1)
+      left
+      |> Enum.zip(parts)
+      |> Enum.all?(&same_extent?/1)
   end
 
   # What a sweep leaves of one member, or of one pair of members, as the
   # spans it is: its parts in one turn of the cycle joined where they meet,
   # within the turn (a whole turn that starts within it is two parts that
   # meet there) and through the cycle's end.
-  defp as_spans(fragments), do: fragments |> joined_where_they_meet() |> Cycle.joined()
+  defp as_spans(fragments) do
+    fragments
+    |> joined_where_they_meet()
+    |> Cycle.joined()
+  end
 
   defp joined_where_they_meet([first | rest]) do
     rest
     |> Enum.reduce([first], fn fragment, [last | spans] ->
-      if Compare.compare_endpoints(last.to, fragment.from) == :same,
-        do: [%{last | to: fragment.to} | spans],
-        else: [fragment, last | spans]
+      if Compare.compare_endpoints(last.to, fragment.from) == :same do
+        [%{last | to: fragment.to} | spans]
+      else
+        [fragment, last | spans]
+      end
     end)
     |> Enum.reverse()
   end
 
-  defp joined_where_they_meet([]), do: []
+  defp joined_where_they_meet([]) do
+    []
+  end
 
-  defp overlaps_a_part?(parts, b_parts),
-    do: sweep_members(parts, b_parts, :overlapping) != []
+  defp overlaps_a_part?(parts, b_parts) do
+    sweep_members(parts, b_parts, :overlapping) != []
+  end
 
   ## Placing on a window — a `:within` window places each operand with no
   ## year on every day of it, so the operation is of dated spans.
@@ -319,8 +343,9 @@ defmodule Tempo.Operations do
 
   # Neither operand has a time of day to place.
   defp place_on_window(a, b, {class_a, class_b}, _compatible, _within)
-       when class_a != :unanchored and class_b != :unanchored,
-       do: {:ok, a, b}
+       when class_a != :unanchored and class_b != :unanchored do
+    {:ok, a, b}
+  end
 
   defp place_on_window(a, b, classes, compatible, within) do
     with {:ok, window_set} <- Tempo.to_interval_set(within) do
@@ -336,12 +361,14 @@ defmodule Tempo.Operations do
   end
 
   # A window with no year, on the operands' own cycle.
-  defp placed_on_window(a, b, _classes, {_no_year, {same, same}}, _window_set, _within),
-    do: {:ok, a, b}
+  defp placed_on_window(a, b, _classes, {_no_year, {same, same}}, _window_set, _within) do
+    {:ok, a, b}
+  end
 
   # A window with no year, where an operand is dated.
-  defp placed_on_window(_a, _b, _classes, _dated_operand, window_set, within),
-    do: ensure_anchored_window(window_set, within)
+  defp placed_on_window(_a, _b, _classes, _dated_operand, window_set, within) do
+    ensure_anchored_window(window_set, within)
+  end
 
   defp ensure_anchored_window(window_set, within) do
     if anchor_class(window_set) == :anchored do
@@ -371,7 +398,9 @@ defmodule Tempo.Operations do
     end
   end
 
-  defp anchor_if_unanchored(_class, value, _window_set), do: {:ok, value}
+  defp anchor_if_unanchored(_class, value, _window_set) do
+    {:ok, value}
+  end
 
   # For each interval in the window, walk each day, and anchor
   # every unanchored interval to that day. Returns {:ok,
@@ -389,8 +418,14 @@ defmodule Tempo.Operations do
       end
     end)
     |> case do
-      {:ok, placed} -> placed |> Enum.reverse() |> Enum.concat() |> IntervalSet.new()
-      {:error, _exception} = error -> error
+      {:ok, placed} ->
+        placed
+        |> Enum.reverse()
+        |> Enum.concat()
+        |> IntervalSet.new()
+
+      {:error, _exception} = error ->
+        error
     end
   end
 
@@ -417,7 +452,11 @@ defmodule Tempo.Operations do
         to: earlier_endpoint(placed.to, to)
     }
 
-    if Compare.compare_endpoints(held.from, held.to) == :earlier, do: [held], else: []
+    if Compare.compare_endpoints(held.from, held.to) == :earlier do
+      [held]
+    else
+      []
+    end
   end
 
   # The days a window touches, its last included when the window ends part
@@ -428,7 +467,10 @@ defmodule Tempo.Operations do
   # and a day it may not hold.
   defp days_in(%Interval{from: from, to: to}) do
     with {:ok, first} <- day_of(from) do
-      {:ok, first |> Stream.unfold(&day_before(&1, to)) |> Enum.to_list()}
+      {:ok,
+       first
+       |> Stream.unfold(&day_before(&1, to))
+       |> Enum.to_list()}
     end
   end
 
@@ -468,7 +510,13 @@ defmodule Tempo.Operations do
   end
 
   # The unit a day is stepped by: the day of the week where the day is one.
-  defp day_step(time), do: if(Keyword.has_key?(time, :day_of_week), do: :day_of_week, else: :day)
+  defp day_step(time) do
+    if Keyword.has_key?(time, :day_of_week) do
+      :day_of_week
+    else
+      :day
+    end
+  end
 
   defp anchor_interval_to_day(
          %Interval{from: na_from, to: na_to, metadata: metadata},
@@ -522,8 +570,9 @@ defmodule Tempo.Operations do
 
   # A set of durations names lengths of time and no time, as one duration
   # does.
-  defp validate_operand(%Tempo.Set{set: [%Tempo.Duration{} | _durations]} = value),
-    do: {:error, ConversionError.exception(value: value, reason: :bare_duration)}
+  defp validate_operand(%Tempo.Set{set: [%Tempo.Duration{} | _durations]} = value) do
+    {:error, ConversionError.exception(value: value, reason: :bare_duration)}
+  end
 
   defp validate_operand(%Tempo.Set{type: :one} = value) do
     {:error,
@@ -533,7 +582,9 @@ defmodule Tempo.Operations do
      )}
   end
 
-  defp validate_operand(_), do: :ok
+  defp validate_operand(_) do
+    :ok
+  end
 
   ## Anchor-class detection and compatibility check.
 
@@ -591,36 +642,89 @@ defmodule Tempo.Operations do
     end
   end
 
-  defp anchor_class(%Interval{from: %Tempo{} = from}), do: anchor_class(from)
-  defp anchor_class(%Interval{to: %Tempo{} = to}), do: anchor_class(to)
-  defp anchor_class(%Interval{}), do: :empty
+  defp anchor_class(%Interval{from: %Tempo{} = from}) do
+    anchor_class(from)
+  end
 
-  defp anchor_class(%Tempo.Set{set: [first | _]}), do: anchor_class(first)
-  defp anchor_class(%Tempo.Set{set: []}), do: :empty
+  defp anchor_class(%Interval{to: %Tempo{} = to}) do
+    anchor_class(to)
+  end
+
+  defp anchor_class(%Interval{}) do
+    :empty
+  end
+
+  defp anchor_class(%Tempo.Set{set: [first | _]}) do
+    anchor_class(first)
+  end
+
+  defp anchor_class(%Tempo.Set{set: []}) do
+    :empty
+  end
 
   # A set's range member is anchored as its ends are.
-  defp anchor_class(%Tempo.Range{first: %Tempo{} = first}), do: anchor_class(first)
-  defp anchor_class(%Tempo.Range{last: %Tempo{} = last}), do: anchor_class(last)
-  defp anchor_class(%Tempo.Range{}), do: :empty
+  defp anchor_class(%Tempo.Range{first: %Tempo{} = first}) do
+    anchor_class(first)
+  end
+
+  defp anchor_class(%Tempo.Range{last: %Tempo{} = last}) do
+    anchor_class(last)
+  end
+
+  defp anchor_class(%Tempo.Range{}) do
+    :empty
+  end
 
   defp anchor_class(%Tempo{} = tempo) do
-    if Tempo.anchored?(tempo), do: :anchored, else: :unanchored
+    if Tempo.anchored?(tempo) do
+      :anchored
+    else
+      :unanchored
+    end
   end
 
   # Two unanchored operands are comparable only when they lead with the same
   # (coarsest) unit — the axis they recur on. A bare-day value has no month, so
   # it cannot be placed against a month/day value.
-  defp same_axis?(a, b), do: leading_unit(a) == leading_unit(b)
+  defp same_axis?(a, b) do
+    leading_unit(a) == leading_unit(b)
+  end
 
-  defp leading_unit(%IntervalSet{} = set), do: leading_unit(IntervalSet.first(set))
-  defp leading_unit(%Interval{from: %Tempo{} = from}), do: leading_unit(from)
-  defp leading_unit(%Interval{to: %Tempo{} = to}), do: leading_unit(to)
-  defp leading_unit(%Interval{}), do: nil
-  defp leading_unit(%Tempo.Set{set: [first | _]}), do: leading_unit(first)
-  defp leading_unit(%Tempo.Range{first: %Tempo{} = first}), do: leading_unit(first)
-  defp leading_unit(%Tempo.Range{last: %Tempo{} = last}), do: leading_unit(last)
-  defp leading_unit(%Tempo{time: [{unit, _value} | _]}), do: unit
-  defp leading_unit(_other), do: nil
+  defp leading_unit(%IntervalSet{} = set) do
+    leading_unit(IntervalSet.first(set))
+  end
+
+  defp leading_unit(%Interval{from: %Tempo{} = from}) do
+    leading_unit(from)
+  end
+
+  defp leading_unit(%Interval{to: %Tempo{} = to}) do
+    leading_unit(to)
+  end
+
+  defp leading_unit(%Interval{}) do
+    nil
+  end
+
+  defp leading_unit(%Tempo.Set{set: [first | _]}) do
+    leading_unit(first)
+  end
+
+  defp leading_unit(%Tempo.Range{first: %Tempo{} = first}) do
+    leading_unit(first)
+  end
+
+  defp leading_unit(%Tempo.Range{last: %Tempo{} = last}) do
+    leading_unit(last)
+  end
+
+  defp leading_unit(%Tempo{time: [{unit, _value} | _]}) do
+    unit
+  end
+
+  defp leading_unit(_other) do
+    nil
+  end
 
   ## Conversion to IntervalSet.
 
@@ -638,9 +742,13 @@ defmodule Tempo.Operations do
     end
   end
 
-  defp resolve_recurrence_set(other, _counterparty, _opts), do: other
+  defp resolve_recurrence_set(other, _counterparty, _opts) do
+    other
+  end
 
-  defp to_aligned_set(%IntervalSet{} = set, _class, _opts), do: {:ok, set}
+  defp to_aligned_set(%IntervalSet{} = set, _class, _opts) do
+    {:ok, set}
+  end
 
   defp to_aligned_set(other, _class, _opts) do
     case Tempo.to_interval_set(other) do
@@ -665,8 +773,13 @@ defmodule Tempo.Operations do
     convert_calendar_first(b_set, IntervalSet.first(b_set), IntervalSet.first(a_set))
   end
 
-  defp convert_calendar_first(b_set, nil, _a_first), do: {:ok, b_set}
-  defp convert_calendar_first(b_set, _b_first, nil), do: {:ok, b_set}
+  defp convert_calendar_first(b_set, nil, _a_first) do
+    {:ok, b_set}
+  end
+
+  defp convert_calendar_first(b_set, _b_first, nil) do
+    {:ok, b_set}
+  end
 
   defp convert_calendar_first(b_set, b_first, a_first) do
     a_cal = endpoint_calendar(a_first)
@@ -696,12 +809,25 @@ defmodule Tempo.Operations do
 
   # `Tempo.anchored?/1` takes a `%Tempo{}`, and an unbounded endpoint
   # is `nil` — which is not anchored, rather than an error.
-  defp anchored_endpoint?(%Tempo{} = tempo), do: Tempo.anchored?(tempo)
-  defp anchored_endpoint?(_unbounded), do: false
+  defp anchored_endpoint?(%Tempo{} = tempo) do
+    Tempo.anchored?(tempo)
+  end
 
-  defp endpoint_calendar(%Interval{from: %Tempo{calendar: cal}}), do: cal
-  defp endpoint_calendar(%Interval{to: %Tempo{calendar: cal}}), do: cal
-  defp endpoint_calendar(_), do: nil
+  defp anchored_endpoint?(_unbounded) do
+    false
+  end
+
+  defp endpoint_calendar(%Interval{from: %Tempo{calendar: cal}}) do
+    cal
+  end
+
+  defp endpoint_calendar(%Interval{to: %Tempo{calendar: cal}}) do
+    cal
+  end
+
+  defp endpoint_calendar(_) do
+    nil
+  end
 
   defp convert_calendar_intervals(%IntervalSet{} = set, target_calendar) do
     set
@@ -724,12 +850,16 @@ defmodule Tempo.Operations do
   # time of day. Unanchored Tempos (no :year) pass through unchanged —
   # their components are calendar-independent. An unbounded endpoint
   # carries no calendar-bound components.
-  defp convert_tempo_calendar(nil, _target_calendar), do: {:ok, nil}
+  defp convert_tempo_calendar(nil, _target_calendar) do
+    {:ok, nil}
+  end
 
   defp convert_tempo_calendar(%Tempo{} = tempo, target_calendar) do
-    if Tempo.anchored?(tempo),
-      do: convert_anchored_calendar(tempo, target_calendar),
-      else: {:ok, tempo}
+    if Tempo.anchored?(tempo) do
+      convert_anchored_calendar(tempo, target_calendar)
+    else
+      {:ok, tempo}
+    end
   end
 
   # Extend to day precision so there is a day to convert — a calendar date,
@@ -763,8 +893,13 @@ defmodule Tempo.Operations do
   end
 
   # The day unit a value extends to: the day of the week on a week axis.
-  defp day_unit(%Tempo{time: time}),
-    do: if(Keyword.has_key?(time, :week), do: :day_of_week, else: :day)
+  defp day_unit(%Tempo{time: time}) do
+    if Keyword.has_key?(time, :week) do
+      :day_of_week
+    else
+      :day
+    end
+  end
 
   ## Axis canonicalisation — week-axis endpoints
   ## (`[year, week, day_of_week]`) have no common unit vocabulary
@@ -790,10 +925,13 @@ defmodule Tempo.Operations do
   # any coarser operand is (`align_resolution/2`). They were taken for two
   # axes, and the week could not be written as a date of a month, which
   # such a calendar need not have.
-  defp one_axis(a_set, b_set, _week_operand, true), do: {:ok, a_set, b_set}
+  defp one_axis(a_set, b_set, _week_operand, true) do
+    {:ok, a_set, b_set}
+  end
 
-  defp one_axis(a_set, b_set, week_operand, false),
-    do: month_axis_operands(a_set, b_set, week_operand)
+  defp one_axis(a_set, b_set, week_operand, false) do
+    month_axis_operands(a_set, b_set, week_operand)
+  end
 
   defp years_of_weeks?(%IntervalSet{} = set) do
     endpoints =
@@ -804,10 +942,13 @@ defmodule Tempo.Operations do
     endpoints != [] and Enum.all?(endpoints, &year_of_weeks?/1)
   end
 
-  defp year_of_weeks?(%Tempo{time: [{:year, year}], calendar: calendar}) when is_integer(year),
-    do: Tempo.week_based_calendar?(calendar)
+  defp year_of_weeks?(%Tempo{time: [{:year, year}], calendar: calendar}) when is_integer(year) do
+    Tempo.week_based_calendar?(calendar)
+  end
 
-  defp year_of_weeks?(%Tempo{}), do: false
+  defp year_of_weeks?(%Tempo{}) do
+    false
+  end
 
   defp month_axis_operands(a_set, b_set, :first) do
     with {:ok, converted} <- map_endpoints(a_set, &month_axis_endpoint/1) do
@@ -827,8 +968,13 @@ defmodule Tempo.Operations do
     end)
   end
 
-  defp week_axis_endpoint?(%Tempo{time: time}), do: Keyword.has_key?(time, :week)
-  defp week_axis_endpoint?(_other), do: false
+  defp week_axis_endpoint?(%Tempo{time: time}) do
+    Keyword.has_key?(time, :week)
+  end
+
+  defp week_axis_endpoint?(_other) do
+    false
+  end
 
   # Rewrite one week-axis endpoint as a month-axis calendar date.
   # A week-resolution endpoint denotes the start of its week under
@@ -836,16 +982,24 @@ defmodule Tempo.Operations do
   # before resolution.
   defp month_axis_endpoint(%Tempo{time: time, calendar: calendar} = tempo) do
     if Keyword.has_key?(time, :week) do
-      resolved = time |> pad_day_of_week() |> Validation.resolve(calendar)
+      resolved =
+        time
+        |> pad_day_of_week()
+        |> Validation.resolve(calendar)
+
       month_axis_time(resolved, tempo)
     else
       {:ok, tempo}
     end
   end
 
-  defp month_axis_endpoint(other), do: {:ok, other}
+  defp month_axis_endpoint(other) do
+    {:ok, other}
+  end
 
-  defp month_axis_time({:error, _} = error, _tempo), do: error
+  defp month_axis_time({:error, _} = error, _tempo) do
+    error
+  end
 
   defp month_axis_time(resolved, tempo) when is_list(resolved) do
     if Keyword.has_key?(resolved, :week) do
@@ -884,18 +1038,27 @@ defmodule Tempo.Operations do
   defp walked_by_dates(%IntervalSet{} = set) do
     members = IntervalSet.members(set)
 
-    if Enum.any?(members, &walked_by_weekdays_of_dates?/1),
-      do: IntervalSet.with_intervals(set, Enum.map(members, &walked_by_days/1)),
-      else: set
+    if Enum.any?(members, &walked_by_weekdays_of_dates?/1) do
+      IntervalSet.with_intervals(set, Enum.map(members, &walked_by_days/1))
+    else
+      set
+    end
   end
 
-  defp walked_by_weekdays_of_dates?(%Interval{unit: :day_of_week, from: from, to: to}),
-    do: not (week_axis_endpoint?(from) or week_axis_endpoint?(to))
+  defp walked_by_weekdays_of_dates?(%Interval{unit: :day_of_week, from: from, to: to}) do
+    not (week_axis_endpoint?(from) or week_axis_endpoint?(to))
+  end
 
-  defp walked_by_weekdays_of_dates?(%Interval{}), do: false
+  defp walked_by_weekdays_of_dates?(%Interval{}) do
+    false
+  end
 
   defp walked_by_days(%Interval{} = member) do
-    if walked_by_weekdays_of_dates?(member), do: %{member | unit: :day}, else: member
+    if walked_by_weekdays_of_dates?(member) do
+      %{member | unit: :day}
+    else
+      member
+    end
   end
 
   ## Resolution alignment — extend the coarser operand's endpoints
@@ -933,7 +1096,11 @@ defmodule Tempo.Operations do
     |> IntervalSet.members()
     |> Enum.flat_map(fn %Interval{from: from, to: to} -> [from, to] end)
     |> Enum.filter(&is_struct(&1, Tempo))
-    |> Enum.map(fn endpoint -> endpoint |> Tempo.resolution() |> elem(0) end)
+    |> Enum.map(fn endpoint ->
+      endpoint
+      |> Tempo.resolution()
+      |> elem(0)
+    end)
     |> Enum.min_by(&Unit.sort_key/1, fn -> :day end)
   end
 
@@ -951,7 +1118,9 @@ defmodule Tempo.Operations do
   end
 
   # There is no resolution to extend an unbounded endpoint to.
-  defp extend_or_pass(unbounded, _target), do: {:ok, unbounded}
+  defp extend_or_pass(unbounded, _target) do
+    {:ok, unbounded}
+  end
 
   defp extend_endpoint(tempo, target) do
     case Tempo.extend_resolution(tempo, target) do
@@ -970,7 +1139,9 @@ defmodule Tempo.Operations do
     end
   end
 
-  defp map_interval_endpoints([], _mapper, acc), do: {:ok, Enum.reverse(acc)}
+  defp map_interval_endpoints([], _mapper, acc) do
+    {:ok, Enum.reverse(acc)}
+  end
 
   defp map_interval_endpoints([%Interval{from: from, to: to} = interval | rest], mapper, acc) do
     with {:ok, mapped_from} <- mapper.(from),
@@ -1110,10 +1281,11 @@ defmodule Tempo.Operations do
   end
 
   defp shared(a_set, b_set, resolve) do
-    if on_cycle?(a_set) or on_cycle?(b_set),
-      do: shared_on_cycle(a_set, b_set, resolve),
-      else:
-        {:ok, sweep_intersection(IntervalSet.members(a_set), IntervalSet.members(b_set), resolve)}
+    if on_cycle?(a_set) or on_cycle?(b_set) do
+      shared_on_cycle(a_set, b_set, resolve)
+    else
+      {:ok, sweep_intersection(IntervalSet.members(a_set), IntervalSet.members(b_set), resolve)}
+    end
   end
 
   @doc """
@@ -1159,9 +1331,17 @@ defmodule Tempo.Operations do
   # overlap. `mode` selects which A members survive: `:overlapping`
   # keeps the sharers, `:outside` keeps the rest.
 
-  defp sweep_members([], _b_list, _mode), do: []
-  defp sweep_members(a_list, [], :outside), do: a_list
-  defp sweep_members(_a_list, [], :overlapping), do: []
+  defp sweep_members([], _b_list, _mode) do
+    []
+  end
+
+  defp sweep_members(a_list, [], :outside) do
+    a_list
+  end
+
+  defp sweep_members(_a_list, [], :overlapping) do
+    []
+  end
 
   defp sweep_members([a | a_rest] = a_list, [b | b_rest] = b_list, mode) do
     cond do
@@ -1202,13 +1382,21 @@ defmodule Tempo.Operations do
   # lists with no overlap of their own are swept in one pass, and a list
   # whose members overlap costs a comparison for each B open at each A.
 
-  defp keep_left_metadata(a_metadata, _b_metadata), do: a_metadata
+  defp keep_left_metadata(a_metadata, _b_metadata) do
+    a_metadata
+  end
 
-  defp sweep_intersection(a_list, b_list, resolve),
-    do: sweep_pairs(a_list, [], b_list, resolve)
+  defp sweep_intersection(a_list, b_list, resolve) do
+    sweep_pairs(a_list, [], b_list, resolve)
+  end
 
-  defp sweep_pairs([], _open, _unopened, _resolve), do: []
-  defp sweep_pairs(_a_list, [], [], _resolve), do: []
+  defp sweep_pairs([], _open, _unopened, _resolve) do
+    []
+  end
+
+  defp sweep_pairs(_a_list, [], [], _resolve) do
+    []
+  end
 
   defp sweep_pairs([%Interval{} = a | a_rest], open, unopened, resolve) do
     {opened, unopened} = Enum.split_while(unopened, &starts_before_end?(&1, a))
@@ -1219,13 +1407,15 @@ defmodule Tempo.Operations do
 
   # A B that starts before this A ends is one this A may reach; the Bs are in
   # the order of their starts, so the first that does not ends the run.
-  defp starts_before_end?(%Interval{from: b_from}, %Interval{to: a_to}),
-    do: Compare.compare_endpoints(b_from, a_to) == :earlier
+  defp starts_before_end?(%Interval{from: b_from}, %Interval{to: a_to}) do
+    Compare.compare_endpoints(b_from, a_to) == :earlier
+  end
 
   # A B that ends at or before this A starts shares no time with it, nor
   # with any A after it.
-  defp ends_by_start?(%Interval{to: b_to}, %Interval{from: a_from}),
-    do: Compare.compare_endpoints(b_to, a_from) != :later
+  defp ends_by_start?(%Interval{to: b_to}, %Interval{from: a_from}) do
+    Compare.compare_endpoints(b_to, a_from) != :later
+  end
 
   # A B is open from an earlier A that may have ended later than this one,
   # so each is asked whether it starts before this A ends.
@@ -1245,10 +1435,17 @@ defmodule Tempo.Operations do
   # merging `%{resource: "Alice"}` with `%{resource: "Bob"}` silently
   # keeps only Bob — so `{:merge, fun}` lets the caller decide how
   # conflicting keys combine.
-  defp metadata_resolver(:left), do: {:ok, &keep_left_metadata/2}
-  defp metadata_resolver(:merge), do: {:ok, &Map.merge/2}
+  defp metadata_resolver(:left) do
+    {:ok, &keep_left_metadata/2}
+  end
 
-  defp metadata_resolver({:merge, fun}) when is_function(fun, 2), do: {:ok, fun}
+  defp metadata_resolver(:merge) do
+    {:ok, &Map.merge/2}
+  end
+
+  defp metadata_resolver({:merge, fun}) when is_function(fun, 2) do
+    {:ok, fun}
+  end
 
   defp metadata_resolver(other) do
     {:error,
@@ -1395,7 +1592,9 @@ defmodule Tempo.Operations do
   # operand, so there is no ambiguity. An empty list is the identity —
   # `a` alone, coerced to a set — which makes "subtract whatever is
   # busy" work without the caller special-casing "nothing is busy".
-  defp fold_operands(a, [], opts, _operation), do: as_set(a, opts)
+  defp fold_operands(a, [], opts, _operation) do
+    as_set(a, opts)
+  end
 
   defp fold_operands(a, operands, opts, operation) do
     Enum.reduce_while(operands, {:ok, a}, fn operand, {:ok, acc} ->
@@ -1448,8 +1647,13 @@ defmodule Tempo.Operations do
   # Sweep-line difference: for each A interval, walk through
   # B intervals that overlap it, emitting the uncovered portions.
 
-  defp sweep_difference([], _b), do: []
-  defp sweep_difference(a_list, []), do: a_list
+  defp sweep_difference([], _b) do
+    []
+  end
+
+  defp sweep_difference(a_list, []) do
+    a_list
+  end
 
   # The members of A are in order of their starts and may overlap each other
   # (two bookings of one room), so a B that ends inside one A may reach the
@@ -1615,7 +1819,9 @@ defmodule Tempo.Operations do
   """
   @spec overlaps?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def overlaps?(a, b, opts \\ []), do: not disjoint?(a, b, opts)
+  def overlaps?(a, b, opts \\ []) do
+    not disjoint?(a, b, opts)
+  end
 
   @doc """
   `true` when every instant covered by `a` is also covered by
@@ -1654,7 +1860,9 @@ defmodule Tempo.Operations do
   """
   @spec contains?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def contains?(a, b, opts \\ []), do: within?(b, a, opts)
+  def contains?(a, b, opts \\ []) do
+    within?(b, a, opts)
+  end
 
   @doc """
   `true` when `a` and `b` cover the same instants — i.e. they
@@ -1679,7 +1887,9 @@ defmodule Tempo.Operations do
         b_members = IntervalSet.members(IntervalSet.merged(b_set))
 
         length(a_members) == length(b_members) and
-          a_members |> Enum.zip(b_members) |> Enum.all?(&same_extent?/1)
+          a_members
+          |> Enum.zip(b_members)
+          |> Enum.all?(&same_extent?/1)
 
       {:error, exception} ->
         raise exception
@@ -1695,6 +1905,11 @@ defmodule Tempo.Operations do
     endpoint_same?(a_from, b_from) and endpoint_same?(a_to, b_to)
   end
 
-  defp endpoint_same?(%Tempo{} = a, %Tempo{} = b), do: Compare.compare_endpoints(a, b) == :same
-  defp endpoint_same?(a, b), do: a == b
+  defp endpoint_same?(%Tempo{} = a, %Tempo{} = b) do
+    Compare.compare_endpoints(a, b) == :same
+  end
+
+  defp endpoint_same?(a, b) do
+    a == b
+  end
 end

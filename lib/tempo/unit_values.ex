@@ -138,18 +138,31 @@ defmodule Tempo.UnitValues do
         {:error, :unanchored}
 
       year ->
-        year |> traditional_months(calendar, :numbered) |> Enum.map(&elem(&1, 0)) |> as_values()
+        year
+        |> traditional_months(calendar, :numbered)
+        |> Enum.map(&elem(&1, 0))
+        |> as_values()
     end
   end
 
-  defp listed(_unit, _context, _calendar), do: :counted
+  defp listed(_unit, _context, _calendar) do
+    :counted
+  end
 
   # The runs of numbers a calendar gives, as the values they are: the range
   # they run through, or the ranges where some are missing between them.
   # None is no period to hold a value.
-  defp numbered([]), do: {:error, :no_period}
-  defp numbered([range]), do: {:ok, range}
-  defp numbered(ranges), do: {:ok, ranges}
+  defp numbered([]) do
+    {:error, :no_period}
+  end
+
+  defp numbered([range]) do
+    {:ok, range}
+  end
+
+  defp numbered(ranges) do
+    {:ok, ranges}
+  end
 
   # Whole numbers in order, as the values they are: one range where they run
   # on from one another, and the ranges of them where they do not.
@@ -158,7 +171,9 @@ defmodule Tempo.UnitValues do
   # through, or the ranges where some are missing between them. None is no
   # period to hold a value.
   @spec as_values([integer()]) :: {:ok, values()} | {:error, :no_period}
-  def as_values([]), do: {:error, :no_period}
+  def as_values([]) do
+    {:error, :no_period}
+  end
 
   def as_values([first | rest]) do
     case runs_of_numbers(rest, first, first) do
@@ -184,17 +199,29 @@ defmodule Tempo.UnitValues do
     |> Enum.flat_map(&numbered_as(&1, kind))
   end
 
-  defp numbered_as({number, place}, :numbered) when is_integer(number), do: [{number, place}]
-  defp numbered_as({{number, :leap}, place}, :leap), do: [{number, place}]
-  defp numbered_as(_another_kind, _kind), do: []
+  defp numbered_as({number, place}, :numbered) when is_integer(number) do
+    [{number, place}]
+  end
 
-  defp runs_of_numbers([number | rest], first, last) when number == last + 1,
-    do: runs_of_numbers(rest, first, number)
+  defp numbered_as({{number, :leap}, place}, :leap) do
+    [{number, place}]
+  end
 
-  defp runs_of_numbers([number | rest], first, last),
-    do: [first..last//1 | runs_of_numbers(rest, number, number)]
+  defp numbered_as(_another_kind, _kind) do
+    []
+  end
 
-  defp runs_of_numbers([], first, last), do: [first..last//1]
+  defp runs_of_numbers([number | rest], first, last) when number == last + 1 do
+    runs_of_numbers(rest, first, number)
+  end
+
+  defp runs_of_numbers([number | rest], first, last) do
+    [first..last//1 | runs_of_numbers(rest, number, number)]
+  end
+
+  defp runs_of_numbers([], first, last) do
+    [first..last//1]
+  end
 
   ## Years
 
@@ -206,9 +233,13 @@ defmodule Tempo.UnitValues do
   @doc false
   # Whether a calendar has the year. Every year but 0 is taken to be one.
   @spec year?(term(), module()) :: boolean()
-  def year?(0, calendar), do: calendar.valid_date?(0, 1, 1)
+  def year?(0, calendar) do
+    calendar.valid_date?(0, 1, 1)
+  end
 
-  def year?(_year, _calendar), do: true
+  def year?(_year, _calendar) do
+    true
+  end
 
   @doc false
   # The year so many years on from a year, back where the count is
@@ -217,9 +248,11 @@ defmodule Tempo.UnitValues do
   # calendar's -1 is 2.
   @spec years_on(integer(), integer(), module()) :: integer()
   def years_on(year, count, calendar) when is_integer(year) and is_integer(count) do
-    if one_side_of_zero?(year, year + count) or year?(0, calendar),
-      do: year + count,
-      else: counted_by_calendar(year, count, calendar)
+    if one_side_of_zero?(year, year + count) or year?(0, calendar) do
+      year + count
+    else
+      counted_by_calendar(year, count, calendar)
+    end
   end
 
   @doc false
@@ -234,7 +267,9 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp one_side_of_zero?(year, other), do: (year > 0 and other > 0) or (year < 0 and other < 0)
+  defp one_side_of_zero?(year, other) do
+    (year > 0 and other > 0) or (year < 0 and other < 0)
+  end
 
   # A year the calendar lacks (the Julian calendar's 0, should one be held)
   # has no date to count from, and is counted on as a number.
@@ -251,18 +286,41 @@ defmodule Tempo.UnitValues do
 
   # The ranges a unit's values are, the first and the last of them, each of
   # them in order, and whether a number is one.
-  defp ranges(%Range{} = range), do: [range]
-  defp ranges(ranges) when is_list(ranges), do: ranges
+  defp ranges(%Range{} = range) do
+    [range]
+  end
 
-  defp first_of(%Range{first: first}), do: first
-  defp first_of([%Range{first: first} | _rest]), do: first
+  defp ranges(ranges) when is_list(ranges) do
+    ranges
+  end
 
-  defp last_of(%Range{last: last}), do: last
-  defp last_of(ranges) when is_list(ranges), do: ranges |> List.last() |> last_of()
+  defp first_of(%Range{first: first}) do
+    first
+  end
 
-  defp numbers(values), do: values |> ranges() |> Enum.flat_map(&Enum.to_list/1)
+  defp first_of([%Range{first: first} | _rest]) do
+    first
+  end
 
-  defp taken?(value, values), do: Enum.any?(ranges(values), &(value in &1))
+  defp last_of(%Range{last: last}) do
+    last
+  end
+
+  defp last_of(ranges) when is_list(ranges) do
+    ranges
+    |> List.last()
+    |> last_of()
+  end
+
+  defp numbers(values) do
+    values
+    |> ranges()
+    |> Enum.flat_map(&Enum.to_list/1)
+  end
+
+  defp taken?(value, values) do
+    Enum.any?(ranges(values), &(value in &1))
+  end
 
   # The units that take a run of values.
   @counted [
@@ -279,8 +337,13 @@ defmodule Tempo.UnitValues do
 
   # The first value a unit takes: the first month, week or day, and hour,
   # minute or second zero.
-  defp first_value(unit) when unit in [:hour, :minute, :second], do: 0
-  defp first_value(_unit), do: 1
+  defp first_value(unit) when unit in [:hour, :minute, :second] do
+    0
+  end
+
+  defp first_value(_unit) do
+    1
+  end
 
   # The last value a unit takes in the period the units before it name. A
   # step asks it of the value it steps from, so no range is built here.
@@ -348,12 +411,16 @@ defmodule Tempo.UnitValues do
   # count of the year's months, which an astronomical calendar works out from
   # its new moons.
   defp month_of_year?(month, year, calendar) when month >= 1 do
-    if Tempo.week_based_calendar?(calendar),
-      do: month <= calendar_weeks_in_year(year, calendar),
-      else: month <= fewest_months(calendar) or month <= last_month(year, calendar)
+    if Tempo.week_based_calendar?(calendar) do
+      month <= calendar_weeks_in_year(year, calendar)
+    else
+      month <= fewest_months(calendar) or month <= last_month(year, calendar)
+    end
   end
 
-  defp month_of_year?(_month, _year, _calendar), do: false
+  defp month_of_year?(_month, _year, _calendar) do
+    false
+  end
 
   defp fewest_months(calendar) do
     case last_in_any_year(:month, [], calendar) do
@@ -371,8 +438,13 @@ defmodule Tempo.UnitValues do
 
   # What a calendar answers for a year or a month of one: a count, or that
   # it cannot say.
-  defp counted(last) when is_integer(last), do: {:ok, last}
-  defp counted(_not_a_count), do: {:error, :unanchored}
+  defp counted(last) when is_integer(last) do
+    {:ok, last}
+  end
+
+  defp counted(_not_a_count) do
+    {:error, :unanchored}
+  end
 
   @doc """
   Returns the values a unit takes with no year to count them in: those it takes in every year, and those it takes in the year that has the most.
@@ -425,20 +497,24 @@ defmodule Tempo.UnitValues do
   # The last value a unit takes in every year, and in the year that has the
   # most: what a calendar answers with no year, read in this one place. A
   # step asks it of the value it steps from, so no range is built here.
-  defp last_in_any_year(:month, _context, calendar),
-    do: counted_in_any_year(calendar.months_in_year())
+  defp last_in_any_year(:month, _context, calendar) do
+    counted_in_any_year(calendar.months_in_year())
+  end
 
   defp last_in_any_year(:day, context, calendar) do
     month = whole(context, :month)
 
-    if is_integer(month) and month > 0,
-      do: counted_in_any_year(calendar.days_in_month(month)),
-      else: {:error, :unanchored}
+    if is_integer(month) and month > 0 do
+      counted_in_any_year(calendar.days_in_month(month))
+    else
+      {:error, :unanchored}
+    end
   end
 
   defp last_in_any_year(unit, _context, _calendar)
-       when unit in [:week, :calendar_week, :day_of_year],
-       do: {:error, :unanchored}
+       when unit in [:week, :calendar_week, :day_of_year] do
+    {:error, :unanchored}
+  end
 
   defp last_in_any_year(unit, context, calendar) do
     with {:ok, last} <- last_in_period(unit, context, calendar) do
@@ -471,7 +547,9 @@ defmodule Tempo.UnitValues do
 
   """
   @spec named_day(integer(), pos_integer(), pos_integer(), module()) :: pos_integer()
-  def named_day(year, month, day, calendar), do: calendar.cardinal_day(year, month, day)
+  def named_day(year, month, day, calendar) do
+    calendar.cardinal_day(year, month, day)
+  end
 
   @doc """
   The year, month and day a date is named by.
@@ -502,8 +580,9 @@ defmodule Tempo.UnitValues do
   """
   @spec named_date(integer(), pos_integer(), pos_integer(), module()) ::
           {integer(), pos_integer(), pos_integer()}
-  def named_date(year, month, day, calendar),
-    do: {year, month_named(year, month, day, calendar), named_day(year, month, day, calendar)}
+  def named_date(year, month, day, calendar) do
+    {year, month_named(year, month, day, calendar), named_day(year, month, day, calendar)}
+  end
 
   @doc """
   Whether a month is the only one of its year with its name.
@@ -544,7 +623,9 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  def month_named_once?(_year, _month, _calendar), do: true
+  def month_named_once?(_year, _month, _calendar) do
+    true
+  end
 
   @doc """
   Whether a year's first month and its last have different names.
@@ -585,7 +666,9 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  def year_named_by_its_months?(_year, _calendar), do: true
+  def year_named_by_its_months?(_year, _calendar) do
+    true
+  end
 
   # The month a date names, as its calendar numbers the months of a year by
   # name: the month its date is of (`month_of_year/3`), named once
@@ -600,20 +683,26 @@ defmodule Tempo.UnitValues do
 
   # What a calendar answers with no year: a count, the counts its years run
   # over (a range or a list of them), or that it cannot say.
-  defp counted_in_any_year(count) when is_integer(count) and count > 0,
-    do: {:ok, count, count}
-
-  defp counted_in_any_year({:ambiguous, %Range{first: first, last: last}})
-       when is_integer(first) and is_integer(last) and first > 0 and last > 0,
-       do: {:ok, min(first, last), max(first, last)}
-
-  defp counted_in_any_year({:ambiguous, [_ | _] = counts}) do
-    if Enum.all?(counts, &(is_integer(&1) and &1 > 0)),
-      do: {:ok, Enum.min(counts), Enum.max(counts)},
-      else: {:error, :unanchored}
+  defp counted_in_any_year(count) when is_integer(count) and count > 0 do
+    {:ok, count, count}
   end
 
-  defp counted_in_any_year(_cannot_say), do: {:error, :unanchored}
+  defp counted_in_any_year({:ambiguous, %Range{first: first, last: last}})
+       when is_integer(first) and is_integer(last) and first > 0 and last > 0 do
+    {:ok, min(first, last), max(first, last)}
+  end
+
+  defp counted_in_any_year({:ambiguous, [_ | _] = counts}) do
+    if Enum.all?(counts, &(is_integer(&1) and &1 > 0)) do
+      {:ok, Enum.min(counts), Enum.max(counts)}
+    else
+      {:error, :unanchored}
+    end
+  end
+
+  defp counted_in_any_year(_cannot_say) do
+    {:error, :unanchored}
+  end
 
   @doc """
   Returns the first value a unit takes after the units before it.
@@ -651,7 +740,9 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  def first(_unit, _context, _calendar), do: {:error, :uncounted}
+  def first(_unit, _context, _calendar) do
+    {:error, :uncounted}
+  end
 
   @doc """
   Returns the last value a unit takes after the units before it.
@@ -762,7 +853,9 @@ defmodule Tempo.UnitValues do
 
   # The value after a value among those a calendar lists: the next it has,
   # which is not the next number where days are missing between them.
-  defp following_among(_values, :any), do: :last
+  defp following_among(_values, :any) do
+    :last
+  end
 
   defp following_among(values, value) do
     case Enum.find(numbers(values), &(&1 > value)) do
@@ -854,8 +947,9 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp at_or_next_among(numbers, value),
-    do: Enum.find(numbers, List.last(numbers), &(&1 >= value))
+  defp at_or_next_among(numbers, value) do
+    Enum.find(numbers, List.last(numbers), &(&1 >= value))
+  end
 
   # The last of the values a calendar lists that is not after a value, and
   # the first of them where every one is.
@@ -924,14 +1018,23 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  def preceding(_unit, _value, _context, _calendar), do: {:error, :uncounted}
+  def preceding(_unit, _value, _context, _calendar) do
+    {:error, :uncounted}
+  end
 
   defp counted_preceding(unit, value) do
-    if value > first_value(unit), do: {:ok, value - 1}, else: :first
+    if value > first_value(unit) do
+      {:ok, value - 1}
+    else
+      :first
+    end
   end
 
   defp preceding_among(values, value) do
-    case values |> numbers() |> Enum.take_while(&(&1 < value)) |> List.last() do
+    case values
+         |> numbers()
+         |> Enum.take_while(&(&1 < value))
+         |> List.last() do
       nil -> :first
       previous -> {:ok, previous}
     end
@@ -977,16 +1080,26 @@ defmodule Tempo.UnitValues do
   # far longer than them (`{1..999999999}D`) costs no more than they do. A
   # range runs up from its first value: one that counts down names nothing,
   # as one whose ends are counted to a first after its last does.
-  defp values_named(%Range{step: step}, _values) when step < 1, do: []
+  defp values_named(%Range{step: step}, _values) when step < 1 do
+    []
+  end
 
   defp values_named(%Range{first: first, last: last, step: step}, values) do
     named = Range.new(from_end(first, values), from_end(last, values), step)
-    values |> numbers() |> Enum.filter(&(&1 in named))
+
+    values
+    |> numbers()
+    |> Enum.filter(&(&1 in named))
   end
 
   defp values_named(index, values) when is_integer(index) do
     value = from_end(index, values)
-    if taken?(value, values), do: [value], else: []
+
+    if taken?(value, values) do
+      [value]
+    else
+      []
+    end
   end
 
   # A mask stands for the values of the unit whose digits it matches, as it
@@ -1002,15 +1115,22 @@ defmodule Tempo.UnitValues do
     |> Enum.map(&Enum.at(counted, -&1))
   end
 
-  defp values_named({:mask, mask}, values) when is_list(mask),
-    do: values |> numbers() |> Mask.matching(mask)
+  defp values_named({:mask, mask}, values) when is_list(mask) do
+    values
+    |> numbers()
+    |> Mask.matching(mask)
+  end
 
   # An unspecified unit (`X*`) stands for every value the unit takes, as a
   # mask of as many digits does (`XX` of a month's days). It was passed
   # over, so a part written with one selected nothing.
-  defp values_named(:any, values), do: numbers(values)
+  defp values_named(:any, values) do
+    numbers(values)
+  end
 
-  defp values_named(_not_a_number, _values), do: []
+  defp values_named(_not_a_number, _values) do
+    []
+  end
 
   @doc """
   Returns a written value with each count from the end counted among the values a unit takes, in the shape it is written in.
@@ -1065,35 +1185,43 @@ defmodule Tempo.UnitValues do
              | {:backwards, Range.t()}
              | {:backwards, Range.t(), Range.t()}}
   def resolve(value, %Range{first: first, last: last})
-      when is_integer(value) and value in first..last//1,
-      do: {:ok, value}
+      when is_integer(value) and value in first..last//1 do
+    {:ok, value}
+  end
 
   def resolve(value, %Range{first: first, last: last})
-      when is_float(value) and value >= first and value <= last,
-      do: {:ok, value}
+      when is_float(value) and value >= first and value <= last do
+    {:ok, value}
+  end
 
   def resolve(value, %Range{first: first, last: last} = values)
       when is_integer(value) and value < 0 do
     counted = from_end(value, values)
 
-    if counted >= 0 and counted in first..last//1,
-      do: {:ok, counted},
-      else: {:error, {:not_taken, value, counted}}
+    if counted >= 0 and counted in first..last//1 do
+      {:ok, counted}
+    else
+      {:error, {:not_taken, value, counted}}
+    end
   end
 
-  def resolve(%Range{step: step} = range, %Range{}) when step < 1,
-    do: {:error, {:backwards, range}}
+  def resolve(%Range{step: step} = range, %Range{}) when step < 1 do
+    {:error, {:backwards, range}}
+  end
 
   def resolve(%Range{first: from, last: to} = range, %Range{first: first, last: last})
-      when from <= to and from in first..last//1 and to in first..last//1,
-      do: {:ok, range}
+      when from <= to and from in first..last//1 and to in first..last//1 do
+    {:ok, range}
+  end
 
   def resolve(%Range{first: from, last: to, step: step} = range, %Range{} = values) do
     with {:ok, from} <- resolve(from, values),
          {:ok, to} <- resolve(to, values) do
-      if from <= to,
-        do: {:ok, from..to//step},
-        else: {:error, {:backwards, range, from..to//step}}
+      if from <= to do
+        {:ok, from..to//step}
+      else
+        {:error, {:backwards, range, from..to//step}}
+      end
     end
   end
 
@@ -1111,41 +1239,56 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  def resolve(value, %Range{}), do: {:error, {:not_taken, value}}
+  def resolve(value, %Range{}) do
+    {:error, {:not_taken, value}}
+  end
 
   # Values that do not run on from one another: a number is one of them or
   # it is not, a count from the end is counted among them, and a range is
   # the ranges of them it names, which are several where it runs through
   # values the calendar does not have.
-  def resolve(written, [%Range{} | _] = values), do: resolve_listed(written, values)
+  def resolve(written, [%Range{} | _] = values) do
+    resolve_listed(written, values)
+  end
 
   defp resolve_listed(value, values) when is_integer(value) and value >= 0 do
-    if taken?(value, values), do: {:ok, value}, else: {:error, {:not_taken, value}}
+    if taken?(value, values) do
+      {:ok, value}
+    else
+      {:error, {:not_taken, value}}
+    end
   end
 
   defp resolve_listed(value, values) when is_float(value) do
-    if Enum.any?(values, &(value >= &1.first and value <= &1.last)),
-      do: {:ok, value},
-      else: {:error, {:not_taken, value}}
+    if Enum.any?(values, &(value >= &1.first and value <= &1.last)) do
+      {:ok, value}
+    else
+      {:error, {:not_taken, value}}
+    end
   end
 
   defp resolve_listed(value, values) when is_integer(value) do
     counted = from_end(value, values)
 
-    if taken?(counted, values),
-      do: {:ok, counted},
-      else: {:error, {:not_taken, value, counted}}
+    if taken?(counted, values) do
+      {:ok, counted}
+    else
+      {:error, {:not_taken, value, counted}}
+    end
   end
 
-  defp resolve_listed(%Range{step: step} = range, _values) when step < 1,
-    do: {:error, {:backwards, range}}
+  defp resolve_listed(%Range{step: step} = range, _values) when step < 1 do
+    {:error, {:backwards, range}}
+  end
 
   defp resolve_listed(%Range{first: from, last: to, step: step} = range, values) do
     with {:ok, from} <- resolve_listed(from, values),
          {:ok, to} <- resolve_listed(to, values) do
-      if from <= to,
-        do: {:ok, taken_within(from..to//step, values)},
-        else: {:error, {:backwards, range, from..to//step}}
+      if from <= to do
+        {:ok, taken_within(from..to//step, values)}
+      else
+        {:error, {:backwards, range, from..to//step}}
+      end
     end
   end
 
@@ -1158,12 +1301,20 @@ defmodule Tempo.UnitValues do
       end
     end)
     |> case do
-      {:ok, resolved} -> {:ok, resolved |> Enum.reverse() |> List.flatten()}
-      {:error, _not_taken} = error -> error
+      {:ok, resolved} ->
+        {:ok,
+         resolved
+         |> Enum.reverse()
+         |> List.flatten()}
+
+      {:error, _not_taken} = error ->
+        error
     end
   end
 
-  defp resolve_listed(value, _values), do: {:error, {:not_taken, value}}
+  defp resolve_listed(value, _values) do
+    {:error, {:not_taken, value}}
+  end
 
   # The values a range names among those listed: the range where it runs
   # through none that is missing, and otherwise the ranges of those it names.
@@ -1174,11 +1325,14 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp taken_within(%Range{} = range, values), do: Enum.filter(range, &taken?(&1, values))
+  defp taken_within(%Range{} = range, values) do
+    Enum.filter(range, &taken?(&1, values))
+  end
 
   defp overlap(%Range{first: first, last: last}, %Range{first: run_first, last: run_last}) do
-    if max(first, run_first) <= min(last, run_last),
-      do: max(first, run_first)..min(last, run_last)//1
+    if max(first, run_first) <= min(last, run_last) do
+      max(first, run_first)..min(last, run_last)//1
+    end
   end
 
   @doc """
@@ -1210,10 +1364,13 @@ defmodule Tempo.UnitValues do
 
   """
   @spec from_end(integer(), values()) :: integer()
-  def from_end(index, %Range{last: last}) when is_integer(index) and index < 0,
-    do: last + 1 + index
+  def from_end(index, %Range{last: last}) when is_integer(index) and index < 0 do
+    last + 1 + index
+  end
 
-  def from_end(index, %Range{}) when is_integer(index), do: index
+  def from_end(index, %Range{}) when is_integer(index) do
+    index
+  end
 
   # Among values that do not run on from one another the count is of the
   # values themselves: the last but seventeen of `[1..2, 14..30]` is the 2nd.
@@ -1227,7 +1384,9 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  def from_end(index, [%Range{} | _]) when is_integer(index), do: index
+  def from_end(index, [%Range{} | _]) when is_integer(index) do
+    index
+  end
 
   ## A year that does not begin with its first month
   #
@@ -1273,10 +1432,13 @@ defmodule Tempo.UnitValues do
 
   """
   @spec year_begins_with_first_month?(integer(), module()) :: boolean()
-  def year_begins_with_first_month?(year, calendar) when is_integer(year) and is_atom(calendar),
-    do: first_of(year, nil, calendar) == {year, 1, 1} and calendar.valid_date?(year, 1, 1)
+  def year_begins_with_first_month?(year, calendar) when is_integer(year) and is_atom(calendar) do
+    first_of(year, nil, calendar) == {year, 1, 1} and calendar.valid_date?(year, 1, 1)
+  end
 
-  def year_begins_with_first_month?(_year, _calendar), do: true
+  def year_begins_with_first_month?(_year, _calendar) do
+    true
+  end
 
   @doc """
   Returns the first date of a year, or of a month of a year, as the calendar counts them.
@@ -1326,7 +1488,9 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  def first_date(_context, _calendar), do: {:error, :no_period}
+  def first_date(_context, _calendar) do
+    {:error, :no_period}
+  end
 
   @doc false
   # The date a value written to its year, its month or its day starts on:
@@ -1377,7 +1541,9 @@ defmodule Tempo.UnitValues do
     [year: year, month: month]
   end
 
-  def with_first_month(time, _calendar), do: time ++ [month: 1]
+  def with_first_month(time, _calendar) do
+    time ++ [month: 1]
+  end
 
   @doc false
   # A time list written to its month, with the month's first day, as the
@@ -1391,7 +1557,9 @@ defmodule Tempo.UnitValues do
     [year: year, month: month, day: day]
   end
 
-  def with_first_day(time, _calendar), do: time ++ [day: 1]
+  def with_first_day(time, _calendar) do
+    time ++ [day: 1]
+  end
 
   @doc """
   Returns the weeks of a month of a year, each as the dates the calendar numbers in it.
@@ -1440,7 +1608,9 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  def weeks_of_month(_year, _month, _calendar), do: {:error, :no_period}
+  def weeks_of_month(_year, _month, _calendar) do
+    {:error, :no_period}
+  end
 
   @doc """
   Returns the dates of a week of a month of a year, as the calendar numbers its weeks.
@@ -1479,14 +1649,24 @@ defmodule Tempo.UnitValues do
           {:ok, Date.Range.t()} | {:error, :no_period}
   def week_of_month(year, month, week, calendar) when is_integer(week) and week != 0 do
     with {:ok, weeks} <- weeks_of_month(year, month, calendar),
-         %Date.Range{} = dates <- Enum.at(weeks, if(week > 0, do: week - 1, else: week)) do
+         %Date.Range{} = dates <-
+           Enum.at(
+             weeks,
+             if week > 0 do
+               week - 1
+             else
+               week
+             end
+           ) do
       {:ok, dates}
     else
       _no_such_week -> {:error, :no_period}
     end
   end
 
-  def week_of_month(_year, _month, _week, _calendar), do: {:error, :no_period}
+  def week_of_month(_year, _month, _week, _calendar) do
+    {:error, :no_period}
+  end
 
   # The days the calendar gives a month of a year: its `month/2`, a callback
   # of the `Calendrical` behaviour.
@@ -1503,19 +1683,39 @@ defmodule Tempo.UnitValues do
   # error or significant digits are written on, and the lowest and the
   # highest year a mask stands for. An unspecified year names none.
   @spec whole_years(term()) :: [integer()]
-  def whole_years(year) when is_integer(year), do: [year]
-  def whole_years(%Range{first: first, last: last}), do: [first, last]
-  def whole_years({year, annotations}) when is_integer(year) and is_list(annotations), do: [year]
+  def whole_years(year) when is_integer(year) do
+    [year]
+  end
+
+  def whole_years(%Range{first: first, last: last}) do
+    [first, last]
+  end
+
+  def whole_years({year, annotations}) when is_integer(year) and is_list(annotations) do
+    [year]
+  end
 
   # A mask is asked of the lowest and the highest year it stands for.
-  def whole_years({:mask, [:negative | digits]}),
-    do: digits |> Mask.mask_bounds() |> Tuple.to_list() |> Enum.map(&(-&1))
+  def whole_years({:mask, [:negative | digits]}) do
+    digits
+    |> Mask.mask_bounds()
+    |> Tuple.to_list()
+    |> Enum.map(&(-&1))
+  end
 
-  def whole_years({:mask, digits}) when is_list(digits),
-    do: digits |> Mask.mask_bounds() |> Tuple.to_list()
+  def whole_years({:mask, digits}) when is_list(digits) do
+    digits
+    |> Mask.mask_bounds()
+    |> Tuple.to_list()
+  end
 
-  def whole_years(years) when is_list(years), do: Enum.flat_map(years, &whole_years/1)
-  def whole_years(_mask_or_none), do: []
+  def whole_years(years) when is_list(years) do
+    Enum.flat_map(years, &whole_years/1)
+  end
+
+  def whole_years(_mask_or_none) do
+    []
+  end
 
   ## The days of a week
   #
@@ -1555,12 +1755,16 @@ defmodule Tempo.UnitValues do
   """
   @spec iso_weekday_from_day_of_week(integer(), module()) :: integer()
   def iso_weekday_from_day_of_week(day_of_week, calendar) when is_integer(day_of_week) do
-    if day_of_week in days_of_a_week(calendar) and Tempo.week_based_calendar?(calendar),
-      do: weekday_of_week_day(calendar, day_of_week),
-      else: day_of_week
+    if day_of_week in days_of_a_week(calendar) and Tempo.week_based_calendar?(calendar) do
+      weekday_of_week_day(calendar, day_of_week)
+    else
+      day_of_week
+    end
   end
 
-  def iso_weekday_from_day_of_week(no_day_of_a_week, _calendar), do: no_day_of_a_week
+  def iso_weekday_from_day_of_week(no_day_of_a_week, _calendar) do
+    no_day_of_a_week
+  end
 
   @doc """
   Returns the day of the week a calendar gives a weekday, the weekday numbered as ISO 8601 numbers it.
@@ -1597,19 +1801,28 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  def day_of_week_from_iso_weekday(no_weekday, _calendar), do: no_weekday
+  def day_of_week_from_iso_weekday(no_weekday, _calendar) do
+    no_weekday
+  end
 
   @doc false
   # The day a calendar is asked to count a week's days from, for the number
   # `K` gives one of its dates: its own first day in a calendar of weeks,
   # and Monday in a calendar of months.
   @spec week_counted_from(module()) :: :default | :monday
-  def week_counted_from(calendar),
-    do: if(Tempo.week_based_calendar?(calendar), do: :default, else: :monday)
+  def week_counted_from(calendar) do
+    if Tempo.week_based_calendar?(calendar) do
+      :default
+    else
+      :monday
+    end
+  end
 
   # The days of a week as a calendar numbers them, from the first to as
   # many as it says a week has.
-  defp days_of_a_week(calendar), do: 1..calendar.days_in_week()//1
+  defp days_of_a_week(calendar) do
+    1..calendar.days_in_week()//1
+  end
 
   # Every week of a calendar of weeks starts on the same weekday, so the
   # first week of any year answers for them all: of this one, where any
@@ -1665,9 +1878,11 @@ defmodule Tempo.UnitValues do
   # `7`, Sunday) among the days the calendar's `week/2` gives the week,
   # so a week cut short at the start or end of its year has fewer.
   def date_from_calendar_week(year, week, day, calendar) do
-    if Tempo.week_based_calendar?(calendar),
-      do: Date.new(year, week, day, calendar),
-      else: weekday_in_week(calendar_week_range(year, week, calendar), day)
+    if Tempo.week_based_calendar?(calendar) do
+      Date.new(year, week, day, calendar)
+    else
+      weekday_in_week(calendar_week_range(year, week, calendar), day)
+    end
   end
 
   @doc false
@@ -1676,20 +1891,25 @@ defmodule Tempo.UnitValues do
   # short at the start or end of the year in a calendar whose weeks number
   # within their own year, or an error for a week the calendar does not
   # number.
-  def calendar_week_range(year, week, calendar), do: calendar.week(year, week)
+  def calendar_week_range(year, week, calendar) do
+    calendar.week(year, week)
+  end
 
   @doc false
   # How many ISO 8601 weeks (`W`) `year` has: a week-based calendar's own
   # count, or the weeks ISO 8601's rule gives a month-based calendar's year.
   # The Gregorian calendar's are the weeks of `Calendrical.ISOWeek`, as in
   # `date_from_iso_week/4`.
-  def iso_weeks_in_year(year, Calendrical.Gregorian) when is_integer(year),
-    do: calendar_weeks_in_year(year, Calendrical.ISOWeek)
+  def iso_weeks_in_year(year, Calendrical.Gregorian) when is_integer(year) do
+    calendar_weeks_in_year(year, Calendrical.ISOWeek)
+  end
 
   def iso_weeks_in_year(year, calendar) do
-    if Tempo.week_based_calendar?(calendar),
-      do: calendar_weeks_in_year(year, calendar),
-      else: iso_week_count(calendar, year)
+    if Tempo.week_based_calendar?(calendar) do
+      calendar_weeks_in_year(year, calendar)
+    else
+      iso_week_count(calendar, year)
+    end
   end
 
   # The weeks from the first day of a year's week 1 to the first day of the
@@ -1720,7 +1940,9 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp iso_week_start(_calendar, _year, _week), do: nil
+  defp iso_week_start(_calendar, _year, _week) do
+    nil
+  end
 
   @doc false
   # How many weeks `year` has in the calendar's own numbering (`w`), or 0
@@ -1753,7 +1975,9 @@ defmodule Tempo.UnitValues do
     |> Enum.take_while(&(Compare.compare_days(&1, next_first) == :lt))
   end
 
-  defp consecutive_week_starts(_first, _next_first), do: []
+  defp consecutive_week_starts(_first, _next_first) do
+    []
+  end
 
   @doc false
   # Which week of `year` the week that starts on `week_start` is, and how
@@ -1782,21 +2006,29 @@ defmodule Tempo.UnitValues do
   def counted_between(%Date{} = from, %Date{} = to, part) do
     calendar = from.calendar
 
-    if to.calendar == calendar,
-      do: calendar.diff({from.year, from.month, from.day}, {to.year, to.month, to.day}, part),
-      else: :two_calendars
+    if to.calendar == calendar do
+      calendar.diff({from.year, from.month, from.day}, {to.year, to.month, to.day}, part)
+    else
+      :two_calendars
+    end
   end
 
   @doc false
   # The day after a date, the day before it and the same day a week on, each
   # as the date's calendar counts it.
-  def day_after(%Date{} = date), do: stepped(date, :days, 1)
+  def day_after(%Date{} = date) do
+    stepped(date, :days, 1)
+  end
 
   @doc false
-  def day_before(%Date{} = date), do: stepped(date, :days, -1)
+  def day_before(%Date{} = date) do
+    stepped(date, :days, -1)
+  end
 
   @doc false
-  def week_after(%Date{} = date), do: stepped(date, :weeks, 1)
+  def week_after(%Date{} = date) do
+    stepped(date, :weeks, 1)
+  end
 
   defp stepped(%Date{year: year, month: month, day: day} = date, unit, count) do
     calendar = date.calendar
@@ -1823,14 +2055,17 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp date_in_week(_week_start, _day, _calendar), do: {:error, :invalid_date}
+  defp date_in_week(_week_start, _day, _calendar) do
+    {:error, :invalid_date}
+  end
 
   @doc false
   # The date among `week_days` on ISO 8601's weekday `weekday` (`1`, Monday,
   # to `7`, Sunday): a day of a week of a month, whose weeks the calendar
   # numbers and may cut short.
-  def date_of_weekday(%Date.Range{} = week_days, weekday),
-    do: weekday_in_week(week_days, weekday)
+  def date_of_weekday(%Date.Range{} = week_days, weekday) do
+    weekday_in_week(week_days, weekday)
+  end
 
   # The day of `week_days` with ISO 8601's weekday number `weekday`, from
   # the calendar's own day of the week.
@@ -1841,6 +2076,11 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp weekday_in_week(%Date.Range{}, _weekday), do: {:error, :invalid_date}
-  defp weekday_in_week({:error, _reason} = error, _weekday), do: error
+  defp weekday_in_week(%Date.Range{}, _weekday) do
+    {:error, :invalid_date}
+  end
+
+  defp weekday_in_week({:error, _reason} = error, _weekday) do
+    error
+  end
 end

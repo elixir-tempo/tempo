@@ -223,16 +223,24 @@ defmodule Tempo.Network.Normalize do
   def finest_unit(%Network{} = network) do
     periods = Map.values(network.periods)
 
-    date_units = periods |> Enum.flat_map(&date_bounds/1) |> Enum.map(&unit_of/1)
+    date_units =
+      periods
+      |> Enum.flat_map(&date_bounds/1)
+      |> Enum.map(&unit_of/1)
 
     # A relative network may carry no dates at all — only durations and
     # relations. Its durations then fix the axis, so a schedule of
     # day-length tasks measures in days rather than collapsing onto the
     # default year axis.
-    duration_units = periods |> Enum.flat_map(&period_durations/1) |> Enum.map(&duration_unit/1)
+    duration_units =
+      periods
+      |> Enum.flat_map(&period_durations/1)
+      |> Enum.map(&duration_unit/1)
 
     delay_units =
-      network.relations |> Enum.flat_map(&delay_duration/1) |> Enum.map(&duration_unit/1)
+      network.relations
+      |> Enum.flat_map(&delay_duration/1)
+      |> Enum.map(&duration_unit/1)
 
     (date_units ++ duration_units ++ delay_units)
     |> Enum.map(&counted_unit/1)
@@ -292,8 +300,9 @@ defmodule Tempo.Network.Normalize do
   # A position on the axis as a value in the axis calendar (and, on the
   # time line, its zone), at the network's unit where that loses nothing.
   @spec date_at(integer(), t()) :: {:ok, Tempo.t()} | {:error, term()}
-  def date_at(position, %{unit: :year, calendar: calendar}),
-    do: Tempo.new(year: position, calendar: calendar)
+  def date_at(position, %{unit: :year, calendar: calendar}) do
+    Tempo.new(year: position, calendar: calendar)
+  end
 
   def date_at(position, %{unit: :month, calendar: calendar}) do
     {year, month} = year_and_month(position, calendar)
@@ -314,9 +323,17 @@ defmodule Tempo.Network.Normalize do
   # A count of the axis unit as a duration, on the time line in the
   # network's unit where that loses nothing.
   @spec duration_of(integer(), t()) :: {:ok, Tempo.Duration.t()} | {:error, term()}
-  def duration_of(count, %{unit: :year}), do: Tempo.read("P#{count}Y")
-  def duration_of(count, %{unit: :month}), do: Tempo.read("P#{count}M")
-  def duration_of(count, %{unit: :day}), do: Tempo.read("P#{count}D")
+  def duration_of(count, %{unit: :year}) do
+    Tempo.read("P#{count}Y")
+  end
+
+  def duration_of(count, %{unit: :month}) do
+    Tempo.read("P#{count}M")
+  end
+
+  def duration_of(count, %{unit: :day}) do
+    Tempo.read("P#{count}D")
+  end
 
   def duration_of(count, %{unit: :second, display: display}) do
     unit = Enum.find([display, :minute, :second], &(rem(count, unit_seconds(&1)) == 0))
@@ -332,11 +349,24 @@ defmodule Tempo.Network.Normalize do
   # numbered year by year, days in any calendar, and hours, minutes and
   # seconds as seconds on the time line of the network's bounds.
   defp axis(%Network{} = network) do
-    bounds = network.periods |> Map.values() |> Enum.flat_map(&date_bounds/1)
-    calendars = bounds |> Enum.map(& &1.calendar) |> Enum.uniq()
-    zones = bounds |> Enum.map(&zone_key/1) |> Enum.uniq()
+    bounds =
+      network.periods
+      |> Map.values()
+      |> Enum.flat_map(&date_bounds/1)
 
-    network |> finest_unit() |> axis(calendars, zones)
+    calendars =
+      bounds
+      |> Enum.map(& &1.calendar)
+      |> Enum.uniq()
+
+    zones =
+      bounds
+      |> Enum.map(&zone_key/1)
+      |> Enum.uniq()
+
+    network
+    |> finest_unit()
+    |> axis(calendars, zones)
   end
 
   defp axis(:microsecond, _calendars, _zones) do
@@ -352,45 +382,74 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp axis(:year, [], _zones), do: {:ok, calendar_axis(:year, single_calendar([]))}
-  defp axis(:year, [calendar], _zones), do: {:ok, calendar_axis(:year, calendar)}
-
-  defp axis(:month, [], zones), do: axis(:month, [single_calendar([])], zones)
-
-  defp axis(:month, [calendar] = calendars, zones) do
-    if is_integer(calendar.months_in_year()),
-      do: {:ok, calendar_axis(:month, calendar)},
-      else: axis(:day, calendars, zones)
+  defp axis(:year, [], _zones) do
+    {:ok, calendar_axis(:year, single_calendar([]))}
   end
 
-  defp axis(_unit, calendars, _zones), do: {:ok, calendar_axis(:day, single_calendar(calendars))}
+  defp axis(:year, [calendar], _zones) do
+    {:ok, calendar_axis(:year, calendar)}
+  end
 
-  defp calendar_axis(unit, calendar),
-    do: %{unit: unit, display: unit, calendar: calendar, zone: nil}
+  defp axis(:month, [], zones) do
+    axis(:month, [single_calendar([])], zones)
+  end
 
-  defp single_calendar([calendar]), do: calendar
-  defp single_calendar(_calendars), do: Calendars.default()
+  defp axis(:month, [calendar] = calendars, zones) do
+    if is_integer(calendar.months_in_year()) do
+      {:ok, calendar_axis(:month, calendar)}
+    else
+      axis(:day, calendars, zones)
+    end
+  end
+
+  defp axis(_unit, calendars, _zones) do
+    {:ok, calendar_axis(:day, single_calendar(calendars))}
+  end
+
+  defp calendar_axis(unit, calendar) do
+    %{unit: unit, display: unit, calendar: calendar, zone: nil}
+  end
+
+  defp single_calendar([calendar]) do
+    calendar
+  end
+
+  defp single_calendar(_calendars) do
+    Calendars.default()
+  end
 
   # The time line a network in hours counts on: the wall clock when its
   # bounds are floating, their zone or offset when they share one, and UTC
   # when they are in several. Floating and zoned bounds share no time line.
-  defp network_zone([]), do: {:ok, :floating}
-  defp network_zone([zone]), do: {:ok, zone}
+  defp network_zone([]) do
+    {:ok, :floating}
+  end
+
+  defp network_zone([zone]) do
+    {:ok, zone}
+  end
 
   defp network_zone(zones) do
-    if :floating in zones,
-      do: {:error, mixed_zones_error()},
-      else: {:ok, {:zone, "Etc/UTC"}}
+    if :floating in zones do
+      {:error, mixed_zones_error()}
+    else
+      {:ok, {:zone, "Etc/UTC"}}
+    end
   end
 
   # A value's time line: a named zone, a fixed offset in seconds, or the
   # wall clock.
-  defp zone_key(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone), do: {:zone, zone}
+  defp zone_key(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) do
+    {:zone, zone}
+  end
 
-  defp zone_key(%Tempo{shift: shift}) when is_list(shift),
-    do: {:offset, Compare.offset_seconds(shift)}
+  defp zone_key(%Tempo{shift: shift}) when is_list(shift) do
+    {:offset, Compare.offset_seconds(shift)}
+  end
 
-  defp zone_key(%Tempo{}), do: :floating
+  defp zone_key(%Tempo{}) do
+    :floating
+  end
 
   # --- period → constraints --------------------------------------
 
@@ -422,7 +481,9 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp lower_bound(result, _node, _value, _axis, _source), do: result
+  defp lower_bound(result, _node, _value, _axis, _source) do
+    result
+  end
 
   # value(node) ≤ bound  ⇒  node − origin ≤ bound, the last unit of the
   # bound's span.
@@ -432,7 +493,9 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp upper_bound(result, _node, _value, _axis, _source), do: result
+  defp upper_bound(result, _node, _value, _axis, _source) do
+    result
+  end
 
   # end − start ≥ min, or end − start ≤ max.
   defp duration_bound(
@@ -450,7 +513,9 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp duration_bound(result, _start, _finish, _duration, _context, _source), do: result
+  defp duration_bound(result, _start, _finish, _duration, _context, _source) do
+    result
+  end
 
   # `to − from` at least (`:min`) or at most (`:max`) `duration`: an edge
   # when the duration counts whole axis units, a measure when it names a
@@ -477,12 +542,19 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp count_edge(from, to, count, :min, source), do: {from, to, -count, source}
-  defp count_edge(from, to, count, :max, source), do: {to, from, count, source}
+  defp count_edge(from, to, count, :min, source) do
+    {from, to, -count, source}
+  end
+
+  defp count_edge(from, to, count, :max, source) do
+    {to, from, count, source}
+  end
 
   # A period's durations count in the calendar and zone of its bounds, and
   # a floating period's in the network's.
-  defp period_calendar(nil, network_calendar), do: network_calendar
+  defp period_calendar(nil, network_calendar) do
+    network_calendar
+  end
 
   defp period_calendar(period, network_calendar) do
     case date_bounds(period) do
@@ -491,8 +563,13 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp period_zone(_period, nil), do: nil
-  defp period_zone(nil, network_zone), do: network_zone
+  defp period_zone(_period, nil) do
+    nil
+  end
+
+  defp period_zone(nil, network_zone) do
+    network_zone
+  end
 
   defp period_zone(period, network_zone) do
     case date_bounds(period) do
@@ -531,15 +608,18 @@ defmodule Tempo.Network.Normalize do
   end
 
   # `p − q ≤ duration`: `p` at most `duration` after `q`.
-  defp atomic_constraint({p, q, {:duration, duration}}, context, source),
-    do: duration_constraint(q, p, duration, :max, context, source)
+  defp atomic_constraint({p, q, {:duration, duration}}, context, source) do
+    duration_constraint(q, p, duration, :max, context, source)
+  end
 
   # `p − q ≤ −duration`: `q` at least `duration` after `p`.
-  defp atomic_constraint({p, q, {:neg_duration, duration}}, context, source),
-    do: duration_constraint(p, q, duration, :min, context, source)
+  defp atomic_constraint({p, q, {:neg_duration, duration}}, context, source) do
+    duration_constraint(p, q, duration, :min, context, source)
+  end
 
-  defp atomic_constraint({p, q, weight}, _context, source) when is_integer(weight),
-    do: {:ok, {p, q, weight, source}}
+  defp atomic_constraint({p, q, weight}, _context, source) when is_integer(weight) do
+    {:ok, {p, q, weight, source}}
+  end
 
   # Each item's constraints (a list, or one constraint), in order, stopping
   # at the first error.
@@ -569,8 +649,13 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp step(%{unit: :second, display: display}), do: unit_seconds(display)
-  defp step(_axis), do: 1
+  defp step(%{unit: :second, display: display}) do
+    unit_seconds(display)
+  end
+
+  defp step(_axis) do
+    1
+  end
 
   # A value's position on the axis: its year, its month numbered year by
   # year, its first day's iso days, or its seconds on the time line.
@@ -600,7 +685,9 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp position(%Tempo{} = value, %{unit: :second}), do: seconds_of(value)
+  defp position(%Tempo{} = value, %{unit: :second}) do
+    seconds_of(value)
+  end
 
   # A value's seconds on the time line: UTC for a zoned value, the wall
   # clock's for a floating one.
@@ -617,10 +704,13 @@ defmodule Tempo.Network.Normalize do
 
   # The value at `seconds` on the time line, in `calendar`: a floating
   # value on the wall clock, or the instant in its zone or at its offset.
-  defp value_at(seconds, calendar, :floating), do: wall_value(seconds, calendar, [])
+  defp value_at(seconds, calendar, :floating) do
+    wall_value(seconds, calendar, [])
+  end
 
-  defp value_at(seconds, calendar, {:offset, offset}),
-    do: wall_value(seconds + offset, calendar, shift: Zone.offset_to_shift(offset))
+  defp value_at(seconds, calendar, {:offset, offset}) do
+    wall_value(seconds + offset, calendar, shift: Zone.offset_to_shift(offset))
+  end
 
   defp value_at(seconds, calendar, {:zone, zone}) do
     with {:ok, utc} <- wall_value(seconds, calendar, zone: "Etc/UTC"),
@@ -661,19 +751,41 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp whole_at?(time, :hour),
-    do: Keyword.get(time, :minute, 0) == 0 and Keyword.get(time, :second, 0) == 0
+  defp whole_at?(time, :hour) do
+    Keyword.get(time, :minute, 0) == 0 and Keyword.get(time, :second, 0) == 0
+  end
 
-  defp whole_at?(time, :minute), do: Keyword.get(time, :second, 0) == 0
-  defp whole_at?(_time, :second), do: true
+  defp whole_at?(time, :minute) do
+    Keyword.get(time, :second, 0) == 0
+  end
 
-  defp unit_seconds(:hour), do: 3600
-  defp unit_seconds(:minute), do: 60
-  defp unit_seconds(:second), do: 1
+  defp whole_at?(_time, :second) do
+    true
+  end
 
-  defp time_designator(:hour), do: "H"
-  defp time_designator(:minute), do: "M"
-  defp time_designator(:second), do: "S"
+  defp unit_seconds(:hour) do
+    3600
+  end
+
+  defp unit_seconds(:minute) do
+    60
+  end
+
+  defp unit_seconds(:second) do
+    1
+  end
+
+  defp time_designator(:hour) do
+    "H"
+  end
+
+  defp time_designator(:minute) do
+    "M"
+  end
+
+  defp time_designator(:second) do
+    "S"
+  end
 
   # The year and the month a position on an axis of months is, in a
   # calendar every year of which has as many months.
@@ -689,8 +801,9 @@ defmodule Tempo.Network.Normalize do
     Date.new(year, month, day, calendar)
   end
 
-  defp day_of_date(%Date{year: year, month: month, day: day, calendar: calendar}),
-    do: calendar.date_to_iso_days(year, month, day)
+  defp day_of_date(%Date{year: year, month: month, day: day, calendar: calendar}) do
+    calendar.date_to_iso_days(year, month, day)
+  end
 
   # --- durations -------------------------------------------------
 
@@ -711,24 +824,35 @@ defmodule Tempo.Network.Normalize do
   end
 
   defp component_count(component, amount, :second, _calendar)
-       when component in @time_units and is_integer(amount),
-       do: {:ok, amount * unit_seconds(component)}
+       when component in @time_units and is_integer(amount) do
+    {:ok, amount * unit_seconds(component)}
+  end
 
   defp component_count(component, amount, :second, _calendar)
-       when component in @calendar_units and is_integer(amount),
-       do: :measured
+       when component in @calendar_units and is_integer(amount) do
+    :measured
+  end
 
-  defp component_count(unit, amount, unit, _calendar) when is_integer(amount), do: {:ok, amount}
+  defp component_count(unit, amount, unit, _calendar) when is_integer(amount) do
+    {:ok, amount}
+  end
 
-  defp component_count(:week, weeks, :day, calendar) when is_integer(weeks),
-    do: {:ok, weeks * calendar.days_in_week()}
+  defp component_count(:week, weeks, :day, calendar) when is_integer(weeks) do
+    {:ok, weeks * calendar.days_in_week()}
+  end
 
   defp component_count(:year, years, unit, _calendar)
-       when is_integer(years) and unit in [:month, :day],
-       do: :measured
+       when is_integer(years) and unit in [:month, :day] do
+    :measured
+  end
 
-  defp component_count(:month, months, :day, _calendar) when is_integer(months), do: :measured
-  defp component_count(_component, _amount, _unit, _calendar), do: :fractional
+  defp component_count(:month, months, :day, _calendar) when is_integer(months) do
+    :measured
+  end
+
+  defp component_count(_component, _amount, _unit, _calendar) do
+    :fractional
+  end
 
   # A measure's edges from its runs: the length between its boundaries, the
   # earliest (`:min`) or latest (`:max`) its end can fall, and the latest
@@ -746,16 +870,31 @@ defmodule Tempo.Network.Normalize do
       bound_edge(:origin, from, negated(runs.earliest_start), source)
   end
 
-  defp measured_edge(_measure, _unmeasured), do: []
+  defp measured_edge(_measure, _unmeasured) do
+    []
+  end
 
   # An absolute bound the runs give: none when they give none, and a
   # contradiction (a negative loop at the origin) when no run fits.
-  defp bound_edge(_from, _to, :unbounded, _source), do: []
-  defp bound_edge(_from, _to, :none, source), do: [{:origin, :origin, -1, source}]
-  defp bound_edge(from, to, weight, source), do: [{from, to, weight, source}]
+  defp bound_edge(_from, _to, :unbounded, _source) do
+    []
+  end
 
-  defp negated(weight) when is_integer(weight), do: -weight
-  defp negated(bound), do: bound
+  defp bound_edge(_from, _to, :none, source) do
+    [{:origin, :origin, -1, source}]
+  end
+
+  defp bound_edge(from, to, weight, source) do
+    [{from, to, weight, source}]
+  end
+
+  defp negated(weight) when is_integer(weight) do
+    -weight
+  end
+
+  defp negated(bound) do
+    bound
+  end
 
   defp measure_one({measure, index}, {:ok, measured, found}, distances, lengths, normalized, mode) do
     range = {bounds_of(distances, measure.from), bounds_of(distances, measure.to)}
@@ -775,19 +914,24 @@ defmodule Tempo.Network.Normalize do
 
   # The lengths found before over the same start range, in the last pass or
   # for the same duration in this one, are kept; any other is measured.
-  defp kept_lengths(%{range: range, lengths: %{} = runs}, range, _found, _measure, _, _),
-    do: {:ok, runs}
+  defp kept_lengths(%{range: range, lengths: %{} = runs}, range, _found, _measure, _, _) do
+    {:ok, runs}
+  end
 
   defp kept_lengths(_previous, _range, found, _measure, _normalized, _mode)
-       when not is_nil(found),
-       do: {:ok, found}
+       when not is_nil(found) do
+    {:ok, found}
+  end
 
-  defp kept_lengths(_previous, range, nil, measure, %{unit: unit}, mode),
-    do: lengths_over(measure, range, unit, mode)
+  defp kept_lengths(_previous, range, nil, measure, %{unit: unit}, mode) do
+    lengths_over(measure, range, unit, mode)
+  end
 
   # The earliest and latest positions a boundary can take, from the solved
   # weights between it and the origin.
-  defp bounds_of(distances, node), do: {earliest(distances, node), latest(distances, node)}
+  defp bounds_of(distances, node) do
+    {earliest(distances, node), latest(distances, node)}
+  end
 
   defp earliest(distances, node) do
     case Map.get(distances, {:origin, node}, :inf) do
@@ -809,9 +953,11 @@ defmodule Tempo.Network.Normalize do
   # one whose lengths repeat with its calendar's cycle takes the cycle's,
   # and any other stays pending while it is unbounded.
   defp lengths_over(measure, {from_range, to_range}, unit, :deferring) do
-    if wide?(measure, from_range, unit),
-      do: {:ok, :pending},
-      else: runs_over(measure, from_range, to_range, unit)
+    if wide?(measure, from_range, unit) do
+      {:ok, :pending}
+    else
+      runs_over(measure, from_range, to_range, unit)
+    end
   end
 
   defp lengths_over(measure, {from_range, to_range}, unit, :final) do
@@ -827,18 +973,28 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp wide?(measure, range, unit),
-    do: unbounded?(range) or (cyclic?(measure, unit) and spans_cycle?(range, measure, unit))
+  defp wide?(measure, range, unit) do
+    unbounded?(range) or (cyclic?(measure, unit) and spans_cycle?(range, measure, unit))
+  end
 
-  defp unbounded?({first, last}), do: :unbounded in [first, last]
+  defp unbounded?({first, last}) do
+    :unbounded in [first, last]
+  end
 
   # The lengths of a calendar whose years come round repeat every cycle, on
   # a wall clock; a zone's do not, nor those of a calendar whose years come
   # round in no cycle.
-  defp cyclic?(%{zone: zone}, :second) when zone != :floating, do: false
-  defp cyclic?(%{calendar: calendar}, unit), do: match?({:ok, _positions}, cycle(unit, calendar))
+  defp cyclic?(%{zone: zone}, :second) when zone != :floating do
+    false
+  end
 
-  defp spans_cycle?({first, last}, _measure, _unit) when :unbounded in [first, last], do: true
+  defp cyclic?(%{calendar: calendar}, unit) do
+    match?({:ok, _positions}, cycle(unit, calendar))
+  end
+
+  defp spans_cycle?({first, last}, _measure, _unit) when :unbounded in [first, last] do
+    true
+  end
 
   defp spans_cycle?({first, last}, %{calendar: calendar}, unit) do
     {:ok, {cycle_first, cycle_last}} = cycle(unit, calendar)
@@ -880,12 +1036,22 @@ defmodule Tempo.Network.Normalize do
     with {:ok, segments} <- segments(measure, first, last, unit) do
       {:ok,
        %{
-         shortest: segments |> Enum.map(&segment_length/1) |> Enum.min(),
-         longest: segments |> Enum.map(&segment_length/1) |> Enum.max(),
+         shortest:
+           segments
+           |> Enum.map(&segment_length/1)
+           |> Enum.min(),
+         longest:
+           segments
+           |> Enum.map(&segment_length/1)
+           |> Enum.max(),
          earliest_end:
-           segments |> Enum.map(fn {from, _to, length} -> from + length end) |> Enum.min(),
+           segments
+           |> Enum.map(fn {from, _to, length} -> from + length end)
+           |> Enum.min(),
          latest_end:
-           segments |> Enum.map(fn {_from, to, length} -> to + length end) |> Enum.max(),
+           segments
+           |> Enum.map(fn {_from, to, length} -> to + length end)
+           |> Enum.max(),
          latest_start: latest_start_ending_by(segments, to_last),
          earliest_start: earliest_start_ending_from(segments, to_first)
        }}
@@ -899,8 +1065,14 @@ defmodule Tempo.Network.Normalize do
          {:ok, segments} <- segments(measure, first, last, unit) do
       {:ok,
        %{
-         shortest: segments |> Enum.map(&segment_length/1) |> Enum.min(),
-         longest: segments |> Enum.map(&segment_length/1) |> Enum.max(),
+         shortest:
+           segments
+           |> Enum.map(&segment_length/1)
+           |> Enum.min(),
+         longest:
+           segments
+           |> Enum.map(&segment_length/1)
+           |> Enum.max(),
          earliest_end: :unbounded,
          latest_end: :unbounded,
          latest_start: :unbounded,
@@ -909,11 +1081,15 @@ defmodule Tempo.Network.Normalize do
     end
   end
 
-  defp segment_length({_from, _to, length}), do: length
+  defp segment_length({_from, _to, length}) do
+    length
+  end
 
   # The latest start whose run ends by `to_last`, or `:none`. Within a
   # segment of one length a later start ends later.
-  defp latest_start_ending_by(_segments, :unbounded), do: :unbounded
+  defp latest_start_ending_by(_segments, :unbounded) do
+    :unbounded
+  end
 
   defp latest_start_ending_by(segments, to_last) do
     segments
@@ -923,7 +1099,9 @@ defmodule Tempo.Network.Normalize do
   end
 
   # The earliest start whose run ends at `to_first` or later, or `:none`.
-  defp earliest_start_ending_from(_segments, :unbounded), do: :unbounded
+  defp earliest_start_ending_from(_segments, :unbounded) do
+    :unbounded
+  end
 
   defp earliest_start_ending_from(segments, to_first) do
     segments
@@ -955,7 +1133,10 @@ defmodule Tempo.Network.Normalize do
   end
 
   defp segments(measure, first, last, :second) do
-    with {:ok, sampled} <- first |> sample_points(last, 3600) |> lengths_at(measure),
+    with {:ok, sampled} <-
+           first
+           |> sample_points(last, 3600)
+           |> lengths_at(measure),
          {:ok, points} <- with_changes(sampled, measure) do
       in_segments({:ok, points}, last)
     end
@@ -999,8 +1180,13 @@ defmodule Tempo.Network.Normalize do
 
   # The points in `(x, y)` where the length changes: none when the two
   # agree, and otherwise found by halving until they are a second apart.
-  defp changes({_x, length}, {_y, length}, _measure), do: {:ok, []}
-  defp changes({x, _lx}, {y, _ly}, _measure) when y - x <= 1, do: {:ok, []}
+  defp changes({_x, length}, {_y, length}, _measure) do
+    {:ok, []}
+  end
+
+  defp changes({x, _lx}, {y, _ly}, _measure) when y - x <= 1 do
+    {:ok, []}
+  end
 
   defp changes({x, _lx} = lower, {y, _ly} = upper, measure) do
     middle = div(x + y, 2)
@@ -1024,13 +1210,18 @@ defmodule Tempo.Network.Normalize do
      end)}
   end
 
-  defp in_segments({:error, _reason} = error, _last), do: error
+  defp in_segments({:error, _reason} = error, _last) do
+    error
+  end
 
   # How many axis units `duration` runs from `position`, by calendar
   # arithmetic in the measure's calendar and, on the time line, its zone.
   defp length_from(position, %{duration: duration, calendar: calendar}, :day) do
     with {:ok, date} <- date_of_day(position, calendar),
-         %Tempo{} = later <- date |> Tempo.from_elixir() |> Math.add(duration),
+         %Tempo{} = later <-
+           date
+           |> Tempo.from_elixir()
+           |> Math.add(duration),
          {:ok, later_date} <- Tempo.to_date(later) do
       {:ok, day_of_date(later_date) - position}
     else
@@ -1078,10 +1269,13 @@ defmodule Tempo.Network.Normalize do
 
   defp delay_duration(%Relation{
          type: {:delay, _edge_a, _edge_b, _comparison, %Tempo.Duration{} = duration}
-       }),
-       do: [duration]
+       }) do
+    [duration]
+  end
 
-  defp delay_duration(_relation), do: []
+  defp delay_duration(_relation) do
+    []
+  end
 
   defp unit_of(%Tempo{} = value) do
     {unit, _factor} = Tempo.resolution(value)
@@ -1094,10 +1288,17 @@ defmodule Tempo.Network.Normalize do
   end
 
   # A network counts weeks, and days of a week or a year, in days.
-  defp counted_unit(unit) when unit in [:week, :day_of_week, :day_of_year], do: :day
-  defp counted_unit(unit), do: unit
+  defp counted_unit(unit) when unit in [:week, :day_of_week, :day_of_year] do
+    :day
+  end
 
-  defp unit_rank(unit), do: Enum.find_index(@unit_order, &(&1 == unit)) || 0
+  defp counted_unit(unit) do
+    unit
+  end
+
+  defp unit_rank(unit) do
+    Enum.find_index(@unit_order, &(&1 == unit)) || 0
+  end
 
   # --- errors ----------------------------------------------------
 
@@ -1136,12 +1337,19 @@ defmodule Tempo.Network.Normalize do
     )
   end
 
-  defp describe_frame(%{zone: {:zone, zone}}), do: zone
-  defp describe_frame(%{calendar: calendar}), do: Calendars.name(calendar)
+  defp describe_frame(%{zone: {:zone, zone}}) do
+    zone
+  end
 
-  defp describe_source({:duration, _bound, id, _duration}),
-    do: "The duration of #{Calendars.inspect(id)}"
+  defp describe_frame(%{calendar: calendar}) do
+    Calendars.name(calendar)
+  end
 
-  defp describe_source({:relation, %Relation{from: from, to: to}}),
-    do: "The delay between #{Calendars.inspect(from)} and #{Calendars.inspect(to)}"
+  defp describe_source({:duration, _bound, id, _duration}) do
+    "The duration of #{Calendars.inspect(id)}"
+  end
+
+  defp describe_source({:relation, %Relation{from: from, to: to}}) do
+    "The delay between #{Calendars.inspect(from)} and #{Calendars.inspect(to)}"
+  end
 end

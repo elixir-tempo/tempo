@@ -40,17 +40,30 @@ defmodule Tempo.RRule.RscaleTest do
 
   # Nisan is the seventh month of a Hebrew year, and the eighth in order in
   # a year with a leap month.
-  defp nisan(year), do: if(Hebrew.leap_year?(year), do: 8, else: 7)
+  defp nisan(year) do
+    if Hebrew.leap_year?(year) do
+      8
+    else
+      7
+    end
+  end
 
-  defp gregorian(year, month, day, calendar),
-    do: year |> Date.new!(month, day, calendar) |> Date.convert!(Calendar.ISO)
+  defp gregorian(year, month, day, calendar) do
+    year
+    |> Date.new!(month, day, calendar)
+    |> Date.convert!(Calendar.ISO)
+  end
 
   # The Gregorian date each occurrence starts on.
   defp starts({:ok, rule}, options \\ []) do
     {:ok, set} = Tempo.to_interval(rule, options)
 
     for occurrence <- IntervalSet.members(set) do
-      {:ok, date} = occurrence |> Interval.from() |> Tempo.to_calendar(Calendar.ISO)
+      {:ok, date} =
+        occurrence
+        |> Interval.from()
+        |> Tempo.to_calendar(Calendar.ISO)
+
       Date.new!(Tempo.year(date), Tempo.month(date), Tempo.day(date))
     end
   end

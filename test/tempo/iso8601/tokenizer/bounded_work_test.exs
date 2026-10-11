@@ -50,9 +50,13 @@ defmodule Tempo.Iso8601.Tokenizer.BoundedWorkTest do
     end
   end
 
-  defp refused_in_time?(text), do: match?({:error, %ParseError{}}, read(text))
+  defp refused_in_time?(text) do
+    match?({:error, %ParseError{}}, read(text))
+  end
 
-  defp nested(opener, depth), do: String.duplicate(opener, depth)
+  defp nested(opener, depth) do
+    String.duplicate(opener, depth)
+  end
 
   # A window in a window in a window: the third Friday in the ten days from
   # the first Saturday in the ten days from the second Thursday in the ten
@@ -192,7 +196,11 @@ defmodule Tempo.Iso8601.Tokenizer.BoundedWorkTest do
     ]
 
     test "changes nothing that is read, or refused" do
-      generated = GeneratedSets.texts() |> Enum.take_every(40) |> Enum.map(& &1.text)
+      generated =
+        GeneratedSets.texts()
+        |> Enum.take_every(40)
+        |> Enum.map(& &1.text)
+
       texts = as_written_and_changed(@selections ++ generated)
 
       assert Enum.count(texts) > 300
@@ -229,9 +237,11 @@ defmodule Tempo.Iso8601.Tokenizer.BoundedWorkTest do
         kept = Memo.reading(fn -> Tokenizer.iso8601(text) end)
         read_again = Tokenizer.iso8601(text)
 
-        if what_is_read(kept) == what_is_read(read_again),
-          do: nil,
-          else: {text, what_is_read(kept), what_is_read(read_again)}
+        if what_is_read(kept) == what_is_read(read_again) do
+          nil
+        else
+          {text, what_is_read(kept), what_is_read(read_again)}
+        end
       end,
       timeout: :infinity,
       ordered: false
@@ -242,10 +252,17 @@ defmodule Tempo.Iso8601.Tokenizer.BoundedWorkTest do
     end)
   end
 
-  defp one_deeper(text), do: if(String.contains?(text, "LL"), do: [], else: ["L" <> text])
+  defp one_deeper(text) do
+    if String.contains?(text, "LL") do
+      []
+    else
+      ["L" <> text]
+    end
+  end
 
   # A reading less the line and the offset, which the grammar does not move
   # on by where a place is taken from the table.
-  defp what_is_read({status, tokens_or_message, rest, context, _line, _offset}),
-    do: {status, tokens_or_message, rest, context}
+  defp what_is_read({status, tokens_or_message, rest, context, _line, _offset}) do
+    {status, tokens_or_message, rest, context}
+  end
 end

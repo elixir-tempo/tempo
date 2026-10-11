@@ -51,13 +51,21 @@ defmodule Tempo.Matrix.Extent do
 
   """
   @spec of(term()) :: {:ok, t()} | :none
-  def of(%Interval{} = interval), do: of_members([interval])
-
-  def of(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set), do: of_members(IntervalSet.members(set)), else: :none
+  def of(%Interval{} = interval) do
+    of_members([interval])
   end
 
-  def of(_other), do: :none
+  def of(%IntervalSet{} = set) do
+    if IntervalSet.bounded?(set) do
+      of_members(IntervalSet.members(set))
+    else
+      :none
+    end
+  end
+
+  def of(_other) do
+    :none
+  end
 
   @doc """
   The spans of each member of an interval or a set, unmerged, in the
@@ -73,13 +81,21 @@ defmodule Tempo.Matrix.Extent do
 
   """
   @spec members(term()) :: {:ok, [t()]} | :none
-  def members(%Interval{} = interval), do: members_of([interval])
-
-  def members(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set), do: members_of(IntervalSet.members(set)), else: :none
+  def members(%Interval{} = interval) do
+    members_of([interval])
   end
 
-  def members(_other), do: :none
+  def members(%IntervalSet{} = set) do
+    if IntervalSet.bounded?(set) do
+      members_of(IntervalSet.members(set))
+    else
+      :none
+    end
+  end
+
+  def members(_other) do
+    :none
+  end
 
   defp members_of(intervals) do
     Enum.reduce_while(intervals, {:ok, []}, fn interval, {:ok, extents} ->
@@ -94,7 +110,9 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  defp of_members([]), do: {:ok, %{line: :empty, spans: [], whole?: true}}
+  defp of_members([]) do
+    {:ok, %{line: :empty, spans: [], whole?: true}}
+  end
 
   defp of_members(intervals) do
     Enum.reduce_while(intervals, {:ok, nil, []}, fn interval, {:ok, line, spans} ->
@@ -121,15 +139,21 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  defp interval_spans(_interval), do: :none
+  defp interval_spans(_interval) do
+    :none
+  end
 
   # On the time line a span runs from its start to its end. On a cycle an
   # end that is not after the start is in the next turn, so the span runs to
   # the cycle's end and on from its start: one that ends where it starts is
   # once round.
-  defp on_line(line, from, to, _point) when line in [:time, :floating], do: [{from, to}]
+  defp on_line(line, from, to, _point) when line in [:time, :floating] do
+    [{from, to}]
+  end
 
-  defp on_line({:cycle, _unit}, from, to, _point) when from < to, do: [{from, to}]
+  defp on_line({:cycle, _unit}, from, to, _point) when from < to do
+    [{from, to}]
+  end
 
   defp on_line({:cycle, unit}, from, to, point) do
     case cycle_length(unit, calendar_of(point)) do
@@ -184,8 +208,13 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  defp element_span(%Interval{} = interval), do: interval_spans(interval)
-  defp element_span(_other), do: :none
+  defp element_span(%Interval{} = interval) do
+    interval_spans(interval)
+  end
+
+  defp element_span(_other) do
+    :none
+  end
 
   ## Set algebra and relations on extents
 
@@ -193,68 +222,108 @@ defmodule Tempo.Matrix.Extent do
   The union of two extents on one line.
   """
   @spec union(t(), t()) :: t()
-  def union(a, b), do: %{a | line: line(a, b), spans: merge(a.spans ++ b.spans)}
+  def union(a, b) do
+    %{a | line: line(a, b), spans: merge(a.spans ++ b.spans)}
+  end
 
   @doc """
   The spans both extents cover.
   """
   @spec intersection(t(), t()) :: t()
-  def intersection(a, b), do: %{a | line: line(a, b), spans: shared(a.spans, b.spans, [])}
+  def intersection(a, b) do
+    %{a | line: line(a, b), spans: shared(a.spans, b.spans, [])}
+  end
 
   # An extent's spans are in order and apart, so two extents are swept
   # together: the span that ends first is done with.
   defp shared([{a_from, a_to} | a_rest] = a, [{b_from, b_to} | b_rest] = b, spans) do
     spans = overlap(max(a_from, b_from), min(a_to, b_to), spans)
 
-    if a_to <= b_to,
-      do: shared(a_rest, b, spans),
-      else: shared(a, b_rest, spans)
+    if a_to <= b_to do
+      shared(a_rest, b, spans)
+    else
+      shared(a, b_rest, spans)
+    end
   end
 
-  defp shared(_a, _b, spans), do: Enum.reverse(spans)
+  defp shared(_a, _b, spans) do
+    Enum.reverse(spans)
+  end
 
-  defp overlap(from, to, spans) when from < to, do: [{from, to} | spans]
-  defp overlap(_from, _to, spans), do: spans
+  defp overlap(from, to, spans) when from < to do
+    [{from, to} | spans]
+  end
+
+  defp overlap(_from, _to, spans) do
+    spans
+  end
 
   @doc """
   The spans of `a` that `b` does not cover.
   """
   @spec difference(t(), t()) :: t()
-  def difference(a, b), do: %{a | line: line(a, b), spans: without(a.spans, b.spans, [])}
+  def difference(a, b) do
+    %{a | line: line(a, b), spans: without(a.spans, b.spans, [])}
+  end
 
   # A cut that ends before the span starts is done with, one that starts
   # after it ends leaves the span whole, and any other takes its part of it.
   defp without([{from, _to} | _rest] = a, [{_cut_from, cut_to} | cuts], kept)
-       when cut_to <= from,
-       do: without(a, cuts, kept)
+       when cut_to <= from do
+    without(a, cuts, kept)
+  end
 
   defp without([{_from, to} = span | rest], [{cut_from, _cut_to} | _cuts] = b, kept)
-       when cut_from >= to,
-       do: without(rest, b, [span | kept])
+       when cut_from >= to do
+    without(rest, b, [span | kept])
+  end
 
   defp without([{from, to} | rest], [{cut_from, cut_to} | cuts] = b, kept) do
     kept = overlap(from, cut_from, kept)
 
-    if cut_to < to,
-      do: without([{cut_to, to} | rest], cuts, kept),
-      else: without(rest, b, kept)
+    if cut_to < to do
+      without([{cut_to, to} | rest], cuts, kept)
+    else
+      without(rest, b, kept)
+    end
   end
 
-  defp without(a, [], kept), do: Enum.reverse(kept, a)
-  defp without([], _b, kept), do: Enum.reverse(kept)
+  defp without(a, [], kept) do
+    Enum.reverse(kept, a)
+  end
+
+  defp without([], _b, kept) do
+    Enum.reverse(kept)
+  end
 
   @doc """
   Whether two extents lie on one line, and so can be combined or compared.
   An extent of no spans lies on any.
   """
   @spec same_line?(t(), t()) :: boolean()
-  def same_line?(%{line: :empty}, _b), do: true
-  def same_line?(_a, %{line: :empty}), do: true
-  def same_line?(%{line: line}, %{line: line}), do: true
-  def same_line?(_a, _b), do: false
+  def same_line?(%{line: :empty}, _b) do
+    true
+  end
 
-  defp line(%{line: :empty}, %{line: line}), do: line
-  defp line(%{line: line}, _b), do: line
+  def same_line?(_a, %{line: :empty}) do
+    true
+  end
+
+  def same_line?(%{line: line}, %{line: line}) do
+    true
+  end
+
+  def same_line?(_a, _b) do
+    false
+  end
+
+  defp line(%{line: :empty}, %{line: line}) do
+    line
+  end
+
+  defp line(%{line: line}, _b) do
+    line
+  end
 
   @doc """
   The Allen relation of two extents that are each one span.
@@ -276,32 +345,71 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  def relation(_a, _b), do: :none
+  def relation(_a, _b) do
+    :none
+  end
 
-  defp overlapping(:lt, :lt), do: :overlaps
-  defp overlapping(:lt, :eq), do: :finished_by
-  defp overlapping(:lt, :gt), do: :contains
-  defp overlapping(:eq, :lt), do: :starts
-  defp overlapping(:eq, :eq), do: :equals
-  defp overlapping(:eq, :gt), do: :started_by
-  defp overlapping(:gt, :lt), do: :during
-  defp overlapping(:gt, :eq), do: :finishes
-  defp overlapping(:gt, :gt), do: :overlapped_by
+  defp overlapping(:lt, :lt) do
+    :overlaps
+  end
+
+  defp overlapping(:lt, :eq) do
+    :finished_by
+  end
+
+  defp overlapping(:lt, :gt) do
+    :contains
+  end
+
+  defp overlapping(:eq, :lt) do
+    :starts
+  end
+
+  defp overlapping(:eq, :eq) do
+    :equals
+  end
+
+  defp overlapping(:eq, :gt) do
+    :started_by
+  end
+
+  defp overlapping(:gt, :lt) do
+    :during
+  end
+
+  defp overlapping(:gt, :eq) do
+    :finishes
+  end
+
+  defp overlapping(:gt, :gt) do
+    :overlapped_by
+  end
 
   @doc """
   The order of two positions: `:lt`, `:eq` or `:gt`.
   """
   @spec compare(position(), position()) :: :lt | :eq | :gt
-  def compare(a, b) when a < b, do: :lt
-  def compare(a, b) when a > b, do: :gt
-  def compare(_a, _b), do: :eq
+  def compare(a, b) when a < b do
+    :lt
+  end
+
+  def compare(a, b) when a > b do
+    :gt
+  end
+
+  def compare(_a, _b) do
+    :eq
+  end
 
   @doc """
   The microseconds an extent covers.
   """
   @spec microseconds(t()) :: non_neg_integer()
-  def microseconds(%{spans: spans}),
-    do: spans |> Enum.map(fn {from, to} -> to - from end) |> Enum.sum()
+  def microseconds(%{spans: spans}) do
+    spans
+    |> Enum.map(fn {from, to} -> to - from end)
+    |> Enum.sum()
+  end
 
   @doc """
   The start and end of each member of an interval or a set as they are
@@ -318,13 +426,21 @@ defmodule Tempo.Matrix.Extent do
 
   """
   @spec written(term()) :: {:ok, line(), [span()]} | :none
-  def written(%Interval{} = interval), do: written_members([interval])
-
-  def written(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set), do: written_members(IntervalSet.members(set)), else: :none
+  def written(%Interval{} = interval) do
+    written_members([interval])
   end
 
-  def written(_other), do: :none
+  def written(%IntervalSet{} = set) do
+    if IntervalSet.bounded?(set) do
+      written_members(IntervalSet.members(set))
+    else
+      :none
+    end
+  end
+
+  def written(_other) do
+    :none
+  end
 
   defp written_members(intervals) do
     Enum.reduce_while(intervals, {:ok, nil, []}, fn interval, {:ok, line, spans} ->
@@ -362,9 +478,11 @@ defmodule Tempo.Matrix.Extent do
       for {window_from, window_to} <- window,
           day <- Integer.floor_div(window_from, @day)..Integer.floor_div(window_to - 1, @day)//1,
           {from, to} <- daily do
-        if to > from,
-          do: {day * @day + from, day * @day + to},
-          else: {day * @day + from, (day + 1) * @day + to}
+        if to > from do
+          {day * @day + from, day * @day + to}
+        else
+          {day * @day + from, (day + 1) * @day + to}
+        end
       end
 
     %{line: line, spans: merge(placed), whole?: true}
@@ -395,8 +513,9 @@ defmodule Tempo.Matrix.Extent do
 
   """
   @spec position(Tempo.t()) :: {:ok, line(), position()} | :none
-  def position(%Tempo{time: [{:year, :any} | rest]} = point),
-    do: cycle_position(%{point | time: rest})
+  def position(%Tempo{time: [{:year, :any} | rest]} = point) do
+    cycle_position(%{point | time: rest})
+  end
 
   def position(%Tempo{time: [{:year, year} | _rest] = time} = point) when is_integer(year) do
     with true <- whole?(time),
@@ -409,15 +528,27 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  def position(%Tempo{} = point), do: cycle_position(point)
+  def position(%Tempo{} = point) do
+    cycle_position(point)
+  end
 
   # A value with a zone or an offset is on the time line, and one with
   # neither on the wall clock of nowhere in particular.
-  defp frame(%Tempo{shift: shift}) when is_list(shift), do: :time
+  defp frame(%Tempo{shift: shift}) when is_list(shift) do
+    :time
+  end
 
-  defp frame(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) and zone != "", do: :time
-  defp frame(%Tempo{extended: %{zone_offset: offset}}) when is_integer(offset), do: :time
-  defp frame(%Tempo{}), do: :floating
+  defp frame(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) and zone != "" do
+    :time
+  end
+
+  defp frame(%Tempo{extended: %{zone_offset: offset}}) when is_integer(offset) do
+    :time
+  end
+
+  defp frame(%Tempo{}) do
+    :floating
+  end
 
   defp whole?(time) do
     Enum.all?(time, fn
@@ -428,14 +559,24 @@ defmodule Tempo.Matrix.Extent do
     end)
   end
 
-  defp calendar_of(%Tempo{calendar: nil}), do: Calendrical.Gregorian
-  defp calendar_of(%Tempo{calendar: Calendar.ISO}), do: Calendrical.Gregorian
-  defp calendar_of(%Tempo{calendar: calendar}), do: calendar
+  defp calendar_of(%Tempo{calendar: nil}) do
+    Calendrical.Gregorian
+  end
+
+  defp calendar_of(%Tempo{calendar: Calendar.ISO}) do
+    Calendrical.Gregorian
+  end
+
+  defp calendar_of(%Tempo{calendar: calendar}) do
+    calendar
+  end
 
   # The date a time list names, in `Calendar.ISO`: a month and a day, a week
   # and a day of the week, or a day of the year, with what is absent the
   # first.
-  defp date_of(time, calendar), do: date_on(axis(Keyword.keys(time)), time, calendar)
+  defp date_of(time, calendar) do
+    date_on(axis(Keyword.keys(time)), time, calendar)
+  end
 
   defp axis(units) do
     Enum.find(
@@ -445,8 +586,13 @@ defmodule Tempo.Matrix.Extent do
     )
   end
 
-  defp on_axis?(:month_and_week, units), do: :month in units and :week in units
-  defp on_axis?(unit, units), do: unit in units
+  defp on_axis?(:month_and_week, units) do
+    :month in units and :week in units
+  end
+
+  defp on_axis?(unit, units) do
+    unit in units
+  end
 
   # A month with a day is the date. A month with no day is its first date,
   # which in a year that starts within its months is the first date of the
@@ -458,17 +604,26 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  defp date_on(:week, time, calendar),
-    do: week_date(time[:year], time[:week], time[:day_of_week] || time[:day] || 1, calendar)
+  defp date_on(:week, time, calendar) do
+    week_date(time[:year], time[:week], time[:day_of_week] || time[:day] || 1, calendar)
+  end
 
-  defp date_on(:day_of_year, time, calendar),
-    do: day_of_year(time[:year], time[:day_of_year], calendar)
+  defp date_on(:day_of_year, time, calendar) do
+    day_of_year(time[:year], time[:day_of_year], calendar)
+  end
 
-  defp date_on(:day, time, calendar), do: day_of_year(time[:year], time[:day], calendar)
-  defp date_on(:year, time, calendar), do: first_of_year(time[:year], calendar)
+  defp date_on(:day, time, calendar) do
+    day_of_year(time[:year], time[:day], calendar)
+  end
+
+  defp date_on(:year, time, calendar) do
+    first_of_year(time[:year], calendar)
+  end
 
   # A week of a month, or a day of the week with no week, is no date here.
-  defp date_on(_another_axis, _time, _calendar), do: :none
+  defp date_on(_another_axis, _time, _calendar) do
+    :none
+  end
 
   # In a calendar whose year starts within its months (a Julian year from
   # 25 March), a year begins on the first date the calendar's `year/1`
@@ -488,12 +643,19 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  defp first_of_counted_month(%Date.Range{first: first}), do: converted(first)
-  defp first_of_counted_month(_no_month), do: :none
+  defp first_of_counted_month(%Date.Range{first: first}) do
+    converted(first)
+  end
+
+  defp first_of_counted_month(_no_month) do
+    :none
+  end
 
   # The dates of a year that does not begin on the first day of its first
   # month, and `nil` for a year that does.
-  defp year_within_its_months(_year, Calendrical.Gregorian), do: nil
+  defp year_within_its_months(_year, Calendrical.Gregorian) do
+    nil
+  end
 
   defp year_within_its_months(year, calendar) do
     with true <- function_exported?(calendar, :year, 1),
@@ -523,7 +685,10 @@ defmodule Tempo.Matrix.Extent do
     else
       with Calendrical.Gregorian <- calendar,
            {:ok, fourth} <- Date.new(year, 1, 4) do
-        {:ok, fourth |> Date.beginning_of_week(:monday) |> Date.add((week - 1) * 7 + day - 1)}
+        {:ok,
+         fourth
+         |> Date.beginning_of_week(:monday)
+         |> Date.add((week - 1) * 7 + day - 1)}
       else
         _no_date -> :none
       end
@@ -552,8 +717,9 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  defp clock_seconds(time),
-    do: (time[:hour] || 0) * 3_600 + (time[:minute] || 0) * 60 + (time[:second] || 0)
+  defp clock_seconds(time) do
+    (time[:hour] || 0) * 3_600 + (time[:minute] || 0) * 60 + (time[:second] || 0)
+  end
 
   defp fraction(time) do
     case List.keyfind(time, :microsecond, 0) do
@@ -569,24 +735,42 @@ defmodule Tempo.Matrix.Extent do
     zone_offset(zone, date, seconds, stated_offset(extended, shift))
   end
 
-  defp offset_of(%Tempo{extended: extended, shift: shift}, _date, _seconds),
-    do: {:ok, stated_offset(extended, shift) || 0}
+  defp offset_of(%Tempo{extended: extended, shift: shift}, _date, _seconds) do
+    {:ok, stated_offset(extended, shift) || 0}
+  end
 
-  defp stated_offset(%{zone_offset: minutes}, _shift) when is_integer(minutes), do: minutes * 60
-  defp stated_offset(_extended, shift) when is_list(shift), do: shift_seconds(shift)
-  defp stated_offset(_extended, _shift), do: nil
+  defp stated_offset(%{zone_offset: minutes}, _shift) when is_integer(minutes) do
+    minutes * 60
+  end
+
+  defp stated_offset(_extended, shift) when is_list(shift) do
+    shift_seconds(shift)
+  end
+
+  defp stated_offset(_extended, _shift) do
+    nil
+  end
 
   # A shift's sign is on its first unit that is not zero: `-05:30` is
   # `[hour: -5, minute: 30]`.
   defp shift_seconds(shift) do
     parts = [shift[:hour] || 0, shift[:minute] || 0, shift[:second] || 0]
-    sign = if Enum.find(parts, 0, &(&1 != 0)) < 0, do: -1, else: 1
+
+    sign =
+      if Enum.find(parts, 0, &(&1 != 0)) < 0 do
+        -1
+      else
+        1
+      end
+
     [hour, minute, second] = Enum.map(parts, &abs/1)
     sign * (hour * 3_600 + minute * 60 + second)
   end
 
   # Before the common era no zone has a rule, and a wall time is UTC's.
-  defp zone_offset(_zone, %Date{year: year}, _seconds, _stated) when year < 1, do: {:ok, 0}
+  defp zone_offset(_zone, %Date{year: year}, _seconds, _stated) when year < 1 do
+    {:ok, 0}
+  end
 
   defp zone_offset(zone, date, seconds, stated) do
     naive = NaiveDateTime.add(NaiveDateTime.new!(date, ~T[00:00:00]), seconds)
@@ -604,10 +788,16 @@ defmodule Tempo.Matrix.Extent do
   # forward. One a clock shows twice when it goes back is the first, unless
   # the offset written with it is the second's.
   defp ambiguous_offset(first, second, stated) do
-    if total_offset(second) == stated, do: total_offset(second), else: total_offset(first)
+    if total_offset(second) == stated do
+      total_offset(second)
+    else
+      total_offset(first)
+    end
   end
 
-  defp total_offset(%DateTime{utc_offset: utc, std_offset: std}), do: utc + std
+  defp total_offset(%DateTime{utc_offset: utc, std_offset: std}) do
+    utc + std
+  end
 
   ## The end of the unit a point is written to
 
@@ -666,9 +856,11 @@ defmodule Tempo.Matrix.Extent do
     {year, month} = {time[:year], time[:month]}
 
     next =
-      if month >= calendar.months_in_year(year),
-        do: calendar_date(year + 1, 1, 1, calendar),
-        else: calendar_date(year, month + 1, 1, calendar)
+      if month >= calendar.months_in_year(year) do
+        calendar_date(year + 1, 1, 1, calendar)
+      else
+        calendar_date(year, month + 1, 1, calendar)
+      end
 
     with {:ok, date} <- next, do: placed(point, date, 0)
   end
@@ -682,7 +874,9 @@ defmodule Tempo.Matrix.Extent do
     with {:ok, date} <- date_of(time, calendar_of(point)), do: placed(point, Date.add(date, 1), 0)
   end
 
-  defp next_wall(_unit, _point), do: :none
+  defp next_wall(_unit, _point) do
+    :none
+  end
 
   defp placed(point, date, seconds) do
     case offset_of(point, date, seconds) do
@@ -711,12 +905,17 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  defp cycle_position(_point), do: :none
+  defp cycle_position(_point) do
+    :none
+  end
 
-  defp cycle_days([{unit, _value} | _rest], _calendar) when unit in [:hour, :minute, :second],
-    do: {:ok, 0}
+  defp cycle_days([{unit, _value} | _rest], _calendar) when unit in [:hour, :minute, :second] do
+    {:ok, 0}
+  end
 
-  defp cycle_days([{:day_of_week, day} | _rest], _calendar), do: {:ok, day - 1}
+  defp cycle_days([{:day_of_week, day} | _rest], _calendar) do
+    {:ok, day - 1}
+  end
 
   defp cycle_days([{:month, month} | rest], calendar) do
     day = rest[:day] || 1
@@ -724,7 +923,9 @@ defmodule Tempo.Matrix.Extent do
     with {:ok, before} <- days_before(month, calendar), do: {:ok, before + day - 1}
   end
 
-  defp cycle_days(_time, _calendar), do: :none
+  defp cycle_days(_time, _calendar) do
+    :none
+  end
 
   defp days_before(month, calendar) do
     Enum.reduce_while(1..(month - 1)//1, {:ok, 0}, fn earlier, {:ok, days} ->
@@ -743,10 +944,21 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  defp cycle_length(:hour, _calendar), do: {:ok, @day}
-  defp cycle_length(:minute, _calendar), do: {:ok, 3_600 * @microseconds}
-  defp cycle_length(:second, _calendar), do: {:ok, 60 * @microseconds}
-  defp cycle_length(:day_of_week, calendar), do: {:ok, calendar.days_in_week() * @day}
+  defp cycle_length(:hour, _calendar) do
+    {:ok, @day}
+  end
+
+  defp cycle_length(:minute, _calendar) do
+    {:ok, 3_600 * @microseconds}
+  end
+
+  defp cycle_length(:second, _calendar) do
+    {:ok, 60 * @microseconds}
+  end
+
+  defp cycle_length(:day_of_week, calendar) do
+    {:ok, calendar.days_in_week() * @day}
+  end
 
   # The year's cycle is the longest year, in which every date has a place:
   # the most months a year has, each as long as it gets.
@@ -760,14 +972,29 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  defp cycle_length(_unit, _calendar), do: :none
+  defp cycle_length(_unit, _calendar) do
+    :none
+  end
 
-  defp most_months(months) when is_integer(months), do: {:ok, months}
-  defp most_months({:ambiguous, %Range{first: first, last: last}}), do: {:ok, max(first, last)}
-  defp most_months(_undefined), do: :none
+  defp most_months(months) when is_integer(months) do
+    {:ok, months}
+  end
 
-  defp without_unspecified_year([{:year, :any} = year | rest]), do: {[year], rest}
-  defp without_unspecified_year(time), do: {[], time}
+  defp most_months({:ambiguous, %Range{first: first, last: last}}) do
+    {:ok, max(first, last)}
+  end
+
+  defp most_months(_undefined) do
+    :none
+  end
+
+  defp without_unspecified_year([{:year, :any} = year | rest]) do
+    {[year], rest}
+  end
+
+  defp without_unspecified_year(time) do
+    {[], time}
+  end
 
   ## Merging
 

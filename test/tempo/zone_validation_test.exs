@@ -326,8 +326,9 @@ defmodule Tempo.ZoneValidationTest do
       end
     end
 
-    defp skipped_whole?(first, last, zone),
-      do: gap(first, zone) != nil and gap(first, zone) == gap(last, zone)
+    defp skipped_whole?(first, last, zone) do
+      gap(first, zone) != nil and gap(first, zone) == gap(last, zone)
+    end
 
     @spans [
       # The hour a spring-forward skips.
@@ -687,6 +688,11 @@ defmodule Tempo.ZoneValidationTest do
     end
   end
 
-  defp pad(n) when n < 10, do: "0#{n}"
-  defp pad(n), do: "#{n}"
+  defp pad(n) when n < 10 do
+    "0#{n}"
+  end
+
+  defp pad(n) do
+    "#{n}"
+  end
 end

@@ -29,7 +29,9 @@ defmodule Tempo.IntervalEndpointsError do
   end
 
   @impl true
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{operation: :select, reason: :open_start}) do
     "`Tempo.select/2` selects forward from a span's start, and a span with an open " <>

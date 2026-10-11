@@ -30,7 +30,9 @@ defmodule Tempo.ShiftOfMasksTest do
 
   @midnight ~T[00:00:00]
 
-  defp at_midnight(dates), do: Enum.map(dates, &NaiveDateTime.new!(&1, @midnight))
+  defp at_midnight(dates) do
+    Enum.map(dates, &NaiveDateTime.new!(&1, @midnight))
+  end
 
   defp days_of(year, keep) do
     Date.new!(year, 1, 1)
@@ -39,10 +41,13 @@ defmodule Tempo.ShiftOfMasksTest do
     |> at_midnight()
   end
 
-  defp months_of(year, months),
-    do: at_midnight(for month <- months, do: Date.new!(year, month, 1))
+  defp months_of(year, months) do
+    at_midnight(for month <- months, do: Date.new!(year, month, 1))
+  end
 
-  defp years(years), do: at_midnight(for year <- years, do: Date.new!(year, 1, 1))
+  defp years(years) do
+    at_midnight(for year <- years, do: Date.new!(year, 1, 1))
+  end
 
   # The Monday of an ISO 8601 week: 4 January is always in week 1.
   defp monday(year, week) do
@@ -50,7 +55,9 @@ defmodule Tempo.ShiftOfMasksTest do
     Date.add(fourth, 1 - Date.day_of_week(fourth) + 7 * (week - 1))
   end
 
-  defp weeks_of(year, weeks), do: at_midnight(for week <- weeks, do: monday(year, week))
+  defp weeks_of(year, weeks) do
+    at_midnight(for week <- weeks, do: monday(year, week))
+  end
 
   # The weeks an ISO 8601 year has: 28 December is always in the last.
   defp weeks_in(year) do
@@ -64,8 +71,9 @@ defmodule Tempo.ShiftOfMasksTest do
     )
   end
 
-  defp hours_of(date, hours),
-    do: for(hour <- hours, do: NaiveDateTime.new!(date, Time.new!(hour, 0, 0)))
+  defp hours_of(date, hours) do
+    for(hour <- hours, do: NaiveDateTime.new!(date, Time.new!(hour, 0, 0)))
+  end
 
   # Each value as it is written, the unit it is written to, and the
   # candidates it stands for.
@@ -140,22 +148,41 @@ defmodule Tempo.ShiftOfMasksTest do
 
   # The steps each value is measured by: those that reach its masked unit.
   # A step coarser than it is measured with `coarser_steps/0`.
-  defp steps_for("2026Y6M" <> _day_masked, :day),
-    do: [[day: 1], [day: -1], [day: 45], [week: 1], [hour: 1], [hour: 25], [month: 1, day: 1]]
+  defp steps_for("2026Y6M" <> _day_masked, :day) do
+    [[day: 1], [day: -1], [day: 45], [week: 1], [hour: 1], [hour: 25], [month: 1, day: 1]]
+  end
 
-  defp steps_for("2026YXXMXXD", :day), do: [[day: 1], [week: -1], [hour: 25]]
-  defp steps_for("2026YXXM1XD", :day), do: [[day: 1], [day: 25], [hour: 1]]
-  defp steps_for("2026Y1XMXXD", :day), do: [[day: 1], [day: -1], [hour: 25]]
+  defp steps_for("2026YXXMXXD", :day) do
+    [[day: 1], [week: -1], [hour: 25]]
+  end
 
-  defp steps_for(_text, :day),
-    do: [[day: 1], [day: -1], [day: 10], [week: 1], [hour: 1], [hour: 25], [month: 1], [year: 1]]
+  defp steps_for("2026YXXM1XD", :day) do
+    [[day: 1], [day: 25], [hour: 1]]
+  end
 
-  defp steps_for(_text, :week), do: [[week: 1], [week: -1], [week: 30], [day: 1], [day: 8]]
-  defp steps_for(_text, :month), do: [[month: 1], [month: -1], [month: 14], [year: 1], [day: 1]]
-  defp steps_for(_text, :year), do: [[year: 1], [year: 10], [year: -3], [month: 1], [day: 1]]
+  defp steps_for("2026Y1XMXXD", :day) do
+    [[day: 1], [day: -1], [hour: 25]]
+  end
 
-  defp steps_for(_text, :hour),
-    do: [[hour: 1], [hour: -1], [hour: 20], [minute: 1], [minute: 90], [day: 1]]
+  defp steps_for(_text, :day) do
+    [[day: 1], [day: -1], [day: 10], [week: 1], [hour: 1], [hour: 25], [month: 1], [year: 1]]
+  end
+
+  defp steps_for(_text, :week) do
+    [[week: 1], [week: -1], [week: 30], [day: 1], [day: 8]]
+  end
+
+  defp steps_for(_text, :month) do
+    [[month: 1], [month: -1], [month: 14], [year: 1], [day: 1]]
+  end
+
+  defp steps_for(_text, :year) do
+    [[year: 1], [year: 10], [year: -3], [month: 1], [day: 1]]
+  end
+
+  defp steps_for(_text, :hour) do
+    [[hour: 1], [hour: -1], [hour: 20], [minute: 1], [minute: 90], [day: 1]]
+  end
 
   @finest_first [:minute, :hour, :day, :week, :month, :year]
 
@@ -173,14 +200,19 @@ defmodule Tempo.ShiftOfMasksTest do
     end
   end
 
-  defp named(%IntervalSet{} = set, unit),
-    do: set |> IntervalSet.members() |> Enum.flat_map(&units_in(&1, unit))
+  defp named(%IntervalSet{} = set, unit) do
+    set
+    |> IntervalSet.members()
+    |> Enum.flat_map(&units_in(&1, unit))
+  end
 
-  defp named(%Tempo.Set{type: :one, set: [%Tempo.Range{first: first, last: last}]}, unit),
-    do: units_from(moment(first), NaiveDateTime.shift(moment(last), [{unit, 1}]), unit)
+  defp named(%Tempo.Set{type: :one, set: [%Tempo.Range{first: first, last: last}]}, unit) do
+    units_from(moment(first), NaiveDateTime.shift(moment(last), [{unit, 1}]), unit)
+  end
 
-  defp units_in(%Interval{} = span, unit),
-    do: units_from(moment(Interval.from(span)), moment(Interval.to(span)), unit)
+  defp units_in(%Interval{} = span, unit) do
+    units_from(moment(Interval.from(span)), moment(Interval.to(span)), unit)
+  end
 
   defp units_from(from, to, unit) do
     from
@@ -189,11 +221,19 @@ defmodule Tempo.ShiftOfMasksTest do
   end
 
   defp moment(%Tempo{} = point) do
-    {:ok, moment} = point |> Tempo.extend_resolution(:second) |> Tempo.to_naive_datetime()
+    {:ok, moment} =
+      point
+      |> Tempo.extend_resolution(:second)
+      |> Tempo.to_naive_datetime()
+
     moment
   end
 
-  defp in_order(moments), do: moments |> Enum.uniq() |> Enum.sort(NaiveDateTime)
+  defp in_order(moments) do
+    moments
+    |> Enum.uniq()
+    |> Enum.sort(NaiveDateTime)
+  end
 
   describe "a step that reaches a masked or an unspecified unit" do
     test "lands each value it stands for, and names those and no others" do
@@ -202,7 +242,11 @@ defmodule Tempo.ShiftOfMasksTest do
 
         for step <- steps_for(text, unit) do
           answered = answered_to(unit, step)
-          expected = candidates |> Enum.map(&NaiveDateTime.shift(&1, step)) |> in_order()
+
+          expected =
+            candidates
+            |> Enum.map(&NaiveDateTime.shift(&1, step))
+            |> in_order()
 
           assert {text, step, in_order(named(Tempo.shift(value, step), answered))} ==
                    {text, step, expected}
@@ -216,7 +260,11 @@ defmodule Tempo.ShiftOfMasksTest do
       for {text, unit, candidates, steps} <- coarser_steps(), step <- steps do
         value = Tempo.from_iso8601!(text)
         answered = answered_to(unit, step)
-        expected = candidates |> Enum.map(&NaiveDateTime.shift(&1, step)) |> in_order()
+
+        expected =
+          candidates
+          |> Enum.map(&NaiveDateTime.shift(&1, step))
+          |> in_order()
 
         assert {text, step, in_order(named(Tempo.shift(value, step), answered))} ==
                  {text, step, expected}
@@ -381,13 +429,17 @@ defmodule Tempo.ShiftOfMasksTest do
   # value with no zone, and landed an hour early on the day the clocks go
   # forward.
   describe "a value in a zone" do
-    defp paris(day, hour, minute),
-      do: DateTime.new!(Date.new!(2026, 3, day), Time.new!(hour, minute, 0), "Europe/Paris")
+    defp paris(day, hour, minute) do
+      DateTime.new!(Date.new!(2026, 3, day), Time.new!(hour, minute, 0), "Europe/Paris")
+    end
 
     defp zoned_starts(%IntervalSet{} = set) do
       for member <- IntervalSet.members(set) do
         {:ok, start} =
-          member |> Interval.from() |> Tempo.extend_resolution(:second) |> Tempo.to_datetime()
+          member
+          |> Interval.from()
+          |> Tempo.extend_resolution(:second)
+          |> Tempo.to_datetime()
 
         {start.day, start.hour, start.minute}
       end
@@ -424,7 +476,12 @@ defmodule Tempo.ShiftOfMasksTest do
     # The days an answer names in the Hebrew calendar: those its mask stands
     # for, or those from the first to the last of a run.
     defp hebrew_days(%Tempo{} = masked) do
-      for day <- masked, do: day |> Tempo.to_date() |> elem(1) |> year_month_day()
+      for day <- masked do
+        day
+        |> Tempo.to_date()
+        |> elem(1)
+        |> year_month_day()
+      end
     end
 
     defp hebrew_days(%Tempo.Set{type: :one, set: [%Tempo.Range{first: first, last: last}]}) do
@@ -437,7 +494,9 @@ defmodule Tempo.ShiftOfMasksTest do
       |> Enum.map(&year_month_day/1)
     end
 
-    defp year_month_day(%Date{year: year, month: month, day: day}), do: {year, month, day}
+    defp year_month_day(%Date{year: year, month: month, day: day}) do
+      {year, month, day}
+    end
 
     defp march25_days(answer) do
       {:ok, set} = Tempo.to_interval_set(answer)
@@ -446,8 +505,17 @@ defmodule Tempo.ShiftOfMasksTest do
 
     # A member written to its month is the days of it.
     defp days_between(member) do
-      {:ok, first} = member |> Interval.from() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
-      {:ok, last} = member |> Interval.to() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
+      {:ok, first} =
+        member
+        |> Interval.from()
+        |> Tempo.extend_resolution(:day)
+        |> Tempo.to_date()
+
+      {:ok, last} =
+        member
+        |> Interval.to()
+        |> Tempo.extend_resolution(:day)
+        |> Tempo.to_date()
 
       first
       |> Stream.iterate(&Date.add(&1, 1))
@@ -472,7 +540,10 @@ defmodule Tempo.ShiftOfMasksTest do
         answer = Tempo.shift(Tempo.from_iso8601!(text, Hebrew), step)
 
         assert {text, step, hebrew_days(answer)} ==
-                 {text, step, landed |> Enum.uniq() |> Enum.sort()}
+                 {text, step,
+                  landed
+                  |> Enum.uniq()
+                  |> Enum.sort()}
       end
     end
 
@@ -490,7 +561,10 @@ defmodule Tempo.ShiftOfMasksTest do
         answer = Tempo.shift(Tempo.from_iso8601!(text, March25), month: 1)
 
         assert {text, Enum.sort_by(march25_days(answer), &Date.to_gregorian_days/1)} ==
-                 {text, expected |> Enum.uniq() |> Enum.sort_by(&Date.to_gregorian_days/1)}
+                 {text,
+                  expected
+                  |> Enum.uniq()
+                  |> Enum.sort_by(&Date.to_gregorian_days/1)}
       end
     end
   end

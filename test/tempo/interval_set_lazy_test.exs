@@ -21,7 +21,12 @@ defmodule Tempo.IntervalSetLazyTest do
     test "walk yields members on demand" do
       set = mondays(~o"2026-01-05")
 
-      days = set |> IntervalSet.walk() |> Enum.take(3) |> Enum.map(& &1.from.time[:day])
+      days =
+        set
+        |> IntervalSet.walk()
+        |> Enum.take(3)
+        |> Enum.map(& &1.from.time[:day])
+
       assert days == [5, 12, 19]
     end
 
@@ -43,7 +48,9 @@ defmodule Tempo.IntervalSetLazyTest do
     test "Enum.take walks sub-points lazily" do
       set = mondays(~o"2026-01-05")
 
-      assert set |> Enum.take(2) |> Enum.map(& &1.time[:hour]) == [0, 1]
+      assert set
+             |> Enum.take(2)
+             |> Enum.map(& &1.time[:hour]) == [0, 1]
     end
   end
 

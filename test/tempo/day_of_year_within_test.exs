@@ -42,11 +42,20 @@ defmodule Tempo.DayOfYearWithinTest do
     from_start in numbers or from_end in numbers
   end
 
-  defp days_in_year(date), do: if(Date.leap_year?(date), do: 366, else: 365)
+  defp days_in_year(date) do
+    if Date.leap_year?(date) do
+      366
+    else
+      365
+    end
+  end
 
-  defp seconds(%Date{} = date),
-    do:
-      date |> NaiveDateTime.new!(~T[00:00:00]) |> NaiveDateTime.to_gregorian_seconds() |> elem(0)
+  defp seconds(%Date{} = date) do
+    date
+    |> NaiveDateTime.new!(~T[00:00:00])
+    |> NaiveDateTime.to_gregorian_seconds()
+    |> elem(0)
+  end
 
   defp expected(days, numbers) do
     for date <- days, named?(date, numbers), do: {seconds(date), seconds(Date.add(date, 1))}
@@ -58,7 +67,9 @@ defmodule Tempo.DayOfYearWithinTest do
     end
   end
 
-  defp pad(number), do: String.pad_leading(Integer.to_string(number), 2, "0")
+  defp pad(number) do
+    String.pad_leading(Integer.to_string(number), 2, "0")
+  end
 
   # ISO 8601's first week is the one that holds 4 January.
   defp monday_of_iso_week(year, week) do

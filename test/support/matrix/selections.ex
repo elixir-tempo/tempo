@@ -246,12 +246,21 @@ defmodule Tempo.Matrix.Selections do
   end
 
   # A Gregorian text is read with no calendar given, as the corpus's others.
-  defp read_in(Gregorian), do: nil
-  defp read_in(calendar), do: calendar
+  defp read_in(Gregorian) do
+    nil
+  end
 
-  defp in_order(parts), do: Enum.sort_by(parts, fn {unit, _values} -> order(unit) end)
+  defp read_in(calendar) do
+    calendar
+  end
 
-  defp order(unit), do: Enum.find_index(@unit_order, &(&1 == unit))
+  defp in_order(parts) do
+    Enum.sort_by(parts, fn {unit, _values} -> order(unit) end)
+  end
+
+  defp order(unit) do
+    Enum.find_index(@unit_order, &(&1 == unit))
+  end
 
   ## The text
 
@@ -268,8 +277,9 @@ defmodule Tempo.Matrix.Selections do
 
   """
   @spec text(datum()) :: String.t()
-  def text(%{period: period, parts: parts}),
-    do: period_text(period) <> "L" <> parts_text(parts) <> "N"
+  def text(%{period: period, parts: parts}) do
+    period_text(period) <> "L" <> parts_text(parts) <> "N"
+  end
 
   @doc """
   The text of a selection's period alone, `2026Y6M`.
@@ -284,15 +294,22 @@ defmodule Tempo.Matrix.Selections do
 
   """
   @spec period_text(datum() | keyword(integer())) :: String.t()
-  def period_text(%{period: period}), do: period_text(period)
+  def period_text(%{period: period}) do
+    period_text(period)
+  end
 
   def period_text(period) do
     {date, clock} = Enum.split_with(period, fn {unit, _value} -> unit != :hour end)
     Enum.map_join(date, &period_unit/1) <> time_text(Enum.map(clock, &period_unit/1))
   end
 
-  defp period_unit({:year, year}), do: "#{year}Y"
-  defp period_unit({unit, value}), do: "#{value}#{@designators[unit]}"
+  defp period_unit({:year, year}) do
+    "#{year}Y"
+  end
+
+  defp period_unit({unit, value}) do
+    "#{value}#{@designators[unit]}"
+  end
 
   @doc """
   The text of a selection's parts alone, as a value with no year writes
@@ -316,16 +333,29 @@ defmodule Tempo.Matrix.Selections do
       time_text(Enum.map(clock, &part_text/1)) <> Enum.map_join(position, &part_text/1)
   end
 
-  defp time_text([]), do: ""
-  defp time_text(units), do: "T" <> Enum.join(units)
+  defp time_text([]) do
+    ""
+  end
 
-  defp part_text({unit, [value]}) when is_integer(value), do: "#{value}#{@designators[unit]}"
+  defp time_text(units) do
+    "T" <> Enum.join(units)
+  end
 
-  defp part_text({unit, values}),
-    do: "{" <> Enum.map_join(values, ",", &written_text/1) <> "}#{@designators[unit]}"
+  defp part_text({unit, [value]}) when is_integer(value) do
+    "#{value}#{@designators[unit]}"
+  end
 
-  defp written_text({first, last}), do: "#{first}..#{last}"
-  defp written_text(value), do: "#{value}"
+  defp part_text({unit, values}) do
+    "{" <> Enum.map_join(values, ",", &written_text/1) <> "}#{@designators[unit]}"
+  end
+
+  defp written_text({first, last}) do
+    "#{first}..#{last}"
+  end
+
+  defp written_text(value) do
+    "#{value}"
+  end
 
   ## What it selects
 
@@ -382,9 +412,17 @@ defmodule Tempo.Matrix.Selections do
     end
   end
 
-  defp following(year: year), do: [year: year + 1]
-  defp following(year: year, month: 12), do: [year: year + 1, month: 1]
-  defp following(year: year, month: month), do: [year: year, month: month + 1]
+  defp following(year: year) do
+    [year: year + 1]
+  end
+
+  defp following(year: year, month: 12) do
+    [year: year + 1, month: 1]
+  end
+
+  defp following(year: year, month: month) do
+    [year: year, month: month + 1]
+  end
 
   @doc """
   The occurrences a selection selects, in the order of time.
@@ -424,14 +462,21 @@ defmodule Tempo.Matrix.Selections do
     end
   end
 
-  defp months([year: _year, month: month], _parts), do: [month]
-  defp months([year: _year], parts), do: values(Keyword.fetch!(parts, :month), 1..12//1)
+  defp months([year: _year, month: month], _parts) do
+    [month]
+  end
+
+  defp months([year: _year], parts) do
+    values(Keyword.fetch!(parts, :month), 1..12//1)
+  end
 
   defp days_of_weeks(year, months, written) do
     for month <- months,
         week <- values(written, 1..weeks_in_month(year, month)//1),
         day <- 0..6 do
-      year |> month_week_start(month, week) |> Date.add(day)
+      year
+      |> month_week_start(month, week)
+      |> Date.add(day)
     end
   end
 
@@ -442,7 +487,13 @@ defmodule Tempo.Matrix.Selections do
   defp month_week_start(year, month, week) do
     first = Date.new!(year, month, 1)
     monday = Date.beginning_of_week(first, :monday)
-    week_one = if Date.diff(first, monday) <= 3, do: monday, else: Date.add(monday, 7)
+
+    week_one =
+      if Date.diff(first, monday) <= 3 do
+        monday
+      else
+        Date.add(monday, 7)
+      end
 
     Date.add(week_one, (week - 1) * 7)
   end
@@ -450,7 +501,10 @@ defmodule Tempo.Matrix.Selections do
   # A month has the weeks from its first up to the next month's first.
   defp weeks_in_month(year, month) do
     %Date{year: next_year, month: next_month} =
-      year |> Date.new!(month, 1) |> Date.end_of_month() |> Date.add(1)
+      year
+      |> Date.new!(month, 1)
+      |> Date.end_of_month()
+      |> Date.add(1)
 
     div(
       Date.diff(month_week_start(next_year, next_month, 1), month_week_start(year, month, 1)),
@@ -461,23 +515,34 @@ defmodule Tempo.Matrix.Selections do
   # A day selected in a year is a day of the year where no part beside it is
   # a month, a week or a day of the year for it to be a day of.
   defp read_in(parts, year: _year) do
-    if Enum.any?([:month, :week, :day_of_year], &Keyword.has_key?(parts, &1)),
-      do: parts,
-      else: Enum.map(parts, &day_of_the_year/1)
+    if Enum.any?([:month, :week, :day_of_year], &Keyword.has_key?(parts, &1)) do
+      parts
+    else
+      Enum.map(parts, &day_of_the_year/1)
+    end
   end
 
-  defp read_in(parts, _finer_period), do: parts
+  defp read_in(parts, _finer_period) do
+    parts
+  end
 
-  defp day_of_the_year({:day, written}), do: {:day_of_year, written}
-  defp day_of_the_year(part), do: part
+  defp day_of_the_year({:day, written}) do
+    {:day_of_year, written}
+  end
+
+  defp day_of_the_year(part) do
+    part
+  end
 
   # The days of the period, as proleptic Gregorian dates. A year whose weeks
   # are selected, and a year of a calendar of weeks, is its ISO 8601 weeks'
   # days.
   defp days([year: year], parts, calendar) do
-    if calendar == ISOWeek or Keyword.has_key?(parts, :week),
-      do: Date.range(week_start(year, 1), Date.add(week_start(year + 1, 1), -1)),
-      else: Date.range(date(year, 1, 1, calendar), Date.add(date(year + 1, 1, 1, calendar), -1))
+    if calendar == ISOWeek or Keyword.has_key?(parts, :week) do
+      Date.range(week_start(year, 1), Date.add(week_start(year + 1, 1), -1))
+    else
+      Date.range(date(year, 1, 1, calendar), Date.add(date(year + 1, 1, 1, calendar), -1))
+    end
   end
 
   defp days([year: year, month: month], _parts, calendar) do
@@ -490,19 +555,28 @@ defmodule Tempo.Matrix.Selections do
     Date.range(first, Date.add(first, 6))
   end
 
-  defp days([{:year, year}, {:month, month}, {:day, day} | _hour], _parts, calendar),
-    do: [date(year, month, day, calendar)]
+  defp days([{:year, year}, {:month, month}, {:day, day} | _hour], _parts, calendar) do
+    [date(year, month, day, calendar)]
+  end
 
   # ISO 8601-1 §4.2.2: weeks begin on Monday, and a year's first week is the
   # one that holds its 4 January.
   defp week_start(year, week) do
-    year |> Date.new!(1, 4) |> Date.beginning_of_week(:monday) |> Date.add((week - 1) * 7)
+    year
+    |> Date.new!(1, 4)
+    |> Date.beginning_of_week(:monday)
+    |> Date.add((week - 1) * 7)
   end
 
-  defp date(year, month, day, Gregorian), do: Date.new!(year, month, day)
+  defp date(year, month, day, Gregorian) do
+    Date.new!(year, month, day)
+  end
 
-  defp date(year, month, day, calendar),
-    do: year |> Date.new!(month, day, calendar) |> Date.convert!(Calendar.ISO)
+  defp date(year, month, day, calendar) do
+    year
+    |> Date.new!(month, day, calendar)
+    |> Date.convert!(Calendar.ISO)
+  end
 
   # A day is selected when every part that is a condition on a day names it.
   defp named?(%Date{} = day, parts, calendar) do
@@ -529,19 +603,32 @@ defmodule Tempo.Matrix.Selections do
     day_of_month in values(written, 1..Reference.days_in_month(year, month, calendar)//1)
   end
 
-  defp day_named?(:day_of_week, written, day, _calendar),
-    do: Date.day_of_week(day) in values(written, 1..7//1)
+  defp day_named?(:day_of_week, written, day, _calendar) do
+    Date.day_of_week(day) in values(written, 1..7//1)
+  end
 
-  defp day_named?(_clock_or_position, _written, _day, _calendar), do: true
+  defp day_named?(_clock_or_position, _written, _day, _calendar) do
+    true
+  end
 
-  defp in_calendar(%Date{} = day, Gregorian), do: day
-  defp in_calendar(%Date{} = day, calendar), do: Date.convert!(day, calendar)
+  defp in_calendar(%Date{} = day, Gregorian) do
+    day
+  end
+
+  defp in_calendar(%Date{} = day, calendar) do
+    Date.convert!(day, calendar)
+  end
 
   # 28 December is always in its year's last ISO 8601 week.
-  defp weeks_in_year(year), do: {year, 12, 28} |> :calendar.iso_week_number() |> elem(1)
+  defp weeks_in_year(year) do
+    {year, 12, 28}
+    |> :calendar.iso_week_number()
+    |> elem(1)
+  end
 
-  defp days_in_year(%Date{} = day),
-    do: Date.diff(%{day | year: day.year + 1, month: 1, day: 1}, %{day | month: 1, day: 1})
+  defp days_in_year(%Date{} = day) do
+    Date.diff(%{day | year: day.year + 1, month: 1, day: 1}, %{day | month: 1, day: 1})
+  end
 
   # The values a part names among those its unit takes: a negative number is
   # counted back from the last, and a range is every value from one of its
@@ -554,13 +641,21 @@ defmodule Tempo.Matrix.Selections do
     |> Enum.sort()
   end
 
-  defp named({first, last}, valid),
-    do: Enum.filter(valid, &(&1 >= counted(first, valid) and &1 <= counted(last, valid)))
+  defp named({first, last}, valid) do
+    Enum.filter(valid, &(&1 >= counted(first, valid) and &1 <= counted(last, valid)))
+  end
 
-  defp named(value, valid), do: [counted(value, valid)]
+  defp named(value, valid) do
+    [counted(value, valid)]
+  end
 
-  defp counted(value, %Range{last: last}) when value < 0, do: last + 1 + value
-  defp counted(value, _valid), do: value
+  defp counted(value, %Range{last: last}) when value < 0 do
+    last + 1 + value
+  end
+
+  defp counted(value, _valid) do
+    value
+  end
 
   # The occurrences are the days, or what holds them where no part names a
   # day: the weeks, the months, or the period's own first day for a time of
@@ -571,18 +666,28 @@ defmodule Tempo.Matrix.Selections do
         Enum.map(days, &day_point/1)
 
       Keyword.has_key?(parts, :week) or Keyword.has_key?(parts, :week_of_month) ->
-        days |> Enum.map(&week_point/1) |> Enum.uniq()
+        days
+        |> Enum.map(&week_point/1)
+        |> Enum.uniq()
 
       Keyword.has_key?(parts, :month) ->
-        days |> Enum.map(&month_point(&1, calendar)) |> Enum.uniq()
+        days
+        |> Enum.map(&month_point(&1, calendar))
+        |> Enum.uniq()
 
       true ->
-        [period |> days(parts, calendar) |> Enum.at(0) |> day_point()]
+        [
+          period
+          |> days(parts, calendar)
+          |> Enum.at(0)
+          |> day_point()
+        ]
     end
   end
 
-  defp day_point(%Date{year: year, month: month, day: day}),
-    do: point([year: year, month: month, day: day], Gregorian)
+  defp day_point(%Date{year: year, month: month, day: day}) do
+    point([year: year, month: month, day: day], Gregorian)
+  end
 
   defp week_point(%Date{year: year, month: month, day: day}) do
     {week_year, week} = :calendar.iso_week_number({year, month, day})
@@ -594,8 +699,9 @@ defmodule Tempo.Matrix.Selections do
     point([year: year, month: month], calendar)
   end
 
-  defp point(date, calendar),
-    do: %{date: date, time: [], fraction: nil, zone: nil, calendar: calendar}
+  defp point(date, calendar) do
+    %{date: date, time: [], fraction: nil, zone: nil, calendar: calendar}
+  end
 
   # An occurrence at each time of day the parts name. An hour the parts do
   # not name is the period's own.
@@ -612,13 +718,25 @@ defmodule Tempo.Matrix.Selections do
     end
   end
 
-  defp at(occurrence, hour, minute), do: %{occurrence | time: [hour: hour, minute: minute]}
+  defp at(occurrence, hour, minute) do
+    %{occurrence | time: [hour: hour, minute: minute]}
+  end
 
-  defp hours(nil, nil), do: nil
-  defp hours(nil, hour), do: [hour]
-  defp hours(written, _period_hour), do: values(written, 0..23//1)
+  defp hours(nil, nil) do
+    nil
+  end
 
-  defp positions(occurrences, nil), do: occurrences
+  defp hours(nil, hour) do
+    [hour]
+  end
+
+  defp hours(written, _period_hour) do
+    values(written, 0..23//1)
+  end
+
+  defp positions(occurrences, nil) do
+    occurrences
+  end
 
   defp positions(occurrences, written) do
     picked = values(written, 1..length(occurrences)//1)

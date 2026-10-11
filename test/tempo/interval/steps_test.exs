@@ -80,8 +80,11 @@ defmodule Tempo.Interval.StepsTest do
     # The measure is the calendar's own count of each year's months. The
     # count was twelve a year wherever the two end years had twelve, so a
     # Hebrew year of thirteen between them was a month short.
-    defp months_counted(from_year, to_year, calendar),
-      do: from_year..(to_year - 1)//1 |> Enum.map(&calendar.months_in_year/1) |> Enum.sum()
+    defp months_counted(from_year, to_year, calendar) do
+      from_year..(to_year - 1)//1
+      |> Enum.map(&calendar.months_in_year/1)
+      |> Enum.sum()
+    end
 
     test "counts a year of thirteen months between two years of twelve" do
       hebrew = Calendrical.Hebrew

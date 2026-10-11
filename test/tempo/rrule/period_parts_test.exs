@@ -54,14 +54,26 @@ defmodule Tempo.RRule.PeriodPartsTest do
     |> Enum.filter(&(&1 in 1..last))
   end
 
-  defp counted(number, last) when number < 0, do: last + 1 + number
-  defp counted(number, _last), do: number
+  defp counted(number, last) when number < 0 do
+    last + 1 + number
+  end
 
-  defp day_of_month?(date, written),
-    do: date.day in named_among(written, Date.days_in_month(date))
+  defp counted(number, _last) do
+    number
+  end
+
+  defp day_of_month?(date, written) do
+    date.day in named_among(written, Date.days_in_month(date))
+  end
 
   defp day_of_year?(date, written) do
-    days = if Date.leap_year?(date), do: 366, else: 365
+    days =
+      if Date.leap_year?(date) do
+        366
+      else
+        365
+      end
+
     Date.day_of_year(date) in named_among(written, days)
   end
 
@@ -76,7 +88,9 @@ defmodule Tempo.RRule.PeriodPartsTest do
     1..last
   end
 
-  defp days_of_week(year, week), do: for(day <- 0..6, do: Date.add(monday(year, week), day))
+  defp days_of_week(year, week) do
+    for(day <- 0..6, do: Date.add(monday(year, week), day))
+  end
 
   defp days_of_month(year, month) do
     first = Date.new!(year, month, 1)
@@ -86,13 +100,25 @@ defmodule Tempo.RRule.PeriodPartsTest do
   # The day each selected span starts on, and how many days long it is.
   defp spans({:ok, %IntervalSet{} = set}) do
     for member <- IntervalSet.members(set) do
-      {:ok, from} = member |> Interval.from() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
-      {:ok, to} = member |> Interval.to() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
+      {:ok, from} =
+        member
+        |> Interval.from()
+        |> Tempo.extend_resolution(:day)
+        |> Tempo.to_date()
+
+      {:ok, to} =
+        member
+        |> Interval.to()
+        |> Tempo.extend_resolution(:day)
+        |> Tempo.to_date()
+
       {from, Date.diff(to, from)}
     end
   end
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   # A selection in a period, by each way it is asked: selected from the
   # period, written after it in a value, and as the rule of a recurrence that
@@ -160,7 +186,14 @@ defmodule Tempo.RRule.PeriodPartsTest do
     test "keeps the week that starts in the month" do
       for year <- [2025, 2026], week <- weeks_of(year), months <- [[6], [1, 12]] do
         start = monday(year, week)
-        expected = if start.month in months, do: [{start, 7}], else: []
+
+        expected =
+          if start.month in months do
+            [{start, 7}]
+          else
+            []
+          end
+
         text = "{#{Enum.join(months, ",")}}M"
 
         selected = spans(Tempo.select(read("#{year}Y#{week}W"), read("L#{text}N")))
@@ -190,7 +223,13 @@ defmodule Tempo.RRule.PeriodPartsTest do
           week <- weeks_of(year),
           {text, written} <- [{"25", [25]}, {"{1,-1}", [1, -1]}] do
         named = named_among(written, Enum.at(weeks_of(year), -1))
-        expected = if week in named, do: [{monday(year, week), 7}], else: []
+
+        expected =
+          if week in named do
+            [{monday(year, week), 7}]
+          else
+            []
+          end
 
         for {way, answer} <- each_way("#{year}Y#{week}W", "P1W", "#{text}W") do
           assert {year, week, text, way, spans(answer)} == {year, week, text, way, expected}

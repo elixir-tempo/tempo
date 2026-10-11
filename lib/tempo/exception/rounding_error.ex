@@ -26,11 +26,15 @@ defmodule Tempo.RoundingError do
   end
 
   @impl true
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{unit: unit}) when not is_nil(unit) do
     "Cannot round to #{Calendars.inspect(unit)}"
   end
 
-  def message(%__MODULE__{}), do: "Rounding operation failed"
+  def message(%__MODULE__{}) do
+    "Rounding operation failed"
+  end
 end

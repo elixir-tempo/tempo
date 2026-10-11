@@ -18,16 +18,24 @@ defmodule Tempo.IntervalSetBackendTest do
     use Tempo.IntervalSet.Backend
 
     @impl true
-    def from_list(intervals, _options), do: {:tuple, intervals}
+    def from_list(intervals, _options) do
+      {:tuple, intervals}
+    end
 
     @impl true
-    def to_list({:tuple, intervals}), do: intervals
+    def to_list({:tuple, intervals}) do
+      intervals
+    end
 
     @impl true
-    def walk({:tuple, intervals}), do: intervals
+    def walk({:tuple, intervals}) do
+      intervals
+    end
 
     @impl true
-    def bounded?(_state), do: true
+    def bounded?(_state) do
+      true
+    end
   end
 
   defp members do
@@ -51,7 +59,10 @@ defmodule Tempo.IntervalSetBackendTest do
 
     test "walk/1 yields the members in time order" do
       {:ok, set} = IntervalSet.new(Enum.reverse(members()))
-      assert set |> IntervalSet.walk() |> Enum.map(& &1.from.time[:month]) == [6, 7]
+
+      assert set
+             |> IntervalSet.walk()
+             |> Enum.map(& &1.from.time[:month]) == [6, 7]
     end
   end
 
@@ -68,7 +79,11 @@ defmodule Tempo.IntervalSetBackendTest do
       assert IntervalSet.count(set) == 2
       refute IntervalSet.empty?(set)
       assert IntervalSet.first(set).from.time[:month] == 6
-      assert set |> IntervalSet.walk() |> Enum.count() == 2
+
+      assert set
+             |> IntervalSet.walk()
+             |> Enum.count() == 2
+
       assert IntervalSet.count(set) == 2
     end
 

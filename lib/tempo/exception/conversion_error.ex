@@ -89,7 +89,9 @@ defmodule Tempo.ConversionError do
   end
 
   @impl true
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{reason: :bare_duration}) do
     "Cannot convert a Tempo.Duration to an interval — a duration has no " <>
@@ -208,50 +210,78 @@ defmodule Tempo.ConversionError do
     "Invalid #{describe_target(target)}"
   end
 
-  def message(%__MODULE__{}), do: "Conversion failed"
+  def message(%__MODULE__{}) do
+    "Conversion failed"
+  end
 
   # What a refusal of something not built says of the value, of what was
   # asked for and of the calendar it was asked in.
-  defp not_built_subject(%__MODULE__{value: nil}), do: "Cannot answer"
+  defp not_built_subject(%__MODULE__{value: nil}) do
+    "Cannot answer"
+  end
 
-  defp not_built_subject(%__MODULE__{value: value}) when is_binary(value),
-    do: "Cannot answer #{value}"
+  defp not_built_subject(%__MODULE__{value: value}) when is_binary(value) do
+    "Cannot answer #{value}"
+  end
 
-  defp not_built_subject(%__MODULE__{value: value}),
-    do: "Cannot answer #{Calendars.inspect(value)}"
+  defp not_built_subject(%__MODULE__{value: value}) do
+    "Cannot answer #{Calendars.inspect(value)}"
+  end
 
-  defp not_built(:selection), do: "a selection that counts days within a month or a year"
-  defp not_built(:season), do: "a season"
-  defp not_built(:shift), do: "a step by days from a value that holds several months or years"
-  defp not_built(:month), do: "a month of a year that begins within one"
+  defp not_built(:selection) do
+    "a selection that counts days within a month or a year"
+  end
 
-  defp not_built(:rrule),
-    do: "an RRULE that steps or selects by a month, a year, a week of the year or a day of one"
+  defp not_built(:season) do
+    "a season"
+  end
 
-  defp not_built(:week_of_month), do: "a week of a month"
+  defp not_built(:shift) do
+    "a step by days from a value that holds several months or years"
+  end
 
-  defp not_built(:rule_to_an_end),
-    do:
-      "a rule that holds a window, on a recurrence written to its end, whose occurrences " <>
-        "run back from it,"
+  defp not_built(:month) do
+    "a month of a year that begins within one"
+  end
 
-  defp not_built(other), do: "#{other}"
+  defp not_built(:rrule) do
+    "an RRULE that steps or selects by a month, a year, a week of the year or a day of one"
+  end
 
-  defp not_built_calendar(:month),
-    do: "which does not count that year's months from the day it begins"
+  defp not_built(:week_of_month) do
+    "a week of a month"
+  end
 
-  defp not_built_calendar(:rrule),
-    do:
-      "since RFC 5545 counts them in the Gregorian calendar and RFC 7529's RSCALE is not written"
+  defp not_built(:rule_to_an_end) do
+    "a rule that holds a window, on a recurrence written to its end, whose occurrences " <>
+      "run back from it,"
+  end
+
+  defp not_built(other) do
+    "#{other}"
+  end
+
+  defp not_built_calendar(:month) do
+    "which does not count that year's months from the day it begins"
+  end
+
+  defp not_built_calendar(:rrule) do
+    "since RFC 5545 counts them in the Gregorian calendar and RFC 7529's RSCALE is not written"
+  end
 
   # A day or a time under a masked week of a month is refused in every
   # calendar, so what is said of the calendar is said of the two cases.
-  defp not_built_calendar(:week_of_month),
-    do: "in a year that does not begin with its first month"
+  defp not_built_calendar(:week_of_month) do
+    "in a year that does not begin with its first month"
+  end
 
-  defp not_built_calendar(:rule_to_an_end), do: "as for every calendar"
+  defp not_built_calendar(:rule_to_an_end) do
+    "as for every calendar"
+  end
 
-  defp not_built_calendar(_target), do: "whose year does not begin with its first month"
+  defp not_built_calendar(_target) do
+    "whose year does not begin with its first month"
+  end
 
   # A module target reads as the module (`Date`), a plain atom as its
   # name (`rrule`).
@@ -262,5 +292,7 @@ defmodule Tempo.ConversionError do
     end
   end
 
-  defp describe_target(other), do: Calendars.inspect(other)
+  defp describe_target(other) do
+    Calendars.inspect(other)
+  end
 end

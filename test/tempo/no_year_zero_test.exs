@@ -33,7 +33,9 @@ defmodule Tempo.NoYearZeroTest do
     Date.new!(2, 6, 15, Calendrical.Julian)
   ]
 
-  defp julian(text), do: Tempo.from_iso8601!(text, @julian)
+  defp julian(text) do
+    Tempo.from_iso8601!(text, @julian)
+  end
 
   defp shifted(%Date{} = date, unit, count) do
     {:ok, shifted} =
@@ -45,7 +47,9 @@ defmodule Tempo.NoYearZeroTest do
     shifted
   end
 
-  defp years(values), do: Enum.map(values, &Tempo.year/1)
+  defp years(values) do
+    Enum.map(values, &Tempo.year/1)
+  end
 
   describe "a year the calendar does not have" do
     test "is not read" do

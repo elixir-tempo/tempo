@@ -88,7 +88,13 @@ defmodule Tempo.Allen do
 
   for {relation, description, example_a, example_b, everyday} <- @relations do
     name = :"#{relation}?"
-    note = if everyday, do: "\n" <> everyday <> "\n", else: ""
+
+    note =
+      if everyday do
+        "\n" <> everyday <> "\n"
+      else
+        ""
+      end
 
     @doc """
     `true` when `a` #{description} — Allen's `#{inspect(relation)}`.
@@ -111,7 +117,9 @@ defmodule Tempo.Allen do
 
     """
     @spec unquote(name)(Interval.interval_like(), Interval.interval_like()) :: boolean()
-    def unquote(name)(a, b), do: holds?(a, b, unquote(relation))
+    def unquote(name)(a, b) do
+      holds?(a, b, unquote(relation))
+    end
   end
 
   @doc """
@@ -146,7 +154,9 @@ defmodule Tempo.Allen do
           Interval.relation() | Relations.t() | {:error, {:invalid_relation, term()}}
   def inverse(relations) when is_list(relations) do
     with relations when is_list(relations) <- Relations.canonical(relations) do
-      relations |> Enum.map(&Map.fetch!(@inverses, &1)) |> Relations.canonical()
+      relations
+      |> Enum.map(&Map.fetch!(@inverses, &1))
+      |> Relations.canonical()
     end
   end
 
@@ -216,10 +226,16 @@ defmodule Tempo.Allen do
     end
   end
 
-  def compose(first, second), do: {:error, {:invalid_relation, first_invalid(first, second)}}
+  def compose(first, second) do
+    {:error, {:invalid_relation, first_invalid(first, second)}}
+  end
 
   defp first_invalid(first, second) do
-    if first in Composition.relations(), do: second, else: first
+    if first in Composition.relations() do
+      second
+    else
+      first
+    end
   end
 
   # A relation error must surface, not read as `false` — a silent false

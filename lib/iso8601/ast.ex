@@ -126,7 +126,9 @@ defmodule Tempo.Iso8601.AST do
   # Overlapping qualifiers on one component combine (`?` + `~` → `%`).
   # Returns `nil` when no component-level qualification was present so
   # the struct stays compact.
-  defp resolve_qualifications([], [], _time), do: nil
+  defp resolve_qualifications([], [], _time) do
+    nil
+  end
 
   defp resolve_qualifications(individual, group, time) do
     present = Enum.filter(@date_resolution_order, &Keyword.has_key?(time, &1))
@@ -143,7 +145,11 @@ defmodule Tempo.Iso8601.AST do
         Map.update(acc, unit, qualifier, &Qualification.combine(&1, qualifier))
       end)
 
-    if map_size(map) == 0, do: nil, else: map
+    if map_size(map) == 0 do
+      nil
+    else
+      map
+    end
   end
 
   # A group qualifier's targets: its own component plus every coarser

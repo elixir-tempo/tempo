@@ -37,12 +37,19 @@ defmodule Tempo.Iso8601.Parser do
       "Write X* for every value the unit takes."
   end
 
-  defp signed_unspecified([_ | _] = tokens), do: Enum.find_value(tokens, &signed_unspecified/1)
+  defp signed_unspecified([_ | _] = tokens) do
+    Enum.find_value(tokens, &signed_unspecified/1)
+  end
 
-  defp signed_unspecified(tokens) when is_tuple(tokens),
-    do: tokens |> Tuple.to_list() |> signed_unspecified()
+  defp signed_unspecified(tokens) when is_tuple(tokens) do
+    tokens
+    |> Tuple.to_list()
+    |> signed_unspecified()
+  end
 
-  defp signed_unspecified(_token), do: nil
+  defp signed_unspecified(_token) do
+    nil
+  end
 
   # What is written in a set that is no member of one, wherever the set is
   # written: as a member, as an end of a range and as a member the set leaves
@@ -59,29 +66,54 @@ defmodule Tempo.Iso8601.Parser do
   # of the interval's ends as one value, which `inspect/1` raised on.
   defp no_member({tag, members})
        when tag in [:all_of, :one_of, :domain_set] and is_list(members) do
-    if tag != :domain_set and durations?(members),
-      do: Enum.find_value(members, &no_range_of_durations_reason/1),
-      else: Enum.find_value(members, &no_member_reason/1) || no_member(members)
+    if tag != :domain_set and durations?(members) do
+      Enum.find_value(members, &no_range_of_durations_reason/1)
+    else
+      Enum.find_value(members, &no_member_reason/1) || no_member(members)
+    end
   end
 
-  defp no_member(tokens) when is_list(tokens), do: Enum.find_value(tokens, &no_member/1)
+  defp no_member(tokens) when is_list(tokens) do
+    Enum.find_value(tokens, &no_member/1)
+  end
 
-  defp no_member(token) when is_tuple(token),
-    do: token |> Tuple.to_list() |> no_member()
+  defp no_member(token) when is_tuple(token) do
+    token
+    |> Tuple.to_list()
+    |> no_member()
+  end
 
-  defp no_member(_token), do: nil
+  defp no_member(_token) do
+    nil
+  end
 
-  defp no_member_reason({:duration, _units}), do: duration_in_set_reason()
-  defp no_member_reason({:except, [member]}), do: no_member_reason(member)
+  defp no_member_reason({:duration, _units}) do
+    duration_in_set_reason()
+  end
 
-  defp no_member_reason({:range, ends}) when is_list(ends),
-    do: Enum.find_value(ends, &no_end_reason/1)
+  defp no_member_reason({:except, [member]}) do
+    no_member_reason(member)
+  end
 
-  defp no_member_reason(_member), do: nil
+  defp no_member_reason({:range, ends}) when is_list(ends) do
+    Enum.find_value(ends, &no_end_reason/1)
+  end
 
-  defp no_end_reason({:duration, _units}), do: duration_in_set_reason()
-  defp no_end_reason({:interval, _ends}), do: interval_in_range_reason()
-  defp no_end_reason(_end), do: nil
+  defp no_member_reason(_member) do
+    nil
+  end
+
+  defp no_end_reason({:duration, _units}) do
+    duration_in_set_reason()
+  end
+
+  defp no_end_reason({:interval, _ends}) do
+    interval_in_range_reason()
+  end
+
+  defp no_end_reason(_end) do
+    nil
+  end
 
   defp duration_in_set_reason do
     "A duration is a member of a set of durations alone, each a duration or a range from " <>
@@ -90,12 +122,25 @@ defmodule Tempo.Iso8601.Parser do
 
   # A set of durations: each member a duration, or a range from one to
   # another.
-  defp durations?([_ | _] = members), do: Enum.all?(members, &duration_or_range_of_them?/1)
-  defp durations?(_no_members), do: false
+  defp durations?([_ | _] = members) do
+    Enum.all?(members, &duration_or_range_of_them?/1)
+  end
 
-  defp duration_or_range_of_them?({:duration, _units}), do: true
-  defp duration_or_range_of_them?({:range, [{:duration, _}, {:duration, _}]}), do: true
-  defp duration_or_range_of_them?(_member), do: false
+  defp durations?(_no_members) do
+    false
+  end
+
+  defp duration_or_range_of_them?({:duration, _units}) do
+    true
+  end
+
+  defp duration_or_range_of_them?({:range, [{:duration, _}, {:duration, _}]}) do
+    true
+  end
+
+  defp duration_or_range_of_them?(_member) do
+    false
+  end
 
   defp no_range_of_durations_reason({:range, [{:duration, first}, {:duration, last}]}) do
     case durations_between(first, last) do
@@ -104,7 +149,9 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
-  defp no_range_of_durations_reason(_duration), do: nil
+  defp no_range_of_durations_reason(_duration) do
+    nil
+  end
 
   # A range of durations is each duration from its first to its last, which
   # differ in their last unit alone: `{P1M2S..P1M5S}` is `P1M2S`, `P1M3S`,
@@ -129,10 +176,14 @@ defmodule Tempo.Iso8601.Parser do
   # A duration is written with no time shift, and so is a set of them.
   defp shifted_durations([{tag, members}, {:time_shift, _shift} | _rest])
        when tag in [:all_of, :one_of] and is_list(members) do
-    if durations?(members), do: "A duration takes no time shift, and nor does a set of them"
+    if durations?(members) do
+      "A duration takes no time shift, and nor does a set of them"
+    end
   end
 
-  defp shifted_durations(_tokens), do: nil
+  defp shifted_durations(_tokens) do
+    nil
+  end
 
   defp interval_in_range_reason do
     "An interval is not an end of a range in a set: a range runs from one date or time " <>
@@ -146,23 +197,42 @@ defmodule Tempo.Iso8601.Parser do
   # its last a step of -1, and a range that counts from the start to the end
   # (`{1..-1}D`) is not backwards: its ends are counted from different ends,
   # and are compared once they are counted (`Tempo.UnitValues.resolve/2`).
-  defp backwards_range(%Range{} = range), do: if(backwards?(range), do: range)
+  defp backwards_range(%Range{} = range) do
+    if backwards?(range) do
+      range
+    end
+  end
 
   defp backwards_range({:range, [{_from_tag, from}, {_to_tag, to}]} = range)
        when is_list(from) and is_list(to) do
-    if backwards_values?(from, to), do: range, else: backwards_range([from, to])
+    if backwards_values?(from, to) do
+      range
+    else
+      backwards_range([from, to])
+    end
   end
 
-  defp backwards_range(tokens) when is_list(tokens),
-    do: Enum.find_value(tokens, &backwards_range/1)
+  defp backwards_range(tokens) when is_list(tokens) do
+    Enum.find_value(tokens, &backwards_range/1)
+  end
 
-  defp backwards_range(token) when is_tuple(token),
-    do: token |> Tuple.to_list() |> backwards_range()
+  defp backwards_range(token) when is_tuple(token) do
+    token
+    |> Tuple.to_list()
+    |> backwards_range()
+  end
 
-  defp backwards_range(_token), do: nil
+  defp backwards_range(_token) do
+    nil
+  end
 
-  defp backwards?(%Range{step: step}) when step < 0, do: true
-  defp backwards?(%Range{first: first, last: last}), do: first > last and first < 0 == last < 0
+  defp backwards?(%Range{step: step}) when step < 0 do
+    true
+  end
+
+  defp backwards?(%Range{first: first, last: last}) do
+    first > last and first < 0 == last < 0
+  end
 
   # Two values of the same units, each one whole number, are compared unit
   # by unit from the coarsest.
@@ -199,20 +269,30 @@ defmodule Tempo.Iso8601.Parser do
   # A window is held to the units a duration measures exactly: a week is
   # seven days, a day twenty-four hours. One written in months or years is as
   # long as the calendar makes it where it starts, and is not judged here.
-  defp short_window({:selection, parts}) when is_list(parts),
-    do: window_reason(parts) || short_window(parts)
+  defp short_window({:selection, parts}) when is_list(parts) do
+    window_reason(parts) || short_window(parts)
+  end
 
-  defp short_window(tokens) when is_list(tokens), do: Enum.find_value(tokens, &short_window/1)
+  defp short_window(tokens) when is_list(tokens) do
+    Enum.find_value(tokens, &short_window/1)
+  end
 
-  defp short_window(token) when is_tuple(token),
-    do: token |> Tuple.to_list() |> short_window()
+  defp short_window(token) when is_tuple(token) do
+    token
+    |> Tuple.to_list()
+    |> short_window()
+  end
 
-  defp short_window(_token), do: nil
+  defp short_window(_token) do
+    nil
+  end
 
   defp window_reason(parts) do
     case Enum.split_while(parts, &(not match?({:interval, _window}, &1))) do
       {_before, [{:interval, window} | within]} when is_list(window) ->
-        window |> List.keyfind(:duration, 0) |> window_shortfall(within)
+        window
+        |> List.keyfind(:duration, 0)
+        |> window_shortfall(within)
 
       _no_window ->
         nil
@@ -222,12 +302,16 @@ defmodule Tempo.Iso8601.Parser do
   defp window_shortfall({:duration, time}, within) when is_list(time) do
     amounts = for {unit, amount} <- time, unit != :direction, do: {unit, amount}
 
-    if Enum.all?(amounts, fn {_unit, amount} -> amount == 0 end),
-      do: no_length_reason(amounts),
-      else: shorter_reason(amounts, measured_seconds(amounts), within)
+    if Enum.all?(amounts, fn {_unit, amount} -> amount == 0 end) do
+      no_length_reason(amounts)
+    else
+      shorter_reason(amounts, measured_seconds(amounts), within)
+    end
   end
 
-  defp window_shortfall(_no_duration, _within), do: nil
+  defp window_shortfall(_no_duration, _within) do
+    nil
+  end
 
   # A week with no calendar to ask is the notation's, of as many days as
   # that calendar counts in one.
@@ -263,7 +347,9 @@ defmodule Tempo.Iso8601.Parser do
     end)
   end
 
-  defp shorter_reason(_amounts, nil, _within), do: nil
+  defp shorter_reason(_amounts, nil, _within) do
+    nil
+  end
 
   defp shorter_reason(amounts, seconds, within) do
     Enum.find_value(within, fn
@@ -272,7 +358,9 @@ defmodule Tempo.Iso8601.Parser do
     end)
   end
 
-  defp shorter_than(_amounts, _seconds, nil), do: nil
+  defp shorter_than(_amounts, _seconds, nil) do
+    nil
+  end
 
   # A window that runs backward is as long as one that runs forward, however
   # its direction is written (`-P7D`, `P-7D`).
@@ -284,8 +372,13 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
-  defp one(:hour), do: "an hour"
-  defp one(unit), do: "a #{unit}"
+  defp one(:hour) do
+    "an hour"
+  end
+
+  defp one(unit) do
+    "a #{unit}"
+  end
 
   defp no_length_reason(amounts) do
     "A selection's window of #{duration_words(amounts)} has no length: each date selected " <>
@@ -324,8 +417,13 @@ defmodule Tempo.Iso8601.Parser do
   # the coarsest one present.
   @resolution_order [:year, :month, :day, :hour, :minute, :second]
 
-  defp pop_leading_qualification([{:qualification, q} | rest]), do: {q, rest}
-  defp pop_leading_qualification(tokens), do: {nil, tokens}
+  defp pop_leading_qualification([{:qualification, q} | rest]) do
+    {q, rest}
+  end
+
+  defp pop_leading_qualification(tokens) do
+    {nil, tokens}
+  end
 
   defp pop_trailing_qualification(tokens) when is_list(tokens) do
     case List.last(tokens) do
@@ -334,15 +432,20 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
-  defp pop_trailing_qualification(tokens), do: {nil, tokens}
+  defp pop_trailing_qualification(tokens) do
+    {nil, tokens}
+  end
 
   # Complete qualification (§8.2.1) — the whole expression, which is each
   # of its components. For an interval it attaches to both endpoints so
   # every sub-value carries it.
-  defp apply_complete_qualification(result, nil), do: result
+  defp apply_complete_qualification(result, nil) do
+    result
+  end
 
-  defp apply_complete_qualification(%Tempo{} = tempo, qualification),
-    do: Qualification.with_complete(tempo, qualification)
+  defp apply_complete_qualification(%Tempo{} = tempo, qualification) do
+    Qualification.with_complete(tempo, qualification)
+  end
 
   defp apply_complete_qualification(%Tempo.Interval{} = interval, qualification) do
     %{
@@ -365,15 +468,21 @@ defmodule Tempo.Iso8601.Parser do
     }
   end
 
-  defp apply_complete_qualification(%Tempo.Duration{} = duration, _qualification), do: duration
+  defp apply_complete_qualification(%Tempo.Duration{} = duration, _qualification) do
+    duration
+  end
 
-  defp apply_complete_qualification(other, _qualification), do: other
+  defp apply_complete_qualification(other, _qualification) do
+    other
+  end
 
   # Individual qualification of the leftmost (coarsest) component
   # present (§8.2.3). Only a single date/time value carries components;
   # for intervals and sets the leading qualifier falls back to the
   # whole-expression behaviour.
-  defp apply_leading_qualification(result, nil), do: result
+  defp apply_leading_qualification(result, nil) do
+    result
+  end
 
   defp apply_leading_qualification(%Tempo{time: time} = tempo, qualification)
        when is_list(time) do
@@ -436,8 +545,9 @@ defmodule Tempo.Iso8601.Parser do
   # A time shift written after a set is the shift of each member that has
   # none, as a set's suffix is each member's that has none, and as a shift
   # after a set in a unit is each value's (decided 2026-10-07).
-  def parse([{type, members}, {:time_shift, shift}]) when type in [:all_of, :one_of],
-    do: parse([{type, Enum.map(members, &at_the_shift(&1, shift))}])
+  def parse([{type, members}, {:time_shift, shift}]) when type in [:all_of, :one_of] do
+    parse([{type, Enum.map(members, &at_the_shift(&1, shift))}])
+  end
 
   def parse(all_of: tokens) do
     tokens
@@ -470,20 +580,26 @@ defmodule Tempo.Iso8601.Parser do
 
   defp at_the_shift({tag, units}, shift)
        when tag in [:date, :datetime, :time_of_day] and is_list(units) do
-    if Keyword.has_key?(units, :time_shift),
-      do: {tag, units},
-      else: {tag, shifted_before_its_suffix(units, shift)}
+    if Keyword.has_key?(units, :time_shift) do
+      {tag, units}
+    else
+      {tag, shifted_before_its_suffix(units, shift)}
+    end
   end
 
   defp at_the_shift({tag, parts}, shift)
-       when tag in [:range, :interval, :except] and is_list(parts),
-       do: {tag, Enum.map(parts, &at_the_shift(&1, shift))}
+       when tag in [:range, :interval, :except] and is_list(parts) do
+    {tag, Enum.map(parts, &at_the_shift(&1, shift))}
+  end
 
   # An end of a range open at its other end is its units alone.
-  defp at_the_shift([{unit, _value} | _units] = units, shift) when is_atom(unit),
-    do: shifted_before_its_suffix(units, shift)
+  defp at_the_shift([{unit, _value} | _units] = units, shift) when is_atom(unit) do
+    shifted_before_its_suffix(units, shift)
+  end
 
-  defp at_the_shift(other, _shift), do: other
+  defp at_the_shift(other, _shift) do
+    other
+  end
 
   # A value's shift is written before its suffix, and is read there.
   defp shifted_before_its_suffix(units, shift) do
@@ -495,7 +611,9 @@ defmodule Tempo.Iso8601.Parser do
     Enum.any?(tokens, &match?({_component, {:one_of, _choices}}, &1))
   end
 
-  defp has_one_of_component?(_tokens), do: false
+  defp has_one_of_component?(_tokens) do
+    false
+  end
 
   # Cartesian product of every component's choices. A `{:one_of, …}`
   # component contributes its alternatives (ranges expanded to their
@@ -512,8 +630,13 @@ defmodule Tempo.Iso8601.Parser do
     end)
   end
 
-  defp expand_one_of_choice(%Range{} = range), do: Enum.to_list(range)
-  defp expand_one_of_choice(value), do: [value]
+  defp expand_one_of_choice(%Range{} = range) do
+    Enum.to_list(range)
+  end
+
+  defp expand_one_of_choice(value) do
+    [value]
+  end
 
   defp interval_has_one_of?(tokens) do
     Enum.any?(tokens, fn
@@ -569,7 +692,9 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   # A member of a set of durations is the duration it is alone.
-  defp parse_set_member({:duration, tokens}), do: parse(duration: tokens)
+  defp parse_set_member({:duration, tokens}) do
+    parse(duration: tokens)
+  end
 
   # An interval member keeps its tag so `Tempo.Set.new/3` builds it with
   # `build_interval/1` rather than as a plain `Tempo`.
@@ -677,7 +802,10 @@ defmodule Tempo.Iso8601.Parser do
       raise ParseError,
             "selection #{Calendars.inspect(selection)} is finer than the following group #{Calendars.inspect(group)}"
     else
-      selection = parse_date(selection) |> reduce_list()
+      selection =
+        parse_date(selection)
+        |> reduce_list()
+
       [{:selection, selection} | parse_date([{:group, group} | rest])]
     end
   end
@@ -759,7 +887,10 @@ defmodule Tempo.Iso8601.Parser do
       raise ParseError,
             "#{Calendars.inspect(unit_2)} is greater than the selection max of #{Calendars.inspect(max)}"
     else
-      selection = parse_date(selection) |> reduce_list()
+      selection =
+        parse_date(selection)
+        |> reduce_list()
+
       [{:selection, selection} | parse_date([{unit_2, value_2} | rest])]
     end
   end
@@ -770,7 +901,10 @@ defmodule Tempo.Iso8601.Parser do
             "Selection time units must be in decreasing time scale order. Found #{Calendars.inspect(selection)}."
     end
 
-    selection = parse_date(selection) |> reduce_list()
+    selection =
+      parse_date(selection)
+      |> reduce_list()
+
     [{:selection, selection} | parse_date(rest)]
   end
 
@@ -795,7 +929,12 @@ defmodule Tempo.Iso8601.Parser do
   # construction out of `Tempo.Interval`, avoiding a module cycle.
   def parse_date([{:domain_set, members} | rest]) do
     {filter, plain} = extract_domain_filter(members)
-    domain = plain |> parse_set() |> Tempo.Set.new(:all)
+
+    domain =
+      plain
+      |> parse_set()
+      |> Tempo.Set.new(:all)
+
     [{:domain, %{domain | filter: filter}} | parse_date(rest)]
   end
 
@@ -907,19 +1046,28 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   defp alternative_format_component?({unit, value})
-       when unit in [:year, :month, :day, :hour, :minute, :second] and is_integer(value),
-       do: true
+       when unit in [:year, :month, :day, :hour, :minute, :second] and is_integer(value) do
+    true
+  end
 
   defp alternative_format_component?({:fraction, {digits, precision}})
-       when is_integer(digits) and is_integer(precision),
-       do: true
+       when is_integer(digits) and is_integer(precision) do
+    true
+  end
 
-  defp alternative_format_component?(_component), do: false
+  defp alternative_format_component?(_component) do
+    false
+  end
 
   # An ordinal date's day of the year is a number of days in a duration
   # (`P0002-178T22:33:55` is `P2Y178DT22H33M55S`).
-  defp duration_days({:day_of_year, days}), do: {:day, days}
-  defp duration_days(component), do: component
+  defp duration_days({:day_of_year, days}) do
+    {:day, days}
+  end
+
+  defp duration_days(component) do
+    component
+  end
 
   # A fractional second is the second the designator form writes
   # (`PT55.5S`), so both forms build the same duration.
@@ -942,15 +1090,28 @@ defmodule Tempo.Iso8601.Parser do
   # was held as `{:mask, [0, 6]}`, so the value was not the one the extended
   # format writes (`2026-06-XX`) and did not read back from its own text.
   defp mask_or_number([:negative | digits] = mask) do
-    if all_digits?(digits), do: -Integer.undigits(digits), else: {:mask, reduce_sublists(mask)}
+    if all_digits?(digits) do
+      -Integer.undigits(digits)
+    else
+      {:mask, reduce_sublists(mask)}
+    end
   end
 
   defp mask_or_number(mask) do
-    if all_digits?(mask), do: Integer.undigits(mask), else: {:mask, reduce_sublists(mask)}
+    if all_digits?(mask) do
+      Integer.undigits(mask)
+    else
+      {:mask, reduce_sublists(mask)}
+    end
   end
 
-  defp all_digits?([_digit | _rest] = digits), do: Enum.all?(digits, &(&1 in 0..9))
-  defp all_digits?([]), do: false
+  defp all_digits?([_digit | _rest] = digits) do
+    Enum.all?(digits, &(&1 in 0..9))
+  end
+
+  defp all_digits?([]) do
+    false
+  end
 
   def reduce_sublists(list) do
     Enum.map(list, fn
@@ -960,7 +1121,11 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   def group_min_max(group) do
-    group = Keyword.delete(group, :nth) |> Keyword.delete(:all_of) |> Keyword.delete(:one_of)
+    group =
+      Keyword.delete(group, :nth)
+      |> Keyword.delete(:all_of)
+      |> Keyword.delete(:one_of)
+
     sorted = Unit.sort(group)
     Tempo.unit_min_max(sorted)
   end
@@ -1006,31 +1171,54 @@ defmodule Tempo.Iso8601.Parser do
   # signs of its years; any other is `reduce_list/1`'s to order.
   defp reduce_members(:year, [first | _rest] = years)
        when is_integer(first) or is_struct(first, Range) do
-    if Enum.all?(years, &number_or_range?/1),
-      do: years |> Enum.sort_by(&first_value/1) |> consolidate_ranges(),
-      else: reduce_list(years)
+    if Enum.all?(years, &number_or_range?/1) do
+      years
+      |> Enum.sort_by(&first_value/1)
+      |> consolidate_ranges()
+    else
+      reduce_list(years)
+    end
   end
 
-  defp reduce_members(_component, members), do: reduce_list(members)
+  defp reduce_members(_component, members) do
+    reduce_list(members)
+  end
 
-  defp number_or_range?(member), do: is_integer(member) or is_struct(member, Range)
+  defp number_or_range?(member) do
+    is_integer(member) or is_struct(member, Range)
+  end
 
-  defp first_value(%Range{first: first}), do: first
-  defp first_value(number), do: number
+  defp first_value(%Range{first: first}) do
+    first
+  end
+
+  defp first_value(number) do
+    number
+  end
 
   # A list is put in order where each member is a whole number or a range
   # of them. One that holds unspecified digits, significant digits or a
   # margin of error (`{2020,19XX}Y`, `{1950S2,1960}Y`) has no one order, and
   # is left as it is written: ordering it raised.
   defp sort_unless_signed(list) do
-    if Enum.all?(list, &number_or_range?/1) and not Enum.any?(list, &signed_member?/1),
-      do: Enum.sort_by(list, &first_value/1),
-      else: list
+    if Enum.all?(list, &number_or_range?/1) and not Enum.any?(list, &signed_member?/1) do
+      Enum.sort_by(list, &first_value/1)
+    else
+      list
+    end
   end
 
-  defp signed_member?(member) when is_integer(member), do: member < 0
-  defp signed_member?(%Range{first: first, last: last}), do: first < 0 or last < 0
-  defp signed_member?(_other), do: false
+  defp signed_member?(member) when is_integer(member) do
+    member < 0
+  end
+
+  defp signed_member?(%Range{first: first, last: last}) do
+    first < 0 or last < 0
+  end
+
+  defp signed_member?(_other) do
+    false
+  end
 
   # A repeat-rule selection built from RRULE/cron `BY…` parts holds raw integer
   # lists (`BYDAY=MO,TU,WE,TH,FR` → `[1, 2, 3, 4, 5]`). Parsing the same
@@ -1050,9 +1238,11 @@ defmodule Tempo.Iso8601.Parser do
   # is a "last day" sentinel, not a value to reorder), and the common weekday
   # and month lists are written ascending already.
   defp consolidate_list_value(value) do
-    if Enum.all?(value, &is_integer/1),
-      do: consolidate_ranges(value),
-      else: value
+    if Enum.all?(value, &is_integer/1) do
+      consolidate_ranges(value)
+    else
+      value
+    end
   end
 
   # Consolidate a list of whole numbers and ranges: a member another holds
@@ -1077,8 +1267,13 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
-  defp join_neighbours([]), do: []
-  defp join_neighbours([member]), do: [member]
+  defp join_neighbours([]) do
+    []
+  end
+
+  defp join_neighbours([member]) do
+    [member]
+  end
 
   defp join_neighbours([first, second | rest]) do
     case joined(first, second) do
@@ -1087,12 +1282,16 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
-  defp joined(member, member), do: {:ok, member}
+  defp joined(member, member) do
+    {:ok, member}
+  end
 
   defp joined(first, second) when is_integer(first) and is_integer(second) do
-    if first + 1 == second and same_end?(first, second),
-      do: {:ok, first..second},
-      else: :apart
+    if first + 1 == second and same_end?(first, second) do
+      {:ok, first..second}
+    else
+      :apart
+    end
   end
 
   defp joined(number, %Range{first: first} = range) when is_integer(number) do
@@ -1112,12 +1311,16 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   defp joined(%Range{} = first, %Range{} = second) do
-    if by_ones?(first) and by_ones?(second) and same_end?(first.first, second.first),
-      do: joined_ranges(first, second),
-      else: :apart
+    if by_ones?(first) and by_ones?(second) and same_end?(first.first, second.first) do
+      joined_ranges(first, second)
+    else
+      :apart
+    end
   end
 
-  defp joined(_first, _second), do: :apart
+  defp joined(_first, _second) do
+    :apart
+  end
 
   # Two ranges that count up by one from the same end: one that holds the
   # other, or the second beginning within the first or just after it.
@@ -1141,18 +1344,24 @@ defmodule Tempo.Iso8601.Parser do
   # end: a range from the start to the end (`{1..-1}`) holds values only
   # once it is counted. A range that counts down names nothing
   # (`Tempo.UnitValues.named/2`), and so holds nothing.
-  defp held?(number, %Range{first: first, last: last, step: step} = range),
-    do: step > 0 and same_end?(first, last) and same_end?(number, first) and number in range
+  defp held?(number, %Range{first: first, last: last, step: step} = range) do
+    step > 0 and same_end?(first, last) and same_end?(number, first) and number in range
+  end
 
   # The second is the value after the first, counted from the same end.
-  defp runs_on?(first, second), do: first + 1 == second and same_end?(first, second)
+  defp runs_on?(first, second) do
+    first + 1 == second and same_end?(first, second)
+  end
 
   # Both count from the start, or both from the end.
-  defp same_end?(first, second), do: first < 0 == second < 0
+  defp same_end?(first, second) do
+    first < 0 == second < 0
+  end
 
   # A range from one value up to another by ones, both counted from one end.
-  defp by_ones?(%Range{first: first, last: last, step: step}),
-    do: step == 1 and first <= last and same_end?(first, last)
+  defp by_ones?(%Range{first: first, last: last, step: step}) do
+    step == 1 and first <= last and same_end?(first, last)
+  end
 
   # Ranges must have the same units. One written backwards never reaches
   # here (`backwards_range/1`). A qualifier of an end is no unit of it:
@@ -1168,7 +1377,9 @@ defmodule Tempo.Iso8601.Parser do
     end
   end
 
-  defp units_written(tokens), do: Keyword.keys(tokens) -- @qualifiers
+  defp units_written(tokens) do
+    Keyword.keys(tokens) -- @qualifiers
+  end
 
   # If the duration direction is negative, negate all the units —
   # shape-aware, since a fractional second reduces to a
@@ -1183,13 +1394,17 @@ defmodule Tempo.Iso8601.Parser do
     other
   end
 
-  defp negate_duration_component({:second, {:signed_fraction, sign, second, fraction}}),
-    do: {:second, {:signed_fraction, -sign, second, fraction}}
+  defp negate_duration_component({:second, {:signed_fraction, sign, second, fraction}}) do
+    {:second, {:signed_fraction, -sign, second, fraction}}
+  end
 
-  defp negate_duration_component({:microsecond, {value, precision}}),
-    do: {:microsecond, {-value, precision}}
+  defp negate_duration_component({:microsecond, {value, precision}}) do
+    {:microsecond, {-value, precision}}
+  end
 
-  defp negate_duration_component({unit, value}) when is_number(value), do: {unit, -value}
+  defp negate_duration_component({unit, value}) when is_number(value) do
+    {unit, -value}
+  end
 
   defp put_calendar(%Tempo{} = tempo, calendar) do
     %{tempo | calendar: calendar}

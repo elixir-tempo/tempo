@@ -34,16 +34,21 @@ defmodule Tempo.SetBesideAGapTest do
 
   # Whether the clock skips the whole of a reading: a minute it never
   # shows, an hour whose first and last second it never shows, a day whose.
-  defp skipped?(zone, date, nil, nil),
-    do: gap?(zone, date, ~T[00:00:00]) and gap?(zone, date, ~T[23:59:59])
+  defp skipped?(zone, date, nil, nil) do
+    gap?(zone, date, ~T[00:00:00]) and gap?(zone, date, ~T[23:59:59])
+  end
 
-  defp skipped?(zone, date, hour, nil),
-    do: gap?(zone, date, Time.new!(hour, 0, 0)) and gap?(zone, date, Time.new!(hour, 59, 59))
+  defp skipped?(zone, date, hour, nil) do
+    gap?(zone, date, Time.new!(hour, 0, 0)) and gap?(zone, date, Time.new!(hour, 59, 59))
+  end
 
-  defp skipped?(zone, date, hour, minute), do: gap?(zone, date, Time.new!(hour, minute, 0))
+  defp skipped?(zone, date, hour, minute) do
+    gap?(zone, date, Time.new!(hour, minute, 0))
+  end
 
-  defp gap?(zone, date, time),
-    do: match?({:gap, _before, _after}, DateTime.new(date, time, zone))
+  defp gap?(zone, date, time) do
+    match?({:gap, _before, _after}, DateTime.new(date, time, zone))
+  end
 
   # The readings a value names: one for each value of each of its sets.
   defp readings(%{date: date, days: days, hours: hours, minutes: minutes}) do
@@ -56,21 +61,43 @@ defmodule Tempo.SetBesideAGapTest do
 
   defp text(%{zone: zone, date: date, days: days, hours: hours, minutes: minutes}) do
     "#{date.year}Y#{date.month}M#{set(days)}D" <>
-      if(hours, do: "T#{set(hours)}H", else: "") <>
-      if(minutes, do: "#{set(minutes)}M", else: "") <> "[#{zone}]"
+      if hours do
+        "T#{set(hours)}H"
+      else
+        ""
+      end <>
+      if minutes do
+        "#{set(minutes)}M"
+      else
+        ""
+      end <> "[#{zone}]"
   end
 
-  defp set([value]), do: "#{value}"
-  defp set(values), do: "{" <> Enum.join(values, ",") <> "}"
+  defp set([value]) do
+    "#{value}"
+  end
+
+  defp set(values) do
+    "{" <> Enum.join(values, ",") <> "}"
+  end
 
   # Values beside a gap: its day with the days about it, its hour with the
   # hours about it, and minutes of the hour.
   defp beside({zone, %Date{day: day} = date, hour}) do
-    hours = fn values -> values |> Enum.filter(&(&1 in 0..23)) |> Enum.uniq() end
+    hours = fn values ->
+      values
+      |> Enum.filter(&(&1 in 0..23))
+      |> Enum.uniq()
+    end
 
     for days <- [[day], [day - 1, day], [day - 2, day - 1], [day, day + 1], [day - 1, day + 1]],
         hours <- [nil, [hour], hours.([hour - 1, hour]), hours.([hour - 1, hour + 1])],
-        minutes <- if(hours, do: [nil, [0, 30], [15, 45], [59]], else: [nil]) do
+        minutes <-
+          (if hours do
+             [nil, [0, 30], [15, 45], [59]]
+           else
+             [nil]
+           end) do
       %{zone: zone, date: date, days: days, hours: hours, minutes: minutes}
     end
   end
@@ -93,7 +120,12 @@ defmodule Tempo.SetBesideAGapTest do
             end
 
           assert {text(value), read} ==
-                   {text(value), if(skipped == [], do: :read, else: :refused)}
+                   {text(value),
+                    if skipped == [] do
+                      :read
+                    else
+                      :refused
+                    end}
 
           read
         end
@@ -255,11 +287,17 @@ defmodule Tempo.SetBesideAGapTest do
     end
   end
 
-  defp minutes_shown(zone, date, hour),
-    do: for(minute <- 0..59, not skipped?(zone, date, hour, minute), do: minute)
+  defp minutes_shown(zone, date, hour) do
+    for(minute <- 0..59, not skipped?(zone, date, hour, minute), do: minute)
+  end
 
-  defp each(value) when is_integer(value), do: [value]
-  defp each(%Range{} = values), do: Enum.to_list(values)
+  defp each(value) when is_integer(value) do
+    [value]
+  end
+
+  defp each(%Range{} = values) do
+    Enum.to_list(values)
+  end
 
   defp hour_and_minute(%Interval{} = member) do
     time = Interval.from(member).time
@@ -267,8 +305,9 @@ defmodule Tempo.SetBesideAGapTest do
   end
 
   # A date and an hour in a zone, or none where the clock skips the hour.
-  defp at_hour(date, hour, zone),
-    do: shown("#{date}T#{String.pad_leading("#{hour}", 2, "0")}[#{zone}]")
+  defp at_hour(date, hour, zone) do
+    shown("#{date}T#{String.pad_leading("#{hour}", 2, "0")}[#{zone}]")
+  end
 
   # A value read, or none where the clock skips the whole of it.
   defp shown(text) do

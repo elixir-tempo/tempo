@@ -15,24 +15,41 @@ defmodule Tempo.IntervalSet.Backend.List do
   use Tempo.IntervalSet.Backend
 
   @impl true
-  def from_list(intervals, _options), do: intervals
+  def from_list(intervals, _options) do
+    intervals
+  end
 
   @impl true
-  def to_list(state), do: state
+  def to_list(state) do
+    state
+  end
 
   @impl true
-  def walk(state), do: state
+  def walk(state) do
+    state
+  end
 
   @impl true
-  def bounded?(_state), do: true
+  def bounded?(_state) do
+    true
+  end
 
   @impl true
-  def count(state), do: length(state)
+  def count(state) do
+    length(state)
+  end
 
   @impl true
-  def empty?(state), do: state == []
+  def empty?(state) do
+    state == []
+  end
 
   @impl true
-  def first([]), do: nil
-  def first([first | _rest]), do: first
+  def first([]) do
+    nil
+  end
+
+  def first([first | _rest]) do
+    first
+  end
 end

@@ -15,7 +15,9 @@ defmodule Tempo.IntervalOfGroupsWalkTest do
 
   import Tempo.Sigils
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   # The months of 2026 from one up to another, as `Calendar.strftime/2`
   # writes a year and a month.

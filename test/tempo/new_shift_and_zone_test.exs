@@ -70,23 +70,30 @@ defmodule Tempo.NewShiftAndZoneTest do
     end
   end
 
-  defp offsets_at(%Date{} = date, zone),
-    do: offsets_at(NaiveDateTime.new!(date, ~T[00:00:00]), zone)
+  defp offsets_at(%Date{} = date, zone) do
+    offsets_at(NaiveDateTime.new!(date, ~T[00:00:00]), zone)
+  end
 
-  defp offset(%DateTime{utc_offset: utc_offset, std_offset: std_offset}),
-    do: utc_offset + std_offset
+  defp offset(%DateTime{utc_offset: utc_offset, std_offset: std_offset}) do
+    utc_offset + std_offset
+  end
 
   # What is to be said of a shift beside a zone that is at these offsets.
   defp to_say(shift, seconds, zone, offsets) do
-    if seconds in offsets,
-      do: {:built, shift, zone},
-      else: {:refused, zone, seconds, Enum.sort(offsets)}
+    if seconds in offsets do
+      {:built, shift, zone}
+    else
+      {:refused, zone, seconds, Enum.sort(offsets)}
+    end
   end
 
-  defp said({:ok, %Tempo{shift: shift, extended: %{zone_id: zone}}}), do: {:built, shift, zone}
+  defp said({:ok, %Tempo{shift: shift, extended: %{zone_id: zone}}}) do
+    {:built, shift, zone}
+  end
 
-  defp said({:error, %ZoneOffsetMismatchError{} = error}),
-    do: {:refused, error.zone_id, error.stated_offset, Enum.sort(error.zone_offsets)}
+  defp said({:error, %ZoneOffsetMismatchError{} = error}) do
+    {:refused, error.zone_id, error.stated_offset, Enum.sort(error.zone_offsets)}
+  end
 
   defp at(%NaiveDateTime{} = reading) do
     [

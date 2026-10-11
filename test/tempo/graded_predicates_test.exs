@@ -25,14 +25,26 @@ defmodule Tempo.GradedPredicatesTest do
 
   ## The measure
 
-  defp holds?(:overlaps, {a_from, a_to}, {b_from, b_to}), do: a_from < b_to and b_from < a_to
-  defp holds?(:within, {a_from, a_to}, {b_from, b_to}), do: b_from <= a_from and a_to <= b_to
-  defp holds?(:before, {_a_from, a_to}, {b_from, _b_to}), do: a_to <= b_from
-  defp holds?(:after, {a_from, _a_to}, {_b_from, b_to}), do: a_from >= b_to
+  defp holds?(:overlaps, {a_from, a_to}, {b_from, b_to}) do
+    a_from < b_to and b_from < a_to
+  end
+
+  defp holds?(:within, {a_from, a_to}, {b_from, b_to}) do
+    b_from <= a_from and a_to <= b_to
+  end
+
+  defp holds?(:before, {_a_from, a_to}, {b_from, _b_to}) do
+    a_to <= b_from
+  end
+
+  defp holds?(:after, {a_from, _a_to}, {_b_from, b_to}) do
+    a_from >= b_to
+  end
 
   # A year with a margin, placed: the year it is, a year long.
-  defp placed({year, margin}),
-    do: for(placed <- (year - margin)..(year + margin), do: {placed, placed + 1})
+  defp placed({year, margin}) do
+    for(placed <- (year - margin)..(year + margin), do: {placed, placed + 1})
+  end
 
   # A span of years with a margin at each end, placed: each start with each
   # end that is after it.
@@ -43,13 +55,21 @@ defmodule Tempo.GradedPredicatesTest do
         do: {start, stop}
   end
 
-  defp year(year, 0), do: "#{year}"
-  defp year(year, margin), do: "#{year}±#{margin}Y"
+  defp year(year, 0) do
+    "#{year}"
+  end
 
-  defp written({year, margin}), do: year(year, margin)
+  defp year(year, margin) do
+    "#{year}±#{margin}Y"
+  end
 
-  defp written({from, from_margin, to, to_margin}),
-    do: "#{year(from, from_margin)}/#{year(to, to_margin)}"
+  defp written({year, margin}) do
+    year(year, margin)
+  end
+
+  defp written({from, from_margin, to, to_margin}) do
+    "#{year(from, from_margin)}/#{year(to, to_margin)}"
+  end
 
   # Whether a predicate holds for every placement, and for some.
   defp measured(concept, a, b) do

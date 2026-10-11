@@ -62,7 +62,9 @@ defmodule Tempo.NowTest do
     test "returns a floating day-resolution Tempo" do
       Test.put(~U[2026-06-15 14:30:00Z])
 
-      assert Tempo.utc_today() |> Tempo.resolution() == {:day, 1}
+      assert Tempo.utc_today()
+             |> Tempo.resolution() == {:day, 1}
+
       assert Tempo.utc_today().time == [year: 2026, month: 6, day: 15]
       assert Tempo.floating?(Tempo.utc_today())
     end

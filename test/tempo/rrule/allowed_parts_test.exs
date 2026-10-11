@@ -50,7 +50,9 @@ defmodule Tempo.RRule.AllowedPartsTest do
     {"T9H", "BYHOUR", "BYHOUR=9", []}
   ]
 
-  defp written(text), do: RRule.to_string(Tempo.from_iso8601!(text))
+  defp written(text) do
+    RRule.to_string(Tempo.from_iso8601!(text))
+  end
 
   describe "a part RFC 5545 forbids at a frequency" do
     test "is an error that names the part and the frequency, and is written at every other" do

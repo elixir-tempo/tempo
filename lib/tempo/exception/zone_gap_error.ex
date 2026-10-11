@@ -40,6 +40,11 @@ defmodule Tempo.ZoneGapError do
     "Wall time #{wall} does not exist in #{Calendars.inspect(zone)}"
   end
 
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
-  def message(%__MODULE__{}), do: "Wall time does not exist in the given zone"
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
+
+  def message(%__MODULE__{}) do
+    "Wall time does not exist in the given zone"
+  end
 end

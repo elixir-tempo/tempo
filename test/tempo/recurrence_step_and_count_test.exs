@@ -21,10 +21,13 @@ defmodule Tempo.RecurrenceStepAndCountTest do
   alias Tempo.RRule.Rule
   alias Tempo.Test.Engine.RRule.Expander
 
-  defp starts({:ok, %IntervalSet{} = set}),
-    do: Enum.map(IntervalSet.members(set), &Interval.from/1)
+  defp starts({:ok, %IntervalSet{} = set}) do
+    Enum.map(IntervalSet.members(set), &Interval.from/1)
+  end
 
-  defp starts(other), do: other
+  defp starts(other) do
+    other
+  end
 
   describe "an RRULE" do
     test "that steps by nothing or backwards is refused where it is read" do

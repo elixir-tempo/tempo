@@ -19,23 +19,30 @@ defmodule Tempo.IntervalShiftTest do
 
   ## The measure
 
-  defp seconds(%Date{} = date), do: seconds(NaiveDateTime.new!(date, ~T[00:00:00]))
+  defp seconds(%Date{} = date) do
+    seconds(NaiveDateTime.new!(date, ~T[00:00:00]))
+  end
 
-  defp seconds(%NaiveDateTime{} = moment),
-    do: moment |> NaiveDateTime.to_gregorian_seconds() |> elem(0)
+  defp seconds(%NaiveDateTime{} = moment) do
+    moment
+    |> NaiveDateTime.to_gregorian_seconds()
+    |> elem(0)
+  end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
-  defp interval(%NaiveDateTime{} = from, %NaiveDateTime{} = to),
-    do:
-      Interval.new!(
-        from: Tempo.from_elixir(from, resolution: :minute),
-        to: Tempo.from_elixir(to, resolution: :minute)
-      )
+  defp interval(%NaiveDateTime{} = from, %NaiveDateTime{} = to) do
+    Interval.new!(
+      from: Tempo.from_elixir(from, resolution: :minute),
+      to: Tempo.from_elixir(to, resolution: :minute)
+    )
+  end
 
-  defp interval(%Date{} = from, %Date{} = to),
-    do: Interval.new!(from: Tempo.from_date(from), to: Tempo.from_date(to))
+  defp interval(%Date{} = from, %Date{} = to) do
+    Interval.new!(from: Tempo.from_date(from), to: Tempo.from_date(to))
+  end
 
   # Pairs of moments a few minutes to a few days apart, some through
   # midnight and through the end of a month.
@@ -86,7 +93,11 @@ defmodule Tempo.IntervalShiftTest do
 
     test "counts its months and years first, and what else it is shifted by after" do
       for {from, to} <- @dates do
-        start = from |> Date.shift(month: 1) |> Date.add(10)
+        start =
+          from
+          |> Date.shift(month: 1)
+          |> Date.add(10)
+
         expected = {seconds(start), seconds(Date.add(start, Date.diff(to, from)))}
 
         assert {from, to, bounds(Tempo.shift(interval(from, to), month: 1, day: 10))} ==
@@ -151,12 +162,22 @@ defmodule Tempo.IntervalShiftTest do
   describe "an interval truncated" do
     # A moment taken down to the start of its unit, and up to the start of
     # the next where it is not on one.
-    defp down(moment, :hour), do: %{moment | minute: 0, second: 0}
-    defp down(moment, :day), do: %{moment | hour: 0, minute: 0, second: 0}
+    defp down(moment, :hour) do
+      %{moment | minute: 0, second: 0}
+    end
+
+    defp down(moment, :day) do
+      %{moment | hour: 0, minute: 0, second: 0}
+    end
 
     defp up(moment, unit) do
       floor = down(moment, unit)
-      if floor == moment, do: floor, else: NaiveDateTime.shift(floor, [{unit, 1}])
+
+      if floor == moment do
+        floor
+      else
+        NaiveDateTime.shift(floor, [{unit, 1}])
+      end
     end
 
     test "is the whole units it touches, its start taken down and its end up" do
@@ -208,12 +229,22 @@ defmodule Tempo.IntervalShiftTest do
   describe "an interval rounded" do
     defp nearest(moment, :hour) do
       floor = %{moment | minute: 0, second: 0}
-      if moment.minute >= 30, do: NaiveDateTime.shift(floor, hour: 1), else: floor
+
+      if moment.minute >= 30 do
+        NaiveDateTime.shift(floor, hour: 1)
+      else
+        floor
+      end
     end
 
     defp nearest(moment, :day) do
       floor = %{moment | hour: 0, minute: 0, second: 0}
-      if moment.hour >= 12, do: NaiveDateTime.shift(floor, day: 1), else: floor
+
+      if moment.hour >= 12 do
+        NaiveDateTime.shift(floor, day: 1)
+      else
+        floor
+      end
     end
 
     test "has each end taken to the unit nearer it" do

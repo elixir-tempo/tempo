@@ -21,7 +21,10 @@ defmodule Tempo.SteppingTest do
 
   defp spans(value) do
     {:ok, %IntervalSet{} = set} = Tempo.to_interval(value)
-    set |> IntervalSet.members() |> Enum.map(&{Interval.from(&1), Interval.to(&1)})
+
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&{Interval.from(&1), Interval.to(&1)})
   end
 
   describe "a day of the week that names no week" do
@@ -163,7 +166,9 @@ defmodule Tempo.SteppingTest do
   end
 
   describe "the last month a year can have, with no year" do
-    defp hebrew(text), do: Tempo.from_iso8601!(text, Hebrew)
+    defp hebrew(text) do
+      Tempo.from_iso8601!(text, Hebrew)
+    end
 
     test "is followed by the first month, as it is in every year that has it" do
       assert span(hebrew("13M")) == {hebrew("13M"), hebrew("1M")}
@@ -405,7 +410,9 @@ defmodule Tempo.SteppingTest do
       {:ok, set} =
         Tempo.to_interval(Tempo.from_iso8601!(text), within: Tempo.from_iso8601!(window))
 
-      set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+      set
+      |> IntervalSet.members()
+      |> Enum.map(&Interval.from/1)
     end
 
     test "starts on the window's day, month or year" do
@@ -450,7 +457,11 @@ defmodule Tempo.SteppingTest do
     test "under a concrete unit after it is the span of each value" do
       assert %IntervalSet{} = set = Tempo.shift(~o"2026YX*M15D", month: 1)
 
-      starts = set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+      starts =
+        set
+        |> IntervalSet.members()
+        |> Enum.map(&Interval.from/1)
+
       assert Enum.count(starts) == 12
       assert hd(starts) == ~o"2026-02-15"
       assert List.last(starts) == ~o"2027-01-15"

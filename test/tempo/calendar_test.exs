@@ -9,7 +9,11 @@ defmodule Tempo.CalendarTest do
     set
     |> IntervalSet.members()
     |> Enum.map(fn interval ->
-      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      {:ok, date} =
+        interval
+        |> Interval.from()
+        |> Tempo.to_date()
+
       {:ok, gregorian} = Date.convert(date, Calendar.ISO)
       Date.to_iso8601(gregorian)
     end)
@@ -117,7 +121,12 @@ defmodule Tempo.CalendarTest do
       # `iso8601` is not among them here: it names `Calendar.ISO`, the test
       # above, where Calendrical registers its own `Calendrical.ISO` for it.
       for {identifier, calendar} <- Calendrical.additional_calendars(), identifier != :iso8601 do
-        suffix = "[u-ca=#{identifier |> Atom.to_string() |> String.replace("_", "-")}]"
+        written =
+          identifier
+          |> Atom.to_string()
+          |> String.replace("_", "-")
+
+        suffix = "[u-ca=#{written}]"
         {:ok, tempo} = Tempo.from_iso8601("2026" <> suffix)
 
         assert tempo.calendar == calendar
@@ -323,7 +332,12 @@ defmodule Tempo.CalendarTest do
       {:ok, rec} = Tempo.from_iso8601("R/../P1Y/FL8m15DN[u-ca=chinese]")
       {:ok, bound} = Tempo.from_iso8601("2024Y/2027Y")
       {:ok, set} = Tempo.to_interval(rec, within: bound)
-      months = set |> IntervalSet.members() |> Enum.map(&Interval.from(&1).time[:month])
+
+      months =
+        set
+        |> IntervalSet.members()
+        |> Enum.map(&Interval.from(&1).time[:month])
+
       # 4662 carries a leap month, so traditional 8 is ordinal 9 there; the
       # common years 4661 and 4663 keep it at ordinal 8.
       assert months == [8, 9, 8]

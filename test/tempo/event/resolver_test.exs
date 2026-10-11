@@ -16,15 +16,31 @@ defmodule Tempo.Event.ResolverTest do
     @behaviour Tempo.Event.Resolver
 
     @impl true
-    def known, do: ["fiscal-year-start", "fiscal-q3", "fiscal-broken"]
+    def known do
+      ["fiscal-year-start", "fiscal-q3", "fiscal-broken"]
+    end
 
     @impl true
-    def date(_name, year, _calendar) when year < 2000, do: {:error, :before_fiscal_epoch}
-    def date("fiscal-year-start", year, _calendar), do: Date.new(year, 4, 1)
-    def date("fiscal-q3", year, _calendar), do: Date.new(year, 10, 1)
+    def date(_name, year, _calendar) when year < 2000 do
+      {:error, :before_fiscal_epoch}
+    end
+
+    def date("fiscal-year-start", year, _calendar) do
+      Date.new(year, 4, 1)
+    end
+
+    def date("fiscal-q3", year, _calendar) do
+      Date.new(year, 10, 1)
+    end
+
     # A date with no `{:ok, …}` about it, which the behaviour does not allow.
-    def date("fiscal-broken", year, _calendar), do: Date.new!(year, 4, 1)
-    def date(_name, _year, _calendar), do: {:error, :unknown_event}
+    def date("fiscal-broken", year, _calendar) do
+      Date.new!(year, 4, 1)
+    end
+
+    def date(_name, _year, _calendar) do
+      {:error, :unknown_event}
+    end
   end
 
   setup do

@@ -180,7 +180,9 @@ defmodule Tempo.Cron do
 
     with {:ok, rule} <- to_rule(expression),
          {:ok, from} <- firing_start(from, rule, expression) do
-      rule |> Expander.to_ast(from) |> Calendars.outside()
+      rule
+      |> Expander.to_ast(from)
+      |> Calendars.outside()
     end
   end
 
@@ -226,7 +228,9 @@ defmodule Tempo.Cron do
   # A cron fires on whole minutes, or whole seconds with six or seven
   # fields, so its firings start at the first of them at or after the
   # `:from` given: 09:05:30 starts a five-field schedule at 09:06.
-  defp firing_start(nil, _rule, _expression), do: {:ok, nil}
+  defp firing_start(nil, _rule, _expression) do
+    {:ok, nil}
+  end
 
   defp firing_start(%Tempo{time: time} = from, rule, _expression) when is_list(time) do
     grain = grain(rule)
@@ -246,20 +250,48 @@ defmodule Tempo.Cron do
   end
 
   defp on_or_after(on_grain, time, grain) do
-    if past_grain?(time, grain), do: next_grain(on_grain, grain), else: {:ok, on_grain}
+    if past_grain?(time, grain) do
+      next_grain(on_grain, grain)
+    else
+      {:ok, on_grain}
+    end
   end
 
-  defp grain(%Rule{freq: :second}), do: :second
-  defp grain(%Rule{bysecond: [_ | _]}), do: :second
-  defp grain(%Rule{}), do: :minute
+  defp grain(%Rule{freq: :second}) do
+    :second
+  end
 
-  defp past_grain?(time, :minute), do: nonzero?(time[:second]) or nonzero?(time[:microsecond])
-  defp past_grain?(time, :second), do: nonzero?(time[:microsecond])
+  defp grain(%Rule{bysecond: [_ | _]}) do
+    :second
+  end
 
-  defp nonzero?(nil), do: false
-  defp nonzero?(0), do: false
-  defp nonzero?({0, _precision}), do: false
-  defp nonzero?(_value), do: true
+  defp grain(%Rule{}) do
+    :minute
+  end
+
+  defp past_grain?(time, :minute) do
+    nonzero?(time[:second]) or nonzero?(time[:microsecond])
+  end
+
+  defp past_grain?(time, :second) do
+    nonzero?(time[:microsecond])
+  end
+
+  defp nonzero?(nil) do
+    false
+  end
+
+  defp nonzero?(0) do
+    false
+  end
+
+  defp nonzero?({0, _precision}) do
+    false
+  end
+
+  defp nonzero?(_value) do
+    true
+  end
 
   defp next_grain(on_grain, grain) do
     case Tempo.shift(on_grain, %Tempo.Duration{time: [{grain, 1}]}) do
@@ -351,9 +383,13 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp posix_or_case(_dom, _dow, _starred?), do: :no
+  defp posix_or_case(_dom, _dow, _starred?) do
+    :no
+  end
 
-  defp starred?(field), do: String.starts_with?(field, "*")
+  defp starred?(field) do
+    String.starts_with?(field, "*")
+  end
 
   # The POSIX OR case runs a DAILY cadence so every candidate day is
   # visited, carrying the time of day and month as ordinary BY filters
@@ -384,8 +420,13 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp default_cascade(%{has_seconds?: true}), do: %Rule{freq: :second, interval: 1}
-  defp default_cascade(_fields), do: %Rule{freq: :minute, interval: 1}
+  defp default_cascade(%{has_seconds?: true}) do
+    %Rule{freq: :second, interval: 1}
+  end
+
+  defp default_cascade(_fields) do
+    %Rule{freq: :minute, interval: 1}
+  end
 
   defp build_cascade(:month, fields) do
     %Rule{freq: :year, interval: 1}
@@ -422,8 +463,13 @@ defmodule Tempo.Cron do
     |> put_by_list(:bysecond, fields.second)
   end
 
-  defp nil?(nil), do: true
-  defp nil?(_), do: false
+  defp nil?(nil) do
+    true
+  end
+
+  defp nil?(_) do
+    false
+  end
 
   # Add a BY rule for every field finer than `coarsest`: its own
   # values, or every value for a `*` (`every_value/2`).
@@ -441,11 +487,25 @@ defmodule Tempo.Cron do
   # not the start's: `0 * * * 1` fires every hour of a Monday. A month's
   # days come from its weekdays when they are given, and five fields
   # have no seconds.
-  defp every_value(:day_of_month, %{day_of_week: nil}), do: {:list, Enum.to_list(1..31)}
-  defp every_value(:hour, _fields), do: {:list, Enum.to_list(0..23)}
-  defp every_value(:minute, _fields), do: {:list, Enum.to_list(0..59)}
-  defp every_value(:second, %{has_seconds?: true}), do: {:list, Enum.to_list(0..59)}
-  defp every_value(_field, _fields), do: nil
+  defp every_value(:day_of_month, %{day_of_week: nil}) do
+    {:list, Enum.to_list(1..31)}
+  end
+
+  defp every_value(:hour, _fields) do
+    {:list, Enum.to_list(0..23)}
+  end
+
+  defp every_value(:minute, _fields) do
+    {:list, Enum.to_list(0..59)}
+  end
+
+  defp every_value(:second, %{has_seconds?: true}) do
+    {:list, Enum.to_list(0..59)}
+  end
+
+  defp every_value(_field, _fields) do
+    nil
+  end
 
   # Weekdays recur weekly, but an ordinal weekday (`5#2`, `5L`) counts
   # within its month, and a day of the month or a year limits each
@@ -457,29 +517,61 @@ defmodule Tempo.Cron do
     |> weekday_freq(fields.day_of_month || fields.year)
   end
 
-  defp weekday_freq(true = _ordinal?, _date_limit), do: :month
-  defp weekday_freq(false, nil), do: :week
-  defp weekday_freq(false, _date_limit), do: :day
+  defp weekday_freq(true = _ordinal?, _date_limit) do
+    :month
+  end
 
-  defp field_to_by_key(:month), do: :bymonth
-  defp field_to_by_key(:day_of_month), do: :bymonthday
-  defp field_to_by_key(:day_of_week), do: :byday
-  defp field_to_by_key(:hour), do: :byhour
-  defp field_to_by_key(:minute), do: :byminute
-  defp field_to_by_key(:second), do: :bysecond
+  defp weekday_freq(false, nil) do
+    :week
+  end
+
+  defp weekday_freq(false, _date_limit) do
+    :day
+  end
+
+  defp field_to_by_key(:month) do
+    :bymonth
+  end
+
+  defp field_to_by_key(:day_of_month) do
+    :bymonthday
+  end
+
+  defp field_to_by_key(:day_of_week) do
+    :byday
+  end
+
+  defp field_to_by_key(:hour) do
+    :byhour
+  end
+
+  defp field_to_by_key(:minute) do
+    :byminute
+  end
+
+  defp field_to_by_key(:second) do
+    :bysecond
+  end
 
   # Convert normalised form into a list of integers (or keep byday
   # tuples as-is). `nil` means "skip this BY rule".
-  defp put_by_list(rule, _key, nil), do: rule
+  defp put_by_list(rule, _key, nil) do
+    rule
+  end
 
-  defp put_by_list(rule, :bymonthday, {:nearest, targets}),
-    do: %{rule | bymonthday_nearest: targets}
+  defp put_by_list(rule, :bymonthday, {:nearest, targets}) do
+    %{rule | bymonthday_nearest: targets}
+  end
 
-  defp put_by_list(rule, key, {:list, values}), do: Map.put(rule, key, values)
+  defp put_by_list(rule, key, {:list, values}) do
+    Map.put(rule, key, values)
+  end
 
   # A year field limits the firings to the years it names — one, a
   # list, a range or a step — and the schedule ends after the last.
-  defp apply_year_limit(rule, nil), do: rule
+  defp apply_year_limit(rule, nil) do
+    rule
+  end
 
   defp apply_year_limit(rule, {:list, years}) do
     %{
@@ -493,8 +585,13 @@ defmodule Tempo.Cron do
   ## Field normalisers
   ## ---------------------------------------------------------
 
-  defp normalise(nil, _field, _range), do: {:ok, nil}
-  defp normalise("*", _field, _range), do: {:ok, nil}
+  defp normalise(nil, _field, _range) do
+    {:ok, nil}
+  end
+
+  defp normalise("*", _field, _range) do
+    {:ok, nil}
+  end
 
   defp normalise(string, field, range) do
     with {:ok, values} <- parse_list(string, field, range) do
@@ -502,7 +599,9 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp normalise_month("*"), do: {:ok, nil}
+  defp normalise_month("*") do
+    {:ok, nil}
+  end
 
   defp normalise_month(string) do
     with {:ok, values} <- parse_list_with_names(string, :month, 1..12, @month_names) do
@@ -510,11 +609,18 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp normalise_monthday("*"), do: {:ok, nil}
-  defp normalise_monthday("L"), do: {:ok, {:list, [-1]}}
+  defp normalise_monthday("*") do
+    {:ok, nil}
+  end
+
+  defp normalise_monthday("L") do
+    {:ok, {:list, [-1]}}
+  end
 
   # `LW` — the last weekday of the month.
-  defp normalise_monthday("LW"), do: {:ok, {:nearest, [:last]}}
+  defp normalise_monthday("LW") do
+    {:ok, {:nearest, [:last]}}
+  end
 
   defp normalise_monthday(string) do
     cond do
@@ -539,9 +645,13 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp single_day?(string), do: not String.contains?(string, [",", "-", "/"])
+  defp single_day?(string) do
+    not String.contains?(string, [",", "-", "/"])
+  end
 
-  defp normalise_dow("*"), do: {:ok, nil}
+  defp normalise_dow("*") do
+    {:ok, nil}
+  end
 
   defp normalise_dow(string) do
     with {:ok, entries} <- parse_dow(string) do
@@ -567,7 +677,10 @@ defmodule Tempo.Cron do
         {:error, CronError.exception(field: field, value: string, reason: "empty field")}
 
       {:ok, list} ->
-        {:ok, list |> Enum.uniq() |> Enum.sort()}
+        {:ok,
+         list
+         |> Enum.uniq()
+         |> Enum.sort()}
 
       err ->
         err
@@ -584,8 +697,14 @@ defmodule Tempo.Cron do
       end
     end)
     |> case do
-      {:ok, list} -> {:ok, list |> Enum.uniq() |> Enum.sort()}
-      err -> err
+      {:ok, list} ->
+        {:ok,
+         list
+         |> Enum.uniq()
+         |> Enum.sort()}
+
+      err ->
+        err
     end
   end
 
@@ -615,7 +734,9 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp step?(part), do: String.contains?(part, "/")
+  defp step?(part) do
+    String.contains?(part, "/")
+  end
 
   defp name_or_int(string, names, field, range) do
     down = String.downcase(string)
@@ -648,7 +769,9 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp parse_step_lhs("*", _field, range), do: {:ok, Enum.to_list(range)}
+  defp parse_step_lhs("*", _field, range) do
+    {:ok, Enum.to_list(range)}
+  end
 
   defp parse_step_lhs(spec, field, range) do
     if String.contains?(spec, "-") do
@@ -673,11 +796,14 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp range_values(from, to, _range) when from <= to, do: Enum.to_list(from..to)
+  defp range_values(from, to, _range) when from <= to do
+    Enum.to_list(from..to)
+  end
 
   # Wrap-around range — common cron dialect.
-  defp range_values(from, to, range),
-    do: Enum.to_list(from..range.last) ++ Enum.to_list(range.first..to)
+  defp range_values(from, to, range) do
+    Enum.to_list(from..range.last) ++ Enum.to_list(range.first..to)
+  end
 
   defp parse_int(string, field, range) do
     case Integer.parse(string) do
@@ -770,8 +896,13 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp dow_range_days(from, to) when from <= to, do: Enum.to_list(from..to)
-  defp dow_range_days(from, _to), do: Enum.to_list(from..7)
+  defp dow_range_days(from, to) when from <= to do
+    Enum.to_list(from..to)
+  end
+
+  defp dow_range_days(from, _to) do
+    Enum.to_list(from..7)
+  end
 
   # `5#2` → the 2nd Friday: a {day, ordinal} pair.
   defp parse_dow_nth(part) do
@@ -796,7 +927,9 @@ defmodule Tempo.Cron do
   # `*` spans the whole week (0..7); a bare day spans from that day
   # to cron's inclusive max (7); a range spans its own bounds. Values
   # stay in cron numbering (0 = Sunday); the caller maps to RFC.
-  defp dow_step_cron_base("*"), do: {:ok, Enum.to_list(0..7)}
+  defp dow_step_cron_base("*") do
+    {:ok, Enum.to_list(0..7)}
+  end
 
   defp dow_step_cron_base(lhs) do
     if String.contains?(lhs, "-") do
@@ -858,7 +991,15 @@ defmodule Tempo.Cron do
     end
   end
 
-  defp cron_to_rfc(0), do: 7
-  defp cron_to_rfc(7), do: 7
-  defp cron_to_rfc(n) when n in 1..6, do: n
+  defp cron_to_rfc(0) do
+    7
+  end
+
+  defp cron_to_rfc(7) do
+    7
+  end
+
+  defp cron_to_rfc(n) when n in 1..6 do
+    n
+  end
 end

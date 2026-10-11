@@ -171,11 +171,15 @@ if Code.ensure_loaded?(ICal) do
     def parse(ics, options \\ [])
 
     def parse(ics, options) when is_binary(ics) do
-      ics |> parsed(Calendars.inside(options)) |> Calendars.outside()
+      ics
+      |> parsed(Calendars.inside(options))
+      |> Calendars.outside()
     end
 
     # What is read is a string: any other value is an error and no raise.
-    def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
+    def parse(not_a_string, _options) do
+      {:error, {:not_a_string, not_a_string}}
+    end
 
     # An iCalendar is text, which shows no value by which a caller's call can
     # be told from one of the library's, so `parse/2` is the caller's: its
@@ -333,7 +337,9 @@ if Code.ensure_loaded?(ICal) do
     end
 
     def available(%ICal{} = calendar, options) do
-      calendar |> offered(Calendars.inside(options)) |> Calendars.outside()
+      calendar
+      |> offered(Calendars.inside(options))
+      |> Calendars.outside()
     end
 
     defp offered(calendar, options) do
@@ -378,7 +384,9 @@ if Code.ensure_loaded?(ICal) do
     # definition, so removing its whole scope from `undecided` is what
     # makes a higher priority actually override a lower one rather
     # than merely add to it.
-    defp resolve_priority([], _undecided, free, _options), do: {:ok, free}
+    defp resolve_priority([], _undecided, free, _options) do
+      {:ok, free}
+    end
 
     defp resolve_priority([availability | rest], undecided, free, options) do
       with {:ok, scope} <- component_scope(availability, undecided),
@@ -400,7 +408,9 @@ if Code.ensure_loaded?(ICal) do
       end
     end
 
-    defp bounds(%ICal.Availability{dtstart: nil, dtend: nil, duration: nil}), do: :unbounded
+    defp bounds(%ICal.Availability{dtstart: nil, dtend: nil, duration: nil}) do
+      :unbounded
+    end
 
     defp bounds(%ICal.Availability{} = availability) do
       %ICal.Event{
@@ -413,8 +423,9 @@ if Code.ensure_loaded?(ICal) do
 
     # Every AVAILABLE subcomponent, expanded and clipped to the scope
     # this component governs.
-    defp offered_within(%ICal.Availability{available: []}, _scope, _options),
-      do: {:ok, empty_set()}
+    defp offered_within(%ICal.Availability{available: []}, _scope, _options) do
+      {:ok, empty_set()}
+    end
 
     defp offered_within(%ICal.Availability{available: available}, scope, options) do
       options = Keyword.put(options, :within, scope)
@@ -460,7 +471,9 @@ if Code.ensure_loaded?(ICal) do
       }
     end
 
-    defp empty_set, do: IntervalSet.new!([])
+    defp empty_set do
+      IntervalSet.new!([])
+    end
 
     ## ------------------------------------------------------------
     ## Calendar → IntervalSet
@@ -491,7 +504,11 @@ if Code.ensure_loaded?(ICal) do
 
     defp calendar_metadata(%ICal{} = cal) do
       custom = Map.get(cal, :custom_properties) || %{}
-      name = custom |> Map.get("X-WR-CALNAME") |> unwrap_custom_value()
+
+      name =
+        custom
+        |> Map.get("X-WR-CALNAME")
+        |> unwrap_custom_value()
 
       %{
         prodid: cal.product_id,
@@ -506,9 +523,17 @@ if Code.ensure_loaded?(ICal) do
 
     # The `ical` library wraps custom property values in a struct
     # like `%{value: "X", params: %{}}`. Unwrap the inner string.
-    defp unwrap_custom_value(%{value: value}) when is_binary(value), do: value
-    defp unwrap_custom_value(value) when is_binary(value), do: value
-    defp unwrap_custom_value(_), do: nil
+    defp unwrap_custom_value(%{value: value}) when is_binary(value) do
+      value
+    end
+
+    defp unwrap_custom_value(value) when is_binary(value) do
+      value
+    end
+
+    defp unwrap_custom_value(_) do
+      nil
+    end
 
     ## ------------------------------------------------------------
     ## Event → Interval(s)
@@ -595,10 +620,13 @@ if Code.ensure_loaded?(ICal) do
     # days recurs on days. They were read, so `FREQ=DAILY;BYHOUR=9` from a
     # date was the day from 09:00 to 09:00 of the next, and two hours named
     # made two occurrences of each day.
-    defp on_the_days_of_an_all_day_event(%ICal.Recurrence{} = rule, %Date{}),
-      do: %{rule | by_hour: nil, by_minute: nil, by_second: nil}
+    defp on_the_days_of_an_all_day_event(%ICal.Recurrence{} = rule, %Date{}) do
+      %{rule | by_hour: nil, by_minute: nil, by_second: nil}
+    end
 
-    defp on_the_days_of_an_all_day_event(%ICal.Recurrence{} = rule, _a_date_and_time), do: rule
+    defp on_the_days_of_an_all_day_event(%ICal.Recurrence{} = rule, _a_date_and_time) do
+      rule
+    end
 
     defp expander_opts(opts, base) do
       []
@@ -615,8 +643,13 @@ if Code.ensure_loaded?(ICal) do
       |> sort_by_from()
     end
 
-    defp maybe_put(keyword, _key, nil), do: keyword
-    defp maybe_put(keyword, key, value), do: Keyword.put(keyword, key, value)
+    defp maybe_put(keyword, _key, nil) do
+      keyword
+    end
+
+    defp maybe_put(keyword, key, value) do
+      Keyword.put(keyword, key, value)
+    end
 
     ## ----------------------------------------------------------
     ## RDATE / EXDATE
@@ -641,8 +674,13 @@ if Code.ensure_loaded?(ICal) do
     ## naturally.
     ## ----------------------------------------------------------
 
-    defp apply_rdates(occurrences, %ICal.Event{rdates: nil}, _base), do: occurrences
-    defp apply_rdates(occurrences, %ICal.Event{rdates: []}, _base), do: occurrences
+    defp apply_rdates(occurrences, %ICal.Event{rdates: nil}, _base) do
+      occurrences
+    end
+
+    defp apply_rdates(occurrences, %ICal.Event{rdates: []}, _base) do
+      occurrences
+    end
 
     defp apply_rdates(occurrences, %ICal.Event{rdates: rdates}, %Interval{} = base) do
       extras =
@@ -668,7 +706,9 @@ if Code.ensure_loaded?(ICal) do
       rdate_tempo(Tempo.from_elixir(Calendars.in_rule(d), resolution: :day), base)
     end
 
-    defp rdate_to_interval(_other, _base), do: nil
+    defp rdate_to_interval(_other, _base) do
+      nil
+    end
 
     # The RDATE's start is its full timestamp (date + time-of-day
     # if present). The end is `start + event_duration`, where the
@@ -690,8 +730,13 @@ if Code.ensure_loaded?(ICal) do
       Interval.duration(%Interval{from: from, to: to})
     end
 
-    defp apply_exdates(occurrences, %ICal.Event{exdates: nil}), do: occurrences
-    defp apply_exdates(occurrences, %ICal.Event{exdates: []}), do: occurrences
+    defp apply_exdates(occurrences, %ICal.Event{exdates: nil}) do
+      occurrences
+    end
+
+    defp apply_exdates(occurrences, %ICal.Event{exdates: []}) do
+      occurrences
+    end
 
     defp apply_exdates(occurrences, %ICal.Event{exdates: exdates}) do
       excluded =
@@ -704,13 +749,21 @@ if Code.ensure_loaded?(ICal) do
       end)
     end
 
-    defp exdate_to_tempo(%DateTime{} = dt), do: Tempo.from_elixir(Calendars.in_rule(dt))
-    defp exdate_to_tempo(%NaiveDateTime{} = ndt), do: Tempo.from_elixir(Calendars.in_rule(ndt))
+    defp exdate_to_tempo(%DateTime{} = dt) do
+      Tempo.from_elixir(Calendars.in_rule(dt))
+    end
 
-    defp exdate_to_tempo(%Date{} = d),
-      do: Tempo.from_elixir(Calendars.in_rule(d), resolution: :day)
+    defp exdate_to_tempo(%NaiveDateTime{} = ndt) do
+      Tempo.from_elixir(Calendars.in_rule(ndt))
+    end
 
-    defp exdate_to_tempo(_other), do: nil
+    defp exdate_to_tempo(%Date{} = d) do
+      Tempo.from_elixir(Calendars.in_rule(d), resolution: :day)
+    end
+
+    defp exdate_to_tempo(_other) do
+      nil
+    end
 
     defp same_moment?(%Tempo{} = a, %Tempo{} = b) do
       Compare.compare_endpoints(a, b) == :same
@@ -858,7 +911,12 @@ if Code.ensure_loaded?(ICal) do
     defp duration_units(
            %ICal.Duration{positive: positive, time: {hours, minutes, seconds}} = duration
          ) do
-      sign = if positive, do: 1, else: -1
+      sign =
+        if positive do
+          1
+        else
+          -1
+        end
 
       [
         week: duration.weeks,
@@ -902,14 +960,21 @@ if Code.ensure_loaded?(ICal) do
       |> Map.new()
     end
 
-    defp stringify_organizer(nil), do: nil
+    defp stringify_organizer(nil) do
+      nil
+    end
 
-    defp stringify_organizer(%{__struct__: _, cname: cname}) when is_binary(cname),
-      do: cname
+    defp stringify_organizer(%{__struct__: _, cname: cname}) when is_binary(cname) do
+      cname
+    end
 
-    defp stringify_organizer(other), do: Calendars.inspect(other)
+    defp stringify_organizer(other) do
+      Calendars.inspect(other)
+    end
 
-    defp stringify_attendees([]), do: []
+    defp stringify_attendees([]) do
+      []
+    end
 
     defp stringify_attendees(attendees) when is_list(attendees) do
       Enum.map(attendees, fn

@@ -52,7 +52,9 @@ defmodule Tempo.Matrix.Table do
 
   """
   @spec kinds() :: keyword(String.t())
-  def kinds, do: @kinds
+  def kinds do
+    @kinds
+  end
 
   @doc """
   The functions of each kind of operation, as the table counts them: a
@@ -163,7 +165,12 @@ defmodule Tempo.Matrix.Table do
     table
     |> String.split("\n")
     |> Enum.filter(&String.starts_with?(&1, "| "))
-    |> Enum.flat_map(&(&1 |> String.split(" | ") |> List.last() |> code_spans()))
+    |> Enum.flat_map(
+      &(&1
+        |> String.split(" | ")
+        |> List.last()
+        |> code_spans())
+    )
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -183,18 +190,25 @@ defmodule Tempo.Matrix.Table do
   # Reading a text and the consistency checks are not operations a class is
   # asked, and a walk is asked of the value itself: membership in another
   # value's walk says nothing of the class.
-  defp asked_of_value?(%{group: group}) when group in [:parse, :consistent], do: false
+  defp asked_of_value?(%{group: group}) when group in [:parse, :consistent] do
+    false
+  end
 
   defp asked_of_value?(%{group: :walk, value: value, arguments: arguments}) do
     arguments == value or String.starts_with?(arguments, value <> " | ")
   end
 
-  defp asked_of_value?(_cell), do: true
+  defp asked_of_value?(_cell) do
+    true
+  end
 
   # An operation's name is its function and, after a space, the argument
   # the matrix gives it. A bang form is its function.
   defp function_name(operation) do
-    operation |> String.split(" ", parts: 2) |> hd() |> String.replace("!", "")
+    operation
+    |> String.split(" ", parts: 2)
+    |> hd()
+    |> String.replace("!", "")
   end
 
   # Each class of a level in the corpus's order, with the value that stands
@@ -219,7 +233,11 @@ defmodule Tempo.Matrix.Table do
 
   # A name with no module is a function of `Tempo`.
   defp qualified(name) do
-    if String.contains?(name, "."), do: name, else: "Tempo." <> name
+    if String.contains?(name, ".") do
+      name
+    else
+      "Tempo." <> name
+    end
   end
 
   defp header do
@@ -248,7 +266,9 @@ defmodule Tempo.Matrix.Table do
   end
 
   # A function answers for a value when one of the cells that ask it does.
-  defp answers?(outcomes), do: Enum.any?(outcomes, &(&1 in [:ok, :value]))
+  defp answers?(outcomes) do
+    Enum.any?(outcomes, &(&1 in [:ok, :value]))
+  end
 
   # What a class is called in the table, where its name in the corpus does
   # not read as one.
@@ -302,25 +322,50 @@ defmodule Tempo.Matrix.Table do
     no_year_masked: "Masked day, no year"
   }
 
-  defp name(class) when is_map_key(@names, class), do: @names[class]
-
-  defp name(class) do
-    class |> to_string() |> String.replace("_", " ") |> String.capitalize()
+  defp name(class) when is_map_key(@names, class) do
+    @names[class]
   end
 
-  defp cell(count, count), do: "all"
-  defp cell(0, _of), do: "none"
-  defp cell(count, of), do: "#{count} of #{of}"
+  defp name(class) do
+    class
+    |> to_string()
+    |> String.replace("_", " ")
+    |> String.capitalize()
+  end
+
+  defp cell(count, count) do
+    "all"
+  end
+
+  defp cell(0, _of) do
+    "none"
+  end
+
+  defp cell(count, of) do
+    "#{count} of #{of}"
+  end
 
   # The errors of the functions that have no answer for a value.
   defp errors(refused) do
-    case refused |> List.flatten() |> Enum.flat_map(&error/1) |> Enum.uniq() |> Enum.sort() do
+    case refused
+         |> List.flatten()
+         |> Enum.flat_map(&error/1)
+         |> Enum.uniq()
+         |> Enum.sort() do
       [] -> "none"
       errors -> Enum.map_join(errors, ", ", &"`#{&1}`")
     end
   end
 
-  defp error({:error, module}), do: [inspect(module)]
-  defp error({:raised, module}), do: [inspect(module)]
-  defp error(_outcome), do: []
+  defp error({:error, module}) do
+    [inspect(module)]
+  end
+
+  defp error({:raised, module}) do
+    [inspect(module)]
+  end
+
+  defp error(_outcome) do
+    []
+  end
 end

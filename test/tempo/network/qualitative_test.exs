@@ -59,7 +59,11 @@ defmodule Tempo.Network.QualitativeTest do
   describe "apply_to_network/2" do
     test "adds a determined relation as a metric constraint" do
       network = dated_network()
-      {:ok, propagated} = network |> Qualitative.from_network() |> QNet.propagate()
+
+      {:ok, propagated} =
+        network
+        |> Qualitative.from_network()
+        |> QNet.propagate()
 
       refined = Qualitative.apply_to_network(propagated, network)
 
@@ -74,7 +78,8 @@ defmodule Tempo.Network.QualitativeTest do
         |> Network.add_period(:y, [])
 
       qualitative =
-        QNet.new([:x, :y]) |> QNet.constrain(:x, [:precedes, :preceded_by], :y)
+        QNet.new([:x, :y])
+        |> QNet.constrain(:x, [:precedes, :preceded_by], :y)
 
       refined = Qualitative.apply_to_network(qualitative, network)
 

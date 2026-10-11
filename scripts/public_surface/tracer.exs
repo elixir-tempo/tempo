@@ -5,13 +5,17 @@ defmodule PublicSurface.Tracer do
   @remote [:remote_function, :imported_function, :remote_macro, :imported_macro]
   @local [:local_function, :local_macro]
 
-  def trace({kind, meta, module, name, arity}, env) when kind in @remote,
-    do: note(module, name, arity, env, meta)
+  def trace({kind, meta, module, name, arity}, env) when kind in @remote do
+    note(module, name, arity, env, meta)
+  end
 
-  def trace({kind, meta, name, arity}, env) when kind in @local,
-    do: note(env.module, name, arity, env, meta)
+  def trace({kind, meta, name, arity}, env) when kind in @local do
+    note(env.module, name, arity, env, meta)
+  end
 
-  def trace(_event, _env), do: :ok
+  def trace(_event, _env) do
+    :ok
+  end
 
   defp note(module, name, arity, env, meta) do
     if tempo?(module) do

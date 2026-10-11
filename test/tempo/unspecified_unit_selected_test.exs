@@ -21,11 +21,16 @@ defmodule Tempo.UnspecifiedUnitSelectedTest do
   alias Tempo.RRule
   alias Tempo.Test.Engine.Compare
 
-  defp seconds(%Date{} = date),
-    do:
-      date |> NaiveDateTime.new!(~T[00:00:00]) |> NaiveDateTime.to_gregorian_seconds() |> elem(0)
+  defp seconds(%Date{} = date) do
+    date
+    |> NaiveDateTime.new!(~T[00:00:00])
+    |> NaiveDateTime.to_gregorian_seconds()
+    |> elem(0)
+  end
 
-  defp day_spans(dates), do: for(date <- dates, do: {seconds(date), seconds(Date.add(date, 1))})
+  defp day_spans(dates) do
+    for(date <- dates, do: {seconds(date), seconds(Date.add(date, 1))})
+  end
 
   defp spans({:ok, %IntervalSet{} = set}) do
     for span <- IntervalSet.members(set) do

@@ -37,8 +37,13 @@ defmodule Tempo.Network.ChronoLandTest do
     }
   end
 
-  defp duration_years(nil), do: nil
-  defp duration_years(%Tempo.Duration{time: time}), do: Keyword.get(time, :year)
+  defp duration_years(nil) do
+    nil
+  end
+
+  defp duration_years(%Tempo.Duration{time: time}) do
+    Keyword.get(time, :year)
+  end
 
   test "the network is consistent" do
     assert Solver.consistent?(chronoland())

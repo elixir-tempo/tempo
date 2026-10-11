@@ -15,7 +15,9 @@ defmodule Tempo.IntervalSetTreeTest do
 
   @base ~o"2020-01-01"
 
-  defp day(offset), do: Tempo.shift(@base, day: offset)
+  defp day(offset) do
+    Tempo.shift(@base, day: offset)
+  end
 
   defp interval(offset, span) do
     %Tempo.Interval{from: day(offset), to: day(offset + span)}
@@ -80,7 +82,9 @@ defmodule Tempo.IntervalSetTreeTest do
       hi = Compare.to_utc_seconds(day(45))
 
       candidates = Tree.overlapping(tree.intervals, {lo, hi})
-      assert Enum.map(candidates, &(&1.from.time[:day] || 1)) |> length() == 2
+
+      assert Enum.map(candidates, &(&1.from.time[:day] || 1))
+             |> length() == 2
 
       assert candidates ==
                Enum.filter(IntervalSet.members(tree), fn iv ->

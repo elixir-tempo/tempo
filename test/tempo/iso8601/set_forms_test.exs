@@ -21,12 +21,18 @@ defmodule Tempo.Iso8601.SetFormsTest do
   alias Tempo.ParseError
   alias Tempo.Test.Engine.Compare
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   # A set written from its members' texts, and those members read alone.
-  defp set_of(members, {open, close}), do: read(open <> Enum.join(members, ",") <> close)
+  defp set_of(members, {open, close}) do
+    read(open <> Enum.join(members, ",") <> close)
+  end
 
-  defp reads_back?(value), do: read(Tempo.to_iso8601!(value)) == value
+  defp reads_back?(value) do
+    read(Tempo.to_iso8601!(value)) == value
+  end
 
   # The spans a value names, each as the instants it starts and ends at.
   defp spans(value) do
@@ -36,8 +42,9 @@ defmodule Tempo.Iso8601.SetFormsTest do
     end
   end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
   @braces [{"{", "}"}, {"[", "]"}]
 
@@ -494,13 +501,19 @@ defmodule Tempo.Iso8601.SetFormsTest do
   describe "the fractions of a second written as a set" do
     # The fractions a range of digits names, each held to the digits written:
     # `.{50..59}` is the hundredths from 0.50 to 0.59.
-    defp microseconds(range, digits),
-      do: for(fraction <- range, do: {fraction * Integer.pow(10, 6 - digits), digits})
+    defp microseconds(range, digits) do
+      for(fraction <- range, do: {fraction * Integer.pow(10, 6 - digits), digits})
+    end
 
-    defp digits_of(fraction, digits),
-      do: fraction |> Integer.to_string() |> String.pad_leading(digits, "0")
+    defp digits_of(fraction, digits) do
+      fraction
+      |> Integer.to_string()
+      |> String.pad_leading(digits, "0")
+    end
 
-    defp fractions_of(%Tempo{time: time}), do: Keyword.fetch!(time, :microsecond)
+    defp fractions_of(%Tempo{time: time}) do
+      Keyword.fetch!(time, :microsecond)
+    end
 
     test "are the microseconds its digits count, from a first to a last" do
       for digits <- 1..6,
@@ -577,7 +590,9 @@ defmodule Tempo.Iso8601.SetFormsTest do
 
     test "keeps what follows the second" do
       assert read("2026Y6M15DT10H30M45.{0..9}SZ").shift == [hour: 0]
-      assert read("2026Y6M15DT10H30M45.{0..9}S?") |> reads_back?()
+
+      assert read("2026Y6M15DT10H30M45.{0..9}S?")
+             |> reads_back?()
 
       assert %Tempo.Interval{from: from} = read("2026Y6M15DT10H30M45.{0..9}S/P1D")
       assert from == read("2026Y6M15DT10H30M45.{0..9}S")

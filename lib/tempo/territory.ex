@@ -89,7 +89,9 @@ defmodule Tempo.Territory do
   end
 
   def resolve(value) when is_atom(value) do
-    value |> Atom.to_string() |> resolve()
+    value
+    |> Atom.to_string()
+    |> resolve()
   end
 
   def resolve(value) when is_binary(value) do

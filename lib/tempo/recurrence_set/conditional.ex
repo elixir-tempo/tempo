@@ -46,15 +46,29 @@ defmodule Tempo.RecurrenceSet.Conditional do
   # A conditional names what it falls on and either the offsets it keeps
   # `:at` or the selector it moves `:to_next`, never both.
   @spec valid?(t()) :: boolean()
-  def valid?(%__MODULE__{falls_on: falls_on, at: [_ | _] = offsets, to_next: nil}),
-    do: falls_on?(falls_on) and Enum.all?(offsets, &match?(%Tempo.Duration{}, &1))
+  def valid?(%__MODULE__{falls_on: falls_on, at: [_ | _] = offsets, to_next: nil}) do
+    falls_on?(falls_on) and Enum.all?(offsets, &match?(%Tempo.Duration{}, &1))
+  end
 
-  def valid?(%__MODULE__{falls_on: falls_on, at: nil, to_next: %Tempo{}}), do: falls_on?(falls_on)
-  def valid?(_conditional), do: false
+  def valid?(%__MODULE__{falls_on: falls_on, at: nil, to_next: %Tempo{}}) do
+    falls_on?(falls_on)
+  end
+
+  def valid?(_conditional) do
+    false
+  end
 
   # What a condition falls on: a metadata map the other members' occurrences
   # are matched against, or a recurrence set whose own occurrences it reads.
-  defp falls_on?(%Tempo.RecurrenceSet{}), do: true
-  defp falls_on?(%_struct{}), do: false
-  defp falls_on?(falls_on), do: is_map(falls_on)
+  defp falls_on?(%Tempo.RecurrenceSet{}) do
+    true
+  end
+
+  defp falls_on?(%_struct{}) do
+    false
+  end
+
+  defp falls_on?(falls_on) do
+    is_map(falls_on)
+  end
 end

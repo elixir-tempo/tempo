@@ -34,14 +34,28 @@ defmodule Tempo.RRule.UntilWithNoStartTest do
 
   ## The measure
 
-  defp named?(:every_day, _date), do: true
-  defp named?(:sunday, date), do: Date.day_of_week(date) == 7
-  defp named?(:monday_or_thursday, date), do: Date.day_of_week(date) in [1, 4]
-  defp named?(:first_or_fifteenth, date), do: date.day in [1, 15]
+  defp named?(:every_day, _date) do
+    true
+  end
+
+  defp named?(:sunday, date) do
+    Date.day_of_week(date) == 7
+  end
+
+  defp named?(:monday_or_thursday, date) do
+    Date.day_of_week(date) in [1, 4]
+  end
+
+  defp named?(:first_or_fifteenth, date) do
+    date.day in [1, 15]
+  end
 
   # The days a rule names from a day to its end, which is one of them.
-  defp named_until(name, from),
-    do: from |> Date.range(@until) |> Enum.filter(&named?(name, &1))
+  defp named_until(name, from) do
+    from
+    |> Date.range(@until)
+    |> Enum.filter(&named?(name, &1))
+  end
 
   defp days_of({:ok, %IntervalSet{} = set}) do
     for occurrence <- IntervalSet.members(set) do

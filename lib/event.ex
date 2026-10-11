@@ -89,7 +89,10 @@ defmodule Tempo.Event do
   @spec known() :: [String.t()]
   def known do
     registered = Enum.flat_map(registered_resolvers(), & &1.known())
-    (Map.keys(@events) ++ registered) |> Enum.uniq() |> Enum.sort()
+
+    (Map.keys(@events) ++ registered)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   @doc """
@@ -105,7 +108,9 @@ defmodule Tempo.Event do
 
   """
   @spec solar_term?(String.t()) :: boolean()
-  def solar_term?(name) when is_binary(name), do: Map.has_key?(@solar_terms, name)
+  def solar_term?(name) when is_binary(name) do
+    Map.has_key?(@solar_terms, name)
+  end
 
   @doc """
   Resolves a named event to its `Date` in a given proleptic-Gregorian year.
@@ -231,8 +236,13 @@ defmodule Tempo.Event do
     end
   end
 
-  defp instant({:equinox, event}, year), do: Astro.equinox(year, event)
-  defp instant({:solstice, event}, year), do: Astro.solstice(year, event)
+  defp instant({:equinox, event}, year) do
+    Astro.equinox(year, event)
+  end
+
+  defp instant({:solstice, event}, year) do
+    Astro.solstice(year, event)
+  end
 
   defp in_zone(
          %DateTime{} = instant,
@@ -241,7 +251,14 @@ defmodule Tempo.Event do
        when sign in [?+, ?-] do
     with {hours, ""} when hours <= 23 <- Integer.parse(hours),
          {minutes, ""} when minutes <= 59 <- Integer.parse(minutes) do
-      offset = (hours * 3600 + minutes * 60) * if(sign == ?-, do: -1, else: 1)
+      offset =
+        (hours * 3600 + minutes * 60) *
+          if sign == ?- do
+            -1
+          else
+            1
+          end
+
       {:ok, DateTime.add(instant, offset, :second)}
     else
       _not_an_offset -> {:error, {:invalid_zone, <<sign, hours::binary, ?:, minutes::binary>>}}
@@ -256,28 +273,41 @@ defmodule Tempo.Event do
     end
   end
 
-  defp resolve(:easter, year, _calendar),
-    do: ecclesiastical_date(Ecclesiastical.easter_sunday(year))
+  defp resolve(:easter, year, _calendar) do
+    ecclesiastical_date(Ecclesiastical.easter_sunday(year))
+  end
 
-  defp resolve(:orthodox_easter, year, _calendar),
-    do: ecclesiastical_date(Ecclesiastical.orthodox_easter_sunday(year))
+  defp resolve(:orthodox_easter, year, _calendar) do
+    ecclesiastical_date(Ecclesiastical.orthodox_easter_sunday(year))
+  end
 
-  defp resolve({:equinox, event}, year, _calendar), do: from_datetime(Astro.equinox(year, event))
+  defp resolve({:equinox, event}, year, _calendar) do
+    from_datetime(Astro.equinox(year, event))
+  end
 
-  defp resolve({:solstice, event}, year, _calendar),
-    do: from_datetime(Astro.solstice(year, event))
+  defp resolve({:solstice, event}, year, _calendar) do
+    from_datetime(Astro.solstice(year, event))
+  end
 
-  defp resolve(:new_moon, year, _calendar), do: new_moon_date(year)
+  defp resolve(:new_moon, year, _calendar) do
+    new_moon_date(year)
+  end
 
-  defp resolve({:solar_term, number}, year, calendar),
-    do: solar_term_date(number, year, calendar)
+  defp resolve({:solar_term, number}, year, calendar) do
+    solar_term_date(number, year, calendar)
+  end
 
   # The day of an instant Astro gives, which it gives in Elixir's own
   # calendar, as a date of the calendar a value that names none is in.
-  defp from_datetime({:ok, %DateTime{} = datetime}),
-    do: datetime |> DateTime.to_date() |> Date.convert(Calendars.default())
+  defp from_datetime({:ok, %DateTime{} = datetime}) do
+    datetime
+    |> DateTime.to_date()
+    |> Date.convert(Calendars.default())
+  end
 
-  defp from_datetime({:error, _reason} = error), do: error
+  defp from_datetime({:error, _reason} = error) do
+    error
+  end
 
   # The first new moon on or after the year's start. Astro is asked from 1
   # January of the year in Elixir's own calendar, which is the one it reads.
@@ -342,9 +372,17 @@ defmodule Tempo.Event do
   # A resolver is a consumer's module: it is given the calendar as a caller
   # holds it, and what it gives is a caller's, a date or an error. Anything else is an error that says
   # so, where it was handed on as the answer.
-  defp a_date_or_an_error({:ok, %Date{}} = date), do: date
-  defp a_date_or_an_error({:error, _reason} = error), do: error
-  defp a_date_or_an_error(given), do: {:error, {:not_a_date, given}}
+  defp a_date_or_an_error({:ok, %Date{}} = date) do
+    date
+  end
+
+  defp a_date_or_an_error({:error, _reason} = error) do
+    error
+  end
+
+  defp a_date_or_an_error(given) do
+    {:error, {:not_a_date, given}}
+  end
 
   defp registered_resolvers do
     List.wrap(Application.get_env(:ex_tempo, :event_resolvers, []))

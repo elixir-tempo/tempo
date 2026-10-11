@@ -28,14 +28,17 @@ defmodule Tempo.PlaceAcrossAxesTest do
   # year by the week Erlang numbers each in.
   @around Date.range(~D[2025-12-22], ~D[2027-01-10])
 
-  defp dates_of_week(week),
-    do: Enum.filter(@around, &(:calendar.iso_week_number(Date.to_erl(&1)) == {2026, week}))
+  defp dates_of_week(week) do
+    Enum.filter(@around, &(:calendar.iso_week_number(Date.to_erl(&1)) == {2026, week}))
+  end
 
-  defp week(number),
-    do: Tempo.from_iso8601!("2026-W" <> String.pad_leading(Integer.to_string(number), 2, "0"))
+  defp week(number) do
+    Tempo.from_iso8601!("2026-W" <> String.pad_leading(Integer.to_string(number), 2, "0"))
+  end
 
-  defp read_back?(%Tempo{} = value),
-    do: Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
+  defp read_back?(%Tempo{} = value) do
+    Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
+  end
 
   describe "a day of a month placed on a week" do
     test "is the day of the week that has that number, and no date where none has" do

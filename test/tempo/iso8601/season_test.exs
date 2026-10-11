@@ -19,14 +19,23 @@ defmodule Tempo.Iso8601.SeasonTest do
   """
   use ExUnit.Case, async: true
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
-  defp reads_back?(value), do: read(Tempo.to_iso8601!(value)) == value
+  defp reads_back?(value) do
+    read(Tempo.to_iso8601!(value)) == value
+  end
 
   # A value with each season of 21 to 24 given its dates north of the
   # equator, and south of it.
-  defp north(text), do: dated(text, :GB)
-  defp south(text), do: dated(text, :AU)
+  defp north(text) do
+    dated(text, :GB)
+  end
+
+  defp south(text) do
+    dated(text, :AU)
+  end
 
   defp dated(text, territory) do
     {:ok, dated} = Tempo.in_territory(read(text), territory)

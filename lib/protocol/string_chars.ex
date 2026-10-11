@@ -5,36 +5,48 @@
 
 defimpl String.Chars, for: Tempo do
   def to_string(tempo) do
-    tempo |> Tempo.Calendars.inside() |> Tempo.Format.string_chars()
+    tempo
+    |> Tempo.Calendars.inside()
+    |> Tempo.Format.string_chars()
   end
 end
 
 defimpl String.Chars, for: Tempo.Interval do
   def to_string(interval) do
-    interval |> Tempo.Calendars.inside() |> Tempo.Format.string_chars()
+    interval
+    |> Tempo.Calendars.inside()
+    |> Tempo.Format.string_chars()
   end
 end
 
 defimpl String.Chars, for: Tempo.IntervalSet do
   def to_string(set) do
-    set |> Tempo.Calendars.inside() |> Tempo.Format.string_chars()
+    set
+    |> Tempo.Calendars.inside()
+    |> Tempo.Format.string_chars()
   end
 end
 
 defimpl String.Chars, for: Tempo.Set do
   def to_string(set) do
-    set |> Tempo.Calendars.inside() |> Tempo.Format.string_chars()
+    set
+    |> Tempo.Calendars.inside()
+    |> Tempo.Format.string_chars()
   end
 end
 
 defimpl String.Chars, for: Tempo.RecurrenceSet do
   def to_string(set) do
-    set |> Tempo.Calendars.inside() |> Tempo.Format.string_chars()
+    set
+    |> Tempo.Calendars.inside()
+    |> Tempo.Format.string_chars()
   end
 end
 
 defimpl String.Chars, for: Tempo.Duration do
   def to_string(duration) do
-    duration |> Tempo.Calendars.inside() |> Tempo.Format.string_chars()
+    duration
+    |> Tempo.Calendars.inside()
+    |> Tempo.Format.string_chars()
   end
 end

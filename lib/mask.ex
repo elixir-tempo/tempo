@@ -22,8 +22,9 @@ defmodule Tempo.Mask do
     end
   end
 
-  def candidates(:year, mask, previous, calendar),
-    do: valid_values(:year, mask, previous, calendar)
+  def candidates(:year, mask, previous, calendar) do
+    valid_values(:year, mask, previous, calendar)
+  end
 
   def candidates(unit, [:negative | mask], previous, calendar) do
     with {:ok, %Range{last: last} = range} <- unspecified(unit, previous, calendar) do
@@ -32,8 +33,9 @@ defmodule Tempo.Mask do
     end
   end
 
-  def candidates(unit, mask, previous, calendar),
-    do: valid_values(unit, mask, previous, calendar)
+  def candidates(unit, mask, previous, calendar) do
+    valid_values(unit, mask, previous, calendar)
+  end
 
   @doc false
   # Every value an unspecified unit (`X*`) takes after the concrete units
@@ -72,10 +74,13 @@ defmodule Tempo.Mask do
           Tempo.t(),
           :unanchored | :too_many_values | {:no_candidates, atom()} | {:unmaskable, atom()}
         ) :: Exception.t()
-  def error(tempo, :unanchored), do: UnanchoredError.exception(value: tempo)
+  def error(tempo, :unanchored) do
+    UnanchoredError.exception(value: tempo)
+  end
 
-  def error(tempo, :too_many_values),
-    do: ConversionError.exception(value: tempo, reason: :too_many_values)
+  def error(tempo, :too_many_values) do
+    ConversionError.exception(value: tempo, reason: :too_many_values)
+  end
 
   def error(tempo, {:no_candidates, unit}) do
     InvalidDateError.exception(
@@ -203,16 +208,30 @@ defmodule Tempo.Mask do
   # years, and listing them did not come to an end. The value is held,
   # written and compared still.
   defp few_enough_to_list(mask) do
-    if years_masked(mask) > Enumeration.listed_at_once(),
-      do: {:error, :too_many_values},
-      else: :ok
+    if years_masked(mask) > Enumeration.listed_at_once() do
+      {:error, :too_many_values}
+    else
+      :ok
+    end
   end
 
-  defp years_masked(mask), do: Enum.reduce(mask, 1, &(digit_choices(&1) * &2))
+  defp years_masked(mask) do
+    Enum.reduce(mask, 1, &(digit_choices(&1) * &2))
+  end
 
-  defp digit_choices(:X), do: 10
-  defp digit_choices(digits) when is_list(digits), do: digits |> set_digits() |> Enum.count()
-  defp digit_choices(_digit), do: 1
+  defp digit_choices(:X) do
+    10
+  end
+
+  defp digit_choices(digits) when is_list(digits) do
+    digits
+    |> set_digits()
+    |> Enum.count()
+  end
+
+  defp digit_choices(_digit) do
+    1
+  end
 
   # A range whose length depends on the missing year — February's 28 or 29
   # days, a Hebrew year's 12 or 13 months. The candidates are known when every
@@ -220,9 +239,11 @@ defmodule Tempo.Mask do
   defp candidates_in_every_year(mask, width, %Range{} = every_year, %Range{} = longest) do
     candidates = Enum.filter(longest, &padded_matches_mask?(&1, mask, width))
 
-    if Enum.all?(candidates, &(&1 in every_year)),
-      do: {:ok, candidates},
-      else: {:error, :unanchored}
+    if Enum.all?(candidates, &(&1 in every_year)) do
+      {:ok, candidates}
+    else
+      {:error, :unanchored}
+    end
   end
 
   # A yearless value (`XX-15`, "the 15th of any month") has no year to
@@ -300,7 +321,9 @@ defmodule Tempo.Mask do
 
   # A month counted from the first, rather than one still counting from the
   # end of a year the value does not have.
-  defp counted?(month), do: is_integer(month) and month > 0
+  defp counted?(month) do
+    is_integer(month) and month > 0
+  end
 
   # The values a unit takes in the period the units before it name, which
   # `Tempo.UnitValues` asks the calendar for.
@@ -349,9 +372,13 @@ defmodule Tempo.Mask do
     zeros >= 0 and digits_match?(List.duplicate(0, zeros) ++ digits, mask)
   end
 
-  defp padded_matches_mask?(_below_zero, _mask, _width), do: false
+  defp padded_matches_mask?(_below_zero, _mask, _width) do
+    false
+  end
 
-  defp digits_match?([], []), do: true
+  defp digits_match?([], []) do
+    true
+  end
 
   defp digits_match?([_digit | rest_d], [:X | rest_m]) do
     digits_match?(rest_d, rest_m)
@@ -365,7 +392,9 @@ defmodule Tempo.Mask do
     digit in set_digits(digit_set) and digits_match?(rest_d, rest_m)
   end
 
-  defp digits_match?(_, _), do: false
+  defp digits_match?(_, _) do
+    false
+  end
 
   @doc """
   Return the `{min, max}` numeric range spanned by a digit mask.
@@ -403,7 +432,9 @@ defmodule Tempo.Mask do
     matches_mask?(abs(candidate), rest_mask)
   end
 
-  def matches_mask?(_candidate, [:negative | _rest_mask]), do: false
+  def matches_mask?(_candidate, [:negative | _rest_mask]) do
+    false
+  end
 
   # Years carry no leading zeros — a 2-digit `XX` year mask means 10..99,
   # `XXXX` means 1000..9999 — so the candidate's digit count must equal
@@ -416,7 +447,11 @@ defmodule Tempo.Mask do
   # `000X` is the years 0 to 9 and `00XX` the years 0 to 99. It matched no
   # year, and a walk of one raised.
   def matches_mask?(candidate, [0, _digit | _rest] = mask) do
-    significant = mask |> Enum.drop_while(&(&1 == 0)) |> at_least_one_digit()
+    significant =
+      mask
+      |> Enum.drop_while(&(&1 == 0))
+      |> at_least_one_digit()
+
     digits = Integer.digits(candidate)
     padding = length(significant) - length(digits)
 
@@ -430,15 +465,22 @@ defmodule Tempo.Mask do
   end
 
   # A mask of nothing but zeros is the year 0, whose one digit is a zero.
-  defp at_least_one_digit([]), do: [0]
-  defp at_least_one_digit(digits), do: digits
+  defp at_least_one_digit([]) do
+    [0]
+  end
+
+  defp at_least_one_digit(digits) do
+    digits
+  end
 
   # Per-position match between candidate digits and mask elements.
   # `:X` is a wildcard, a digit set matches any of its digits, and any
   # other element (an integer digit) must match the candidate's digit
   # exactly. Mirrors the `digits_match?/2` helper used by
   # `padded_matches_mask?/3` above.
-  defp digits_equal_or_wildcard?([], []), do: true
+  defp digits_equal_or_wildcard?([], []) do
+    true
+  end
 
   defp digits_equal_or_wildcard?([_digit | rest_d], [:X | rest_m]) do
     digits_equal_or_wildcard?(rest_d, rest_m)
@@ -453,7 +495,9 @@ defmodule Tempo.Mask do
     digit in set_digits(digit_set) and digits_equal_or_wildcard?(rest_d, rest_m)
   end
 
-  defp digits_equal_or_wildcard?(_, _), do: false
+  defp digits_equal_or_wildcard?(_, _) do
+    false
+  end
 
   # The digits a digit set allows: `{0,2,4,6,8}` parses to `[0, 2, 4, 6, 8]`
   # and `{2..3}` to `[2..3]`.
@@ -465,7 +509,11 @@ defmodule Tempo.Mask do
   end
 
   defp set_bounds(digit_set, lo, hi) do
-    {min, max} = digit_set |> set_digits() |> Enum.min_max()
+    {min, max} =
+      digit_set
+      |> set_digits()
+      |> Enum.min_max()
+
     {[min | lo], [max | hi]}
   end
 end

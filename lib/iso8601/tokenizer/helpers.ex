@@ -4,8 +4,13 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
 
   import NimbleParsec
 
-  def recur([]), do: :infinity
-  def recur([other]), do: other
+  def recur([]) do
+    :infinity
+  end
+
+  def recur([other]) do
+    other
+  end
 
   def sign do
     utf8_char([?+, ?-, ?−])
@@ -59,18 +64,22 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
   end
 
   @doc false
-  def enter_set(rest, args, context, _line, _offset),
-    do: {rest, args, Map.update(context, :set_depth, 1, &(&1 + 1))}
+  def enter_set(rest, args, context, _line, _offset) do
+    {rest, args, Map.update(context, :set_depth, 1, &(&1 + 1))}
+  end
 
   @doc false
-  def leave_set(rest, args, context, _line, _offset),
-    do: {rest, args, Map.update(context, :set_depth, 0, &(&1 - 1))}
+  def leave_set(rest, args, context, _line, _offset) do
+    {rest, args, Map.update(context, :set_depth, 0, &(&1 - 1))}
+  end
 
   @doc false
   def outside_a_set(rest, args, context, _line, _offset) do
-    if Map.get(context, :set_depth, 0) > 0,
-      do: {:error, "a comma separates the members of a set"},
-      else: {rest, args, context}
+    if Map.get(context, :set_depth, 0) > 0 do
+      {:error, "a comma separates the members of a set"}
+    else
+      {rest, args, context}
+    end
   end
 
   # A combinator read once at each place it is tried: what it read there, or
@@ -83,8 +92,10 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
   # `Tempo.Iso8601.Tokenizer.Set` defines from the three functions below: a
   # traversal that returns an error is its combinator failing, and the next
   # of the three is tried.
-  def read_once(name, opening),
-    do: lookahead(string(opening)) |> read_once_of(name, Tempo.Iso8601.Tokenizer.Set)
+  def read_once(name, opening) do
+    lookahead(string(opening))
+    |> read_once_of(name, Tempo.Iso8601.Tokenizer.Set)
+  end
 
   # A combinator whose reading is kept where it reads, and which is read
   # again where it is refused, so that it is refused in its own words: an
@@ -106,8 +117,9 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
     ])
   end
 
-  def read_before(name),
-    do: post_traverse(empty(), {Tempo.Iso8601.Tokenizer.Memo, :read_before, [name]})
+  def read_before(name) do
+    post_traverse(empty(), {Tempo.Iso8601.Tokenizer.Memo, :read_before, [name]})
+  end
 
   def read_now(name, combinator) do
     post_traverse(
@@ -117,8 +129,9 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
     )
   end
 
-  def refused(name),
-    do: post_traverse(empty(), {Tempo.Iso8601.Tokenizer.Memo, :refused, [name]})
+  def refused(name) do
+    post_traverse(empty(), {Tempo.Iso8601.Tokenizer.Memo, :refused, [name]})
+  end
 
   def negative do
     ascii_char([?-])
@@ -245,7 +258,9 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
   end
 
   @doc false
-  def pair_with_unit([qualifier], unit), do: {unit, qualifier}
+  def pair_with_unit([qualifier], unit) do
+    {unit, qualifier}
+  end
 
   defp qualifier_symbol(combinator) do
     combinator
@@ -316,10 +331,17 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
 
   # Single-value pass-through (e.g. a duration or interval token that
   # was not wrapped by date/datetime/time_of_day).
-  defp merge_qualification(other, _segments), do: other
+  defp merge_qualification(other, _segments) do
+    other
+  end
 
-  defp extended_entry(nil), do: []
-  defp extended_entry(segments), do: [extended: segments]
+  defp extended_entry(nil) do
+    []
+  end
+
+  defp extended_entry(segments) do
+    [extended: segments]
+  end
 
   @doc false
   # A member of a set with its qualifiers, read as a value written alone
@@ -337,14 +359,18 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
     end
   end
 
-  defp with_suffix({tag, inner}, segments), do: {tag, inner ++ [extended: segments]}
+  defp with_suffix({tag, inner}, segments) do
+    {tag, inner ++ [extended: segments]}
+  end
 
-  defp member_with_qualifiers([{tag, inner}]) when tag in [:date, :datetime, :time_of_day],
-    do: {tag, inner}
+  defp member_with_qualifiers([{tag, inner}]) when tag in [:date, :datetime, :time_of_day] do
+    {tag, inner}
+  end
 
   defp member_with_qualifiers([{tag, inner}, {:qualification, complete}])
-       when tag in [:date, :datetime, :time_of_day],
-       do: {tag, inner ++ [qualification: complete]}
+       when tag in [:date, :datetime, :time_of_day] do
+    {tag, inner ++ [qualification: complete]}
+  end
 
   defp member_with_qualifiers([{:qualification, leading}, {tag, inner} | trailing])
        when tag in [:date, :datetime, :time_of_day] do

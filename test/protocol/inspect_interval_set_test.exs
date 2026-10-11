@@ -5,7 +5,11 @@ defmodule Tempo.Protocol.InspectIntervalSetTest do
 
   alias Tempo.IntervalSet
 
-  defp set(sigil), do: sigil |> Tempo.to_interval_set() |> elem(1)
+  defp set(sigil) do
+    sigil
+    |> Tempo.to_interval_set()
+    |> elem(1)
+  end
 
   test "an empty set inspects as an empty list" do
     assert inspect(%IntervalSet{intervals: []}) == "#Tempo.IntervalSet<[]>"

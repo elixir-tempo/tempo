@@ -269,7 +269,12 @@ defmodule Tempo.ICal.Test do
 
       {:ok, set} = ICal.parse(ics)
       assert IntervalSet.count(set) == 2
-      summaries = set.intervals |> Enum.map(& &1.metadata.summary) |> Enum.sort()
+
+      summaries =
+        set.intervals
+        |> Enum.map(& &1.metadata.summary)
+        |> Enum.sort()
+
       assert summaries == ["Event A", "Event B"]
     end
 
@@ -436,7 +441,10 @@ defmodule Tempo.ICal.Test do
       assert IntervalSet.count(set) == 3
 
       # Each occurrence keeps its summary; days are 7 apart.
-      days = set.intervals |> Enum.map(& &1.from.time[:day])
+      days =
+        set.intervals
+        |> Enum.map(& &1.from.time[:day])
+
       assert days == [15, 22, 29]
 
       assert Enum.all?(set.intervals, fn iv ->
@@ -486,7 +494,10 @@ defmodule Tempo.ICal.Test do
       assert IntervalSet.count(set) == 4
 
       # 14-day spacing: Jun 1, Jun 15, Jun 29, Jul 13.
-      days = set.intervals |> Enum.map(&{&1.from.time[:month], &1.from.time[:day]})
+      days =
+        set.intervals
+        |> Enum.map(&{&1.from.time[:month], &1.from.time[:day]})
+
       assert days == [{6, 1}, {6, 15}, {6, 29}, {7, 13}]
     end
 
@@ -599,8 +610,9 @@ defmodule Tempo.ICal.Test do
       Enum.map(members, fn %{spans: [span]} -> span end)
     end
 
-    defp microseconds(%NaiveDateTime{} = moment),
-      do: NaiveDateTime.diff(moment, @epoch, :microsecond)
+    defp microseconds(%NaiveDateTime{} = moment) do
+      NaiveDateTime.diff(moment, @epoch, :microsecond)
+    end
 
     defp days(dates) do
       for date <- dates do

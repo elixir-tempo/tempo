@@ -25,7 +25,10 @@ defmodule Tempo.Iso8601.Parser.Data.Test do
   @interval_tests @interval_data
                   |> File.read!()
                   |> String.split("\n")
-                  |> Enum.map(&(String.split(&1, "\t") |> Enum.at(1)))
+                  |> Enum.map(
+                    &(String.split(&1, "\t")
+                      |> Enum.at(1))
+                  )
                   |> Enum.with_index()
                   |> Enum.filter(&is_nil(elem(&1, 1)))
 

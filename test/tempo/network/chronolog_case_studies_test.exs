@@ -42,7 +42,9 @@ defmodule Tempo.Network.ChronoLogCaseStudiesTest do
     }
   }
 
-  defp load(file), do: ChronoLog.from_file(Path.join(@fixtures, file))
+  defp load(file) do
+    ChronoLog.from_file(Path.join(@fixtures, file))
+  end
 
   defp bounds(period) do
     {

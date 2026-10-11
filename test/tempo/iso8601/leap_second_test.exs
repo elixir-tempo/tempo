@@ -78,6 +78,11 @@ defmodule Tempo.Iso8601.LeapSecond.Test do
     end
   end
 
-  defp pad(n) when n < 10, do: "0#{n}"
-  defp pad(n), do: "#{n}"
+  defp pad(n) when n < 10 do
+    "0#{n}"
+  end
+
+  defp pad(n) do
+    "#{n}"
+  end
 end

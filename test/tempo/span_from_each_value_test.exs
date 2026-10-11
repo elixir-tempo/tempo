@@ -27,17 +27,26 @@ defmodule Tempo.SpanFromEachValueTest do
 
   ## The measure
 
-  defp seconds(%Date{} = date), do: seconds(NaiveDateTime.new!(date, ~T[00:00:00]))
+  defp seconds(%Date{} = date) do
+    seconds(NaiveDateTime.new!(date, ~T[00:00:00]))
+  end
 
-  defp seconds(%NaiveDateTime{} = moment),
-    do: moment |> NaiveDateTime.to_gregorian_seconds() |> elem(0)
+  defp seconds(%NaiveDateTime{} = moment) do
+    moment
+    |> NaiveDateTime.to_gregorian_seconds()
+    |> elem(0)
+  end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
   defp spans(value) do
     {:ok, %IntervalSet{} = set} = Tempo.to_interval(value)
-    set |> IntervalSet.members() |> Enum.map(&bounds/1)
+
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&bounds/1)
   end
 
   # A start of June 2026 that holds a set of days, as text, with the dates
@@ -46,7 +55,9 @@ defmodule Tempo.SpanFromEachValueTest do
   @days [[1, 15], [1, 2, 3], [10, 30], [28, 29, 30]]
   @durations [{"P1D", [day: 1]}, {"P3D", [day: 3]}, {"P1W", [week: 1]}, {"P1M", [month: 1]}]
 
-  defp set(days), do: "{" <> Enum.join(days, ",") <> "}"
+  defp set(days) do
+    "{" <> Enum.join(days, ",") <> "}"
+  end
 
   describe "an interval written with a duration from a start that holds a set" do
     test "is the span from each value of the set" do

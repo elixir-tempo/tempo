@@ -35,6 +35,11 @@ defmodule Tempo.UnboundedSetError do
       "and build a bounded set from them."
   end
 
-  defp operation_phrase(nil), do: "The operation"
-  defp operation_phrase(operation), do: "`#{operation}`"
+  defp operation_phrase(nil) do
+    "The operation"
+  end
+
+  defp operation_phrase(operation) do
+    "`#{operation}`"
+  end
 end

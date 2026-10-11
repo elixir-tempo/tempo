@@ -63,14 +63,15 @@ defmodule Tempo.RRule.StepPastPartsTest do
 
   ## The measure
 
-  defp read(text),
-    do:
-      NaiveDateTime.from_iso8601!(
-        text <> String.slice("2026-06-16T00:00:00", byte_size(text)..-1//1)
-      )
+  defp read(text) do
+    NaiveDateTime.from_iso8601!(
+      text <> String.slice("2026-06-16T00:00:00", byte_size(text)..-1//1)
+    )
+  end
 
-  defp place_in_week(%NaiveDateTime{} = stop),
-    do: {Date.day_of_week(stop), stop.hour, stop.minute, stop.second}
+  defp place_in_week(%NaiveDateTime{} = stop) do
+    {Date.day_of_week(stop), stop.hour, stop.minute, stop.second}
+  end
 
   # Every place in the week a walk stops at: it is back where it began after
   # them, and goes round them again.
@@ -115,25 +116,46 @@ defmodule Tempo.RRule.StepPastPartsTest do
     end)
   end
 
-  defp duration(:day, amount), do: "P#{amount}D"
-  defp duration(:hour, amount), do: "PT#{amount}H"
-  defp duration(:minute, amount), do: "PT#{amount}M"
-  defp duration(:second, amount), do: "PT#{amount}S"
+  defp duration(:day, amount) do
+    "P#{amount}D"
+  end
 
-  defp part({part, [value]}), do: "#{value}#{Map.fetch!(@designators, part)}"
+  defp duration(:hour, amount) do
+    "PT#{amount}H"
+  end
 
-  defp part({part, values}),
-    do: "{#{Enum.join(values, ",")}}#{Map.fetch!(@designators, part)}"
+  defp duration(:minute, amount) do
+    "PT#{amount}M"
+  end
+
+  defp duration(:second, amount) do
+    "PT#{amount}S"
+  end
+
+  defp part({part, [value]}) do
+    "#{value}#{Map.fetch!(@designators, part)}"
+  end
+
+  defp part({part, values}) do
+    "{#{Enum.join(values, ",")}}#{Map.fetch!(@designators, part)}"
+  end
 
   defp selection(parts) do
     {days, times} = Enum.split_with(parts, &match?({:day_of_week, _days}, &1))
-    clock = if times == [], do: "", else: "T" <> Enum.map_join(times, &part/1)
+
+    clock =
+      if times == [] do
+        ""
+      else
+        "T" <> Enum.map_join(times, &part/1)
+      end
 
     Enum.map_join(days, &part/1) <> clock
   end
 
-  defp rule(start, unit, amount, parts),
-    do: "R3/#{start}/#{duration(unit, amount)}/FL#{selection(parts)}N"
+  defp rule(start, unit, amount, parts) do
+    "R3/#{start}/#{duration(unit, amount)}/FL#{selection(parts)}N"
+  end
 
   # The moment each occurrence starts at, in seconds, as Erlang counts them.
   # The first occurrence of a walk finer than its start is written as the
@@ -143,14 +165,26 @@ defmodule Tempo.RRule.StepPastPartsTest do
     with {:ok, %IntervalSet{} = occurrences} <- Tempo.to_interval(Tempo.from_iso8601!(text)) do
       occurrences
       |> IntervalSet.members()
-      |> Enum.map(&(&1 |> Interval.from() |> Compare.to_utc_seconds() |> trunc()))
+      |> Enum.map(
+        &(&1
+          |> Interval.from()
+          |> Compare.to_utc_seconds()
+          |> trunc())
+      )
     end
   end
 
-  defp moment(%NaiveDateTime{} = stop),
-    do: stop |> NaiveDateTime.to_erl() |> :calendar.datetime_to_gregorian_seconds()
+  defp moment(%NaiveDateTime{} = stop) do
+    stop
+    |> NaiveDateTime.to_erl()
+    |> :calendar.datetime_to_gregorian_seconds()
+  end
 
-  defp starts(text), do: text |> Tempo.from_iso8601!() |> starts_of()
+  defp starts(text) do
+    text
+    |> Tempo.from_iso8601!()
+    |> starts_of()
+  end
 
   defp starts_of(%Interval{} = recurrence) do
     with {:ok, %IntervalSet{} = occurrences} <- Tempo.to_interval(recurrence) do

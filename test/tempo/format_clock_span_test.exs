@@ -43,9 +43,17 @@ defmodule Tempo.FormatClockSpanTest do
   ## The measure
 
   # A time as the twelve-hour clock of `en` writes it, to a unit.
-  defp said(%Time{} = time, :hour), do: Calendar.strftime(time, "%-I#{@nbsp}%p")
-  defp said(%Time{} = time, :minute), do: Calendar.strftime(time, "%-I:%M#{@nbsp}%p")
-  defp said(%Time{} = time, :second), do: Calendar.strftime(time, "%-I:%M:%S#{@nbsp}%p")
+  defp said(%Time{} = time, :hour) do
+    Calendar.strftime(time, "%-I#{@nbsp}%p")
+  end
+
+  defp said(%Time{} = time, :minute) do
+    Calendar.strftime(time, "%-I:%M#{@nbsp}%p")
+  end
+
+  defp said(%Time{} = time, :second) do
+    Calendar.strftime(time, "%-I:%M:%S#{@nbsp}%p")
+  end
 
   defp shown(value, options \\ []) do
     {:ok, text} = Tempo.to_string(value, options)

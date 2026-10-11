@@ -28,7 +28,13 @@ defmodule Tempo.RRule.WeekdayAtAPositionTest do
     count = Enum.count(on_the_day)
 
     positions
-    |> Enum.map(&if(&1 < 0, do: count + &1, else: &1 - 1))
+    |> Enum.map(
+      &if &1 < 0 do
+        count + &1
+      else
+        &1 - 1
+      end
+    )
     |> Enum.filter(&(&1 in 0..(count - 1)//1))
     |> Enum.uniq()
     |> Enum.sort()
@@ -40,20 +46,33 @@ defmodule Tempo.RRule.WeekdayAtAPositionTest do
     Date.range(first, Date.end_of_month(first))
   end
 
-  defp year_of(year),
-    do: Date.range(Date.new!(year, 1, 1), Date.new!(year, 12, 31))
+  defp year_of(year) do
+    Date.range(Date.new!(year, 1, 1), Date.new!(year, 12, 31))
+  end
 
-  defp days_of({:ok, %Interval{} = one}), do: [day_of(one)]
-  defp days_of({:ok, %IntervalSet{} = set}), do: Enum.map(IntervalSet.members(set), &day_of/1)
+  defp days_of({:ok, %Interval{} = one}) do
+    [day_of(one)]
+  end
+
+  defp days_of({:ok, %IntervalSet{} = set}) do
+    Enum.map(IntervalSet.members(set), &day_of/1)
+  end
 
   defp day_of(%Interval{} = occurrence) do
     {:ok, date} = Tempo.to_date(Interval.from(occurrence))
     date
   end
 
-  defp written(positions) when is_list(positions), do: "{#{Enum.join(positions, ",")}}"
+  defp written(positions) when is_list(positions) do
+    "{#{Enum.join(positions, ",")}}"
+  end
 
-  defp selected(text), do: text |> Tempo.from_iso8601!() |> Tempo.to_interval() |> days_of()
+  defp selected(text) do
+    text
+    |> Tempo.from_iso8601!()
+    |> Tempo.to_interval()
+    |> days_of()
+  end
 
   @positions [[1], [2], [4], [5], [6], [-1], [-2], [-5], [-6], [1, -1], [-1, 1], [2, 4], [5, -5]]
 
@@ -66,7 +85,10 @@ defmodule Tempo.RRule.WeekdayAtAPositionTest do
         text = "#{year}Y#{month}ML#{weekday}K#{written(positions)}IN"
 
         assert {text, selected(text)} ==
-                 {text, year |> month_of(month) |> at_positions(weekday, positions)}
+                 {text,
+                  year
+                  |> month_of(month)
+                  |> at_positions(weekday, positions)}
       end
     end
 
@@ -104,7 +126,10 @@ defmodule Tempo.RRule.WeekdayAtAPositionTest do
         text = "#{year}YL#{weekday}K#{written(positions)}IN"
 
         assert {text, selected(text)} ==
-                 {text, year |> year_of() |> at_positions(weekday, positions)}
+                 {text,
+                  year
+                  |> year_of()
+                  |> at_positions(weekday, positions)}
       end
     end
 
@@ -115,7 +140,9 @@ defmodule Tempo.RRule.WeekdayAtAPositionTest do
         mondays = Date.range(~D[2026-06-01], ~D[2026-07-31])
 
         assert {text, selected(text)} ==
-                 {text, mondays |> at_positions(1, positions)}
+                 {text,
+                  mondays
+                  |> at_positions(1, positions)}
       end
     end
   end
@@ -129,7 +156,8 @@ defmodule Tempo.RRule.WeekdayAtAPositionTest do
       assert selected("2026Y6ML{1..5}K1IN") == [hd(weekdays)]
 
       assert selected("2026Y6ML1K{2..-1}IN") ==
-               june |> at_positions(1, [2, 3, 4, 5])
+               june
+               |> at_positions(1, [2, 3, 4, 5])
     end
   end
 
@@ -148,8 +176,9 @@ defmodule Tempo.RRule.WeekdayAtAPositionTest do
       [1, 2, 3, 4, 5, 6, 7]
     ]
 
-    defp on_weekdays(%Date.Range{} = days, weekdays),
-      do: Enum.filter(days, &(Date.day_of_week(&1, :monday) in weekdays))
+    defp on_weekdays(%Date.Range{} = days, weekdays) do
+      Enum.filter(days, &(Date.day_of_week(&1, :monday) in weekdays))
+    end
 
     test "are the days of a month on them, in the order of time" do
       for year <- [2024, 2026], month <- 1..12, weekdays <- @weekday_sets do
@@ -192,7 +221,10 @@ defmodule Tempo.RRule.WeekdayAtAPositionTest do
                |> Enum.reject(&(Date.compare(&1, ~D[2026-01-06]) == :lt))
                |> Enum.take(30)
 
-      assert days_of(Tempo.to_interval(yearly)) == days |> on_weekdays([2, 4]) |> Enum.take(150)
+      assert days_of(Tempo.to_interval(yearly)) ==
+               days
+               |> on_weekdays([2, 4])
+               |> Enum.take(150)
     end
   end
 end

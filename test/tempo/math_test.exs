@@ -9,7 +9,9 @@ defmodule Tempo.Math.Test do
   # `add_unit/3` and `subtract_unit/3` examples went on documenting a
   # bare return long after the functions began threading `{:ok, _}`.
   describe "large day-count arithmetic (absolute-day fast path)" do
-    defp add_days(tempo, n), do: Math.add(tempo, %Tempo.Duration{time: [day: n]})
+    defp add_days(tempo, n) do
+      Math.add(tempo, %Tempo.Duration{time: [day: n]})
+    end
 
     test "a large day count matches stepped arithmetic and is fast" do
       # Fast path (Date.add) must equal single-day stepping across
@@ -292,7 +294,9 @@ defmodule Tempo.Math.Test do
     test "a day it names is shifted as a day" do
       {:ok, good_friday} = Tempo.on(~o"LLL(easter)eN/P-3DN5K1IN", ~o"2027")
 
-      assert good_friday |> Interval.from() |> Tempo.shift(~o"-P1D") == ~o"2027Y3M25D"
+      assert good_friday
+             |> Interval.from()
+             |> Tempo.shift(~o"-P1D") == ~o"2027Y3M25D"
     end
   end
 

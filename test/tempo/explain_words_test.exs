@@ -26,15 +26,24 @@ defmodule Tempo.ExplainWordsTest do
     ~N[2024-02-29 12:00:01]
   ]
 
-  defp explain(text), do: Tempo.explain(Tempo.from_iso8601!(text))
+  defp explain(text) do
+    Tempo.explain(Tempo.from_iso8601!(text))
+  end
 
-  defp clock(%NaiveDateTime{} = moment), do: Calendar.strftime(moment, "%H:%M:%S")
+  defp clock(%NaiveDateTime{} = moment) do
+    Calendar.strftime(moment, "%H:%M:%S")
+  end
 
   describe "a time written to its second" do
     test "is worded to the second, and spans it" do
       for moment <- @seconds do
         written = NaiveDateTime.to_iso8601(moment)
-        next = moment |> NaiveDateTime.add(1, :second) |> NaiveDateTime.to_iso8601()
+
+        next =
+          moment
+          |> NaiveDateTime.add(1, :second)
+          |> NaiveDateTime.to_iso8601()
+
         explained = explain(written)
 
         assert {written, explained =~ " at #{clock(moment)}.\n"} == {written, true}
@@ -206,7 +215,9 @@ defmodule Tempo.ExplainWordsTest do
     # names. Each end was told as its year, the group left out: "From: 2026.
     # To: 2026" of the interval from one quarter to the next. The measure is
     # the names `Calendar.strftime/2` gives the months.
-    defp month(number), do: Calendar.strftime(Date.new!(2026, number, 1), "%B")
+    defp month(number) do
+      Calendar.strftime(Date.new!(2026, number, 1), "%B")
+    end
 
     test "names the months of each end" do
       for {interval, {from_first, from_last}, {to_first, to_last}} <- [

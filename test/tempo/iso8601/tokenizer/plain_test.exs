@@ -59,12 +59,18 @@ defmodule Tempo.Iso8601.Tokenizer.PlainTest do
     |> Enum.flat_map(fn {:ok, different} -> different end)
   end
 
-  defp scanned(texts), do: Enum.count(texts, &match?({:ok, _tokens}, Plain.tokens(&1)))
+  defp scanned(texts) do
+    Enum.count(texts, &match?({:ok, _tokens}, Plain.tokens(&1)))
+  end
 
   describe "the scan of a plain form gives what the grammar gives" do
     test "for four digits, and four bytes that are not" do
       years =
-        for year <- 0..9999//37, do: year |> Integer.to_string() |> String.pad_leading(4, "0")
+        for year <- 0..9999//37 do
+          year
+          |> Integer.to_string()
+          |> String.pad_leading(4, "0")
+        end
 
       others = ["202X", "20-6", "T102", "-026", "+026", "2026 ", " 2026", "２０２６"]
 
@@ -255,7 +261,9 @@ defmodule Tempo.Iso8601.Tokenizer.PlainTest do
     @minutes_designated ["", "6M", "90M"]
     @seconds_designated ["", "7S", "0S"]
 
-    defp spans_scanned(texts), do: Enum.count(texts, &match?({:ok, _tokens}, Plain.span(&1)))
+    defp spans_scanned(texts) do
+      Enum.count(texts, &match?({:ok, _tokens}, Plain.span(&1)))
+    end
 
     # Every duration those write, with a `T` before a time of day.
     defp durations do
@@ -267,7 +275,17 @@ defmodule Tempo.Iso8601.Tokenizer.PlainTest do
           minute <- @minutes_designated,
           second <- @seconds_designated do
         time = hour <> minute <> second
-        "P" <> year <> month <> week <> day <> if(time == "", do: "", else: "T" <> time)
+
+        "P" <>
+          year <>
+          month <>
+          week <>
+          day <>
+          if time == "" do
+            ""
+          else
+            "T" <> time
+          end
       end
     end
 

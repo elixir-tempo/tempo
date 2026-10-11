@@ -353,7 +353,10 @@ defmodule Tempo.Enumeration.Test do
       {:ok, interval} = Tempo.to_interval(~o"2022-11-06[America/New_York]")
 
       shifts =
-        interval |> Enum.to_list() |> Enum.filter(&(&1.time[:hour] == 1)) |> Enum.map(& &1.shift)
+        interval
+        |> Enum.to_list()
+        |> Enum.filter(&(&1.time[:hour] == 1))
+        |> Enum.map(& &1.shift)
 
       assert shifts == [[hour: -4], [hour: -5]]
     end

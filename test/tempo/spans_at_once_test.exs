@@ -27,13 +27,27 @@ defmodule Tempo.SpansAtOnceTest do
   ## The measure
 
   # What is to be said of a value that names `count` values.
-  defp to_say(count) when count > @most, do: :refused
-  defp to_say(count), do: {:spans, count}
+  defp to_say(count) when count > @most do
+    :refused
+  end
 
-  defp said({:ok, %IntervalSet{} = set}), do: {:spans, IntervalSet.count(set)}
-  defp said({:error, %ConversionError{reason: :too_many_values}}), do: :refused
+  defp to_say(count) do
+    {:spans, count}
+  end
 
-  defp converted(text), do: text |> Tempo.from_iso8601!() |> Tempo.to_interval()
+  defp said({:ok, %IntervalSet{} = set}) do
+    {:spans, IntervalSet.count(set)}
+  end
+
+  defp said({:error, %ConversionError{reason: :too_many_values}}) do
+    :refused
+  end
+
+  defp converted(text) do
+    text
+    |> Tempo.from_iso8601!()
+    |> Tempo.to_interval()
+  end
 
   defp held_to(cases) do
     for {text, count} <- cases do

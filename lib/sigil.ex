@@ -387,7 +387,9 @@ defmodule Tempo.Sigils do
   # Resolve the modifier char list to a list of unit atoms to
   # bind. Order in the sigil is irrelevant — the pattern builder
   # re-sorts by axis position.
-  defp bindings_from_modifiers([]), do: []
+  defp bindings_from_modifiers([]) do
+    []
+  end
 
   defp bindings_from_modifiers(letters) when is_list(letters) do
     Enum.map(letters, fn letter ->
@@ -449,7 +451,9 @@ defmodule Tempo.Sigils do
             "#{Calendars.inspect(other.__struct__)} values"
   end
 
-  defp reject_container_bindings!([], _module), do: :ok
+  defp reject_container_bindings!([], _module) do
+    :ok
+  end
 
   defp reject_container_bindings!(bindings, module) do
     raise ArgumentError,
@@ -542,7 +546,9 @@ defmodule Tempo.Sigils do
   # Integers (including negatives) are valid literal patterns.
   # Anything else indicates a non-simple Tempo component that we
   # don't yet know how to express as a static Elixir pattern.
-  defp assert_matchable!(_unit, value) when is_integer(value), do: :ok
+  defp assert_matchable!(_unit, value) when is_integer(value) do
+    :ok
+  end
 
   defp assert_matchable!(unit, value) do
     raise ArgumentError,
@@ -583,10 +589,21 @@ defmodule Tempo.Sigils do
     axis_of(week?, ordinal?, season?)
   end
 
-  defp axis_of(true = _week?, _ordinal?, _season?), do: @iso_week_axis
-  defp axis_of(_week?, true = _ordinal?, _season?), do: @ordinal_axis
-  defp axis_of(_week?, _ordinal?, true = _season?), do: @season_axis
-  defp axis_of(_week?, _ordinal?, _season?), do: @gregorian_axis
+  defp axis_of(true = _week?, _ordinal?, _season?) do
+    @iso_week_axis
+  end
+
+  defp axis_of(_week?, true = _ordinal?, _season?) do
+    @ordinal_axis
+  end
+
+  defp axis_of(_week?, _ordinal?, true = _season?) do
+    @season_axis
+  end
+
+  defp axis_of(_week?, _ordinal?, _season?) do
+    @gregorian_axis
+  end
 
   defp index_in_axis!(unit, axis) do
     case Enum.find_index(axis, &(&1 == unit)) do
@@ -610,8 +627,13 @@ defmodule Tempo.Sigils do
   # prefix-match semantics of phase ①/② so that an endpoint like
   # `~o"2022Y"` matches any Tempo whose `time` starts with year
   # 2022.
-  defp endpoint_pattern(:undefined), do: :undefined
-  defp endpoint_pattern(nil), do: nil
+  defp endpoint_pattern(:undefined) do
+    :undefined
+  end
+
+  defp endpoint_pattern(nil) do
+    nil
+  end
 
   defp endpoint_pattern(%Tempo{time: time}) do
     time_pattern = build_time_match_pattern(time, [])
@@ -676,9 +698,17 @@ defmodule Tempo.Sigils do
     end
   end
 
-  defp set_member_pattern(%Tempo.Range{} = range), do: range_pattern(range)
-  defp set_member_pattern(%Tempo{} = tempo), do: endpoint_pattern(tempo)
-  defp set_member_pattern(%Tempo.Duration{} = duration), do: endpoint_pattern(duration)
+  defp set_member_pattern(%Tempo.Range{} = range) do
+    range_pattern(range)
+  end
+
+  defp set_member_pattern(%Tempo{} = tempo) do
+    endpoint_pattern(tempo)
+  end
+
+  defp set_member_pattern(%Tempo.Duration{} = duration) do
+    endpoint_pattern(duration)
+  end
 
   defp set_member_pattern(other) do
     raise ArgumentError,

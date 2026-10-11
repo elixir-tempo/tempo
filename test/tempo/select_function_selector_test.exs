@@ -13,8 +13,9 @@ defmodule Tempo.SelectFunctionSelectorTest do
   alias Tempo.Interval
   alias Tempo.IntervalSet
 
-  defp days({:ok, %IntervalSet{} = set}),
-    do: for(member <- IntervalSet.members(set), do: Tempo.day(Interval.from(member)))
+  defp days({:ok, %IntervalSet{} = set}) do
+    for(member <- IntervalSet.members(set), do: Tempo.day(Interval.from(member)))
+  end
 
   describe "a selector that is a function" do
     test "selects by what it returns for the period: indexes, a range of them, a value or nothing" do

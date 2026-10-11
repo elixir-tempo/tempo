@@ -16,7 +16,10 @@ defmodule Tempo.ValidatedCoreTest do
 
   defp spans(value) do
     {:ok, set} = Tempo.to_interval(value)
-    set |> IntervalSet.members() |> Enum.map(&{&1.from, &1.to})
+
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&{&1.from, &1.to})
   end
 
   describe "a fraction of a second before a time shift" do
@@ -236,7 +239,9 @@ defmodule Tempo.ValidatedCoreTest do
 
   describe "every week of several years" do
     test "is the weeks of each, not the calendar years" do
-      assert spans(~o"202XYXXW") |> hd() == {~o"2020-W01", ~o"2021-W01"}
+      assert spans(~o"202XYXXW")
+             |> hd() == {~o"2020-W01", ~o"2021-W01"}
+
       assert Tempo.to_interval(~o"2026YXXW") == {:ok, ~o"2026Y1W/2027Y1W"}
     end
   end
@@ -429,8 +434,15 @@ defmodule Tempo.ValidatedCoreTest do
     end
   end
 
-  defp certainty([only], only), do: :certain
+  defp certainty([only], only) do
+    :certain
+  end
 
-  defp certainty(relations, relation),
-    do: if(relation in relations, do: :possible, else: :impossible)
+  defp certainty(relations, relation) do
+    if relation in relations do
+      :possible
+    else
+      :impossible
+    end
+  end
 end

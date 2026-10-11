@@ -36,14 +36,21 @@ defmodule Tempo.CompositeCalendarTest do
     {Sweden, 1700, 2}
   ]
 
-  defp value(text, calendar), do: Tempo.from_iso8601!(text, calendar)
+  defp value(text, calendar) do
+    Tempo.from_iso8601!(text, calendar)
+  end
 
-  defp month(year, month, calendar), do: value("#{year}Y#{month}M", calendar)
+  defp month(year, month, calendar) do
+    value("#{year}Y#{month}M", calendar)
+  end
 
-  defp day(%Date{} = date), do: Tempo.from_elixir(date)
+  defp day(%Date{} = date) do
+    Tempo.from_elixir(date)
+  end
 
-  defp day_numbers(calendar, year, month),
-    do: for(day <- 1..31, calendar.valid_date?(year, month, day), do: day)
+  defp day_numbers(calendar, year, month) do
+    for(day <- 1..31, calendar.valid_date?(year, month, day), do: day)
+  end
 
   describe "what the calendars say" do
     test "is that a month has days missing, begins late or ends early" do
@@ -309,7 +316,9 @@ defmodule Tempo.CompositeCalendarTest do
     test "counts its days as the month has them" do
       {:ok, last} = Tempo.to_interval(value("1752Y9ML-1DN", England))
 
-      assert last |> IntervalSet.members() |> Enum.map(&Interval.from/1) == [
+      assert last
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.from/1) == [
                value("1752Y9M30D", England)
              ]
 
@@ -318,7 +327,9 @@ defmodule Tempo.CompositeCalendarTest do
 
       {:ok, mondays} = Tempo.select(month(1752, 9, England), ~o"1K")
 
-      assert mondays |> IntervalSet.members() |> Enum.map(&Interval.from/1) ==
+      assert mondays
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.from/1) ==
                for(
                  date <- England.month(1752, 9),
                  Date.day_of_week(date, :monday) == 1,
@@ -419,7 +430,10 @@ defmodule Tempo.CompositeCalendarTest do
     end
 
     test "counts a month of a group of years from the first month it has" do
-      months = England.year(1751) |> Enum.map(& &1.month) |> Enum.uniq()
+      months =
+        England.year(1751)
+        |> Enum.map(& &1.month)
+        |> Enum.uniq()
 
       # `1752G1YU` is the group of one year that is 1751.
       assert {:ok, interval} = Tempo.to_interval(value("1752G1YU", England))
@@ -438,7 +452,10 @@ defmodule Tempo.CompositeCalendarTest do
     end
 
     test "has months whose every day is the month, as in any calendar" do
-      for month <- England.year(1751) |> Enum.map(& &1.month) |> Enum.uniq() do
+      for month <-
+            England.year(1751)
+            |> Enum.map(& &1.month)
+            |> Enum.uniq() do
         {:ok, of_every_day} = Tempo.to_interval(value("1751Y#{month}MX*D", England))
         {:ok, of_the_month} = Tempo.to_interval(month(1751, month, England))
 

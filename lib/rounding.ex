@@ -39,7 +39,9 @@ defmodule Tempo.Rounding do
     end
   end
 
-  defp order(unit, resolution) when unit in @day_units and resolution in @day_units, do: :same
+  defp order(unit, resolution) when unit in @day_units and resolution in @day_units do
+    :same
+  end
 
   defp order(unit, resolution) do
     case Unit.compare(unit, resolution) do
@@ -58,23 +60,34 @@ defmodule Tempo.Rounding do
          %Tempo{} = next <- Tempo.shift(floor, [{step(unit), 1}]) do
       start = position(boundary(floor, time))
 
-      if 2 * (position(tempo) - start) >= position(boundary(next, time)) - start,
-        do: next,
-        else: floor
+      if 2 * (position(tempo) - start) >= position(boundary(next, time)) - start do
+        next
+      else
+        floor
+      end
     end
   end
 
   defp nearest(%Tempo{} = tempo, unit) do
     with %Tempo{} = floor <- Tempo.trunc(tempo, unit),
          {:ok, up?} <- half_way_or_more?(tempo, unit) do
-      if up?, do: Tempo.shift(floor, [{step(unit), 1}]), else: floor
+      if up? do
+        Tempo.shift(floor, [{step(unit), 1}])
+      else
+        floor
+      end
     end
   end
 
   # The unit a value steps by to the next boundary: a day, however the day
   # is written.
-  defp step(unit) when unit in @day_units, do: :day
-  defp step(unit), do: unit
+  defp step(unit) when unit in @day_units do
+    :day
+  end
+
+  defp step(unit) do
+    unit
+  end
 
   ## A value with a year
 
@@ -82,12 +95,16 @@ defmodule Tempo.Rounding do
   # in starts with its first week, which is not 1 January: ISO 8601's 2026
   # runs from 29 December 2025.
   defp boundary(%Tempo{time: [year: year]} = point, time) do
-    if List.keymember?(time, :week, 0),
-      do: %{point | time: [year: year, week: 1]},
-      else: point
+    if List.keymember?(time, :week, 0) do
+      %{point | time: [year: year, week: 1]}
+    else
+      point
+    end
   end
 
-  defp boundary(point, _time), do: point
+  defp boundary(point, _time) do
+    point
+  end
 
   # Microseconds along the line the value is on: the time line for a value in
   # a zone, the wall clock for one in none.
@@ -96,9 +113,11 @@ defmodule Tempo.Rounding do
     whole_point = %{point | time: whole}
 
     seconds =
-      if Tempo.floating?(whole_point),
-        do: Compare.to_wall_seconds(whole_point),
-        else: Compare.to_utc_seconds(whole_point)
+      if Tempo.floating?(whole_point) do
+        Compare.to_wall_seconds(whole_point)
+      else
+        Compare.to_utc_seconds(whole_point)
+      end
 
     seconds * @microseconds + fraction
   end
@@ -131,10 +150,13 @@ defmodule Tempo.Rounding do
     end
   end
 
-  defp one_answer([up?], _tempo), do: {:ok, up?}
+  defp one_answer([up?], _tempo) do
+    {:ok, up?}
+  end
 
-  defp one_answer(_differing, tempo),
-    do: {:error, UnanchoredError.exception(value: tempo, operation: :round)}
+  defp one_answer(_differing, tempo) do
+    {:error, UnanchoredError.exception(value: tempo, operation: :round)}
+  end
 
   # The units of a time list after `unit`.
   defp below(time, unit) do
@@ -142,30 +164,51 @@ defmodule Tempo.Rounding do
     |> Enum.drop_while(fn {present, _value} -> order(present, unit) != :finer end)
   end
 
-  defp elapsed([{unit, value} | rest], total) when unit in @day_units,
-    do: elapsed(rest, total + (value - 1) * @day)
+  defp elapsed([{unit, value} | rest], total) when unit in @day_units do
+    elapsed(rest, total + (value - 1) * @day)
+  end
 
-  defp elapsed([{:hour, hour} | rest], total),
-    do: elapsed(rest, total + hour * 3_600 * @microseconds)
+  defp elapsed([{:hour, hour} | rest], total) do
+    elapsed(rest, total + hour * 3_600 * @microseconds)
+  end
 
-  defp elapsed([{:minute, minute} | rest], total),
-    do: elapsed(rest, total + minute * 60 * @microseconds)
+  defp elapsed([{:minute, minute} | rest], total) do
+    elapsed(rest, total + minute * 60 * @microseconds)
+  end
 
-  defp elapsed([{:second, second} | rest], total),
-    do: elapsed(rest, total + second * @microseconds)
+  defp elapsed([{:second, second} | rest], total) do
+    elapsed(rest, total + second * @microseconds)
+  end
 
-  defp elapsed([{:microsecond, {value, _precision}} | rest], total),
-    do: elapsed(rest, total + value)
+  defp elapsed([{:microsecond, {value, _precision}} | rest], total) do
+    elapsed(rest, total + value)
+  end
 
-  defp elapsed([], total), do: total
+  defp elapsed([], total) do
+    total
+  end
 
   # The lengths a unit may have where the value is, in microseconds: one, or
   # the shortest and the longest of a month whose days depend on the year.
-  defp lengths(:second, _time, _calendar), do: [@microseconds]
-  defp lengths(:minute, _time, _calendar), do: [60 * @microseconds]
-  defp lengths(:hour, _time, _calendar), do: [3_600 * @microseconds]
-  defp lengths(unit, _time, _calendar) when unit in @day_units, do: [@day]
-  defp lengths(:week, _time, calendar), do: [calendar.days_in_week() * @day]
+  defp lengths(:second, _time, _calendar) do
+    [@microseconds]
+  end
+
+  defp lengths(:minute, _time, _calendar) do
+    [60 * @microseconds]
+  end
+
+  defp lengths(:hour, _time, _calendar) do
+    [3_600 * @microseconds]
+  end
+
+  defp lengths(unit, _time, _calendar) when unit in @day_units do
+    [@day]
+  end
+
+  defp lengths(:week, _time, calendar) do
+    [calendar.days_in_week() * @day]
+  end
 
   defp lengths(:month, time, calendar) do
     case UnitValues.in_any_year(:day, time, calendar) do
@@ -175,7 +218,9 @@ defmodule Tempo.Rounding do
     end
   end
 
-  defp lengths(_unit, _time, _calendar), do: []
+  defp lengths(_unit, _time, _calendar) do
+    []
+  end
 
   defp finer_error(tempo, resolution, unit) do
     RoundingError.exception(

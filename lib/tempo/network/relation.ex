@@ -181,17 +181,23 @@ defmodule Tempo.Network.Relation do
   @doc false
   # Whether `to_atomic/1` reads a relation of this type.
   @spec valid_type?(term()) :: boolean()
-  def valid_type?(type) when type in @qualitative, do: true
+  def valid_type?(type) when type in @qualitative do
+    true
+  end
 
   def valid_type?({:delay, edge_a, edge_b, comparison, %Tempo.Duration{}})
-      when edge_a in @edges and edge_b in @edges and comparison in @comparisons,
-      do: true
+      when edge_a in @edges and edge_b in @edges and comparison in @comparisons do
+    true
+  end
 
   def valid_type?({:boundary, edge_a, comparison, edge_b})
-      when edge_a in @edges and edge_b in @edges and comparison in @boundary_comparisons,
-      do: true
+      when edge_a in @edges and edge_b in @edges and comparison in @boundary_comparisons do
+    true
+  end
 
-  def valid_type?(_type), do: false
+  def valid_type?(_type) do
+    false
+  end
 
   @typedoc """
   A boundary variable in the constraint graph: the start or end of a
@@ -242,92 +248,144 @@ defmodule Tempo.Network.Relation do
 
   """
   @spec to_atomic(t()) :: [atomic()]
-  def to_atomic(%__MODULE__{type: type, from: a, to: b}), do: atomic_for(type, a, b)
+  def to_atomic(%__MODULE__{type: type, from: a, to: b}) do
+    atomic_for(type, a, b)
+  end
 
   # end(A) ≥ start(B) ∧ end(B) ≥ start(A) — non-empty overlap.
-  defp atomic_for(:contemporary, a, b),
-    do: [le(start(b), finish(a), 0), le(start(a), finish(b), 0)]
+  defp atomic_for(:contemporary, a, b) do
+    [le(start(b), finish(a), 0), le(start(a), finish(b), 0)]
+  end
 
   # start(A) ≤ start(B) ∧ end(B) ≤ end(A).
-  defp atomic_for(:includes, a, b),
-    do: [le(start(a), start(b), 0), le(finish(b), finish(a), 0)]
+  defp atomic_for(:includes, a, b) do
+    [le(start(a), start(b), 0), le(finish(b), finish(a), 0)]
+  end
 
   # start(B) ≤ start(A) ∧ end(A) ≤ end(B).
-  defp atomic_for(:included_in, a, b),
-    do: [le(start(b), start(a), 0), le(finish(a), finish(b), 0)]
+  defp atomic_for(:included_in, a, b) do
+    [le(start(b), start(a), 0), le(finish(a), finish(b), 0)]
+  end
 
   # Overlaps succeeding (Table 2): start(A) ≤ start(B) ≤ end(A) ≤ end(B).
-  defp atomic_for(:overlaps, a, b),
-    do: [le(start(a), start(b), 0), le(start(b), finish(a), 0), le(finish(a), finish(b), 0)]
+  defp atomic_for(:overlaps, a, b) do
+    [le(start(a), start(b), 0), le(start(b), finish(a), 0), le(finish(a), finish(b), 0)]
+  end
 
   # Overlaps preceding: start(B) ≤ start(A) ≤ end(B) ≤ end(A).
-  defp atomic_for(:overlapped_by, a, b),
-    do: [le(start(b), start(a), 0), le(start(a), finish(b), 0), le(finish(b), finish(a), 0)]
+  defp atomic_for(:overlapped_by, a, b) do
+    [le(start(b), start(a), 0), le(start(a), finish(b), 0), le(finish(b), finish(a), 0)]
+  end
 
   # A starts during B: start(B) ≤ start(A) ≤ end(B).
-  defp atomic_for(:starts_during, a, b),
-    do: [le(start(b), start(a), 0), le(start(a), finish(b), 0)]
+  defp atomic_for(:starts_during, a, b) do
+    [le(start(b), start(a), 0), le(start(a), finish(b), 0)]
+  end
 
   # A includes the start of B: start(A) ≤ start(B) ≤ end(A).
-  defp atomic_for(:includes_start, a, b),
-    do: [le(start(a), start(b), 0), le(start(b), finish(a), 0)]
+  defp atomic_for(:includes_start, a, b) do
+    [le(start(a), start(b), 0), le(start(b), finish(a), 0)]
+  end
 
   # A ends during B: start(B) ≤ end(A) ≤ end(B).
-  defp atomic_for(:ends_during, a, b),
-    do: [le(start(b), finish(a), 0), le(finish(a), finish(b), 0)]
+  defp atomic_for(:ends_during, a, b) do
+    [le(start(b), finish(a), 0), le(finish(a), finish(b), 0)]
+  end
 
   # A includes the end of B: start(A) ≤ end(B) ≤ end(A).
-  defp atomic_for(:includes_end, a, b),
-    do: [le(start(a), finish(b), 0), le(finish(b), finish(a), 0)]
+  defp atomic_for(:includes_end, a, b) do
+    [le(start(a), finish(b), 0), le(finish(b), finish(a), 0)]
+  end
 
-  defp atomic_for(:before, a, b), do: [lt(finish(a), start(b))]
+  defp atomic_for(:before, a, b) do
+    [lt(finish(a), start(b))]
+  end
 
-  defp atomic_for(:after, a, b), do: [lt(finish(b), start(a))]
+  defp atomic_for(:after, a, b) do
+    [lt(finish(b), start(a))]
+  end
 
-  defp atomic_for(:immediately_precedes, a, b), do: eq(finish(a), start(b))
+  defp atomic_for(:immediately_precedes, a, b) do
+    eq(finish(a), start(b))
+  end
 
-  defp atomic_for(:immediately_follows, a, b), do: eq(start(a), finish(b))
+  defp atomic_for(:immediately_follows, a, b) do
+    eq(start(a), finish(b))
+  end
 
-  defp atomic_for(:synchronous_start, a, b), do: eq(start(a), start(b))
+  defp atomic_for(:synchronous_start, a, b) do
+    eq(start(a), start(b))
+  end
 
-  defp atomic_for(:synchronous_end, a, b), do: eq(finish(a), finish(b))
+  defp atomic_for(:synchronous_end, a, b) do
+    eq(finish(a), finish(b))
+  end
 
-  defp atomic_for(:equals, a, b), do: eq(start(a), start(b)) ++ eq(finish(a), finish(b))
+  defp atomic_for(:equals, a, b) do
+    eq(start(a), start(b)) ++ eq(finish(a), finish(b))
+  end
 
   # Shared start, A ends no later / no earlier than B (Allen starts / started_by).
-  defp atomic_for(:starts, a, b), do: eq(start(a), start(b)) ++ [le(finish(a), finish(b), 0)]
+  defp atomic_for(:starts, a, b) do
+    eq(start(a), start(b)) ++ [le(finish(a), finish(b), 0)]
+  end
 
-  defp atomic_for(:started_by, a, b), do: eq(start(a), start(b)) ++ [le(finish(b), finish(a), 0)]
+  defp atomic_for(:started_by, a, b) do
+    eq(start(a), start(b)) ++ [le(finish(b), finish(a), 0)]
+  end
 
   # Shared end, A starts no earlier / no later than B (Allen finishes / finished_by).
-  defp atomic_for(:finishes, a, b), do: eq(finish(a), finish(b)) ++ [le(start(b), start(a), 0)]
+  defp atomic_for(:finishes, a, b) do
+    eq(finish(a), finish(b)) ++ [le(start(b), start(a), 0)]
+  end
 
-  defp atomic_for(:finished_by, a, b), do: eq(finish(a), finish(b)) ++ [le(start(a), start(b), 0)]
+  defp atomic_for(:finished_by, a, b) do
+    eq(finish(a), finish(b)) ++ [le(start(a), start(b), 0)]
+  end
 
   # Non-empty interior overlap: start(B) < end(A) ∧ start(A) < end(B).
-  defp atomic_for(:strictly_contemporary, a, b),
-    do: [lt(start(b), finish(a)), lt(start(a), finish(b))]
+  defp atomic_for(:strictly_contemporary, a, b) do
+    [lt(start(b), finish(a)), lt(start(a), finish(b))]
+  end
 
-  defp atomic_for({:delay, edge_a, edge_b, comparison, duration}, a, b),
-    do: delay_atomic(boundary(edge_a, a), boundary(edge_b, b), comparison, duration)
+  defp atomic_for({:delay, edge_a, edge_b, comparison, duration}, a, b) do
+    delay_atomic(boundary(edge_a, a), boundary(edge_b, b), comparison, duration)
+  end
 
-  defp atomic_for({:boundary, edge_a, comparison, edge_b}, a, b),
-    do: boundary_atomic(boundary(edge_a, a), comparison, boundary(edge_b, b))
+  defp atomic_for({:boundary, edge_a, comparison, edge_b}, a, b) do
+    boundary_atomic(boundary(edge_a, a), comparison, boundary(edge_b, b))
+  end
 
-  defp start(id), do: {:start, id}
-  defp finish(id), do: {:end, id}
+  defp start(id) do
+    {:start, id}
+  end
+
+  defp finish(id) do
+    {:end, id}
+  end
 
   # from − to ≤ k.
-  defp le(from, to, k), do: {from, to, k}
+  defp le(from, to, k) do
+    {from, to, k}
+  end
 
   # from < to  ⇒  from − to ≤ -1 (strict on the integer time-scale).
-  defp lt(from, to), do: {from, to, -1}
+  defp lt(from, to) do
+    {from, to, -1}
+  end
 
   # from = to  ⇒  from − to ≤ 0 ∧ to − from ≤ 0.
-  defp eq(from, to), do: [{from, to, 0}, {to, from, 0}]
+  defp eq(from, to) do
+    [{from, to, 0}, {to, from, 0}]
+  end
 
-  defp boundary(:start, id), do: {:start, id}
-  defp boundary(:end, id), do: {:end, id}
+  defp boundary(:start, id) do
+    {:start, id}
+  end
+
+  defp boundary(:end, id) do
+    {:end, id}
+  end
 
   # "edge_a is `comparison` `duration` before edge_b": with the offset
   # `bb − ba`, exactly = d, at least ≥ d, at most ≤ d.
@@ -344,11 +402,25 @@ defmodule Tempo.Network.Relation do
   end
 
   # "ba is `comparison` bb": one boundary of A against one of B.
-  defp boundary_atomic(ba, :before, bb), do: [lt(ba, bb)]
-  defp boundary_atomic(ba, :at_or_before, bb), do: [le(ba, bb, 0)]
-  defp boundary_atomic(ba, :coincident, bb), do: eq(ba, bb)
-  defp boundary_atomic(ba, :at_or_after, bb), do: [le(bb, ba, 0)]
-  defp boundary_atomic(ba, :after, bb), do: [lt(bb, ba)]
+  defp boundary_atomic(ba, :before, bb) do
+    [lt(ba, bb)]
+  end
+
+  defp boundary_atomic(ba, :at_or_before, bb) do
+    [le(ba, bb, 0)]
+  end
+
+  defp boundary_atomic(ba, :coincident, bb) do
+    eq(ba, bb)
+  end
+
+  defp boundary_atomic(ba, :at_or_after, bb) do
+    [le(bb, ba, 0)]
+  end
+
+  defp boundary_atomic(ba, :after, bb) do
+    [lt(bb, ba)]
+  end
 
   # The Allen relations each relation admits, in Allen's order: those of the
   # pairs of periods its constraints hold of. The constraints are not strict
@@ -471,17 +543,55 @@ defmodule Tempo.Network.Relation do
 
   """
   @spec from_allen(atom()) :: relation_type()
-  def from_allen(:precedes), do: :before
-  def from_allen(:preceded_by), do: :after
-  def from_allen(:meets), do: :immediately_precedes
-  def from_allen(:met_by), do: :immediately_follows
-  def from_allen(:overlaps), do: :overlaps
-  def from_allen(:overlapped_by), do: :overlapped_by
-  def from_allen(:contains), do: :includes
-  def from_allen(:during), do: :included_in
-  def from_allen(:equals), do: :equals
-  def from_allen(:starts), do: :starts
-  def from_allen(:started_by), do: :started_by
-  def from_allen(:finishes), do: :finishes
-  def from_allen(:finished_by), do: :finished_by
+  def from_allen(:precedes) do
+    :before
+  end
+
+  def from_allen(:preceded_by) do
+    :after
+  end
+
+  def from_allen(:meets) do
+    :immediately_precedes
+  end
+
+  def from_allen(:met_by) do
+    :immediately_follows
+  end
+
+  def from_allen(:overlaps) do
+    :overlaps
+  end
+
+  def from_allen(:overlapped_by) do
+    :overlapped_by
+  end
+
+  def from_allen(:contains) do
+    :includes
+  end
+
+  def from_allen(:during) do
+    :included_in
+  end
+
+  def from_allen(:equals) do
+    :equals
+  end
+
+  def from_allen(:starts) do
+    :starts
+  end
+
+  def from_allen(:started_by) do
+    :started_by
+  end
+
+  def from_allen(:finishes) do
+    :finishes
+  end
+
+  def from_allen(:finished_by) do
+    :finished_by
+  end
 end

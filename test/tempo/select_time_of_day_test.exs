@@ -38,7 +38,10 @@ defmodule Tempo.SelectTimeOfDayTest do
       assert IntervalSet.count(hours) == 23 * 8
 
       resolutions =
-        hours |> IntervalSet.members() |> Enum.map(&Interval.resolution/1) |> Enum.uniq()
+        hours
+        |> IntervalSet.members()
+        |> Enum.map(&Interval.resolution/1)
+        |> Enum.uniq()
 
       assert resolutions == [:hour]
     end
@@ -141,7 +144,11 @@ defmodule Tempo.SelectTimeOfDayTest do
       for day <- 1..7 do
         base = Tempo.from_iso8601!("2024-W10-#{day}[u-ca=iso-week]")
         date = date_of_week_day(2024, 10, day)
-        nine = date |> DateTime.new!(~T[09:00:00]) |> DateTime.to_unix()
+
+        nine =
+          date
+          |> DateTime.new!(~T[09:00:00])
+          |> DateTime.to_unix()
 
         {:ok, hour} = Tempo.select(base, ~o"T09")
         {:ok, window} = Tempo.select(base, ~o"T09/T17")
@@ -157,7 +164,9 @@ defmodule Tempo.SelectTimeOfDayTest do
       base = Tempo.from_iso8601!("2024-W10-7[America/New_York][u-ca=iso-week]")
 
       nine =
-        ~D[2024-03-10] |> DateTime.new!(~T[09:00:00], "America/New_York") |> DateTime.to_unix()
+        ~D[2024-03-10]
+        |> DateTime.new!(~T[09:00:00], "America/New_York")
+        |> DateTime.to_unix()
 
       {:ok, hour} = Tempo.select(base, ~o"T09")
       {:ok, skipped} = Tempo.select(base, ~o"T02")

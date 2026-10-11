@@ -48,9 +48,13 @@ defmodule Tempo.Interval.Steps do
   # the stored bounds at their stated resolution. A `nil` unit, or one
   # already at (or coarser than) the value's resolution, is a no-op.
   @spec fill_to_unit(Tempo.t(), atom() | nil, module()) :: Tempo.t()
-  def fill_to_unit(%Tempo{} = tempo, nil, _calendar), do: tempo
+  def fill_to_unit(%Tempo{} = tempo, nil, _calendar) do
+    tempo
+  end
 
-  def fill_to_unit(%Tempo{} = tempo, unit, calendar), do: fill_by_unit(tempo, unit, calendar)
+  def fill_to_unit(%Tempo{} = tempo, unit, calendar) do
+    fill_by_unit(tempo, unit, calendar)
+  end
 
   defp fill_by_unit(%Tempo{time: time} = tempo, unit, calendar) do
     {resolution_unit, _span} = Tempo.resolution(tempo)
@@ -66,14 +70,24 @@ defmodule Tempo.Interval.Steps do
     end
   end
 
-  defp range_first(%Range{first: first}), do: first
+  defp range_first(%Range{first: first}) do
+    first
+  end
 
   # A year's first month and a month's first day are asked of the calendar,
   # which gives another than the first to a year that begins on another day
   # (`Tempo.UnitValues.with_first_month/2`, `with_first_day/2`).
-  defp with_first(time, :month, 1, calendar), do: UnitValues.with_first_month(time, calendar)
-  defp with_first(time, :day, 1, calendar), do: UnitValues.with_first_day(time, calendar)
-  defp with_first(time, unit, minimum, _calendar), do: time ++ [{unit, minimum}]
+  defp with_first(time, :month, 1, calendar) do
+    UnitValues.with_first_month(time, calendar)
+  end
+
+  defp with_first(time, :day, 1, calendar) do
+    UnitValues.with_first_day(time, calendar)
+  end
+
+  defp with_first(time, unit, minimum, _calendar) do
+    time ++ [{unit, minimum}]
+  end
 
   @doc """
   Count the number of `unit`-wide steps in the half-open span
@@ -123,7 +137,9 @@ defmodule Tempo.Interval.Steps do
           non_neg_integer() | :not_supported
   def count_steps(%Tempo{time: from_time} = from, %Tempo{time: to_time} = to, unit, calendar) do
     if counted_from?(from_time, unit) and date_axis?(to_time, unit) do
-      from |> count_date_steps(to, unit, calendar) |> steps_before(from, to, unit, calendar)
+      from
+      |> count_date_steps(to, unit, calendar)
+      |> steps_before(from, to, unit, calendar)
     else
       :not_supported
     end
@@ -149,11 +165,13 @@ defmodule Tempo.Interval.Steps do
     Date.diff(date_of!(to_time, calendar), date_of!(from_time, calendar))
   end
 
-  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :hour, calendar),
-    do: count_on_the_clock(from, to, @seconds_per_hour, calendar)
+  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :hour, calendar) do
+    count_on_the_clock(from, to, @seconds_per_hour, calendar)
+  end
 
-  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :minute, calendar),
-    do: count_on_the_clock(from, to, @seconds_per_minute, calendar)
+  defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :minute, calendar) do
+    count_on_the_clock(from, to, @seconds_per_minute, calendar)
+  end
 
   defp count_date_steps(%Tempo{} = from, %Tempo{} = to, :second, calendar) do
     elapsed_seconds(from, to, calendar)
@@ -165,7 +183,9 @@ defmodule Tempo.Interval.Steps do
     div(elapsed_microseconds(from, to, calendar), step)
   end
 
-  defp count_date_steps(_from, _to, _unit, _calendar), do: :not_supported
+  defp count_date_steps(_from, _to, _unit, _calendar) do
+    :not_supported
+  end
 
   # Hours and minutes in a named zone are counted by the time elapsed, which
   # is the count of the values a walk gives only where each change of the
@@ -181,9 +201,11 @@ defmodule Tempo.Interval.Steps do
       from_utc = trunc(Compare.to_utc_seconds(from))
       to_utc = trunc(Compare.to_utc_seconds(to))
 
-      if changes_on_the_steps?(from, from_utc, to_utc, unit_seconds),
-        do: div(to_utc - from_utc, unit_seconds),
-        else: :not_supported
+      if changes_on_the_steps?(from, from_utc, to_utc, unit_seconds) do
+        div(to_utc - from_utc, unit_seconds)
+      else
+        :not_supported
+      end
     else
       div(wall_seconds(to.time, calendar) - wall_seconds(from.time, calendar), unit_seconds)
     end
@@ -211,53 +233,82 @@ defmodule Tempo.Interval.Steps do
   # the unit. The steps in `[from, to)` are those, and one more when the step
   # they reach still starts before `to`, as the walk takes it: `1985/1986-06`
   # is 1985 and 1986, and `2026Y/2026Y6M15D` is 2026.
-  defp steps_before(count, from, to, unit, calendar) when is_integer(count) and count >= 0,
-    do: from |> nth_date_step(count, unit, calendar) |> one_more_before(to, count)
-
-  defp steps_before(count, _from, _to, _unit, _calendar), do: count
-
-  defp one_more_before(%Tempo{} = step, to, count) do
-    if Compare.compare_endpoints(step, to) == :earlier, do: count + 1, else: count
+  defp steps_before(count, from, to, unit, calendar) when is_integer(count) and count >= 0 do
+    from
+    |> nth_date_step(count, unit, calendar)
+    |> one_more_before(to, count)
   end
 
-  defp one_more_before(:not_supported, _to, count), do: count
+  defp steps_before(count, _from, _to, _unit, _calendar) do
+    count
+  end
+
+  defp one_more_before(%Tempo{} = step, to, count) do
+    if Compare.compare_endpoints(step, to) == :earlier do
+      count + 1
+    else
+      count
+    end
+  end
+
+  defp one_more_before(:not_supported, _to, count) do
+    count
+  end
 
   # The closed forms count and step a calendar date — a year, a year and
   # month, or a year, month and day beneath days and clock units — each of
   # whose units is one whole number. A value on the week axis (a week's
   # days), one with no year, and one that holds a set, a mask or an
   # unspecified unit are walked instead.
-  defp date_axis?([{:year, year} | rest], :year) when is_integer(year), do: whole_units?(rest)
+  defp date_axis?([{:year, year} | rest], :year) when is_integer(year) do
+    whole_units?(rest)
+  end
 
   defp date_axis?([{:year, year}, {:month, month} | rest], :month)
-       when is_integer(year) and is_integer(month),
-       do: whole_units?(rest)
+       when is_integer(year) and is_integer(month) do
+    whole_units?(rest)
+  end
 
   defp date_axis?([{:year, year}, {:month, month}, {:day, day} | rest], unit)
        when unit not in [:year, :month] and is_integer(year) and is_integer(month) and
-              is_integer(day),
-       do: whole_units?(rest)
+              is_integer(day) do
+    whole_units?(rest)
+  end
 
-  defp date_axis?(_time, _unit), do: false
+  defp date_axis?(_time, _unit) do
+    false
+  end
 
   # The value steps are counted from, which gives a microsecond step its
   # width, so it must hold one.
-  defp counted_from?(time, :microsecond),
-    do: date_axis?(time, :microsecond) and List.keymember?(time, :microsecond, 0)
+  defp counted_from?(time, :microsecond) do
+    date_axis?(time, :microsecond) and List.keymember?(time, :microsecond, 0)
+  end
 
-  defp counted_from?(time, unit), do: date_axis?(time, unit)
+  defp counted_from?(time, unit) do
+    date_axis?(time, unit)
+  end
 
   @doc false
   # Whether every unit of a time list is one whole number: no set, range,
   # group, mask, unspecified unit or margin of error.
   @spec whole_units?(list()) :: boolean()
   def whole_units?([{:microsecond, {value, precision}} | rest])
-      when is_integer(value) and is_integer(precision),
-      do: whole_units?(rest)
+      when is_integer(value) and is_integer(precision) do
+    whole_units?(rest)
+  end
 
-  def whole_units?([{_unit, value} | rest]) when is_integer(value), do: whole_units?(rest)
-  def whole_units?([]), do: true
-  def whole_units?(_time), do: false
+  def whole_units?([{_unit, value} | rest]) when is_integer(value) do
+    whole_units?(rest)
+  end
+
+  def whole_units?([]) do
+    true
+  end
+
+  def whole_units?(_time) do
+    false
+  end
 
   @doc """
   Return the Tempo at step `n` from `from` at `unit` granularity.
@@ -292,9 +343,11 @@ defmodule Tempo.Interval.Steps do
   @spec nth_step(Tempo.t(), non_neg_integer(), atom(), module()) ::
           Tempo.t() | :not_supported
   def nth_step(%Tempo{time: time} = tempo, n, unit, calendar) do
-    if counted_from?(time, unit),
-      do: nth_date_step(tempo, n, unit, calendar),
-      else: :not_supported
+    if counted_from?(time, unit) do
+      nth_date_step(tempo, n, unit, calendar)
+    else
+      :not_supported
+    end
   end
 
   defp nth_date_step(%Tempo{time: time} = tempo, n, :year, calendar) do
@@ -355,7 +408,9 @@ defmodule Tempo.Interval.Steps do
     %{shifted | time: Keyword.replace(shifted.time, :microsecond, {new_us_value, precision})}
   end
 
-  defp nth_date_step(_from, _n, _unit, _calendar), do: :not_supported
+  defp nth_date_step(_from, _n, _unit, _calendar) do
+    :not_supported
+  end
 
   @doc """
   Return `true` when `element` falls on a `unit`-step boundary
@@ -467,20 +522,36 @@ defmodule Tempo.Interval.Steps do
       when unit in [:hour, :minute, :second] do
     # The start may come filled to the unit already, so it is asked of the
     # clock whether or not this fills it.
-    from = from |> fill_to_unit(unit, calendar) |> Zone.shown_by_the_clock()
+    from =
+      from
+      |> fill_to_unit(unit, calendar)
+      |> Zone.shown_by_the_clock()
+
     to = fill_to_unit(to, unit, calendar)
 
     if counted_from?(from.time, unit) and date_axis?(to.time, unit) and
-         dst_correct?(from, to, calendar),
-       do: clock_walk_between(from, to, seconds_in(unit)),
-       else: :not_supported
+         dst_correct?(from, to, calendar) do
+      clock_walk_between(from, to, seconds_in(unit))
+    else
+      :not_supported
+    end
   end
 
-  def clock_walk(_from, _to, _unit, _calendar), do: :not_supported
+  def clock_walk(_from, _to, _unit, _calendar) do
+    :not_supported
+  end
 
-  defp seconds_in(:hour), do: @seconds_per_hour
-  defp seconds_in(:minute), do: @seconds_per_minute
-  defp seconds_in(:second), do: 1
+  defp seconds_in(:hour) do
+    @seconds_per_hour
+  end
+
+  defp seconds_in(:minute) do
+    @seconds_per_minute
+  end
+
+  defp seconds_in(:second) do
+    1
+  end
 
   # More than any offset a zone has had: a change within this of the span
   # can show a reading of the span twice.
@@ -518,13 +589,17 @@ defmodule Tempo.Interval.Steps do
   # `Enumerable.reduce/3` over a walk by the clock.
   @spec reduce_clock_walk(clock_walk(), Enumerable.acc(), Enumerable.reducer()) ::
           Enumerable.result()
-  def reduce_clock_walk(_walk, {:halt, acc}, _fun), do: {:halted, acc}
+  def reduce_clock_walk(_walk, {:halt, acc}, _fun) do
+    {:halted, acc}
+  end
 
-  def reduce_clock_walk(walk, {:suspend, acc}, fun),
-    do: {:suspended, acc, &reduce_clock_walk(walk, &1, fun)}
+  def reduce_clock_walk(walk, {:suspend, acc}, fun) do
+    {:suspended, acc, &reduce_clock_walk(walk, &1, fun)}
+  end
 
-  def reduce_clock_walk(%{moment: moment, ends: ends}, {:cont, acc}, _fun) when moment >= ends,
-    do: {:done, acc}
+  def reduce_clock_walk(%{moment: moment, ends: ends}, {:cont, acc}, _fun) when moment >= ends do
+    {:done, acc}
+  end
 
   def reduce_clock_walk(%{moment: moment, unit: unit} = walk, {:cont, acc}, fun) do
     walk = past_its_changes(walk)
@@ -533,10 +608,13 @@ defmodule Tempo.Interval.Steps do
 
   # The offset the clock is at: the last change at or before the moment.
   defp past_its_changes(%{moment: moment, changes: [{changed, _before, later} | changes]} = walk)
-       when changed <= moment,
-       do: past_its_changes(%{walk | offset: later, changes: changes})
+       when changed <= moment do
+    past_its_changes(%{walk | offset: later, changes: changes})
+  end
 
-  defp past_its_changes(walk), do: walk
+  defp past_its_changes(walk) do
+    walk
+  end
 
   # A reading the clock shows twice carries the offset that tells its two
   # occurrences apart, and each value of a span whose start was written
@@ -548,14 +626,21 @@ defmodule Tempo.Interval.Steps do
     %{from | time: time, shift: shift_read(from.shift, offset, shown_twice?(walk, reading))}
   end
 
-  defp shift_read(written, offset, _twice?) when is_list(written),
-    do: Zone.offset_as_written(offset, written)
+  defp shift_read(written, offset, _twice?) when is_list(written) do
+    Zone.offset_as_written(offset, written)
+  end
 
-  defp shift_read(nil, offset, true), do: Zone.offset_to_shift(offset)
-  defp shift_read(nil, _offset, false), do: nil
+  defp shift_read(nil, offset, true) do
+    Zone.offset_to_shift(offset)
+  end
 
-  defp shown_twice?(%{shown_twice: readings}, reading),
-    do: Enum.any?(readings, fn {from, to} -> reading >= from and reading < to end)
+  defp shift_read(nil, _offset, false) do
+    nil
+  end
+
+  defp shown_twice?(%{shown_twice: readings}, reading) do
+    Enum.any?(readings, fn {from, to} -> reading >= from and reading < to end)
+  end
 
   ## ----------------------------------------------------------
   ## Helpers
@@ -584,10 +669,13 @@ defmodule Tempo.Interval.Steps do
         calendar
       )
       when is_integer(from_year) and is_integer(from_month) and is_integer(to_year) and
-             is_integer(to_month) and from_year <= to_year,
-      do: months_between(from_year, from_month, to_year, to_month, calendar)
+             is_integer(to_month) and from_year <= to_year do
+    months_between(from_year, from_month, to_year, to_month, calendar)
+  end
 
-  def months_apart(%Tempo{}, %Tempo{}, _calendar), do: :not_supported
+  def months_apart(%Tempo{}, %Tempo{}, _calendar) do
+    :not_supported
+  end
 
   # Calendar-aware month difference. Where the calendar says every year has
   # the same months (the Gregorian's twelve, the Ethiopic's thirteen), it is
@@ -611,12 +699,15 @@ defmodule Tempo.Interval.Steps do
   end
 
   @spec months_in_years_between(integer(), integer(), module()) :: integer()
-  defp months_in_years_between(from_y, to_y, _calendar) when from_y == to_y, do: 0
+  defp months_in_years_between(from_y, to_y, _calendar) when from_y == to_y do
+    0
+  end
 
   # Back from a later year the count is below none: a walk asks it of a
   # value before its start, which is on no step of it.
-  defp months_in_years_between(from_y, to_y, calendar) when from_y > to_y,
-    do: -months_in_years_between(to_y, from_y, calendar)
+  defp months_in_years_between(from_y, to_y, calendar) when from_y > to_y do
+    -months_in_years_between(to_y, from_y, calendar)
+  end
 
   defp months_in_years_between(from_y, to_y, calendar) when from_y < to_y do
     # `calendar.months_in_year/1` is a dynamic dispatch, so Dialyzer
@@ -737,7 +828,9 @@ defmodule Tempo.Interval.Steps do
     end
   end
 
-  defp first_occurrence(%Tempo{} = start), do: start
+  defp first_occurrence(%Tempo{} = start) do
+    start
+  end
 
   # When the stepped-to wall time occurs twice (a DST fall-back fold),
   # carry the explicit offset for *this* occurrence so the two folded
@@ -746,8 +839,9 @@ defmodule Tempo.Interval.Steps do
   # on. A step from a start written with an offset carries the offset its
   # own moment has, as written: it kept the start's, which is another's
   # once the clock has changed.
-  defp disambiguate_fold(%Tempo{shift: written} = result, offset_seconds) when is_list(written),
-    do: %{result | shift: Zone.offset_as_written(offset_seconds, written)}
+  defp disambiguate_fold(%Tempo{shift: written} = result, offset_seconds) when is_list(written) do
+    %{result | shift: Zone.offset_as_written(offset_seconds, written)}
+  end
 
   defp disambiguate_fold(%Tempo{} = result, offset_seconds) do
     case Zone.zone_status(result) do
@@ -787,10 +881,17 @@ defmodule Tempo.Interval.Steps do
     zone_id(from) != nil and zone_id(from) == zone_id(to)
   end
 
-  defp in_a_named_zone?(%Tempo{} = tempo), do: zone_id(tempo) != nil
+  defp in_a_named_zone?(%Tempo{} = tempo) do
+    zone_id(tempo) != nil
+  end
 
-  defp zone_id(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) and zone != "", do: zone
-  defp zone_id(_), do: nil
+  defp zone_id(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) and zone != "" do
+    zone
+  end
+
+  defp zone_id(_) do
+    nil
+  end
 
   defp zone_offset_at_utc(zone, utc_seconds) do
     # Pre-common-era instants are handled inside the adapter
@@ -824,7 +925,11 @@ defmodule Tempo.Interval.Steps do
   end
 
   defp maybe_replace(time, key, value) do
-    if Keyword.has_key?(time, key), do: Keyword.replace(time, key, value), else: time
+    if Keyword.has_key?(time, key) do
+      Keyword.replace(time, key, value)
+    else
+      time
+    end
   end
 
   # Suppress an unused-alias warning if `AST` ends up unreferenced in

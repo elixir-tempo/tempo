@@ -38,13 +38,22 @@ defmodule Tempo.Enumeration.Zone do
   # skips.
   def zone_status(%Tempo{extended: %{zone_id: zone}, time: [year: _, month: _, day: _]} = date)
       when is_binary(zone) do
-    if on_a_day_left_out?(date), do: :gap, else: :ok
+    if on_a_day_left_out?(date) do
+      :gap
+    else
+      :ok
+    end
   end
 
-  def zone_status(%Tempo{extended: %{zone_id: zone}} = tempo) when is_binary(zone),
-    do: tempo |> in_gregorian() |> status_in(zone)
+  def zone_status(%Tempo{extended: %{zone_id: zone}} = tempo) when is_binary(zone) do
+    tempo
+    |> in_gregorian()
+    |> status_in(zone)
+  end
 
-  def zone_status(_tempo), do: :ok
+  def zone_status(_tempo) do
+    :ok
+  end
 
   # A zone's clock is asked by the Gregorian date of a value. One whose date
   # could not be given as one (`in_gregorian/1`) is asked nothing.
@@ -52,13 +61,17 @@ defmodule Tempo.Enumeration.Zone do
        when is_notation(calendar) do
     with %NaiveDateTime{} = naive <- naive_from_tempo(tempo),
          db when is_atom(db) <- TimeZoneDatabase.database() do
-      naive |> DateTime.from_naive(zone, db) |> status(tempo, naive)
+      naive
+      |> DateTime.from_naive(zone, db)
+      |> status(tempo, naive)
     else
       _ -> :ok
     end
   end
 
-  defp status_in(%Tempo{}, _zone), do: :ok
+  defp status_in(%Tempo{}, _zone) do
+    :ok
+  end
 
   @doc """
   A value with its date as the Gregorian date of the same day, which the
@@ -93,8 +106,9 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  def in_gregorian(%Tempo{calendar: calendar} = value) when is_notation(calendar),
-    do: value
+  def in_gregorian(%Tempo{calendar: calendar} = value) when is_notation(calendar) do
+    value
+  end
 
   def in_gregorian(
         %Tempo{
@@ -111,7 +125,9 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  def in_gregorian(%Tempo{} = value), do: value
+  def in_gregorian(%Tempo{} = value) do
+    value
+  end
 
   defp gregorian_units(%Date{} = date) do
     with {:ok, %Date{year: year, month: month, day: day}} <- Date.convert(date, Calendars.zone()),
@@ -145,8 +161,9 @@ defmodule Tempo.Enumeration.Zone do
   end
 
   def in_calendar_of(%Tempo{} = gregorian, %Tempo{calendar: calendar})
-      when is_notation(calendar),
-      do: {:ok, gregorian}
+      when is_notation(calendar) do
+    {:ok, gregorian}
+  end
 
   def in_calendar_of(
         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
@@ -161,16 +178,20 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  def in_calendar_of(%Tempo{}, %Tempo{}), do: :error
+  def in_calendar_of(%Tempo{}, %Tempo{}) do
+    :error
+  end
 
   # A date of a calendar as a day of a week: the fields of the date itself
   # in a calendar of weeks, and in any other its ISO 8601 week, which the
   # calendar answers over its own year (`iso_week_of_year/3`), with the day
   # of that week counted from Monday.
   defp day_of_a_week(%Date{year: year, month: month, day: day}, calendar) do
-    if Tempo.week_based_calendar?(calendar),
-      do: {:ok, year, month, day},
-      else: day_of_an_iso_week(year, month, day, calendar)
+    if Tempo.week_based_calendar?(calendar) do
+      {:ok, year, month, day}
+    else
+      day_of_an_iso_week(year, month, day, calendar)
+    end
   end
 
   defp day_of_an_iso_week(year, month, day, calendar) do
@@ -182,13 +203,21 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  defp status({:gap, _before, shown}, tempo, naive),
-    do: if(shown_in_part?(tempo, naive, shown), do: :ok, else: :gap)
+  defp status({:gap, _before, shown}, tempo, naive) do
+    if shown_in_part?(tempo, naive, shown) do
+      :ok
+    else
+      :gap
+    end
+  end
 
-  defp status({:ambiguous, first, second}, _tempo, _naive),
-    do: {:ambiguous, shift_from_datetime(first), shift_from_datetime(second)}
+  defp status({:ambiguous, first, second}, _tempo, _naive) do
+    {:ambiguous, shift_from_datetime(first), shift_from_datetime(second)}
+  end
 
-  defp status(_shown_once_or_not_known, _tempo, _naive), do: :ok
+  defp status(_shown_once_or_not_known, _tempo, _naive) do
+    :ok
+  end
 
   # An hour whose first reading the clock skips is shown in part where the
   # clock comes out of the gap before the hour ends: 02:00 on Lord Howe
@@ -218,12 +247,19 @@ defmodule Tempo.Enumeration.Zone do
   @spec on_a_day_left_out?(Tempo.t()) :: boolean()
   def on_a_day_left_out?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
     case TimeZoneDatabase.days_left_out(zone) do
-      [] -> false
-      days -> value |> in_gregorian() |> on_one_of?(days)
+      [] ->
+        false
+
+      days ->
+        value
+        |> in_gregorian()
+        |> on_one_of?(days)
     end
   end
 
-  def on_a_day_left_out?(_value), do: false
+  def on_a_day_left_out?(_value) do
+    false
+  end
 
   defp on_one_of?(
          %Tempo{
@@ -232,10 +268,13 @@ defmodule Tempo.Enumeration.Zone do
          },
          days
        )
-       when is_integer(year) and is_integer(month) and is_integer(day) and is_notation(calendar),
-       do: {year, month, day} in days
+       when is_integer(year) and is_integer(month) and is_integer(day) and is_notation(calendar) do
+    {year, month, day} in days
+  end
 
-  defp on_one_of?(%Tempo{}, _days), do: false
+  defp on_one_of?(%Tempo{}, _days) do
+    false
+  end
 
   @doc """
   Whether a value is one its zone's clock shows: any value but one the clock
@@ -252,9 +291,11 @@ defmodule Tempo.Enumeration.Zone do
   """
   @spec shown?(Tempo.t()) :: boolean()
   def shown?(%Tempo{time: time} = value) do
-    if List.keymember?(time, :hour, 0),
-      do: away_from_every_change?(value) or Validation.validate_zone_existence(value) == :ok,
-      else: not on_a_day_left_out?(value)
+    if List.keymember?(time, :hour, 0) do
+      away_from_every_change?(value) or Validation.validate_zone_existence(value) == :ok
+    else
+      not on_a_day_left_out?(value)
+    end
   end
 
   # More than any offset a zone has had, and any change of one.
@@ -276,13 +317,17 @@ defmodule Tempo.Enumeration.Zone do
   # value that is no one reading (a set, a mask or a group in a unit) is
   # asked in full.
   defp away_from_every_change?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
-    case value |> in_gregorian() |> first_reading() do
+    case value
+         |> in_gregorian()
+         |> first_reading() do
       {:ok, reading} -> TimeZoneDatabase.clear_of_changes?(zone, reading, @a_day_or_so)
       :no_one_reading -> false
     end
   end
 
-  defp away_from_every_change?(%Tempo{}), do: true
+  defp away_from_every_change?(%Tempo{}) do
+    true
+  end
 
   # More than the most a zone's clock is from UTC and the most it has
   # changed by, together: a reading this far from every change, and as far
@@ -307,7 +352,9 @@ defmodule Tempo.Enumeration.Zone do
   @spec clear_of_changes?(Tempo.t(), integer()) :: boolean()
   def clear_of_changes?(%Tempo{extended: %{zone_id: zone}} = value, seconds)
       when is_binary(zone) and is_integer(seconds) do
-    case value |> in_gregorian() |> first_reading() do
+    case value
+         |> in_gregorian()
+         |> first_reading() do
       {:ok, reading} ->
         TimeZoneDatabase.clear_of_changes?(zone, reading, abs(seconds) + @clear_of_a_change)
 
@@ -316,23 +363,35 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  def clear_of_changes?(%Tempo{}, _seconds), do: false
+  def clear_of_changes?(%Tempo{}, _seconds) do
+    false
+  end
 
-  defp seconds_into_the_day([]), do: {:ok, 0}
-  defp seconds_into_the_day([{:hour, hour}]) when is_integer(hour), do: {:ok, hour * 3_600}
+  defp seconds_into_the_day([]) do
+    {:ok, 0}
+  end
+
+  defp seconds_into_the_day([{:hour, hour}]) when is_integer(hour) do
+    {:ok, hour * 3_600}
+  end
 
   defp seconds_into_the_day([{:hour, hour}, {:minute, minute}])
-       when is_integer(hour) and is_integer(minute),
-       do: {:ok, hour * 3_600 + minute * 60}
+       when is_integer(hour) and is_integer(minute) do
+    {:ok, hour * 3_600 + minute * 60}
+  end
 
   defp seconds_into_the_day([{:hour, hour}, {:minute, minute}, {:second, second} | fraction])
        when is_integer(hour) and is_integer(minute) and is_integer(second) do
-    if Enum.all?(fraction, &match?({:microsecond, {_value, _precision}}, &1)),
-      do: {:ok, hour * 3_600 + minute * 60 + second},
-      else: :no_one_reading
+    if Enum.all?(fraction, &match?({:microsecond, {_value, _precision}}, &1)) do
+      {:ok, hour * 3_600 + minute * 60 + second}
+    else
+      :no_one_reading
+    end
   end
 
-  defp seconds_into_the_day(_other_units), do: :no_one_reading
+  defp seconds_into_the_day(_other_units) do
+    :no_one_reading
+  end
 
   @doc """
   A value as its zone's clock shows it: the value, or where the clock skips
@@ -350,17 +409,24 @@ defmodule Tempo.Enumeration.Zone do
   @spec shown_by_the_clock(Tempo.t()) :: Tempo.t()
   def shown_by_the_clock(%Tempo{extended: %{zone_id: zone}, time: time} = value)
       when is_binary(zone) do
-    if shown?(value) or not Steps.whole_units?(time),
-      do: value,
-      else: on_the_reading_shown(value, zone)
+    if shown?(value) or not Steps.whole_units?(time) do
+      value
+    else
+      on_the_reading_shown(value, zone)
+    end
   end
 
-  def shown_by_the_clock(%Tempo{} = value), do: value
+  def shown_by_the_clock(%Tempo{} = value) do
+    value
+  end
 
   # The reading is found by the value's Gregorian date, and given in the
   # value's calendar.
   defp on_the_reading_shown(%Tempo{} = value, zone) do
-    case value |> in_gregorian() |> gregorian_reading_shown(zone) |> in_calendar_of(value) do
+    case value
+         |> in_gregorian()
+         |> gregorian_reading_shown(zone)
+         |> in_calendar_of(value) do
       {:ok, shown} -> shown
       :error -> value
     end
@@ -381,8 +447,9 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  defp time_of_day(clock),
-    do: {clock[:hour] || 0, clock[:minute] || 0, clock[:second] || 0}
+  defp time_of_day(clock) do
+    {clock[:hour] || 0, clock[:minute] || 0, clock[:second] || 0}
+  end
 
   # The units of a value at another reading of the clock: the units it has,
   # and the finer ones the reading needs. 02:00 moved to 02:30 is written
@@ -405,16 +472,21 @@ defmodule Tempo.Enumeration.Zone do
     Enum.find([:second, :minute, :hour], :day, &Keyword.has_key?(time, &1))
   end
 
-  defp clock_units(hour, minute, second, finest) when second != 0 or finest == :second,
-    do: [hour: hour, minute: minute, second: second]
+  defp clock_units(hour, minute, second, finest) when second != 0 or finest == :second do
+    [hour: hour, minute: minute, second: second]
+  end
 
-  defp clock_units(hour, minute, _second, finest) when minute != 0 or finest == :minute,
-    do: [hour: hour, minute: minute]
+  defp clock_units(hour, minute, _second, finest) when minute != 0 or finest == :minute do
+    [hour: hour, minute: minute]
+  end
 
-  defp clock_units(hour, _minute, _second, finest) when hour != 0 or finest == :hour,
-    do: [hour: hour]
+  defp clock_units(hour, _minute, _second, finest) when hour != 0 or finest == :hour do
+    [hour: hour]
+  end
 
-  defp clock_units(_hour, _minute, _second, :day), do: []
+  defp clock_units(_hour, _minute, _second, :day) do
+    []
+  end
 
   @doc """
   The value an hour in a named zone ends at: the reading its clock shows
@@ -459,7 +531,10 @@ defmodule Tempo.Enumeration.Zone do
   """
   @spec end_of_hour(Tempo.t()) :: {:ok, Tempo.t()} | :error
   def end_of_hour(%Tempo{} = value) do
-    with {:ok, ending} <- value |> in_gregorian() |> end_of_gregorian_hour(),
+    with {:ok, ending} <-
+           value
+           |> in_gregorian()
+           |> end_of_gregorian_hour(),
          do: in_calendar_of(ending, value)
   end
 
@@ -481,7 +556,9 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  defp end_of_gregorian_hour(%Tempo{}), do: :error
+  defp end_of_gregorian_hour(%Tempo{}) do
+    :error
+  end
 
   # Where the hour that starts on the reading `starts` ends, as
   # `{reading, offset, shown twice?}`.
@@ -497,21 +574,27 @@ defmodule Tempo.Enumeration.Zone do
     {first, second} =
       {TimeZoneDatabase.total_offset(first), TimeZoneDatabase.total_offset(second)}
 
-    if is_list(shift) and Compare.offset_seconds(shift) == second,
-      do: at_the_next_hour(zone, starts, second),
-      else: shown_at(zone, starts - first + min(@seconds_in_an_hour, first - second))
+    if is_list(shift) and Compare.offset_seconds(shift) == second do
+      at_the_next_hour(zone, starts, second)
+    else
+      shown_at(zone, starts - first + min(@seconds_in_an_hour, first - second))
+    end
   end
 
   # Any other hour ends when the clock reaches the next, at the offset it
   # shows the hour at: the offset after the gap for one that starts in a
   # gap.
-  defp ending(zone, starts, {:ok, period}, _shift),
-    do: at_the_next_hour(zone, starts, TimeZoneDatabase.total_offset(period))
+  defp ending(zone, starts, {:ok, period}, _shift) do
+    at_the_next_hour(zone, starts, TimeZoneDatabase.total_offset(period))
+  end
 
-  defp ending(zone, starts, {:gap, _before, {later, _limit}}, _shift),
-    do: at_the_next_hour(zone, starts, TimeZoneDatabase.total_offset(later))
+  defp ending(zone, starts, {:gap, _before, {later, _limit}}, _shift) do
+    at_the_next_hour(zone, starts, TimeZoneDatabase.total_offset(later))
+  end
 
-  defp ending(_zone, _starts, {:error, _reason}, _shift), do: :error
+  defp ending(_zone, _starts, {:error, _reason}, _shift) do
+    :error
+  end
 
   # The next hour as the clock shows it: at the offset the hour is in where
   # the clock shows that reading twice, and the reading the clock jumps to
@@ -525,7 +608,14 @@ defmodule Tempo.Enumeration.Zone do
 
       {:ambiguous, first, second} ->
         second = TimeZoneDatabase.total_offset(second)
-        shown = if offset == second, do: second, else: TimeZoneDatabase.total_offset(first)
+
+        shown =
+          if offset == second do
+            second
+          else
+            TimeZoneDatabase.total_offset(first)
+          end
+
         {:ok, {next, shown, true}}
 
       {:gap, _before, {later, comes_out}} ->
@@ -555,8 +645,9 @@ defmodule Tempo.Enumeration.Zone do
          hour: hour,
          minute: minute,
          second: second
-       }),
-       do: :calendar.datetime_to_gregorian_seconds({{year, month, day}, {hour, minute, second}})
+       }) do
+    :calendar.datetime_to_gregorian_seconds({{year, month, day}, {hour, minute, second}})
+  end
 
   # The value at an ending. A reading the clock shows twice carries its
   # offset, which tells its two occurrences apart, and so does one of a
@@ -567,9 +658,11 @@ defmodule Tempo.Enumeration.Zone do
 
     time = [year: year, month: month, day: day] ++ clock_units(hour, minute, second, :hour)
 
-    if twice? or is_list(shift),
-      do: %{value | time: time, shift: offset_as_written(offset, shift)},
-      else: %{value | time: time}
+    if twice? or is_list(shift) do
+      %{value | time: time, shift: offset_as_written(offset, shift)}
+    else
+      %{value | time: time}
+    end
   end
 
   @doc """
@@ -606,20 +699,28 @@ defmodule Tempo.Enumeration.Zone do
   @spec at_its_offset(Tempo.t()) :: Tempo.t()
   def at_its_offset(%Tempo{shift: [_ | _] = written, extended: %{zone_id: zone}} = value)
       when is_binary(zone) and zone != "" do
-    case value |> in_gregorian() |> first_reading() do
+    case value
+         |> in_gregorian()
+         |> first_reading() do
       {:ok, reading} -> at_the_offset_of(value, written, offsets_at(zone, reading))
       :no_one_reading -> at_one_offset_or_none(value)
     end
   end
 
-  def at_its_offset(%Tempo{} = value), do: value
+  def at_its_offset(%Tempo{} = value) do
+    value
+  end
 
-  defp at_the_offset_of(value, _written, []), do: value
+  defp at_the_offset_of(value, _written, []) do
+    value
+  end
 
   defp at_the_offset_of(value, written, [first | _rest] = offsets) do
-    if Compare.offset_seconds(written) in offsets,
-      do: value,
-      else: %{value | shift: offset_as_written(first, written)}
+    if Compare.offset_seconds(written) in offsets do
+      value
+    else
+      %{value | shift: offset_as_written(first, written)}
+    end
   end
 
   # A value that names several readings (a set or unspecified digits in a
@@ -628,9 +729,11 @@ defmodule Tempo.Enumeration.Zone do
   # its zone and no offset, which gives each reading its own: the hours of
   # the day New York's clocks go forward are at two.
   defp at_one_offset_or_none(%Tempo{} = value) do
-    if Compare.validate_zone_offset(value) == :ok,
-      do: value,
-      else: %{value | shift: nil}
+    if Compare.validate_zone_offset(value) == :ok do
+      value
+    else
+      %{value | shift: nil}
+    end
   end
 
   # The first reading of a Gregorian date, or date and time, in gregorian
@@ -653,12 +756,16 @@ defmodule Tempo.Enumeration.Zone do
   # (`Tempo.Compare.to_wall_seconds/1`).
   defp first_reading(%Tempo{time: [{:year, year} | _rest] = time} = value)
        when is_integer(year) and year >= 1 do
-    if Steps.whole_units?(time),
-      do: {:ok, trunc(Compare.to_wall_seconds(value))},
-      else: :no_one_reading
+    if Steps.whole_units?(time) do
+      {:ok, trunc(Compare.to_wall_seconds(value))}
+    else
+      :no_one_reading
+    end
   end
 
-  defp first_reading(%Tempo{}), do: :no_one_reading
+  defp first_reading(%Tempo{}) do
+    :no_one_reading
+  end
 
   # The offsets a zone's clock is at on a reading: one, the two of a reading
   # it shows twice, the one it comes out of a gap at for a reading it skips,
@@ -688,9 +795,11 @@ defmodule Tempo.Enumeration.Zone do
     written = offset_to_shift(offset)
 
     if is_list(shift) and Keyword.has_key?(shift, :minute) and
-         not Keyword.has_key?(written, :minute),
-       do: written ++ [minute: 0],
-       else: written
+         not Keyword.has_key?(written, :minute) do
+      written ++ [minute: 0]
+    else
+      written
+    end
   end
 
   @doc """
@@ -709,7 +818,13 @@ defmodule Tempo.Enumeration.Zone do
   """
   @spec offset_to_shift(integer()) :: keyword()
   def offset_to_shift(total_seconds) do
-    sign = if total_seconds < 0, do: -1, else: 1
+    sign =
+      if total_seconds < 0 do
+        -1
+      else
+        1
+      end
+
     abs_total = abs(total_seconds)
     hours = div(abs_total, 3600)
     minutes = div(rem(abs_total, 3600), 60)
@@ -717,17 +832,29 @@ defmodule Tempo.Enumeration.Zone do
     signed_units(sign, hours, minutes, rem(abs_total, 60))
   end
 
-  defp signed_units(sign, hours, 0, 0), do: [hour: sign * hours]
-  defp signed_units(sign, 0, minutes, 0), do: [hour: 0, minute: sign * minutes]
-  defp signed_units(sign, hours, minutes, 0), do: [hour: sign * hours, minute: minutes]
+  defp signed_units(sign, hours, 0, 0) do
+    [hour: sign * hours]
+  end
 
-  defp signed_units(sign, 0, 0, seconds), do: [hour: 0, minute: 0, second: sign * seconds]
+  defp signed_units(sign, 0, minutes, 0) do
+    [hour: 0, minute: sign * minutes]
+  end
 
-  defp signed_units(sign, 0, minutes, seconds),
-    do: [hour: 0, minute: sign * minutes, second: seconds]
+  defp signed_units(sign, hours, minutes, 0) do
+    [hour: sign * hours, minute: minutes]
+  end
 
-  defp signed_units(sign, hours, minutes, seconds),
-    do: [hour: sign * hours, minute: minutes, second: seconds]
+  defp signed_units(sign, 0, 0, seconds) do
+    [hour: 0, minute: 0, second: sign * seconds]
+  end
+
+  defp signed_units(sign, 0, minutes, seconds) do
+    [hour: 0, minute: sign * minutes, second: seconds]
+  end
+
+  defp signed_units(sign, hours, minutes, seconds) do
+    [hour: sign * hours, minute: minutes, second: seconds]
+  end
 
   # Extract `year, month, day, hour, minute, second` from a Tempo's
   # time keyword list and build a NaiveDateTime, filling missing
@@ -759,6 +886,7 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  defp shift_from_datetime(%DateTime{utc_offset: utc, std_offset: std}),
-    do: offset_to_shift(utc + std)
+  defp shift_from_datetime(%DateTime{utc_offset: utc, std_offset: std}) do
+    offset_to_shift(utc + std)
+  end
 end

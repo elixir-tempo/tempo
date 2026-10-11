@@ -58,7 +58,10 @@ defimpl Enumerable, for: Tempo do
 
   @impl Enumerable
   def slice(tempo) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> slice() |> Calendars.outside_slice()
+    tempo
+    |> Calendars.inside()
+    |> slice()
+    |> Calendars.outside_slice()
   end
 
   def slice(%Tempo{} = tempo) do
@@ -105,9 +108,11 @@ defimpl Enumerable, for: Tempo do
   def reduce(%Tempo{time: time} = tempo, acc, fun) do
     # A value that holds a selection (`2026Y6ML2KN`, the Tuesdays of June
     # 2026) names the dates the selection picks, and is walked as they are.
-    if List.keymember?(time, :selection, 0),
-      do: reduce_spans(Tempo.to_interval(tempo), acc, fun),
-      else: reduce_steps(clock_walk(tempo), tempo, acc, fun)
+    if List.keymember?(time, :selection, 0) do
+      reduce_spans(Tempo.to_interval(tempo), acc, fun)
+    else
+      reduce_steps(clock_walk(tempo), tempo, acc, fun)
+    end
   end
 
   # A value in a named zone that names one span walked by hours, minutes or
@@ -115,10 +120,13 @@ defimpl Enumerable, for: Tempo do
   # (`Tempo.Interval.Steps.clock_walk/4`): its values are in the order of
   # time and within it whatever its zone's clock does. Any other value, and
   # one whose zone changes its clock off the steps, is walked by its units.
-  defp reduce_steps({:ok, steps}, _tempo, acc, fun), do: Steps.reduce_clock_walk(steps, acc, fun)
+  defp reduce_steps({:ok, steps}, _tempo, acc, fun) do
+    Steps.reduce_clock_walk(steps, acc, fun)
+  end
 
-  defp reduce_steps(:not_supported, tempo, acc, fun),
-    do: reduce_walk({Enumeration.implicit_walk(tempo), own_occurrence(tempo)}, acc, fun)
+  defp reduce_steps(:not_supported, tempo, acc, fun) do
+    reduce_walk({Enumeration.implicit_walk(tempo), own_occurrence(tempo)}, acc, fun)
+  end
 
   defp clock_walk(%Tempo{extended: %{zone_id: zone}, calendar: calendar} = tempo)
        when is_binary(zone) do
@@ -131,7 +139,9 @@ defimpl Enumerable, for: Tempo do
     end
   end
 
-  defp clock_walk(%Tempo{}), do: :not_supported
+  defp clock_walk(%Tempo{}) do
+    :not_supported
+  end
 
   # A wall time a clock shows twice (the hour a clock goes back) names the
   # first time it shows it, or the one the offset written with it names: the
@@ -140,25 +150,43 @@ defimpl Enumerable, for: Tempo do
   # being in it (the day the clock goes back) is walked through both.
   defp own_occurrence(%Tempo{shift: shift} = tempo) do
     case Zone.zone_status(tempo) do
-      {:ambiguous, first, second} -> if same_offset?(shift, second), do: second, else: first
-      _one_reading -> :both
+      {:ambiguous, first, second} ->
+        if same_offset?(shift, second) do
+          second
+        else
+          first
+        end
+
+      _one_reading ->
+        :both
     end
   end
 
-  defp same_offset?(nil, _shift), do: false
+  defp same_offset?(nil, _shift) do
+    false
+  end
 
-  defp same_offset?(written, shift),
-    do: Tempo.Compare.offset_seconds(written) == Tempo.Compare.offset_seconds(shift)
+  defp same_offset?(written, shift) do
+    Tempo.Compare.offset_seconds(written) == Tempo.Compare.offset_seconds(shift)
+  end
 
-  defp reduce_spans({:ok, spans}, acc, fun), do: Enumerable.reduce(spans, acc, fun)
-  defp reduce_spans({:error, exception}, _acc, _fun), do: raise(exception)
+  defp reduce_spans({:ok, spans}, acc, fun) do
+    Enumerable.reduce(spans, acc, fun)
+  end
+
+  defp reduce_spans({:error, exception}, _acc, _fun) do
+    raise(exception)
+  end
 
   # The walk of the value (see `Tempo.Enumeration`), a few values at a time,
   # with the occurrence of an hour shown twice that the value names.
-  defp reduce_walk(_walk, {:halt, acc}, _fun), do: {:halted, acc}
+  defp reduce_walk(_walk, {:halt, acc}, _fun) do
+    {:halted, acc}
+  end
 
-  defp reduce_walk(walk, {:suspend, acc}, fun),
-    do: {:suspended, acc, &reduce_walk(walk, &1, fun)}
+  defp reduce_walk(walk, {:suspend, acc}, fun) do
+    {:suspended, acc, &reduce_walk(walk, &1, fun)}
+  end
 
   defp reduce_walk({walk, fold}, {:cont, acc}, fun) do
     case Enumeration.next(walk) do
@@ -169,12 +197,17 @@ defimpl Enumerable, for: Tempo do
   end
 
   # The values read from the walk, each read through its zone.
-  defp reduce_values(_values, _walk, {:halt, acc}, _fun), do: {:halted, acc}
+  defp reduce_values(_values, _walk, {:halt, acc}, _fun) do
+    {:halted, acc}
+  end
 
-  defp reduce_values(values, walk, {:suspend, acc}, fun),
-    do: {:suspended, acc, &reduce_values(values, walk, &1, fun)}
+  defp reduce_values(values, walk, {:suspend, acc}, fun) do
+    {:suspended, acc, &reduce_values(values, walk, &1, fun)}
+  end
 
-  defp reduce_values([], walk, {:cont, acc}, fun), do: reduce_walk(walk, {:cont, acc}, fun)
+  defp reduce_values([], walk, {:cont, acc}, fun) do
+    reduce_walk(walk, {:cont, acc}, fun)
+  end
 
   defp reduce_values([value | values], {_walk, fold} = walk, {:cont, acc}, fun) do
     case Zone.zone_status(value) do
@@ -204,14 +237,19 @@ defimpl Enumerable, for: Tempo do
   end
 
   # The two occurrences of a fall-back hour, then the values after it.
-  defp reduce_folded(_folded, _values, _walk, {:halt, acc}, _fun), do: {:halted, acc}
+  defp reduce_folded(_folded, _values, _walk, {:halt, acc}, _fun) do
+    {:halted, acc}
+  end
 
-  defp reduce_folded(folded, values, walk, {:suspend, acc}, fun),
-    do: {:suspended, acc, &reduce_folded(folded, values, walk, &1, fun)}
+  defp reduce_folded(folded, values, walk, {:suspend, acc}, fun) do
+    {:suspended, acc, &reduce_folded(folded, values, walk, &1, fun)}
+  end
 
-  defp reduce_folded([], values, walk, {:cont, acc}, fun),
-    do: reduce_values(values, walk, {:cont, acc}, fun)
+  defp reduce_folded([], values, walk, {:cont, acc}, fun) do
+    reduce_values(values, walk, {:cont, acc}, fun)
+  end
 
-  defp reduce_folded([occurrence | folded], values, walk, {:cont, acc}, fun),
-    do: reduce_folded(folded, values, walk, fun.(occurrence, acc), fun)
+  defp reduce_folded([occurrence | folded], values, walk, {:cont, acc}, fun) do
+    reduce_folded(folded, values, walk, fun.(occurrence, acc), fun)
+  end
 end

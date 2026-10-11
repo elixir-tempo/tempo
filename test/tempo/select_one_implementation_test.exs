@@ -26,19 +26,33 @@ defmodule Tempo.SelectOneImplementationTest do
 
   ## The measure
 
-  defp seconds(%Date{} = date), do: seconds(NaiveDateTime.new!(date, ~T[00:00:00]))
+  defp seconds(%Date{} = date) do
+    seconds(NaiveDateTime.new!(date, ~T[00:00:00]))
+  end
 
-  defp seconds(%NaiveDateTime{} = moment),
-    do: moment |> NaiveDateTime.to_gregorian_seconds() |> elem(0)
+  defp seconds(%NaiveDateTime{} = moment) do
+    moment
+    |> NaiveDateTime.to_gregorian_seconds()
+    |> elem(0)
+  end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
-  defp members({:ok, %IntervalSet{} = set}), do: IntervalSet.members(set)
+  defp members({:ok, %IntervalSet{} = set}) do
+    IntervalSet.members(set)
+  end
 
-  defp spans(selected), do: selected |> members() |> Enum.map(&bounds/1)
+  defp spans(selected) do
+    selected
+    |> members()
+    |> Enum.map(&bounds/1)
+  end
 
-  defp read(text, calendar \\ Calendrical.Gregorian), do: Tempo.from_iso8601!(text, calendar)
+  defp read(text, calendar \\ Calendrical.Gregorian) do
+    Tempo.from_iso8601!(text, calendar)
+  end
 
   # Bases of each resolution, a span of several periods, a zoned day, and a
   # month and a year of two other calendars.
@@ -99,8 +113,13 @@ defmodule Tempo.SelectOneImplementationTest do
     end
 
     # An answer as its members, each whole, or the error it is.
-    defp answer({:ok, %IntervalSet{} = set}), do: IntervalSet.members(set)
-    defp answer({:error, exception}), do: {:error, exception.__struct__}
+    defp answer({:ok, %IntervalSet{} = set}) do
+      IntervalSet.members(set)
+    end
+
+    defp answer({:error, exception}) do
+      {:error, exception.__struct__}
+    end
 
     test "select the same day of a week of the year" do
       # A day of a week of a month is the constraint's alone, and is below.

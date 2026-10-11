@@ -95,18 +95,24 @@ defmodule Tempo.BesideAGap do
         do: {zoned(value, zone), zoned(twin, zone) <> "[u-ca=" <> calendar <> "]", calendar}
   end
 
-  defp zoned(value, zone), do: value <> "[" <> zone <> "]"
+  defp zoned(value, zone) do
+    value <> "[" <> zone <> "]"
+  end
 
-  defp twins_of(value), do: buddhist_twin(value) ++ hebrew_twin(value) ++ week_twin(value)
+  defp twins_of(value) do
+    buddhist_twin(value) ++ hebrew_twin(value) ++ week_twin(value)
+  end
 
   @buddhist_years_on 543
 
   defp buddhist_twin(<<year::binary-size(4), rest::binary>> = value) do
-    if value =~ ~r/^\d{4}(-W|-\d{3}$)/,
-      do: [],
-      else: [
+    if value =~ ~r/^\d{4}(-W|-\d{3}$)/ do
+      []
+    else
+      [
         {"buddhist", Integer.to_string(String.to_integer(year) + @buddhist_years_on) <> rest}
       ]
+    end
   end
 
   defp hebrew_twin(value) do
@@ -136,21 +142,31 @@ defmodule Tempo.BesideAGap do
     end
   end
 
-  defp integer(digits), do: String.to_integer(digits)
-  defp two(number), do: number |> Integer.to_string() |> String.pad_leading(2, "0")
+  defp integer(digits) do
+    String.to_integer(digits)
+  end
+
+  defp two(number) do
+    number
+    |> Integer.to_string()
+    |> String.pad_leading(2, "0")
+  end
 
   # The operations that give a Hebrew date or a day of a week what they give
   # its Gregorian twin: every one that does not count in months or years,
   # pick a day by its number in a month or keep a day in its month, which
   # are other months and other numbers there, or none.
-  defp of_any_calendar?(name),
-    do: not (name =~ ~r/year|month|30D|29D\/31D|P1M|BYMONTHDAY/)
+  defp of_any_calendar?(name) do
+    not (name =~ ~r/year|month|30D|29D\/31D|P1M|BYMONTHDAY/)
+  end
 
   @doc """
   The operations each value is given to, by name.
   """
   @spec operations() :: [{String.t(), (Tempo.t() -> term())}]
-  def operations, do: conversions() ++ steps() ++ selections() ++ spans() ++ sets() ++ walks()
+  def operations do
+    conversions() ++ steps() ++ selections() ++ spans() ++ sets() ++ walks()
+  end
 
   defp conversions do
     [
@@ -233,8 +249,9 @@ defmodule Tempo.BesideAGap do
 
   # A selector that names a day by its number is written in the calendar of
   # what it selects from, as a day is numbered by its calendar.
-  defp in_its_calendar(selector, %Tempo{calendar: calendar}),
-    do: Tempo.from_iso8601!(selector, calendar)
+  defp in_its_calendar(selector, %Tempo{calendar: calendar}) do
+    Tempo.from_iso8601!(selector, calendar)
+  end
 
   # The occurrences of a rule that starts on the value.
   defp rule(value, parts) do
@@ -290,8 +307,9 @@ defmodule Tempo.BesideAGap do
   end
 
   # The value with no zone, placed in the zone it was read in.
-  defp placed(%Tempo{extended: %{zone_id: zone}} = value),
-    do: Tempo.in_zone(%{value | extended: nil, shift: nil}, zone)
+  defp placed(%Tempo{extended: %{zone_id: zone}} = value) do
+    Tempo.in_zone(%{value | extended: nil, shift: nil}, zone)
+  end
 
   # A step that skips a busy span from the value to the value stepped.
   defp skipping(value, step, busy_for) do
@@ -385,14 +403,28 @@ defmodule Tempo.BesideAGap do
   end
 
   defp cell({text, {name, operation}}) do
-    values = text |> Tempo.from_iso8601!() |> operation.() |> values_in()
+    values =
+      text
+      |> Tempo.from_iso8601!()
+      |> operation.()
+      |> values_in()
+
     {name, values, not_read_among(values), [], another_offset_among(values)}
   end
 
   # A twin is given what its Gregorian value is, date for date.
   defp cell({twin, {name, operation}, {text, calendar}}) do
-    values = twin |> Tempo.from_iso8601!() |> operation.() |> values_in()
-    given = text |> Tempo.from_iso8601!() |> operation.() |> values_in()
+    values =
+      twin
+      |> Tempo.from_iso8601!()
+      |> operation.()
+      |> values_in()
+
+    given =
+      text
+      |> Tempo.from_iso8601!()
+      |> operation.()
+      |> values_in()
 
     differs =
       case {Enum.map(given, &dated/1), Enum.map(values, &gregorian(&1, calendar))} do
@@ -403,8 +435,9 @@ defmodule Tempo.BesideAGap do
     {name, values, not_read_among(values), differs, another_offset_among(values)}
   end
 
-  defp not_read_among(values),
-    do: for(value <- values, found = not_read(value), found != nil, do: {value, found})
+  defp not_read_among(values) do
+    for(value <- values, found = not_read(value), found != nil, do: {value, found})
+  end
 
   # The values given with an offset their zone is not at on the reading they
   # are given with, each with the offsets Elixir places the reading at.
@@ -430,14 +463,18 @@ defmodule Tempo.BesideAGap do
          do: NaiveDateTime.new(year, month, day, hour, minute, second)
   end
 
-  defp reading_of(%Tempo{}), do: :error
+  defp reading_of(%Tempo{}) do
+    :error
+  end
 
   defp time_of_day(clock) do
     units = for {unit, value} <- clock, unit in [:hour, :minute, :second], do: {unit, value}
 
-    if Enum.all?(units, fn {_unit, value} -> is_integer(value) end),
-      do: {:ok, {units[:hour] || 0, units[:minute] || 0, units[:second] || 0}},
-      else: :error
+    if Enum.all?(units, fn {_unit, value} -> is_integer(value) end) do
+      {:ok, {units[:hour] || 0, units[:minute] || 0, units[:second] || 0}}
+    else
+      :error
+    end
   end
 
   # The offsets Elixir places a reading at in a zone: one, two for a reading
@@ -456,19 +493,28 @@ defmodule Tempo.BesideAGap do
     hours = Keyword.get(shift, :hour, 0)
     minutes = Keyword.get(shift, :minute, 0)
     seconds = Keyword.get(shift, :second, 0)
-    sign = if Enum.any?([hours, minutes, seconds], &(&1 < 0)), do: -1, else: 1
+
+    sign =
+      if Enum.any?([hours, minutes, seconds], &(&1 < 0)) do
+        -1
+      else
+        1
+      end
 
     sign * (abs(hours) * 3_600 + abs(minutes) * 60 + abs(seconds))
   end
 
-  defp dated(%Tempo{time: time, shift: shift}), do: {time, shift}
+  defp dated(%Tempo{time: time, shift: shift}) do
+    {time, shift}
+  end
 
   # A value of another calendar as the Gregorian units and offset it names,
   # worked out here: a Buddhist year is 543 on, and a Hebrew date is asked
   # of Elixir's `Date`.
   defp gregorian(%Tempo{time: [{:year, year} | rest], shift: shift}, "buddhist")
-       when is_integer(year),
-       do: {[{:year, year - @buddhist_years_on} | rest], shift}
+       when is_integer(year) do
+    {[{:year, year - @buddhist_years_on} | rest], shift}
+  end
 
   defp gregorian(
          %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock], shift: shift},
@@ -490,7 +536,9 @@ defmodule Tempo.BesideAGap do
     {[year: date.year, month: date.month, day: date.day] ++ clock, shift}
   end
 
-  defp gregorian(%Tempo{} = value, _calendar), do: dated(value)
+  defp gregorian(%Tempo{} = value, _calendar) do
+    dated(value)
+  end
 
   defp reported({{:ok, {name, values, not_read, differs, another_offset}}, cell}) do
     text = elem(cell, 0)
@@ -500,7 +548,12 @@ defmodule Tempo.BesideAGap do
         for(detail <- differs, do: {:not_as_its_twin, name, text, detail}) ++
         for detail <- another_offset, do: {:another_offset, name, text, detail}
 
-    {name, if(values == [], do: :gave_none, else: :gave), findings}
+    {name,
+     if values == [] do
+       :gave_none
+     else
+       :gave
+     end, findings}
   end
 
   defp reported({{:exit, reason}, cell}) do
@@ -509,34 +562,68 @@ defmodule Tempo.BesideAGap do
   end
 
   # The exception and where it was raised, for a report a reader can act on.
-  defp raised({%{__exception__: true} = exception, [_ | _] = stack}),
-    do: {exception.__struct__, stack |> Enum.take(3) |> Enum.map(&frame/1)}
+  defp raised({%{__exception__: true} = exception, [_ | _] = stack}) do
+    {exception.__struct__,
+     stack
+     |> Enum.take(3)
+     |> Enum.map(&frame/1)}
+  end
 
-  defp raised(reason), do: reason
+  defp raised(reason) do
+    reason
+  end
 
-  defp frame({module, function, arity, location}) when is_list(arity),
-    do: frame({module, function, Enum.count(arity), location})
+  defp frame({module, function, arity, location}) when is_list(arity) do
+    frame({module, function, Enum.count(arity), location})
+  end
 
-  defp frame({module, function, arity, location}),
-    do: "#{inspect(module)}.#{function}/#{arity}:#{location[:line]}"
+  defp frame({module, function, arity, location}) do
+    "#{inspect(module)}.#{function}/#{arity}:#{location[:line]}"
+  end
 
   # Every Tempo value in what an operation gives: the ends of a span, the
   # members of a set, each value of a list. An error is an answer, and
   # holds none.
-  defp values_in({:ok, given}), do: values_in(given)
-  defp values_in(%Tempo{} = value), do: [value]
-  defp values_in(%Interval{from: from, to: to}), do: values_in(from) ++ values_in(to)
-  defp values_in(%Tempo.Set{set: members}), do: Enum.flat_map(members, &values_in/1)
-  defp values_in(%Tempo.Range{first: first, last: last}), do: values_in(first) ++ values_in(last)
-  defp values_in(list) when is_list(list), do: Enum.flat_map(list, &values_in/1)
-
-  defp values_in(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set),
-      do: set |> IntervalSet.members() |> Enum.flat_map(&values_in/1),
-      else: set |> IntervalSet.walk() |> Enum.take(20) |> Enum.flat_map(&values_in/1)
+  defp values_in({:ok, given}) do
+    values_in(given)
   end
 
-  defp values_in(_an_error_or_no_value), do: []
+  defp values_in(%Tempo{} = value) do
+    [value]
+  end
+
+  defp values_in(%Interval{from: from, to: to}) do
+    values_in(from) ++ values_in(to)
+  end
+
+  defp values_in(%Tempo.Set{set: members}) do
+    Enum.flat_map(members, &values_in/1)
+  end
+
+  defp values_in(%Tempo.Range{first: first, last: last}) do
+    values_in(first) ++ values_in(last)
+  end
+
+  defp values_in(list) when is_list(list) do
+    Enum.flat_map(list, &values_in/1)
+  end
+
+  defp values_in(%IntervalSet{} = set) do
+    if IntervalSet.bounded?(set) do
+      set
+      |> IntervalSet.members()
+      |> Enum.flat_map(&values_in/1)
+    else
+      set
+      |> IntervalSet.walk()
+      |> Enum.take(20)
+      |> Enum.flat_map(&values_in/1)
+    end
+  end
+
+  defp values_in(_an_error_or_no_value) do
+    []
+  end
 
   # A value the reader takes is written, and read as itself.
   defp not_read(%Tempo{} = value) do

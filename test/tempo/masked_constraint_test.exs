@@ -26,7 +26,10 @@ defmodule Tempo.MaskedConstraintTest do
 
   # Whether a number, written to a mask's width, has the mask's digits.
   defp matches?(number, mask) do
-    written = number |> Integer.to_string() |> String.pad_leading(String.length(mask), "0")
+    written =
+      number
+      |> Integer.to_string()
+      |> String.pad_leading(String.length(mask), "0")
 
     String.length(written) == String.length(mask) and
       Enum.all?(Enum.zip(String.graphemes(written), String.graphemes(mask)), fn
@@ -36,19 +39,31 @@ defmodule Tempo.MaskedConstraintTest do
       end)
   end
 
-  defp seconds(%Date{} = date), do: seconds(NaiveDateTime.new!(date, ~T[00:00:00]))
+  defp seconds(%Date{} = date) do
+    seconds(NaiveDateTime.new!(date, ~T[00:00:00]))
+  end
 
-  defp seconds(%NaiveDateTime{} = moment),
-    do: moment |> NaiveDateTime.to_gregorian_seconds() |> elem(0)
+  defp seconds(%NaiveDateTime{} = moment) do
+    moment
+    |> NaiveDateTime.to_gregorian_seconds()
+    |> elem(0)
+  end
 
-  defp day(%Date{} = date), do: {seconds(date), seconds(Date.add(date, 1))}
+  defp day(%Date{} = date) do
+    {seconds(date), seconds(Date.add(date, 1))}
+  end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
-  defp spans({:ok, %IntervalSet{} = set}), do: Enum.map(IntervalSet.members(set), &bounds/1)
+  defp spans({:ok, %IntervalSet{} = set}) do
+    Enum.map(IntervalSet.members(set), &bounds/1)
+  end
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   @day_masks ["1X", "X5", "3X", "XX", "0X", "2X", "X0"]
 

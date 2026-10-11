@@ -9,7 +9,10 @@ defmodule Tempo.GuidesRunner do
 
   @doc "Run every executable code block in `path`, raising with context on the first failure."
   def check!(path) do
-    all_blocks = path |> File.read!() |> blocks()
+    all_blocks =
+      path
+      |> File.read!()
+      |> blocks()
 
     # `Code.eval_string/3` threads bindings but not aliases/imports, while
     # guides alias a module once (`alias Tempo.Network`) and use the short
@@ -43,7 +46,9 @@ defmodule Tempo.GuidesRunner do
     |> collect([], :outside, [], %{skip: false, run: false})
   end
 
-  defp collect([], acc, _state, _current, _markers), do: Enum.reverse(acc)
+  defp collect([], acc, _state, _current, _markers) do
+    Enum.reverse(acc)
+  end
 
   defp collect([line | rest], acc, :outside, _current, markers) do
     case String.trim(line) do
@@ -78,12 +83,16 @@ defmodule Tempo.GuidesRunner do
     Map.put(block, :kind, kind)
   end
 
-  defp iex_line?(line), do: String.starts_with?(String.trim_leading(line), "iex>")
+  defp iex_line?(line) do
+    String.starts_with?(String.trim_leading(line), "iex>")
+  end
 
   # --- Running ---
 
   # No result markers and not force-run: prose illustration, skipped.
-  defp run(%{kind: :illustration}, binding, _path), do: binding
+  defp run(%{kind: :illustration}, binding, _path) do
+    binding
+  end
 
   defp run(%{kind: :plain, lines: lines}, binding, path) do
     {_result, binding} = eval(Enum.join(lines, "\n"), binding, path)
@@ -133,19 +142,27 @@ defmodule Tempo.GuidesRunner do
     end
   end
 
-  defp append_code([current | rest], code),
-    do: [%{current | code: current.code <> "\n" <> code} | rest]
+  defp append_code([current | rest], code) do
+    [%{current | code: current.code <> "\n" <> code} | rest]
+  end
 
-  defp append_code([], _code), do: []
+  defp append_code([], _code) do
+    []
+  end
 
-  defp append_expected([current | rest], line),
-    do: [%{current | expected: current.expected <> line <> "\n"} | rest]
+  defp append_expected([current | rest], line) do
+    [%{current | expected: current.expected <> line <> "\n"} | rest]
+  end
 
   defp flag_raises(%{expected: expected} = example) do
     Map.put(example, :raises, String.starts_with?(String.trim_leading(expected), "** ("))
   end
 
-  defp strip(line, prefix), do: line |> String.replace_prefix(prefix, "") |> String.trim_leading()
+  defp strip(line, prefix) do
+    line
+    |> String.replace_prefix(prefix, "")
+    |> String.trim_leading()
+  end
 
   # --- Evaluation: bindings thread through, stdout suppressed, failures annotated ---
 
@@ -196,7 +213,9 @@ defmodule Tempo.GuidesRunner do
     result
   end
 
-  defp indent(code), do: "    " <> String.replace(code, "\n", "\n    ")
+  defp indent(code) do
+    "    " <> String.replace(code, "\n", "\n    ")
+  end
 end
 
 defmodule Tempo.GuidesTest do

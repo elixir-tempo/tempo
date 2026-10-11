@@ -45,7 +45,10 @@ defmodule Tempo.Matrix.Baseline do
   """
   @spec write([failure()]) :: :ok
   def write(failures) do
-    lines = failures |> Enum.sort() |> Enum.map_join(",\n", &("  " <> inspect(&1)))
+    lines =
+      failures
+      |> Enum.sort()
+      |> Enum.map_join(",\n", &("  " <> inspect(&1)))
 
     File.write!(@path, """
     # The cells of the matrix known to fail: the operation, its arguments and
@@ -80,8 +83,14 @@ defmodule Tempo.Matrix.Baseline do
     found = MapSet.new(failures)
 
     %{
-      new: found |> MapSet.difference(listed) |> Enum.sort(),
-      fixed: listed |> MapSet.difference(found) |> Enum.sort()
+      new:
+        found
+        |> MapSet.difference(listed)
+        |> Enum.sort(),
+      fixed:
+        listed
+        |> MapSet.difference(found)
+        |> Enum.sort()
     }
   end
 end

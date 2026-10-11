@@ -39,38 +39,59 @@ defmodule Tempo.RangeExpansionPropertyTest do
 
     one_of([
       constant(:all),
-      member_of(values) |> map(&{:single, &1}),
+      member_of(values)
+      |> map(&{:single, &1}),
       uniq_list_of(member_of(values), min_length: 2, max_length: 3)
       |> map(&{:list, Enum.sort(&1)}),
-      integer(first..(first + 1)) |> map(&{:range, &1, &1 + 2}),
-      member_of(values) |> map(&{:open_from, &1})
+      integer(first..(first + 1))
+      |> map(&{:range, &1, &1 + 2}),
+      member_of(values)
+      |> map(&{:open_from, &1})
     ])
   end
 
   # `{n..-1}` runs from `n` to the unit's last value, so "the whole
   # extent" starts at the unit's *own* first value — 1 for a month,
   # 0 for an hour.
-  defp render(:all, designator, domain), do: "{#{Enum.min(domain)}..-1}#{designator}"
-  defp render({:single, value}, designator, _domain), do: "#{value}#{designator}"
+  defp render(:all, designator, domain) do
+    "{#{Enum.min(domain)}..-1}#{designator}"
+  end
 
-  defp render({:list, values}, designator, _domain),
-    do: "{#{Enum.join(values, ",")}}#{designator}"
+  defp render({:single, value}, designator, _domain) do
+    "#{value}#{designator}"
+  end
 
-  defp render({:range, first, last}, designator, _domain),
-    do: "{#{first}..#{last}}#{designator}"
+  defp render({:list, values}, designator, _domain) do
+    "{#{Enum.join(values, ",")}}#{designator}"
+  end
 
-  defp render({:open_from, first}, designator, _domain),
-    do: "{#{first}..-1}#{designator}"
+  defp render({:range, first, last}, designator, _domain) do
+    "{#{first}..#{last}}#{designator}"
+  end
 
-  defp resolve(:all, domain), do: Enum.to_list(domain)
-  defp resolve({:single, value}, domain), do: Enum.filter([value], &(&1 in domain))
-  defp resolve({:list, values}, domain), do: Enum.filter(values, &(&1 in domain))
+  defp render({:open_from, first}, designator, _domain) do
+    "{#{first}..-1}#{designator}"
+  end
 
-  defp resolve({:range, first, last}, domain),
-    do: Enum.filter(first..last//1, &(&1 in domain))
+  defp resolve(:all, domain) do
+    Enum.to_list(domain)
+  end
 
-  defp resolve({:open_from, first}, domain),
-    do: Enum.filter(first..Enum.max(domain)//1, &(&1 in domain))
+  defp resolve({:single, value}, domain) do
+    Enum.filter([value], &(&1 in domain))
+  end
+
+  defp resolve({:list, values}, domain) do
+    Enum.filter(values, &(&1 in domain))
+  end
+
+  defp resolve({:range, first, last}, domain) do
+    Enum.filter(first..last//1, &(&1 in domain))
+  end
+
+  defp resolve({:open_from, first}, domain) do
+    Enum.filter(first..Enum.max(domain)//1, &(&1 in domain))
+  end
 
   ## The calendar axis: year, month, day, hour, minute, second.
 
@@ -94,7 +115,13 @@ defmodule Tempo.RangeExpansionPropertyTest do
       |> Enum.map(fn {{spec, designator, domain}, index} ->
         # `T` separates the date part from the time part, and
         # disambiguates month `M` from minute `M`.
-        prefix = if index == 2, do: "T", else: ""
+        prefix =
+          if index == 2 do
+            "T"
+          else
+            ""
+          end
+
         prefix <> render(spec, designator, domain || 1..28)
       end)
 
@@ -115,29 +142,46 @@ defmodule Tempo.RangeExpansionPropertyTest do
     |> Enum.map(&List.to_tuple/1)
   end
 
-  defp domain_for(:day, nil, [year, month | _rest]),
-    do: 1..Date.days_in_month(Date.new!(year, month, 1))
+  defp domain_for(:day, nil, [year, month | _rest]) do
+    1..Date.days_in_month(Date.new!(year, month, 1))
+  end
 
-  defp domain_for(_unit, domain, _path), do: domain
+  defp domain_for(_unit, domain, _path) do
+    domain
+  end
 
   defp components(time, count) do
     [:year | @units]
     |> Enum.take(count + 1)
-    |> Enum.map(&(time |> Keyword.fetch!(&1) |> concrete()))
+    |> Enum.map(
+      &(time
+        |> Keyword.fetch!(&1)
+        |> concrete())
+    )
     |> List.to_tuple()
   end
 
   # A set that resolves to a single member keeps its set form on the
   # materialised endpoint (`month: [12..12]` rather than `month: 12`);
   # compare on the value it denotes.
-  defp concrete([value]), do: concrete(value)
-  defp concrete(first..first//_step), do: first
-  defp concrete(value), do: value
+  defp concrete([value]) do
+    concrete(value)
+  end
+
+  defp concrete(first..first//_step) do
+    first
+  end
+
+  defp concrete(value) do
+    value
+  end
 
   # A set that resolves to a single member materialises as one
   # interval rather than a set — deliberate, so accept both shapes.
   defp members(iso) do
-    case iso |> Tempo.from_iso8601!() |> Tempo.to_interval() do
+    case iso
+         |> Tempo.from_iso8601!()
+         |> Tempo.to_interval() do
       {:ok, %IntervalSet{} = set} -> IntervalSet.members(set)
       {:ok, %Interval{} = interval} -> [interval]
     end
@@ -158,7 +202,12 @@ defmodule Tempo.RangeExpansionPropertyTest do
   defp dates_of(iso) do
     iso
     |> members()
-    |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_date() |> elem(1)))
+    |> Enum.map(
+      &(&1
+        |> Interval.from()
+        |> Tempo.to_date()
+        |> elem(1))
+    )
   end
 
   property "ranges in any combination of component positions expand to exactly the real values" do
@@ -217,7 +266,13 @@ defmodule Tempo.RangeExpansionPropertyTest do
   property "an ordinal day range expands to the days of the year" do
     check all(year <- integer(2020..2030), max_runs: 20) do
       dates = dates_of("#{year}Y{1..-1}O")
-      days_in_year = if Date.leap_year?(Date.new!(year, 1, 1)), do: 366, else: 365
+
+      days_in_year =
+        if Date.leap_year?(Date.new!(year, 1, 1)) do
+          366
+        else
+          365
+        end
 
       assert length(dates) == days_in_year
       assert hd(dates) == Date.new!(year, 1, 1)
@@ -240,7 +295,13 @@ defmodule Tempo.RangeExpansionPropertyTest do
         Map.new(1..12, fn month -> {month, Date.days_in_month(Date.new!(year, month, 1))} end)
 
       assert per_month == expected
-      assert length(dates) == if(Date.leap_year?(Date.new!(year, 1, 1)), do: 366, else: 365)
+
+      assert length(dates) ==
+               (if Date.leap_year?(Date.new!(year, 1, 1)) do
+                  366
+                else
+                  365
+                end)
     end
   end
 end

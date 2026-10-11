@@ -74,11 +74,16 @@ defmodule Tempo.CronMatcherTest do
     {MapSet.new(values), not String.starts_with?(text, "*")}
   end
 
-  defp values_of([range], bounds, names), do: Enum.to_list(ends(range, bounds, names, nil))
+  defp values_of([range], bounds, names) do
+    Enum.to_list(ends(range, bounds, names, nil))
+  end
 
   defp values_of([range, step], bounds, names) do
     step = String.to_integer(step)
-    range |> ends(bounds, names, step) |> Enum.take_every(step)
+
+    range
+    |> ends(bounds, names, step)
+    |> Enum.take_every(step)
   end
 
   # A range's ends. A number alone before a step runs from it to the end of
@@ -120,12 +125,21 @@ defmodule Tempo.CronMatcherTest do
     day? = at.day in days
     weekday? = Enum.any?(numbers_of(Date.day_of_week(at)), &(&1 in weekdays))
 
-    if day_restricted? and weekday_restricted?, do: day? or weekday?, else: day? and weekday?
+    if day_restricted? and weekday_restricted? do
+      day? or weekday?
+    else
+      day? and weekday?
+    end
   end
 
   # Sunday is 0 and 7.
-  defp numbers_of(7), do: [0, 7]
-  defp numbers_of(weekday), do: [weekday]
+  defp numbers_of(7) do
+    [0, 7]
+  end
+
+  defp numbers_of(weekday) do
+    [weekday]
+  end
 
   # Every minute of the window, one after another.
   defp minutes_of_window do
@@ -134,11 +148,17 @@ defmodule Tempo.CronMatcherTest do
     |> Enum.take(@minutes_in_window)
   end
 
-  defp firings(expression, minutes \\ minutes_of_window()),
-    do: minutes |> Stream.filter(matcher(expression)) |> Enum.take(@compared)
+  defp firings(expression, minutes \\ minutes_of_window()) do
+    minutes
+    |> Stream.filter(matcher(expression))
+    |> Enum.take(@compared)
+  end
 
-  defp moment(%NaiveDateTime{} = at),
-    do: at |> NaiveDateTime.to_erl() |> :calendar.datetime_to_gregorian_seconds()
+  defp moment(%NaiveDateTime{} = at) do
+    at
+    |> NaiveDateTime.to_erl()
+    |> :calendar.datetime_to_gregorian_seconds()
+  end
 
   describe "a five-field expression" do
     test "fires at the minutes the matcher finds, in June and July 2026" do
@@ -152,7 +172,12 @@ defmodule Tempo.CronMatcherTest do
           fired
           |> IntervalSet.members()
           |> Enum.take(@compared)
-          |> Enum.map(&(&1 |> Interval.from() |> Compare.to_utc_seconds() |> trunc()))
+          |> Enum.map(
+            &(&1
+              |> Interval.from()
+              |> Compare.to_utc_seconds()
+              |> trunc())
+          )
 
         assert {expression, starts} ==
                  {expression, Enum.map(firings(expression, minutes), &moment/1)}

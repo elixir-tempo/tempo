@@ -27,8 +27,9 @@ defmodule Tempo.ZonedWalkPastItsPartsTest do
 
   ## The measure
 
-  defp started(zone, time),
-    do: DateTime.new!(~D[2026-06-16], time, zone, TimeZoneDatabase.database())
+  defp started(zone, time) do
+    DateTime.new!(~D[2026-06-16], time, zone, TimeZoneDatabase.database())
+  end
 
   # Each stop of a walk of `seconds` at a time, as the zone's clock shows it.
   defp stops(zone, time, seconds) do
@@ -38,16 +39,24 @@ defmodule Tempo.ZonedWalkPastItsPartsTest do
         do: DateTime.add(start, step * seconds, :second, TimeZoneDatabase.database())
   end
 
-  defp utc_seconds(%DateTime{} = at),
-    do: at |> DateTime.to_unix() |> Kernel.+(62_167_219_200)
-
-  defp starts({:ok, %IntervalSet{} = set}) do
-    for occurrence <- IntervalSet.members(set),
-        do: occurrence |> Interval.from() |> Compare.to_utc_seconds() |> Kernel.trunc()
+  defp utc_seconds(%DateTime{} = at) do
+    at
+    |> DateTime.to_unix()
+    |> Kernel.+(62_167_219_200)
   end
 
-  defp walk(zone, cadence, rule, time \\ "T10"),
-    do: Tempo.from_iso8601!("R5/2026-06-16#{time}[#{zone}]/#{cadence}/F#{rule}")
+  defp starts({:ok, %IntervalSet{} = set}) do
+    for occurrence <- IntervalSet.members(set) do
+      occurrence
+      |> Interval.from()
+      |> Compare.to_utc_seconds()
+      |> Kernel.trunc()
+    end
+  end
+
+  defp walk(zone, cadence, rule, time \\ "T10") do
+    Tempo.from_iso8601!("R5/2026-06-16#{time}[#{zone}]/#{cadence}/F#{rule}")
+  end
 
   describe "a rule of hours in a zone that names an hour its walk never stops at" do
     test "has no occurrence, and is told so" do
@@ -57,7 +66,11 @@ defmodule Tempo.ZonedWalkPastItsPartsTest do
             {"America/New_York", 24, "LT12HN", [12]},
             {"Asia/Kolkata", 24, "LT3HN", [3]}
           ] do
-        shown = zone |> stops(~T[10:00:00], hours * 3_600) |> Enum.map(& &1.hour) |> Enum.uniq()
+        shown =
+          zone
+          |> stops(~T[10:00:00], hours * 3_600)
+          |> Enum.map(& &1.hour)
+          |> Enum.uniq()
 
         # The measure: the walk's clock never shows an hour the rule names.
         assert {zone, hours, Enum.filter(named, &(&1 in shown))} == {zone, hours, []}
@@ -97,7 +110,11 @@ defmodule Tempo.ZonedWalkPastItsPartsTest do
             {~T[10:45:00], "T10:45", "LT{9,12}HN", [9, 12]},
             {~T[10:29:59], "T10:29:59", "LT11HN", [11]}
           ] do
-        shown = @lord_howe |> stops(time, 86_400) |> Enum.map(& &1.hour) |> Enum.uniq()
+        shown =
+          @lord_howe
+          |> stops(time, 86_400)
+          |> Enum.map(& &1.hour)
+          |> Enum.uniq()
 
         assert {written, rule, Enum.filter(named, &(&1 in shown))} == {written, rule, []}
 
@@ -134,7 +151,10 @@ defmodule Tempo.ZonedWalkPastItsPartsTest do
       # Every sixtieth minute from a quarter past is a quarter past, a
       # change of the clock by whole hours leaving the minute as it was.
       minutes =
-        "Europe/Paris" |> stops(~T[10:15:00], 3_600) |> Enum.map(& &1.minute) |> Enum.uniq()
+        "Europe/Paris"
+        |> stops(~T[10:15:00], 3_600)
+        |> Enum.map(& &1.minute)
+        |> Enum.uniq()
 
       assert minutes == [15]
 

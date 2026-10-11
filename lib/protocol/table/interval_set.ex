@@ -21,7 +21,11 @@ if Code.ensure_loaded?(Table.Reader) do
 
     defp metadata_keys(members) do
       members
-      |> Enum.flat_map(&(&1 |> Tempo.metadata() |> Map.keys()))
+      |> Enum.flat_map(
+        &(&1
+          |> Tempo.metadata()
+          |> Map.keys())
+      )
       |> Enum.uniq()
     end
 

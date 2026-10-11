@@ -121,7 +121,9 @@ defmodule Tempo.Calendars do
   end
 
   def outside?(term) when is_tuple(term) do
-    term |> Tuple.to_list() |> outside?()
+    term
+    |> Tuple.to_list()
+    |> outside?()
   end
 
   def outside?(term) when is_map(term) do
@@ -192,7 +194,10 @@ defmodule Tempo.Calendars do
   end
 
   defp replaced(term, from, to) when is_tuple(term) do
-    term |> Tuple.to_list() |> replaced(from, to) |> List.to_tuple()
+    term
+    |> Tuple.to_list()
+    |> replaced(from, to)
+    |> List.to_tuple()
   end
 
   defp replaced(term, _from, _to) do
@@ -270,19 +275,25 @@ defmodule Tempo.Calendars do
   # 8601-2's seasons are the seasons of its months, and an event of the sky
   # or of the church is dated in it.
   @spec default() :: notation()
-  def default, do: @notation
+  def default do
+    @notation
+  end
 
   @doc false
   # The calendar the zone database keeps its clocks in. A value of another
   # calendar is read on a zone's clock as the date of the same day in it.
   @spec zone() :: notation()
-  def zone, do: @notation
+  def zone do
+    @notation
+  end
 
   @doc false
   # The calendar a rule of RFC 5545, of cron or of JSCalendar counts its
   # months and its years in.
   @spec rule() :: notation()
-  def rule, do: @notation
+  def rule do
+    @notation
+  end
 
   @doc false
   # The calendar an identifier written beside a value names (IXDTF's
@@ -291,8 +302,13 @@ defmodule Tempo.Calendars do
   # in, which is the calendar of a value that names none. Any other is
   # Calendrical's to say.
   @spec named(atom() | String.t()) :: {:ok, module()} | {:error, Exception.t()}
-  def named(type) when type in [:iso8601, "iso8601"], do: {:ok, @notation}
-  def named(type), do: Calendrical.calendar_from_cldr_calendar_type(type)
+  def named(type) when type in [:iso8601, "iso8601"] do
+    {:ok, @notation}
+  end
+
+  def named(type) do
+    Calendrical.calendar_from_cldr_calendar_type(type)
+  end
 
   @doc false
   # A date, or a date and time, that another library read for a rule (the
@@ -300,21 +316,33 @@ defmodule Tempo.Calendars do
   # Such a library reads into Elixir's own calendar, and what it read is
   # made a date of a calendar Tempo holds where it arrives.
   @spec in_rule(value) :: value when value: Date.t() | NaiveDateTime.t() | DateTime.t()
-  def in_rule(%DateTime{} = value), do: converted(value, DateTime.convert(value, @notation))
+  def in_rule(%DateTime{} = value) do
+    converted(value, DateTime.convert(value, @notation))
+  end
 
-  def in_rule(%NaiveDateTime{} = value),
-    do: converted(value, NaiveDateTime.convert(value, @notation))
+  def in_rule(%NaiveDateTime{} = value) do
+    converted(value, NaiveDateTime.convert(value, @notation))
+  end
 
-  def in_rule(%Date{} = value), do: converted(value, Date.convert(value, @notation))
+  def in_rule(%Date{} = value) do
+    converted(value, Date.convert(value, @notation))
+  end
 
-  defp converted(_value, {:ok, converted}), do: converted
-  defp converted(value, {:error, _not_convertible}), do: value
+  defp converted(_value, {:ok, converted}) do
+    converted
+  end
+
+  defp converted(value, {:error, _not_convertible}) do
+    value
+  end
 
   @doc false
   # The calendar of the notation's week dates (`2026-W10-1`), which a value
   # is in where the sigil's `W` says so.
   @spec weeks() :: Calendrical.ISOWeek
-  def weeks, do: @weeks
+  def weeks do
+    @weeks
+  end
 
   @doc false
   # Whether a calendar is the notation's, for a guard: the calendar of a
@@ -335,7 +363,9 @@ defmodule Tempo.Calendars do
   # behaviours for `Calendar.ISO` is Localize's, which cannot declare
   # Calendrical's, and Calendrical knows a calendar by what it declares.
   @spec validated(term()) :: {:ok, module()} | :error
-  def validated(@notation), do: {:ok, @notation}
+  def validated(@notation) do
+    {:ok, @notation}
+  end
 
   def validated(calendar) do
     case Calendrical.validate_calendar(calendar) do

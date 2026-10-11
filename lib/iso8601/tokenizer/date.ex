@@ -84,15 +84,19 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
                 optional(qualification())
                 |> concat(
                   choice([
-                    integer(3) |> unwrap_and_tag(:three_digits),
-                    integer(2) |> unwrap_and_tag(:two_digits),
-                    integer(1) |> unwrap_and_tag(:one_digit)
+                    integer(3)
+                    |> unwrap_and_tag(:three_digits),
+                    integer(2)
+                    |> unwrap_and_tag(:two_digits),
+                    integer(1)
+                    |> unwrap_and_tag(:one_digit)
                   ])
                   |> lookahead(
                     choice([
                       eos(),
                       ascii_char([?[, ?/, ?}, ?], ??, ?~, ?%]),
-                      ascii_char([?,]) |> lookahead_not(digit())
+                      ascii_char([?,])
+                      |> lookahead_not(digit())
                     ])
                   )
                   |> tag(:date)
@@ -180,7 +184,10 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
   end
 
   def classify_explicit_date(rest, [:__explicit_date__ | tokens], context, _line, _offset) do
-    date = tokens |> Enum.reverse() |> apply_fraction()
+    date =
+      tokens
+      |> Enum.reverse()
+      |> apply_fraction()
 
     {rest, [{:date, date}], context}
   end

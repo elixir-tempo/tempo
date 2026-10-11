@@ -129,7 +129,9 @@ defmodule Tempo.Duration do
     end
   end
 
-  def new(other), do: ensure_keyword(other)
+  def new(other) do
+    ensure_keyword(other)
+  end
 
   # A fractional second is stored as a `:microsecond` component riding
   # on its `:second`. Keep `second: 0` present whenever microseconds
@@ -225,10 +227,13 @@ defmodule Tempo.Duration do
     %{duration | time: Enum.map(time, &negate_component/1)}
   end
 
-  defp negate_component({:microsecond, {value, precision}}),
-    do: {:microsecond, {-value, precision}}
+  defp negate_component({:microsecond, {value, precision}}) do
+    {:microsecond, {-value, precision}}
+  end
 
-  defp negate_component({unit, value}), do: {unit, -value}
+  defp negate_component({unit, value}) do
+    {unit, -value}
+  end
 
   @doc """
   Add two durations component-wise, returning a new duration.
@@ -275,7 +280,12 @@ defmodule Tempo.Duration do
           not zero_component?(summed),
           do: {unit, summed}
 
-    %__MODULE__{time: merged |> normalise_microseconds() |> borrow_time_of_day()}
+    %__MODULE__{
+      time:
+        merged
+        |> normalise_microseconds()
+        |> borrow_time_of_day()
+    }
   end
 
   @doc """
@@ -412,19 +422,41 @@ defmodule Tempo.Duration do
     end
   end
 
-  defp add_components(nil, nil), do: nil
-  defp add_components(value, nil), do: value
-  defp add_components(nil, value), do: value
+  defp add_components(nil, nil) do
+    nil
+  end
 
-  defp add_components({value_a, precision_a}, {value_b, precision_b}),
-    do: {value_a + value_b, max(precision_a, precision_b)}
+  defp add_components(value, nil) do
+    value
+  end
 
-  defp add_components(value_a, value_b), do: value_a + value_b
+  defp add_components(nil, value) do
+    value
+  end
 
-  defp zero_component?(nil), do: true
-  defp zero_component?({0, _precision}), do: true
-  defp zero_component?(0), do: true
-  defp zero_component?(_summed), do: false
+  defp add_components({value_a, precision_a}, {value_b, precision_b}) do
+    {value_a + value_b, max(precision_a, precision_b)}
+  end
+
+  defp add_components(value_a, value_b) do
+    value_a + value_b
+  end
+
+  defp zero_component?(nil) do
+    true
+  end
+
+  defp zero_component?({0, _precision}) do
+    true
+  end
+
+  defp zero_component?(0) do
+    true
+  end
+
+  defp zero_component?(_summed) do
+    false
+  end
 
   # When the time-of-day components disagree in sign (`40 h − 21 h 30 m`
   # summing to `19 h, −30 m`), borrow across them: recombine hour,
@@ -437,7 +469,14 @@ defmodule Tempo.Duration do
 
     if mixed_signs?(components) do
       total = time_of_day_microseconds(components)
-      sign = if total < 0, do: -1, else: 1
+
+      sign =
+        if total < 0 do
+          -1
+        else
+          1
+        end
+
       rebuilt = rebuild_time_of_day(sign, abs(total), micro_precision(components))
       Keyword.drop(time, [:hour, :minute, :second, :microsecond]) ++ rebuilt
     else
@@ -457,20 +496,41 @@ defmodule Tempo.Duration do
     |> append_micro(sign, rem(magnitude, 1_000_000), precision)
   end
 
-  defp append_micro(parts, _sign, 0, _precision), do: parts
+  defp append_micro(parts, _sign, 0, _precision) do
+    parts
+  end
 
-  defp append_micro(parts, sign, micro, precision),
-    do: parts ++ [microsecond: {sign * micro, precision}]
+  defp append_micro(parts, sign, micro, precision) do
+    parts ++ [microsecond: {sign * micro, precision}]
+  end
 
-  defp component_sign({:microsecond, {value, _precision}}), do: sign_of(value)
-  defp component_sign({_unit, value}), do: sign_of(value)
+  defp component_sign({:microsecond, {value, _precision}}) do
+    sign_of(value)
+  end
 
-  defp sign_of(value) when value > 0, do: 1
-  defp sign_of(value) when value < 0, do: -1
-  defp sign_of(_zero), do: 0
+  defp component_sign({_unit, value}) do
+    sign_of(value)
+  end
+
+  defp sign_of(value) when value > 0 do
+    1
+  end
+
+  defp sign_of(value) when value < 0 do
+    -1
+  end
+
+  defp sign_of(_zero) do
+    0
+  end
 
   defp mixed_signs?(components) do
-    signs = components |> Enum.map(&component_sign/1) |> Enum.reject(&(&1 == 0)) |> Enum.uniq()
+    signs =
+      components
+      |> Enum.map(&component_sign/1)
+      |> Enum.reject(&(&1 == 0))
+      |> Enum.uniq()
+
     match?([_, _ | _], signs)
   end
 
@@ -505,7 +565,11 @@ defmodule Tempo.Duration do
         total = Keyword.get(time, :second, 0) * 1_000_000 + micro
         seconds = div(total, 1_000_000)
         remainder = rem(total, 1_000_000)
-        base = time |> Keyword.delete(:second) |> Keyword.delete(:microsecond)
+
+        base =
+          time
+          |> Keyword.delete(:second)
+          |> Keyword.delete(:microsecond)
 
         cond do
           remainder == 0 and seconds == 0 -> base
@@ -642,7 +706,9 @@ defmodule Tempo.Duration do
     {:ok, value * @fixed_unit_seconds[unit]}
   end
 
-  defp component_seconds(_unit, _value), do: :error
+  defp component_seconds(_unit, _value) do
+    :error
+  end
 
   # Relative conversion: apply the duration to the reference
   # date, then measure the elapsed seconds on the UTC time line and
@@ -699,7 +765,13 @@ defmodule Tempo.Duration do
     # The fraction extends the second's magnitude and inherits its sign
     # (`-1.5 s` is `second: -1, microsecond: {-500000, 1}`).
     {micro_value, precision} = Microsecond.from_fraction(digits, count)
-    microsecond = if second < 0, do: {-micro_value, precision}, else: {micro_value, precision}
+
+    microsecond =
+      if second < 0 do
+        {-micro_value, precision}
+      else
+        {micro_value, precision}
+      end
 
     [
       {:second, second},
@@ -708,8 +780,13 @@ defmodule Tempo.Duration do
     ]
   end
 
-  defp lift_microsecond([head | rest]), do: [head | lift_microsecond(rest)]
-  defp lift_microsecond([]), do: []
+  defp lift_microsecond([head | rest]) do
+    [head | lift_microsecond(rest)]
+  end
+
+  defp lift_microsecond([]) do
+    []
+  end
 
   defp ensure_keyword(components) do
     if Keyword.keyword?(components) do

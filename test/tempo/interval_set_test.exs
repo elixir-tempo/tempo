@@ -150,8 +150,14 @@ defmodule Tempo.IntervalSet.Test do
 
         assert {count, Enum.zip(set, beside)} == {count, Enum.zip(walked, beside)}
 
-        assert {count, set |> Stream.zip(Stream.cycle([:beside])) |> Enum.take(count)} ==
-                 {count, walked |> Enum.zip(Stream.cycle([:beside])) |> Enum.take(count)}
+        assert {count,
+                set
+                |> Stream.zip(Stream.cycle([:beside]))
+                |> Enum.take(count)} ==
+                 {count,
+                  walked
+                  |> Enum.zip(Stream.cycle([:beside]))
+                  |> Enum.take(count)}
       end
 
       assert Enum.zip(set, set) == Enum.zip(walked, walked)
@@ -374,8 +380,15 @@ defmodule Tempo.IntervalSet.Test do
       )
     end
 
-    defp spans({:ok, set}), do: spans(set)
-    defp spans(set), do: set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+    defp spans({:ok, set}) do
+      spans(set)
+    end
+
+    defp spans(set) do
+      set
+      |> Tempo.IntervalSet.members()
+      |> Enum.map(&Tempo.to_iso8601!/1)
+    end
 
     test "the default, at_least: 1, is the time the set covers" do
       set = Tempo.IntervalSet.new!([at("09", "11"), at("10", "12")])
@@ -579,7 +592,9 @@ defmodule Tempo.IntervalSet.Test do
 
       assert Tempo.IntervalSet.count(slots) == 3
 
-      assert slots |> Tempo.IntervalSet.members() |> Enum.map(& &1.from.time[:hour]) ==
+      assert slots
+             |> Tempo.IntervalSet.members()
+             |> Enum.map(& &1.from.time[:hour]) ==
                [9, 10, 11]
     end
 

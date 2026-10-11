@@ -8,7 +8,9 @@ defmodule Tempo.DurationResolutionTest do
   alias Tempo.IntervalSet
   alias Tempo.RRule
 
-  defp measure(from, to), do: Interval.duration(%Interval{from: from, to: to})
+  defp measure(from, to) do
+    Interval.duration(%Interval{from: from, to: to})
+  end
 
   describe "a duration is counted in its endpoints' unit" do
     test "years, months, weeks and days count calendar steps" do

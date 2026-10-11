@@ -89,8 +89,10 @@ defmodule Tempo.Interval.DurationFormsTest do
         for spelling <- @spelled do
           {:ok, set} = IntervalSet.new([spelling])
 
-          assert IntervalSet.members(set) |> Enum.map(&Interval.endpoints/1) ==
-                   IntervalSet.members(expected) |> Enum.map(&Interval.endpoints/1)
+          assert IntervalSet.members(set)
+                 |> Enum.map(&Interval.endpoints/1) ==
+                   IntervalSet.members(expected)
+                   |> Enum.map(&Interval.endpoints/1)
         end
       end
     end

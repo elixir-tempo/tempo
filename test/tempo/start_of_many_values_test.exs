@@ -81,8 +81,13 @@ defmodule Tempo.StartOfManyValuesTest do
     end
   end
 
-  defp first_of(%Interval{from: %Tempo{} = start}), do: {:starts, start}
-  defp first_of(_no_span), do: :no_span
+  defp first_of(%Interval{from: %Tempo{} = start}) do
+    {:starts, start}
+  end
+
+  defp first_of(_no_span) do
+    :no_span
+  end
 
   defp found(value) do
     case Compare.start_point(value) do
@@ -93,12 +98,21 @@ defmodule Tempo.StartOfManyValuesTest do
 
   # Whether a start is the one the conversion gives: the same point, or an
   # error where the conversion gives none or no point.
-  defp agrees?({:starts, found}, {:starts, converted}),
-    do: Compare.compare_endpoints(found, converted) == :same
+  defp agrees?({:starts, found}, {:starts, converted}) do
+    Compare.compare_endpoints(found, converted) == :same
+  end
 
-  defp agrees?({:error, _}, {:error, _}), do: true
-  defp agrees?({:error, _}, :no_span), do: true
-  defp agrees?(_found, _converted), do: false
+  defp agrees?({:error, _}, {:error, _}) do
+    true
+  end
+
+  defp agrees?({:error, _}, :no_span) do
+    true
+  end
+
+  defp agrees?(_found, _converted) do
+    false
+  end
 
   describe "the start of a value that names several values" do
     test "is the start of the first span it converts to" do

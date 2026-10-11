@@ -221,7 +221,11 @@ defmodule Tempo.Parser.Selection.Test do
   # guide. The days are named to select among them.
   describe "a time of day selected in a month" do
     defp starts(text) do
-      {:ok, set} = text |> Tempo.from_iso8601!() |> Tempo.to_interval()
+      {:ok, set} =
+        text
+        |> Tempo.from_iso8601!()
+        |> Tempo.to_interval()
+
       Enum.map(IntervalSet.members(set), &Interval.from/1)
     end
 

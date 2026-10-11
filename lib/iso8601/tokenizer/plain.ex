@@ -42,8 +42,9 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
 
   @doc false
   @spec tokens(binary()) :: {:ok, keyword()} | :general
-  def tokens(<<y1, y2, y3, y4>>) when are_digits(y1, y2, y3, y4),
-    do: {:ok, [date: [year: year(y1, y2, y3, y4)]]}
+  def tokens(<<y1, y2, y3, y4>>) when are_digits(y1, y2, y3, y4) do
+    {:ok, [date: [year: year(y1, y2, y3, y4)]]}
+  end
 
   def tokens(<<y1, y2, y3, y4, ?-, m1, m2>>)
       when are_digits(y1, y2, y3, y4) and are_digits(m1, m2) do
@@ -65,7 +66,9 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
     with {:ok, time_of_day} <- time_of_day(time), do: {:ok, [time_of_day: time_of_day]}
   end
 
-  def tokens(_another_form), do: :general
+  def tokens(_another_form) do
+    :general
+  end
 
   @doc false
   # The tokens of an interval of plain ends, or of a plain duration, as the
@@ -96,8 +99,9 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
   end
 
   # An interval repeated with no end, or so many times.
-  defp repeated("", {:ok, [interval: ends]}),
-    do: {:ok, [interval: [{:recurrence, :infinity} | ends]]}
+  defp repeated("", {:ok, [interval: ends]}) do
+    {:ok, [interval: [{:recurrence, :infinity} | ends]]}
+  end
 
   defp repeated(times, {:ok, [interval: ends]}) do
     case whole_number(times, 0, 0) do
@@ -106,23 +110,32 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
     end
   end
 
-  defp repeated(_times, :general), do: :general
+  defp repeated(_times, :general) do
+    :general
+  end
 
   defp interval({:ok, [{from_form, _} | _] = from}, {:ok, [{to_form, _} | _] = to})
-       when from_form in [:date, :datetime] or to_form in [:date, :datetime],
-       do: {:ok, [interval: from ++ to]}
+       when from_form in [:date, :datetime] or to_form in [:date, :datetime] do
+    {:ok, [interval: from ++ to]}
+  end
 
   defp interval({:ok, [{form, _from}] = from}, {:ok, [:undefined] = to})
-       when form in [:date, :datetime],
-       do: {:ok, [interval: from ++ to]}
+       when form in [:date, :datetime] do
+    {:ok, [interval: from ++ to]}
+  end
 
   defp interval({:ok, [:undefined] = from}, {:ok, [{form, _to}] = to})
-       when form in [:date, :datetime],
-       do: {:ok, [interval: from ++ to]}
+       when form in [:date, :datetime] do
+    {:ok, [interval: from ++ to]}
+  end
 
-  defp interval(_from, _to), do: :general
+  defp interval(_from, _to) do
+    :general
+  end
 
-  defp end_of_a_span(:any, ".."), do: {:ok, [:undefined]}
+  defp end_of_a_span(:any, "..") do
+    {:ok, [:undefined]}
+  end
 
   defp end_of_a_span(_which, <<?P, designated::binary>>) do
     with {:ok, date, rest} <- designated(designated, @date_designators, []),
@@ -134,11 +147,18 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
     end
   end
 
-  defp end_of_a_span(:any, text), do: tokens(text)
-  defp end_of_a_span(:duration, _another_form), do: :general
+  defp end_of_a_span(:any, text) do
+    tokens(text)
+  end
+
+  defp end_of_a_span(:duration, _another_form) do
+    :general
+  end
 
   # A duration's time of day follows a `T`, and holds a unit at the least.
-  defp time_designated(""), do: {:ok, []}
+  defp time_designated("") do
+    {:ok, []}
+  end
 
   defp time_designated(<<?T, designated::binary>>) do
     case designated(designated, @time_designators, []) do
@@ -147,7 +167,9 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
     end
   end
 
-  defp time_designated(_another_form), do: :general
+  defp time_designated(_another_form) do
+    :general
+  end
 
   # Each whole number and the designator after it, in the order the
   # designators come in, each once: what is left is given back where no
@@ -166,22 +188,41 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
     end
   end
 
-  defp unit_designated([{designator, unit} | later], designator), do: {unit, later}
-  defp unit_designated([_earlier | later], designator), do: unit_designated(later, designator)
-  defp unit_designated([], _designator), do: :general
+  defp unit_designated([{designator, unit} | later], designator) do
+    {unit, later}
+  end
+
+  defp unit_designated([_earlier | later], designator) do
+    unit_designated(later, designator)
+  end
+
+  defp unit_designated([], _designator) do
+    :general
+  end
 
   # A number of one to nine digits, and what follows it.
   @most_digits 9
 
   defp whole_number(<<digit, rest::binary>>, value, digits)
-       when is_digit(digit) and digits < @most_digits,
-       do: whole_number(rest, value * 10 + (digit - ?0), digits + 1)
+       when is_digit(digit) and digits < @most_digits do
+    whole_number(rest, value * 10 + (digit - ?0), digits + 1)
+  end
 
-  defp whole_number(<<digit, _rest::binary>>, _value, _digits) when is_digit(digit), do: :too_long
-  defp whole_number(_rest, _value, 0), do: :none
-  defp whole_number(rest, value, _digits), do: {:ok, value, rest}
+  defp whole_number(<<digit, _rest::binary>>, _value, _digits) when is_digit(digit) do
+    :too_long
+  end
 
-  defp with_time_of_day(date, ""), do: {:ok, [date: date]}
+  defp whole_number(_rest, _value, 0) do
+    :none
+  end
+
+  defp whole_number(rest, value, _digits) do
+    {:ok, value, rest}
+  end
+
+  defp with_time_of_day(date, "") do
+    {:ok, [date: date]}
+  end
 
   defp with_time_of_day(date, <<?T, time::binary>>) do
     with {:ok, time_of_day} <- time_of_day(time) do
@@ -189,7 +230,9 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
     end
   end
 
-  defp with_time_of_day(_date, _another_form), do: :general
+  defp with_time_of_day(_date, _another_form) do
+    :general
+  end
 
   # A time of day to the hour, the minute or the second, a second with its
   # fraction, and a shift after a minute or a second.
@@ -217,27 +260,46 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
     end
   end
 
-  defp time_of_day(_another_form), do: :general
+  defp time_of_day(_another_form) do
+    :general
+  end
 
   # A fraction of a second of one to six digits, as a number and how many
   # digits it was written to.
-  defp fraction(<<?., digit, rest::binary>>) when is_digit(digit),
-    do: fraction(rest, digit - ?0, 1)
+  defp fraction(<<?., digit, rest::binary>>) when is_digit(digit) do
+    fraction(rest, digit - ?0, 1)
+  end
 
-  defp fraction(<<?., _not_a_digit::binary>>), do: :general
-  defp fraction(rest), do: {:ok, [], rest}
+  defp fraction(<<?., _not_a_digit::binary>>) do
+    :general
+  end
 
-  defp fraction(<<digit, rest::binary>>, value, digits) when is_digit(digit) and digits < 6,
-    do: fraction(rest, value * 10 + (digit - ?0), digits + 1)
+  defp fraction(rest) do
+    {:ok, [], rest}
+  end
 
-  defp fraction(<<digit, _rest::binary>>, _value, _digits) when is_digit(digit), do: :general
-  defp fraction(rest, value, digits), do: {:ok, [fraction: {value, digits}], rest}
+  defp fraction(<<digit, rest::binary>>, value, digits) when is_digit(digit) and digits < 6 do
+    fraction(rest, value * 10 + (digit - ?0), digits + 1)
+  end
+
+  defp fraction(<<digit, _rest::binary>>, _value, _digits) when is_digit(digit) do
+    :general
+  end
+
+  defp fraction(rest, value, digits) do
+    {:ok, [fraction: {value, digits}], rest}
+  end
 
   # No shift, `Z`, or hours and minutes east or west of it. A shift of no
   # hours west (`-00:30`) has no hour to hold its sign, and is the general
   # tokenizer's to read.
-  defp shift(""), do: {:ok, []}
-  defp shift("Z"), do: {:ok, [time_shift: [hour: 0]]}
+  defp shift("") do
+    {:ok, []}
+  end
+
+  defp shift("Z") do
+    {:ok, [time_shift: [hour: 0]]}
+  end
 
   defp shift(<<sign, h1, h2, ?:, m1, m2>>)
        when sign in [?+, ?-] and are_digits(h1, h2) and are_digits(m1, m2) do
@@ -247,18 +309,39 @@ defmodule Tempo.Iso8601.Tokenizer.Plain do
     end
   end
 
-  defp shift(_another_form), do: :general
+  defp shift(_another_form) do
+    :general
+  end
 
-  defp first_hour(?+), do: 0
-  defp first_hour(?-), do: 1
+  defp first_hour(?+) do
+    0
+  end
 
-  defp signed(?+, hour), do: hour
-  defp signed(?-, hour), do: -hour
+  defp first_hour(?-) do
+    1
+  end
 
-  defp within(value, first, last) when value >= first and value <= last, do: {:ok, value}
-  defp within(_value, _first, _last), do: :general
+  defp signed(?+, hour) do
+    hour
+  end
 
-  defp two(a, b), do: (a - ?0) * 10 + (b - ?0)
+  defp signed(?-, hour) do
+    -hour
+  end
 
-  defp year(y1, y2, y3, y4), do: two(y1, y2) * 100 + two(y3, y4)
+  defp within(value, first, last) when value >= first and value <= last do
+    {:ok, value}
+  end
+
+  defp within(_value, _first, _last) do
+    :general
+  end
+
+  defp two(a, b) do
+    (a - ?0) * 10 + (b - ?0)
+  end
+
+  defp year(y1, y2, y3, y4) do
+    two(y1, y2) * 100 + two(y3, y4)
+  end
 end

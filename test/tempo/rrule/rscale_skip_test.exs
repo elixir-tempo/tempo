@@ -20,15 +20,25 @@ defmodule Tempo.RRule.RscaleSkipTest do
 
   @starts [~D[2026-01-28], ~D[2026-01-29], ~D[2026-01-30], ~D[2026-01-31], ~D[2024-02-29]]
 
-  defp read(rule, %Date{} = start), do: RRule.parse(rule, from: Tempo.from_date(start))
+  defp read(rule, %Date{} = start) do
+    RRule.parse(rule, from: Tempo.from_date(start))
+  end
 
   # The day each occurrence starts on and how many days long it is.
   defp occurrences({:ok, rule}) do
     {:ok, set} = Tempo.to_interval(rule)
 
     for occurrence <- IntervalSet.members(set) do
-      {:ok, from} = occurrence |> Interval.from() |> Tempo.to_date()
-      {:ok, to} = occurrence |> Interval.to() |> Tempo.to_date()
+      {:ok, from} =
+        occurrence
+        |> Interval.from()
+        |> Tempo.to_date()
+
+      {:ok, to} =
+        occurrence
+        |> Interval.to()
+        |> Tempo.to_date()
+
       {from, Date.diff(to, from)}
     end
   end
@@ -69,12 +79,23 @@ defmodule Tempo.RRule.RscaleSkipTest do
   defp days_selected(days, skip, keep \\ & &1) do
     for step <- 0..59,
         month = Date.shift(~D[2026-01-01], month: step),
-        date <- days |> Enum.flat_map(&day_or_moved(month, &1, skip)) |> Enum.uniq() |> keep.(),
+        date <-
+          days
+          |> Enum.flat_map(&day_or_moved(month, &1, skip))
+          |> Enum.uniq()
+          |> keep.(),
         uniq: true,
         do: {date, 1}
   end
 
-  defp skip_part(skip), do: "SKIP=#{skip |> Atom.to_string() |> String.upcase()}"
+  defp skip_part(skip) do
+    written =
+      skip
+      |> Atom.to_string()
+      |> String.upcase()
+
+    "SKIP=#{written}"
+  end
 
   describe "SKIP=FORWARD" do
     test "takes the first day of the month after a month without the start's day" do
@@ -123,7 +144,10 @@ defmodule Tempo.RRule.RscaleSkipTest do
           "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=#{Enum.join(days, ",")};" <>
             "#{skip_part(skip)};COUNT=30"
 
-        expected = days |> days_selected(skip) |> Enum.take(30)
+        expected =
+          days
+          |> days_selected(skip)
+          |> Enum.take(30)
 
         assert {rule, occurrences(read(rule, ~D[2026-01-01]))} == {rule, expected}
       end
@@ -136,7 +160,10 @@ defmodule Tempo.RRule.RscaleSkipTest do
         Enum.filter(dates, &(Date.day_of_week(&1) in [7, 1]))
       end
 
-      expected = [31] |> days_selected(:forward, on_sunday_or_monday) |> Enum.take(5)
+      expected =
+        [31]
+        |> days_selected(:forward, on_sunday_or_monday)
+        |> Enum.take(5)
 
       assert occurrences(read(rule, ~D[2026-01-01])) == expected
       assert hd(expected) == {~D[2026-03-01], 1}
@@ -148,8 +175,16 @@ defmodule Tempo.RRule.RscaleSkipTest do
           "RSCALE=GREGORIAN;FREQ=MONTHLY;BYMONTHDAY=29,30,31;BYSETPOS=-1;" <>
             "#{skip_part(skip)};COUNT=12"
 
-        last = fn dates -> dates |> Enum.sort(Date) |> Enum.take(-1) end
-        expected = [29, 30, 31] |> days_selected(skip, last) |> Enum.take(12)
+        last = fn dates ->
+          dates
+          |> Enum.sort(Date)
+          |> Enum.take(-1)
+        end
+
+        expected =
+          [29, 30, 31]
+          |> days_selected(skip, last)
+          |> Enum.take(12)
 
         assert {skip, occurrences(read(rule, ~D[2026-01-01]))} == {skip, expected}
       end
@@ -164,7 +199,10 @@ defmodule Tempo.RRule.RscaleSkipTest do
             "#{skip_part(skip)};COUNT=30"
 
         expected =
-          days |> days_selected(skip) |> Enum.sort_by(&elem(&1, 0), Date) |> Enum.take(30)
+          days
+          |> days_selected(skip)
+          |> Enum.sort_by(&elem(&1, 0), Date)
+          |> Enum.take(30)
 
         assert {rule, occurrences(read(rule, ~D[2026-01-01]))} == {rule, expected}
       end
@@ -341,13 +379,20 @@ defmodule Tempo.RRule.RscaleSkipTest do
       {:ok, set} = Tempo.to_interval(rule)
 
       for occurrence <- IntervalSet.members(set) do
-        {:ok, date} = occurrence |> Interval.from() |> Tempo.to_calendar(Calendrical.Gregorian)
+        {:ok, date} =
+          occurrence
+          |> Interval.from()
+          |> Tempo.to_calendar(Calendrical.Gregorian)
+
         Date.new!(Tempo.year(date), Tempo.month(date), Tempo.day(date))
       end
     end
 
-    defp in_gregorian(year, month, day, calendar),
-      do: year |> Date.new!(month, day, calendar) |> Date.convert!(Calendar.ISO)
+    defp in_gregorian(year, month, day, calendar) do
+      year
+      |> Date.new!(month, day, calendar)
+      |> Date.convert!(Calendar.ISO)
+    end
 
     test "has its own days moved: the sixth of an Ethiopic year's thirteenth month" do
       # The thirteenth month has five days, and six in a leap year. Its 6th
@@ -364,9 +409,11 @@ defmodule Tempo.RRule.RscaleSkipTest do
 
       sixth_or = fn moved ->
         for year <- years do
-          if Ethiopic.days_in_month(year, 13) == 6,
-            do: in_gregorian(year, 13, 6, Ethiopic),
-            else: moved.(year)
+          if Ethiopic.days_in_month(year, 13) == 6 do
+            in_gregorian(year, 13, 6, Ethiopic)
+          else
+            moved.(year)
+          end
         end
       end
 
@@ -440,9 +487,11 @@ defmodule Tempo.RRule.RscaleSkipTest do
 
       expected =
         for month <- months do
-          if Hebrew.days_in_month(5786, month) == 30,
-            do: in_gregorian(5786, month, 1, Hebrew),
-            else: Date.add(in_gregorian(5786, month, 1, Hebrew), -1)
+          if Hebrew.days_in_month(5786, month) == 30 do
+            in_gregorian(5786, month, 1, Hebrew)
+          else
+            Date.add(in_gregorian(5786, month, 1, Hebrew), -1)
+          end
         end
 
       assert gregorian_starts(back) == expected

@@ -111,10 +111,12 @@ defmodule Tempo.RoundTripTest do
       # RFC 5545 §3.3.10: "the FREQ rule part MUST be the first rule part
       # specified in a RECUR value". A count or an end was written before it.
       assert {:ok, "FREQ=DAILY;COUNT=10"} =
-               RRule.parse!("FREQ=DAILY;COUNT=10") |> RRule.to_string()
+               RRule.parse!("FREQ=DAILY;COUNT=10")
+               |> RRule.to_string()
 
       assert {:ok, "FREQ=WEEKLY;UNTIL=20221231"} =
-               RRule.parse!("FREQ=WEEKLY;UNTIL=20221231") |> RRule.to_string()
+               RRule.parse!("FREQ=WEEKLY;UNTIL=20221231")
+               |> RRule.to_string()
 
       assert {:ok, "FREQ=WEEKLY;UNTIL=20221231;BYDAY=MO,WE,FR"} =
                RRule.parse!("FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20221231")
@@ -160,9 +162,11 @@ defmodule Tempo.RoundTripTest do
     # years.
     defp first_occurrences(rule, text) do
       window =
-        if text =~ ~r/FREQ=(SECONDLY|MINUTELY|HOURLY|DAILY)/,
-          do: Tempo.from_iso8601!("2026-06-15/2026-07-15"),
-          else: Tempo.from_iso8601!("2026/2031")
+        if text =~ ~r/FREQ=(SECONDLY|MINUTELY|HOURLY|DAILY)/ do
+          Tempo.from_iso8601!("2026-06-15/2026-07-15")
+        else
+          Tempo.from_iso8601!("2026/2031")
+        end
 
       case Tempo.to_interval(rule, within: window) do
         {:ok, %IntervalSet{} = set} -> Enum.take(IntervalSet.members(set), 12)
@@ -186,14 +190,19 @@ defmodule Tempo.RoundTripTest do
     test "is written with its frequency first, after the calendar it is counted in where it names one" do
       for text <- @rules do
         {:ok, written} =
-          text |> RRule.parse!(from: Tempo.from_iso8601!("2026-06-15")) |> RRule.to_string()
+          text
+          |> RRule.parse!(from: Tempo.from_iso8601!("2026-06-15"))
+          |> RRule.to_string()
 
         assert {text,
                 written
                 |> String.split(";")
                 |> Enum.reject(&String.starts_with?(&1, "RSCALE="))
                 |> hd()} ==
-                 {text, text |> String.split(";") |> hd()}
+                 {text,
+                  text
+                  |> String.split(";")
+                  |> hd()}
       end
     end
 
@@ -233,21 +242,31 @@ defmodule Tempo.RoundTripTest do
 
     test "a start and an end step by the first occurrence's length" do
       assert {:ok, "FREQ=DAILY;INTERVAL=5;COUNT=5"} =
-               "R5/2026-06-15/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
+               "R5/2026-06-15/2026-06-20"
+               |> Tempo.from_iso8601!()
+               |> RRule.to_string()
 
       assert {:ok, "FREQ=MONTHLY;INTERVAL=2;COUNT=3"} =
-               "R3/2026-01/2026-03" |> Tempo.from_iso8601!() |> RRule.to_string()
+               "R3/2026-01/2026-03"
+               |> Tempo.from_iso8601!()
+               |> RRule.to_string()
 
       assert {:ok, "FREQ=DAILY;INTERVAL=5"} =
-               "R/2026-06-15/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
+               "R/2026-06-15/2026-06-20"
+               |> Tempo.from_iso8601!()
+               |> RRule.to_string()
     end
 
     test "a duration and an end are a count, not an UNTIL" do
       assert {:ok, "FREQ=DAILY;COUNT=5"} =
-               "R5/P1D/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
+               "R5/P1D/2026-06-20"
+               |> Tempo.from_iso8601!()
+               |> RRule.to_string()
 
       assert {:error, %Tempo.ConversionError{target: :rrule}} =
-               "R/P1D/2026-06-20" |> Tempo.from_iso8601!() |> RRule.to_string()
+               "R/P1D/2026-06-20"
+               |> Tempo.from_iso8601!()
+               |> RRule.to_string()
     end
   end
 
@@ -347,7 +366,9 @@ defmodule Tempo.RoundTripTest do
             {"R/2026-01-01/P1Y/FLLL2K2IN/P10DN4K2IN", "a selection window"}
           ] do
         assert {:error, %Tempo.ConversionError{target: :rrule, reason: reason}} =
-                 iso |> Tempo.from_iso8601!() |> RRule.to_string()
+                 iso
+                 |> Tempo.from_iso8601!()
+                 |> RRule.to_string()
 
         assert reason =~ named
       end
@@ -455,7 +476,11 @@ defmodule Tempo.RoundTripTest do
   end
 
   describe "a value in another calendar reads back in it, however it was made" do
-    defp read_back(value), do: value |> Tempo.to_iso8601!() |> Tempo.from_iso8601!()
+    defp read_back(value) do
+      value
+      |> Tempo.to_iso8601!()
+      |> Tempo.from_iso8601!()
+    end
 
     test "converted, built from an Elixir date, built with a calendar and parsed with one" do
       for value <- [
@@ -508,18 +533,25 @@ defmodule Tempo.RoundTripTest do
     end
 
     # The calendar of each value in a set or a recurrence, in the order written.
-    defp calendars(%Tempo{calendar: calendar}), do: [calendar]
+    defp calendars(%Tempo{calendar: calendar}) do
+      [calendar]
+    end
 
-    defp calendars(%Tempo.Set{set: members, except: except}),
-      do: Enum.flat_map(members ++ except, &calendars/1)
+    defp calendars(%Tempo.Set{set: members, except: except}) do
+      Enum.flat_map(members ++ except, &calendars/1)
+    end
 
-    defp calendars(%Tempo.Range{first: first, last: last}),
-      do: calendars(first) ++ calendars(last)
+    defp calendars(%Tempo.Range{first: first, last: last}) do
+      calendars(first) ++ calendars(last)
+    end
 
-    defp calendars(%Tempo.Interval{from: from, to: to, repeat_rule: rule}),
-      do: calendars(from) ++ calendars(to) ++ calendars(rule)
+    defp calendars(%Tempo.Interval{from: from, to: to, repeat_rule: rule}) do
+      calendars(from) ++ calendars(to) ++ calendars(rule)
+    end
 
-    defp calendars(_open_or_absent), do: []
+    defp calendars(_open_or_absent) do
+      []
+    end
 
     test "a set, its calendar written once after it" do
       # A suffix inside the braces does not parse, so the members share one.

@@ -16,7 +16,9 @@ defmodule Tempo.CalendarIndependenceTest do
   alias Tempo.Test.Engine.Compare
 
   # Build a value in the named calendar via its IXDTF `u-ca` tag.
-  defp cal(string, calendar), do: Tempo.from_iso8601!("#{string}[u-ca=#{calendar}]")
+  defp cal(string, calendar) do
+    Tempo.from_iso8601!("#{string}[u-ca=#{calendar}]")
+  end
 
   # The real elapsed length of a value's enclosing span, in whole days.
   defp span_days(value) do

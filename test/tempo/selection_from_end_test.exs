@@ -18,14 +18,26 @@ defmodule Tempo.SelectionFromEndTest do
     {:ok, value} = Tempo.from_iso8601(text, calendar)
     {:ok, %IntervalSet{} = spans} = Tempo.to_interval(value)
 
-    spans |> IntervalSet.members() |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_iso8601!()))
+    spans
+    |> IntervalSet.members()
+    |> Enum.map(
+      &(&1
+        |> Interval.from()
+        |> Tempo.to_iso8601!())
+    )
   end
 
   defp rrule_starts(rrule) do
     {:ok, recurrence} = RRule.parse(rrule, from: ~o"2026-01-01")
     {:ok, %IntervalSet{} = spans} = Tempo.to_interval(recurrence)
 
-    spans |> IntervalSet.members() |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_iso8601!()))
+    spans
+    |> IntervalSet.members()
+    |> Enum.map(
+      &(&1
+        |> Interval.from()
+        |> Tempo.to_iso8601!())
+    )
   end
 
   describe "a range that reaches the end of its period" do
@@ -148,7 +160,11 @@ defmodule Tempo.SelectionFromEndTest do
 
       assert placed
              |> IntervalSet.members()
-             |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_iso8601!())) ==
+             |> Enum.map(
+               &(&1
+                 |> Interval.from()
+                 |> Tempo.to_iso8601!())
+             ) ==
                ~w(2026Y6M15D 2026Y7M15D 2026Y8M15D)
     end
 

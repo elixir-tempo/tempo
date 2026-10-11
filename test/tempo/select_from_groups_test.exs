@@ -27,10 +27,13 @@ defmodule Tempo.SelectFromGroupsTest do
   @epoch ~N[0000-01-01 00:00:00]
   @first_quarter Date.range(~D[2026-01-01], ~D[2026-03-31])
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
-  defp microseconds(%Date{} = date),
-    do: NaiveDateTime.diff(NaiveDateTime.new!(date, ~T[00:00:00]), @epoch, :microsecond)
+  defp microseconds(%Date{} = date) do
+    NaiveDateTime.diff(NaiveDateTime.new!(date, ~T[00:00:00]), @epoch, :microsecond)
+  end
 
   defp selected(base, selector) do
     {:ok, set} = Tempo.select(base, selector)
@@ -141,8 +144,14 @@ defmodule Tempo.SelectFromGroupsTest do
 
         refute IntervalSet.bounded?(grouped)
 
-        assert {selector, grouped |> IntervalSet.walk() |> Enum.take(40)} ==
-                 {selector, plain |> IntervalSet.walk() |> Enum.take(40)}
+        assert {selector,
+                grouped
+                |> IntervalSet.walk()
+                |> Enum.take(40)} ==
+                 {selector,
+                  plain
+                  |> IntervalSet.walk()
+                  |> Enum.take(40)}
       end
     end
   end

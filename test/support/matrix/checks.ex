@@ -94,13 +94,19 @@ defmodule Tempo.Matrix.Checks do
 
   defp walk(value) do
     case Tempo.to_interval(value) do
-      {:ok, converted} -> converted |> Extent.of() |> walk_covers(converted, value)
-      {:error, _exception} -> :skip
+      {:ok, converted} ->
+        converted
+        |> Extent.of()
+        |> walk_covers(converted, value)
+
+      {:error, _exception} ->
+        :skip
     end
   end
 
-  defp walk_covers({:ok, covered}, _converted, value),
-    do: walk_against(value, covered, Extent.of_walk(value))
+  defp walk_covers({:ok, covered}, _converted, value) do
+    walk_against(value, covered, Extent.of_walk(value))
+  end
 
   # A span with both its ends, neither of which can be placed, where the
   # walk yields values that can: the conversion and the walk read the value
@@ -117,19 +123,26 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp walk_covers(:none, _converted, _value), do: :skip
+  defp walk_covers(:none, _converted, _value) do
+    :skip
+  end
 
   # The walk of a value is its span, unit by unit, and the walk of an interval
   # is the interval by the finer of its ends' units: neither covers more than
   # `to_interval/2` does, nor less.
-  defp walk_against(_value, covered, {:ok, walked}),
-    do: same(measured_part(covered, walked), walked, "to_interval/2", "the walk")
+  defp walk_against(_value, covered, {:ok, walked}) do
+    same(measured_part(covered, walked), walked, "to_interval/2", "the walk")
+  end
 
-  defp walk_against(_value, _covered, :none), do: :skip
+  defp walk_against(_value, _covered, :none) do
+    :skip
+  end
 
   # A walk measured as far as it was taken is compared with what
   # `to_interval/2` covers up to where it stopped.
-  defp measured_part(covered, %{whole?: true}), do: covered
+  defp measured_part(covered, %{whole?: true}) do
+    covered
+  end
 
   defp measured_part(covered, %{spans: spans}) do
     {_from, limit} = List.last(spans)
@@ -152,7 +165,9 @@ defmodule Tempo.Matrix.Checks do
          {:ok, covered} <- Extent.of(converted) do
       case Tempo.to_interval(converted) do
         {:ok, again} ->
-          again |> Extent.of() |> same_or_unmeasured(covered, "its result")
+          again
+          |> Extent.of()
+          |> same_or_unmeasured(covered, "its result")
 
         {:error, exception} ->
           {:fail, "to_interval/2 refuses its own result: #{message(exception)}"}
@@ -162,10 +177,13 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp same_or_unmeasured({:ok, again}, covered, name),
-    do: same(covered, again, "to_interval/2", name)
+  defp same_or_unmeasured({:ok, again}, covered, name) do
+    same(covered, again, "to_interval/2", name)
+  end
 
-  defp same_or_unmeasured(:none, _covered, name), do: {:fail, "#{name} cannot be measured"}
+  defp same_or_unmeasured(:none, _covered, name) do
+    {:fail, "#{name} cannot be measured"}
+  end
 
   defp round_trip(entry, value) do
     case Tempo.to_iso8601(value) do
@@ -215,17 +233,25 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp frames(%Tempo{calendar: calendar, extended: extended, shift: shift}),
-    do: [{calendar, extended, shift}]
+  defp frames(%Tempo{calendar: calendar, extended: extended, shift: shift}) do
+    [{calendar, extended, shift}]
+  end
 
-  defp frames(%Interval{from: from, to: to, repeat_rule: rule}),
-    do: frames(from) ++ frames(to) ++ frames(rule)
+  defp frames(%Interval{from: from, to: to, repeat_rule: rule}) do
+    frames(from) ++ frames(to) ++ frames(rule)
+  end
 
-  defp frames(%Tempo.Set{set: members, except: except}),
-    do: Enum.flat_map(members ++ except, &frames/1)
+  defp frames(%Tempo.Set{set: members, except: except}) do
+    Enum.flat_map(members ++ except, &frames/1)
+  end
 
-  defp frames(%Tempo.Range{first: first, last: last}), do: frames(first) ++ frames(last)
-  defp frames(_other), do: []
+  defp frames(%Tempo.Range{first: first, last: last}) do
+    frames(first) ++ frames(last)
+  end
+
+  defp frames(_other) do
+    []
+  end
 
   defp same_cover_of(a, b, a_name, b_name) do
     with {:ok, a_extent} <- cover(a),
@@ -262,14 +288,18 @@ defmodule Tempo.Matrix.Checks do
   defp elapsed(%Duration{time: time} = duration, from, to) do
     case Extent.of(%Interval{from: from, to: to}) do
       {:ok, %{spans: spans}} ->
-        covered = spans |> Enum.map(fn {from, to} -> to - from end) |> Enum.sum()
+        covered =
+          spans
+          |> Enum.map(fn {from, to} -> to - from end)
+          |> Enum.sum()
 
-        if covered == clock_microseconds(time),
-          do: :ok,
-          else:
-            {:fail,
-             "#{inspect(duration)} is not the #{covered} microseconds " <>
-               "from #{inspect(from)} to #{inspect(to)}"}
+        if covered == clock_microseconds(time) do
+          :ok
+        else
+          {:fail,
+           "#{inspect(duration)} is not the #{covered} microseconds " <>
+             "from #{inspect(from)} to #{inspect(to)}"}
+        end
 
       :none ->
         :skip
@@ -279,12 +309,13 @@ defmodule Tempo.Matrix.Checks do
   defp on_the_wall(%Duration{time: time} = duration, from, to) do
     with {:ok, from_wall} <- wall(from),
          {:ok, to_wall} <- wall(to) do
-      if NaiveDateTime.shift(from_wall, date_shift(time)) == to_wall,
-        do: :ok,
-        else:
-          {:fail,
-           "#{inspect(duration)} from #{inspect(from)} is " <>
-             "#{NaiveDateTime.shift(from_wall, date_shift(time))}, not #{inspect(to)}"}
+      if NaiveDateTime.shift(from_wall, date_shift(time)) == to_wall do
+        :ok
+      else
+        {:fail,
+         "#{inspect(duration)} from #{inspect(from)} is " <>
+           "#{NaiveDateTime.shift(from_wall, date_shift(time))}, not #{inspect(to)}"}
+      end
     else
       _no_wall_reading -> :skip
     end
@@ -310,7 +341,9 @@ defmodule Tempo.Matrix.Checks do
     end)
   end
 
-  defp date_shift(time), do: Keyword.take(time, [:year, :month, :week, :day])
+  defp date_shift(time) do
+    Keyword.take(time, [:year, :month, :week, :day])
+  end
 
   # The wall reading of a Gregorian point: its date and time as written,
   # with what is absent the first.
@@ -328,15 +361,19 @@ defmodule Tempo.Matrix.Checks do
              time[:minute] || 0,
              time[:second] || 0
            ) do
-      if Keyword.has_key?(time, :day) and not Keyword.has_key?(time, :month),
-        do: :none,
-        else: {:ok, naive}
+      if Keyword.has_key?(time, :day) and not Keyword.has_key?(time, :month) do
+        :none
+      else
+        {:ok, naive}
+      end
     else
       _no_wall_reading -> :none
     end
   end
 
-  defp wall(_point), do: :none
+  defp wall(_point) do
+    :none
+  end
 
   defp empty_and_bounded(value) do
     with {:ok, converted} <- Tempo.to_interval(value),
@@ -380,10 +417,13 @@ defmodule Tempo.Matrix.Checks do
     day_predicates(value, order)
   end
 
-  defp against_a_day(value, %{line: {:cycle, _unit}} = covered, _from, _to),
-    do: day_predicates(value, Extent.compare(@day, Extent.microseconds(covered)))
+  defp against_a_day(value, %{line: {:cycle, _unit}} = covered, _from, _to) do
+    day_predicates(value, Extent.compare(@day, Extent.microseconds(covered)))
+  end
 
-  defp against_a_day(_value, _covered, _from, _to), do: []
+  defp against_a_day(_value, _covered, _from, _to) do
+    []
+  end
 
   # `order` is how a day from the start compares with the end.
   defp day_predicates(value, order) do
@@ -440,15 +480,20 @@ defmodule Tempo.Matrix.Checks do
 
   # A lazy set holds the functions that generate it, which are never equal.
   defp same_term(_name, %IntervalSet{} = returned, %IntervalSet{} = banged) do
-    if IntervalSet.bounded?(returned) and IntervalSet.bounded?(banged),
-      do: same_term(:members, IntervalSet.members(returned), IntervalSet.members(banged)),
-      else: :ok
+    if IntervalSet.bounded?(returned) and IntervalSet.bounded?(banged) do
+      same_term(:members, IntervalSet.members(returned), IntervalSet.members(banged))
+    else
+      :ok
+    end
   end
 
-  defp same_term(_name, same, same), do: :ok
+  defp same_term(_name, same, same) do
+    :ok
+  end
 
-  defp same_term(name, returned, banged),
-    do: {:fail, "#{name} answers #{short(returned)} and its bang form #{short(banged)}"}
+  defp same_term(name, returned, banged) do
+    {:fail, "#{name} answers #{short(returned)} and its bang form #{short(banged)}"}
+  end
 
   defp raised_another(name, exception, module) do
     "#{name} returns a #{inspect(exception.__struct__)} and its bang form raises " <>
@@ -468,13 +513,15 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp compare(_a, _b), do: :skip
+  defp compare(_a, _b) do
+    :skip
+  end
 
   # Two values on different lines have no order, and `compare/2` raises.
-  defp no_order(a, b),
-    do:
-      {:fail,
-       "compare/2 orders #{inspect(a)} and #{inspect(b)} as #{Tempo.compare(a, b)}, and they share no line"}
+  defp no_order(a, b) do
+    {:fail,
+     "compare/2 orders #{inspect(a)} and #{inspect(b)} as #{Tempo.compare(a, b)}, and they share no line"}
+  end
 
   # A relation is of two spans, so a value that converts to several members
   # has none, whether or not they touch: `relation/2` refuses it.
@@ -509,11 +556,20 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp expected_relation(:several, _b_span), do: :none
-  defp expected_relation(_a_span, :several), do: :none
+  defp expected_relation(:several, _b_span) do
+    :none
+  end
+
+  defp expected_relation(_a_span, :several) do
+    :none
+  end
 
   defp expected_relation(a_span, b_span) do
-    if Extent.same_line?(a_span, b_span), do: Extent.relation(a_span, b_span), else: :apart
+    if Extent.same_line?(a_span, b_span) do
+      Extent.relation(a_span, b_span)
+    else
+      :apart
+    end
   end
 
   # The extent of the one member a value converts to, or `:several`.
@@ -584,8 +640,13 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp certain(true), do: :certain
-  defp certain(false), do: :impossible
+  defp certain(true) do
+    :certain
+  end
+
+  defp certain(false) do
+    :impossible
+  end
 
   defp crisp?(%Tempo{time: time}) do
     Enum.all?(time, fn
@@ -595,18 +656,25 @@ defmodule Tempo.Matrix.Checks do
     end)
   end
 
-  defp crisp?(%Interval{from: %Tempo{} = from, to: %Tempo{} = to, recurrence: 1}),
-    do: crisp?(from) and crisp?(to)
+  defp crisp?(%Interval{from: %Tempo{} = from, to: %Tempo{} = to, recurrence: 1}) do
+    crisp?(from) and crisp?(to)
+  end
 
-  defp crisp?(_other), do: false
+  defp crisp?(_other) do
+    false
+  end
 
-  defp union(a, b), do: combined("union/2", Tempo.union(a, b), a, b, &Extent.union/2)
+  defp union(a, b) do
+    combined("union/2", Tempo.union(a, b), a, b, &Extent.union/2)
+  end
 
-  defp intersection(a, b),
-    do: combined("intersection/2", Tempo.intersection(a, b), a, b, &Extent.intersection/2)
+  defp intersection(a, b) do
+    combined("intersection/2", Tempo.intersection(a, b), a, b, &Extent.intersection/2)
+  end
 
-  defp difference(a, b),
-    do: combined("difference/2", Tempo.difference(a, b), a, b, &Extent.difference/2)
+  defp difference(a, b) do
+    combined("difference/2", Tempo.difference(a, b), a, b, &Extent.difference/2)
+  end
 
   defp symmetric_difference(a, b) do
     combined("symmetric_difference/2", Tempo.symmetric_difference(a, b), a, b, fn a_cover,
@@ -624,7 +692,10 @@ defmodule Tempo.Matrix.Checks do
       # zone the days are the zone's, which the reference does not place.
       {{:ok, set}, {:ok, daily}, {:ok, %{line: :floating} = window}} ->
         expected = Extent.difference(window, Extent.on_each_day(daily, window))
-        set |> Extent.of() |> covers_as(expected, "complement/2")
+
+        set
+        |> Extent.of()
+        |> covers_as(expected, "complement/2")
 
       {_answer, {:ok, _daily}, _b_cover} ->
         :skip
@@ -649,25 +720,34 @@ defmodule Tempo.Matrix.Checks do
   defp combined(name, answer, a, b, expected) do
     case {answer, cover(a), cover(b)} do
       {{:ok, set}, {:ok, a_cover}, {:ok, b_cover}} ->
-        if Extent.same_line?(a_cover, b_cover),
-          do: set |> Extent.of() |> covers_as(expected.(a_cover, b_cover), name),
-          else: {:fail, "#{name} combines values that share no line"}
+        if Extent.same_line?(a_cover, b_cover) do
+          set
+          |> Extent.of()
+          |> covers_as(expected.(a_cover, b_cover), name)
+        else
+          {:fail, "#{name} combines values that share no line"}
+        end
 
       _refused_or_unmeasured ->
         :skip
     end
   end
 
-  defp covers_as({:ok, covered}, expected, name), do: same(expected, covered, "the spans", name)
+  defp covers_as({:ok, covered}, expected, name) do
+    same(expected, covered, "the spans", name)
+  end
 
-  defp covers_as(:none, _expected, name),
-    do: {:fail, "#{name} gives a set that cannot be measured"}
+  defp covers_as(:none, _expected, name) do
+    {:fail, "#{name} gives a set that cannot be measured"}
+  end
 
-  defp members_overlapping(a, b),
-    do: kept_members("members_overlapping/2", Tempo.members_overlapping(a, b), a, b, true)
+  defp members_overlapping(a, b) do
+    kept_members("members_overlapping/2", Tempo.members_overlapping(a, b), a, b, true)
+  end
 
-  defp members_outside(a, b),
-    do: kept_members("members_outside/2", Tempo.members_outside(a, b), a, b, false)
+  defp members_outside(a, b) do
+    kept_members("members_outside/2", Tempo.members_outside(a, b), a, b, false)
+  end
 
   defp kept_members(name, answer, a, b, overlapping?) do
     with {:ok, set} <- answer,
@@ -681,7 +761,9 @@ defmodule Tempo.Matrix.Checks do
       expected =
         Enum.reduce(kept, %{line: :empty, spans: [], whole?: true}, &Extent.union(&2, &1))
 
-      set |> Extent.of() |> covers_as(expected, name)
+      set
+      |> Extent.of()
+      |> covers_as(expected, name)
     else
       _refused_or_unmeasured -> :skip
     end
@@ -697,7 +779,9 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp duration_between(_a, _b), do: :skip
+  defp duration_between(_a, _b) do
+    :skip
+  end
 
   defp start(value) do
     case Tempo.to_interval(value) do
@@ -712,10 +796,13 @@ defmodule Tempo.Matrix.Checks do
   # from the datum by `Tempo.Matrix.Selections` with none of the library's
   # code: the conversion gives those spans, each once and in order, or the
   # two read the selection two ways.
-  defp selection(%{selection: datum}, value),
-    do: selected(Tempo.to_interval(value), Selections.extents(datum), "to_interval/2")
+  defp selection(%{selection: datum}, value) do
+    selected(Tempo.to_interval(value), Selections.extents(datum), "to_interval/2")
+  end
 
-  defp selection(_entry, _value), do: :skip
+  defp selection(_entry, _value) do
+    :skip
+  end
 
   # The same parts as the rule of a recurrence of the period, within the
   # period: the two are resolved by one resolver from two starting points.
@@ -743,12 +830,17 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp selection_as_rule(_entry, _value), do: :skip
+  defp selection_as_rule(_entry, _value) do
+    :skip
+  end
 
-  defp reaches_past_period?(%{calendar: calendar, period: [year: _year], parts: parts}),
-    do: calendar == ISOWeek or Keyword.has_key?(parts, :week)
+  defp reaches_past_period?(%{calendar: calendar, period: [year: _year], parts: parts}) do
+    calendar == ISOWeek or Keyword.has_key?(parts, :week)
+  end
 
-  defp reaches_past_period?(_datum), do: false
+  defp reaches_past_period?(_datum) do
+    false
+  end
 
   defp cadence(period) do
     case List.last(period) do
@@ -785,7 +877,9 @@ defmodule Tempo.Matrix.Checks do
     end
   end
 
-  defp selection_as_select(_entry, _value), do: :skip
+  defp selection_as_select(_entry, _value) do
+    :skip
+  end
 
   defp selected({:ok, converted}, extents, name) do
     expected = Enum.map(extents, & &1.spans)
@@ -804,7 +898,9 @@ defmodule Tempo.Matrix.Checks do
      "#{name} refuses it (#{message(exception)}), and its parts name #{length(extents)} spans"}
   end
 
-  defp same_members(expected, expected, _name), do: :ok
+  defp same_members(expected, expected, _name) do
+    :ok
+  end
 
   defp same_members(expected, given, name) do
     {:fail,
@@ -812,8 +908,9 @@ defmodule Tempo.Matrix.Checks do
        "#{length(given)} #{member_spans(given)}"}
   end
 
-  defp member_spans(members),
-    do: spans(%{line: :floating, spans: List.flatten(members)})
+  defp member_spans(members) do
+    spans(%{line: :floating, spans: List.flatten(members)})
+  end
 
   ## Extents and answers
 
@@ -832,20 +929,28 @@ defmodule Tempo.Matrix.Checks do
   end
 
   defp same(%{spans: spans} = a, %{spans: spans} = b, a_name, b_name) do
-    if Extent.same_line?(a, b),
-      do: :ok,
-      else: {:fail, "#{a_name} and #{b_name} are on different lines"}
+    if Extent.same_line?(a, b) do
+      :ok
+    else
+      {:fail, "#{a_name} and #{b_name} are on different lines"}
+    end
   end
 
-  defp same(a, b, a_name, b_name),
-    do: {:fail, "#{a_name} covers #{spans(a)}, and #{b_name} #{spans(b)}"}
+  defp same(a, b, a_name, b_name) do
+    {:fail, "#{a_name} covers #{spans(a)}, and #{b_name} #{spans(b)}"}
+  end
 
-  defp expect(_name, answer, answer), do: :ok
+  defp expect(_name, answer, answer) do
+    :ok
+  end
 
-  defp expect(name, answer, expected),
-    do: {:fail, "#{name} is #{inspect(answer)}, and the spans give #{inspect(expected)}"}
+  defp expect(name, answer, expected) do
+    {:fail, "#{name} is #{inspect(answer)}, and the spans give #{inspect(expected)}"}
+  end
 
-  defp first_failure(answers), do: Enum.find(answers, :ok, &(&1 != :ok))
+  defp first_failure(answers) do
+    Enum.find(answers, :ok, &(&1 != :ok))
+  end
 
   # Up to three spans as they are placed, for a failure's detail.
   defp spans(%{line: line, spans: spans}) do
@@ -853,27 +958,47 @@ defmodule Tempo.Matrix.Checks do
     "[#{Enum.map_join(shown, ", ", &span(line, &1))}]#{and_more(rest)}"
   end
 
-  defp and_more([]), do: ""
-  defp and_more(rest), do: " and #{length(rest)} more"
+  defp and_more([]) do
+    ""
+  end
 
-  defp span(line, {from, to}) when line in [:time, :floating],
-    do: "#{moment(from)}/#{moment(to)}"
+  defp and_more(rest) do
+    " and #{length(rest)} more"
+  end
 
-  defp span(_cycle, {from, to}), do: "#{from / @microseconds}s/#{to / @microseconds}s"
+  defp span(line, {from, to}) when line in [:time, :floating] do
+    "#{moment(from)}/#{moment(to)}"
+  end
+
+  defp span(_cycle, {from, to}) do
+    "#{from / @microseconds}s/#{to / @microseconds}s"
+  end
 
   defp moment(position) do
     seconds = Integer.floor_div(position, @microseconds)
     fraction = Integer.mod(position, @microseconds)
 
-    if seconds >= 0 and seconds < 315_537_897_600,
-      do: "#{NaiveDateTime.from_gregorian_seconds(seconds, {fraction, 6})}",
-      else: "#{seconds}s"
+    if seconds >= 0 and seconds < 315_537_897_600 do
+      "#{NaiveDateTime.from_gregorian_seconds(seconds, {fraction, 6})}"
+    else
+      "#{seconds}s"
+    end
   end
 
-  defp message(exception) when is_exception(exception),
-    do: exception |> Exception.message() |> String.replace(~r/\s+/, " ") |> String.slice(0, 120)
+  defp message(exception) when is_exception(exception) do
+    exception
+    |> Exception.message()
+    |> String.replace(~r/\s+/, " ")
+    |> String.slice(0, 120)
+  end
 
-  defp message(other), do: short(other)
+  defp message(other) do
+    short(other)
+  end
 
-  defp short(term), do: term |> inspect(limit: 6) |> String.slice(0, 80)
+  defp short(term) do
+    term
+    |> inspect(limit: 6)
+    |> String.slice(0, 80)
+  end
 end

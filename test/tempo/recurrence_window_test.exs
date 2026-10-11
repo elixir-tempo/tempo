@@ -26,7 +26,9 @@ defmodule Tempo.RecurrenceWindowTest do
   alias Tempo.Test.Engine.Compare
   alias Tempo.UnboundedRecurrenceError
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   defp starts(value, within) do
     {:ok, set} = Tempo.to_interval(value, within: within)
@@ -84,7 +86,12 @@ defmodule Tempo.RecurrenceWindowTest do
             {:minute, "M", ~N[2026-01-01 00:07:00], 15},
             {:minute, "M", ~N[2026-06-01 00:00:00], 1}
           ] do
-        in_a_day = if unit == :hour, do: 24, else: 1_440
+        in_a_day =
+          if unit == :hour do
+            24
+          else
+            1_440
+          end
 
         # From a cadence before the day opens, to its close.
         expected =
@@ -243,9 +250,11 @@ defmodule Tempo.RecurrenceWindowTest do
   # Every occurrence from a rule's start to where a window closes, or none
   # where the window closes before the rule starts.
   defp walked_from_the_start(%Interval{from: start} = value, window_to) do
-    if Compare.to_utc_seconds(start) < Compare.to_utc_seconds(window_to),
-      do: walked_within(value, Interval.new!(from: start, to: window_to)),
-      else: []
+    if Compare.to_utc_seconds(start) < Compare.to_utc_seconds(window_to) do
+      walked_within(value, Interval.new!(from: start, to: window_to))
+    else
+      []
+    end
   end
 
   defp walked_within(value, window) do
@@ -255,8 +264,9 @@ defmodule Tempo.RecurrenceWindowTest do
     end
   end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
   describe "a walk that is cut short" do
     test "fails by name, where it gave the occurrences it had come to" do

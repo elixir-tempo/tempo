@@ -15,13 +15,17 @@ defmodule Tempo.WithinWindowTest do
   # for every recurrence and every calendar format: an occurrence is kept when
   # it overlaps the window.
 
-  defp starts({:ok, %IntervalSet{} = set}),
-    do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
+  defp starts({:ok, %IntervalSet{} = set}) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
+  end
 
   # A recurrence whose every occurrence spans `duration` from its start, as an
   # iCalendar DTEND and a multi-day holiday carry it.
-  defp spanned(recurrence, duration),
-    do: %{recurrence | metadata: Map.put(recurrence.metadata, :occurrence_duration, duration)}
+  defp spanned(recurrence, duration) do
+    %{recurrence | metadata: Map.put(recurrence.metadata, :occurrence_duration, duration)}
+  end
 
   defp ics(events) do
     """
@@ -88,7 +92,12 @@ defmodule Tempo.WithinWindowTest do
              ) == ["2026Y12M19D"]
 
       {:ok, from_2027} = Tempo.to_interval_set(summer, within: ~o"2027/..")
-      assert [first | _rest] = from_2027 |> IntervalSet.walk() |> Enum.take(2)
+
+      assert [first | _rest] =
+               from_2027
+               |> IntervalSet.walk()
+               |> Enum.take(2)
+
       assert Interval.from(first) == ~o"2026Y12M19D"
 
       # A monthly one reaches back as many months as its span does, and one that
@@ -114,7 +123,12 @@ defmodule Tempo.WithinWindowTest do
                ["2025Y12M29D", "2026Y12M29D"]
 
       {:ok, from_2026} = Tempo.to_interval_set(before_new_year, within: ~o"2026/..")
-      assert [first | _rest] = from_2026 |> IntervalSet.walk() |> Enum.take(2)
+
+      assert [first | _rest] =
+               from_2026
+               |> IntervalSet.walk()
+               |> Enum.take(2)
+
       assert Interval.from(first) == ~o"2025Y12M29D"
 
       # A recurrence with a start of its own reaches as far past the window's end.
@@ -217,7 +231,9 @@ defmodule Tempo.WithinWindowTest do
       nights = spanned(~o"R/../P1D/FLT22HN", ~o"PT4H")
       {:ok, set} = Tempo.to_interval_set(nights, within: ~o"2027-01-01/2027-01-03")
 
-      assert set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1) ==
+      assert set
+             |> IntervalSet.members()
+             |> Enum.map(&Tempo.to_iso8601!/1) ==
                ["2026Y12M31DT22H/2027Y1M1DT2H", "2027Y1M1DT22H/2DT2H", "2027Y1M2DT22H/3DT2H"]
     end
 

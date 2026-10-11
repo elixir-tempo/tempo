@@ -10,7 +10,10 @@ defmodule Tempo.OpenWindowTest do
   alias Tempo.RecurrenceSet
 
   defp starts(set, count) do
-    set |> IntervalSet.walk() |> Enum.take(count) |> Enum.map(&Interval.from/1)
+    set
+    |> IntervalSet.walk()
+    |> Enum.take(count)
+    |> Enum.map(&Interval.from/1)
   end
 
   describe "an open-ended :within window" do
@@ -24,7 +27,9 @@ defmodule Tempo.OpenWindowTest do
       {:ok, christmases} =
         Tempo.to_interval_set(~o"R/../P1Y/FL12M25DN", within: ~o"2026-12-26/..")
 
-      assert christmases |> IntervalSet.first() |> Interval.from() == ~o"2027-12-25"
+      assert christmases
+             |> IntervalSet.first()
+             |> Interval.from() == ~o"2027-12-25"
     end
 
     test "an open domain walks its years: US Election Day in even years" do
@@ -70,7 +75,9 @@ defmodule Tempo.OpenWindowTest do
       {:ok, from_today} = Interval.new(from: Tempo.today())
       {:ok, christmases} = Tempo.to_interval_set(~o"R/../P1Y/FL12M25DN", within: from_today)
 
-      assert christmases |> IntervalSet.first() |> Interval.from() == ~o"2026-12-25"
+      assert christmases
+             |> IntervalSet.first()
+             |> Interval.from() == ~o"2026-12-25"
     end
   end
 
@@ -78,7 +85,9 @@ defmodule Tempo.OpenWindowTest do
     test "a masked start begins where the span it names does" do
       {:ok, christmases} = Tempo.to_interval_set(~o"R/../P1Y/FL12M25DN", within: ~o"202X/..")
 
-      assert christmases |> IntervalSet.first() |> Interval.from() == ~o"2020-12-25"
+      assert christmases
+             |> IntervalSet.first()
+             |> Interval.from() == ~o"2020-12-25"
     end
 
     test "a start with no date is an error" do

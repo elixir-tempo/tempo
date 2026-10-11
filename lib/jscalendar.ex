@@ -153,13 +153,17 @@ if Code.ensure_loaded?(JSCalendar) do
 
       with :ok <- Tempo.check_within_option(options, "Tempo.JSCalendar.parse/2"),
            {:ok, object} <- JSCalendar.decode(json) do
-        object |> placed(options) |> Calendars.outside()
+        object
+        |> placed(options)
+        |> Calendars.outside()
       end
     end
 
     # What is read is a string: any other value is an error and no raise. An
     # object decoded already is `to_interval_set/2`'s.
-    def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
+    def parse(not_a_string, _options) do
+      {:error, {:not_a_string, not_a_string}}
+    end
 
     @doc """
     Place an already-parsed JSCalendar object on a timeline.
@@ -195,7 +199,9 @@ if Code.ensure_loaded?(JSCalendar) do
     """
     @spec to_interval_set(struct(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
     def to_interval_set(object, options \\ []) do
-      object |> placed(Calendars.inside(options)) |> Calendars.outside()
+      object
+      |> placed(Calendars.inside(options))
+      |> Calendars.outside()
     end
 
     # A JSCalendar object shows no value by which a caller's call can be told
@@ -210,11 +216,15 @@ if Code.ensure_loaded?(JSCalendar) do
       end
     end
 
-    defp object_occurrences(%Event{} = event, options), do: occurrences(event, options)
+    defp object_occurrences(%Event{} = event, options) do
+      occurrences(event, options)
+    end
 
     # A task is work, not time occupied. Placing one on a timeline
     # would assert something the document does not say.
-    defp object_occurrences(%Task{}, _options), do: {:ok, []}
+    defp object_occurrences(%Task{}, _options) do
+      {:ok, []}
+    end
 
     defp object_occurrences(%Group{entries: entries}, options) do
       entries
@@ -228,7 +238,9 @@ if Code.ensure_loaded?(JSCalendar) do
       end)
     end
 
-    defp object_occurrences(other, _options), do: {:error, {:not_a_calendar_object, other}}
+    defp object_occurrences(other, _options) do
+      {:error, {:not_a_calendar_object, other}}
+    end
 
     ## ------------------------------------------------------------
     ## Event → Interval(s)
@@ -238,7 +250,9 @@ if Code.ensure_loaded?(JSCalendar) do
     # mandatory, but a document that omits it is skipped rather than
     # failing the whole calendar — one malformed event should not cost
     # the reader the other four hundred.
-    defp occurrences(%Event{start: nil}, _options), do: {:ok, []}
+    defp occurrences(%Event{start: nil}, _options) do
+      {:ok, []}
+    end
 
     defp occurrences(%Event{} = event, options) do
       with {:ok, from} <- at_zone(event.start, event.time_zone),
@@ -251,14 +265,24 @@ if Code.ensure_loaded?(JSCalendar) do
     # why the duration is applied to the wall clock rather than to an
     # instant. `Tempo.shift/2` does that arithmetic calendar-aware.
     defp span(%Event{} = event, from) do
-      to = event |> Event.duration() |> units() |> shift(from)
+      to =
+        event
+        |> Event.duration()
+        |> units()
+        |> shift(from)
+
       {from, to, metadata} = ensure_non_degenerate(from, to, metadata(event))
 
       Interval.new(from: from, to: to, metadata: metadata)
     end
 
-    defp shift([] = _no_units, from), do: from
-    defp shift(units, from), do: Tempo.shift(from, units)
+    defp shift([] = _no_units, from) do
+      from
+    end
+
+    defp shift(units, from) do
+      Tempo.shift(from, units)
+    end
 
     # RFC 8984 §5.1.2 gives `duration` a default of `PT0S`, so an event
     # with none is an instant. Tempo's interval domain excludes
@@ -423,7 +447,9 @@ if Code.ensure_loaded?(JSCalendar) do
 
     # `excludedRecurrenceRules` removes occurrences by start moment,
     # exactly as EXDATE does for iCalendar.
-    defp without(included, []), do: included
+    defp without(included, []) do
+      included
+    end
 
     defp without(included, excluded) do
       starts = MapSet.new(excluded, & &1.from)
@@ -437,8 +463,9 @@ if Code.ensure_loaded?(JSCalendar) do
     ## Wall clock → instant
     ## ------------------------------------------------------------
 
-    defp at_zone(%NaiveDateTime{} = naive, nil),
-      do: {:ok, Tempo.from_elixir(Calendars.in_rule(naive))}
+    defp at_zone(%NaiveDateTime{} = naive, nil) do
+      {:ok, Tempo.from_elixir(Calendars.in_rule(naive))}
+    end
 
     defp at_zone(%NaiveDateTime{} = naive, zone) when is_binary(zone) do
       case DateTime.from_naive(naive, zone) do
@@ -482,24 +509,61 @@ if Code.ensure_loaded?(JSCalendar) do
       end
     end
 
-    defp frequency("yearly"), do: {:ok, :year}
-    defp frequency("monthly"), do: {:ok, :month}
-    defp frequency("weekly"), do: {:ok, :week}
-    defp frequency("daily"), do: {:ok, :day}
-    defp frequency("hourly"), do: {:ok, :hour}
-    defp frequency("minutely"), do: {:ok, :minute}
-    defp frequency("secondly"), do: {:ok, :second}
-    defp frequency(other), do: {:error, {:unsupported_frequency, other}}
+    defp frequency("yearly") do
+      {:ok, :year}
+    end
+
+    defp frequency("monthly") do
+      {:ok, :month}
+    end
+
+    defp frequency("weekly") do
+      {:ok, :week}
+    end
+
+    defp frequency("daily") do
+      {:ok, :day}
+    end
+
+    defp frequency("hourly") do
+      {:ok, :hour}
+    end
+
+    defp frequency("minutely") do
+      {:ok, :minute}
+    end
+
+    defp frequency("secondly") do
+      {:ok, :second}
+    end
+
+    defp frequency(other) do
+      {:error, {:unsupported_frequency, other}}
+    end
 
     # RFC 8984 §4.3.3: `skip` says what a rule does with a date that does not
     # exist, the 31st of a month of thirty days. "omit", the default, passes
     # over it, "backward" takes the month's last day and "forward" the first
     # day of the month after.
-    defp skip(nil), do: {:ok, :omit}
-    defp skip("omit"), do: {:ok, :omit}
-    defp skip("backward"), do: {:ok, :backward}
-    defp skip("forward"), do: {:ok, :forward}
-    defp skip(other), do: {:error, {:unsupported_skip, other}}
+    defp skip(nil) do
+      {:ok, :omit}
+    end
+
+    defp skip("omit") do
+      {:ok, :omit}
+    end
+
+    defp skip("backward") do
+      {:ok, :backward}
+    end
+
+    defp skip("forward") do
+      {:ok, :forward}
+    end
+
+    defp skip(other) do
+      {:error, {:unsupported_skip, other}}
+    end
 
     # RFC 8984 §4.3.3 names a day of the week by its first two letters, in
     # lower case. A name it does not have was read as Monday, so a rule for
@@ -514,11 +578,21 @@ if Code.ensure_loaded?(JSCalendar) do
     end
 
     # A rule's weeks start on Monday where it does not say.
-    defp week_start(nil), do: {:ok, 1}
-    defp week_start(day), do: weekday(day)
+    defp week_start(nil) do
+      {:ok, 1}
+    end
 
-    defp byday(nil), do: {:ok, nil}
-    defp byday([]), do: {:ok, nil}
+    defp week_start(day) do
+      weekday(day)
+    end
+
+    defp byday(nil) do
+      {:ok, nil}
+    end
+
+    defp byday([]) do
+      {:ok, nil}
+    end
 
     defp byday(days) when is_list(days) do
       Enum.reduce_while(days, {:ok, []}, fn %NDay{} = day, {:ok, named} ->
@@ -532,7 +606,9 @@ if Code.ensure_loaded?(JSCalendar) do
     # RFC 8984 writes months as strings so that a lunisolar leap month
     # can be `"3L"`, the leap month after the third, which a rule holds as
     # `{3, :leap}` (`Tempo.RRule.Rule.month_from_text/1`).
-    defp months(nil), do: {:ok, nil}
+    defp months(nil) do
+      {:ok, nil}
+    end
 
     defp months(values) when is_list(values) do
       Enum.reduce_while(values, {:ok, []}, fn value, {:ok, acc} ->

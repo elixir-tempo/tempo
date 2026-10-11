@@ -98,10 +98,24 @@ defmodule Tempo.ShiftTest do
         date = Date.new!(2026, week, day, Calendrical.ISOWeek)
         value = Tempo.from_date(date)
 
-        assert {week, day, count, Tempo.to_date(Tempo.shift(value, ~o"P1W" |> times(count)))} ==
+        assert {week, day, count,
+                Tempo.to_date(
+                  Tempo.shift(
+                    value,
+                    ~o"P1W"
+                    |> times(count)
+                  )
+                )} ==
                  {week, day, count, {:ok, Date.shift(date, week: count)}}
 
-        assert {week, day, count, Tempo.to_date(Tempo.shift(value, ~o"P1D" |> times(count)))} ==
+        assert {week, day, count,
+                Tempo.to_date(
+                  Tempo.shift(
+                    value,
+                    ~o"P1D"
+                    |> times(count)
+                  )
+                )} ==
                  {week, day, count, {:ok, Date.add(date, count)}}
       end
 
@@ -144,8 +158,9 @@ defmodule Tempo.ShiftTest do
     end
   end
 
-  defp times(%Tempo.Duration{time: [{unit, 1}]}, count),
-    do: %Tempo.Duration{time: [{unit, count}]}
+  defp times(%Tempo.Duration{time: [{unit, 1}]}, count) do
+    %Tempo.Duration{time: [{unit, count}]}
+  end
 
   describe "Tempo.shift/2 with a duration value" do
     test "accepts a Tempo.Duration directly" do

@@ -70,7 +70,9 @@ defmodule Tempo.CalendarCensusTest do
     end
   end
 
-  defp assert_walk_with_no_year(_text, _calendar, :unchecked), do: :ok
+  defp assert_walk_with_no_year(_text, _calendar, :unchecked) do
+    :ok
+  end
 
   # A walk cannot return an error, so one that needs a year raises it.
   defp assert_walk_with_no_year(text, calendar, :needs_a_year) do
@@ -158,7 +160,9 @@ defmodule Tempo.CalendarCensusTest do
           end
 
         # Parts that are no value's text cannot be asked; most are.
-        if CalendarCensus.selections(calendar) != [], do: assert(Enum.count(asked) >= 8)
+        if CalendarCensus.selections(calendar) != [] do
+          assert(Enum.count(asked) >= 8)
+        end
       end
 
       test "a shape, an interval and a recurrence cover and yield what the calendar says" do

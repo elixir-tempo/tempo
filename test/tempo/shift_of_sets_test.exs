@@ -32,12 +32,19 @@ defmodule Tempo.ShiftOfSetsTest do
   # `2026Y6M{1,15}D`.
   defp written(units) do
     Enum.map_join(units, fn {unit, values} ->
-      "#{if unit == :hour, do: "T"}#{held(values)}#{@letters[unit]}"
+      "#{if unit == :hour do
+        "T"
+      end}#{held(values)}#{@letters[unit]}"
     end)
   end
 
-  defp held([value]), do: "#{value}"
-  defp held(values), do: "{#{Enum.join(values, ",")}}"
+  defp held([value]) do
+    "#{value}"
+  end
+
+  defp held(values) do
+    "{#{Enum.join(values, ",")}}"
+  end
 
   # Each date and time a value names, in the order it names them: every
   # combination of what its units hold that is a date.
@@ -54,7 +61,15 @@ defmodule Tempo.ShiftOfSetsTest do
   # The unit an answer is written to: the finer of the value's and the
   # step's, a week being stepped as its days.
   defp answered_to(units, step) do
-    stepped = for {unit, _amount} <- step, do: if(unit == :week, do: :day, else: unit)
+    stepped =
+      for {unit, _amount} <- step do
+        if unit == :week do
+          :day
+        else
+          unit
+        end
+      end
+
     Enum.find(@finest_first, &(Keyword.has_key?(units, &1) or &1 in stepped))
   end
 
@@ -63,22 +78,43 @@ defmodule Tempo.ShiftOfSetsTest do
   # their units hold.
   defp expected(units, step) do
     unit = answered_to(units, step)
-    landed = units |> named() |> Enum.map(&NaiveDateTime.shift(&1, step)) |> Enum.uniq()
+
+    landed =
+      units
+      |> named()
+      |> Enum.map(&NaiveDateTime.shift(&1, step))
+      |> Enum.uniq()
+
     spans = for start <- landed, do: {start, NaiveDateTime.shift(start, [{unit, 1}])}
 
     {Enum.sort_by(spans, &elem(&1, 0), NaiveDateTime),
      every_combination?(Enum.map(landed, &fields(&1, unit)))}
   end
 
-  defp fields(moment, :year), do: [moment.year]
-  defp fields(moment, :month), do: [moment.year, moment.month]
-  defp fields(moment, :day), do: [moment.year, moment.month, moment.day]
-  defp fields(moment, :hour), do: [moment.year, moment.month, moment.day, moment.hour]
+  defp fields(moment, :year) do
+    [moment.year]
+  end
+
+  defp fields(moment, :month) do
+    [moment.year, moment.month]
+  end
+
+  defp fields(moment, :day) do
+    [moment.year, moment.month, moment.day]
+  end
+
+  defp fields(moment, :hour) do
+    [moment.year, moment.month, moment.day, moment.hour]
+  end
 
   defp every_combination?(rows) do
     combinations =
       rows
-      |> Enum.zip_with(&(&1 |> Enum.uniq() |> Enum.count()))
+      |> Enum.zip_with(
+        &(&1
+          |> Enum.uniq()
+          |> Enum.count())
+      )
       |> Enum.product()
 
     combinations == Enum.count(rows)
@@ -92,17 +128,32 @@ defmodule Tempo.ShiftOfSetsTest do
     end
   end
 
-  defp spans(%IntervalSet{} = set), do: set |> IntervalSet.members() |> Enum.map(&ends/1)
+  defp spans(%IntervalSet{} = set) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&ends/1)
+  end
 
-  defp ends(%Interval{} = span), do: {moment(Interval.from(span)), moment(Interval.to(span))}
+  defp ends(%Interval{} = span) do
+    {moment(Interval.from(span)), moment(Interval.to(span))}
+  end
 
   defp moment(%Tempo{} = point) do
-    {:ok, moment} = point |> Tempo.extend_resolution(:second) |> Tempo.to_naive_datetime()
+    {:ok, moment} =
+      point
+      |> Tempo.extend_resolution(:second)
+      |> Tempo.to_naive_datetime()
+
     moment
   end
 
-  defp one_value?(%Tempo{}), do: true
-  defp one_value?(%IntervalSet{}), do: false
+  defp one_value?(%Tempo{}) do
+    true
+  end
+
+  defp one_value?(%IntervalSet{}) do
+    false
+  end
 
   @years [[2026], [2024], [2024, 2025], [2026, 2027]]
   @months [nil, [1], [2], [6], [12], [1, 2], [6, 7], [11, 12], [1, 12]]
@@ -128,7 +179,12 @@ defmodule Tempo.ShiftOfSetsTest do
   defp dates_holding_sets do
     for years <- @years,
         months <- @months,
-        days <- if(months, do: @days, else: [nil]),
+        days <-
+          (if months do
+             @days
+           else
+             [nil]
+           end),
         units = Enum.reject([year: years, month: months, day: days], &is_nil(elem(&1, 1))),
         Enum.any?(units, &match?({_unit, [_one, _another | _more]}, &1)),
         each_day_is_a_date?(units) do
@@ -145,7 +201,9 @@ defmodule Tempo.ShiftOfSetsTest do
     end)
   end
 
-  defp each_day_is_a_date?(_units), do: true
+  defp each_day_is_a_date?(_units) do
+    true
+  end
 
   describe "each value a set names is stepped" do
     test "by every unit, whichever unit holds the set" do
@@ -288,14 +346,20 @@ defmodule Tempo.ShiftOfSetsTest do
 
         landed =
           for week <- weeks, weekday <- weekdays do
-            2026 |> monday(week) |> Date.add(weekday - 1) |> Date.shift(step)
+            2026
+            |> monday(week)
+            |> Date.add(weekday - 1)
+            |> Date.shift(step)
           end
 
         landed = Enum.uniq(landed)
         answer = Tempo.shift(Tempo.from_iso8601!(text), step)
 
         assert {text, step, days_spanned(answer)} ==
-                 {text, step, landed |> Enum.sort(Date) |> Enum.map(&{&1, 1})}
+                 {text, step,
+                  landed
+                  |> Enum.sort(Date)
+                  |> Enum.map(&{&1, 1})}
 
         assert {text, step, one_value?(answer)} ==
                  {text, step, every_combination?(Enum.map(landed, &week_date/1))}
@@ -366,7 +430,11 @@ defmodule Tempo.ShiftOfSetsTest do
     end
 
     defp zoned(%Tempo{} = point) do
-      {:ok, moment} = point |> Tempo.extend_resolution(:second) |> Tempo.to_datetime()
+      {:ok, moment} =
+        point
+        |> Tempo.extend_resolution(:second)
+        |> Tempo.to_datetime()
+
       moment
     end
 
@@ -444,7 +512,10 @@ defmodule Tempo.ShiftOfSetsTest do
           |> Enum.sort_by(&Date.to_gregorian_days/1)
 
         assert {text, step, starts} ==
-                 {text, step, landed |> Enum.uniq() |> Enum.sort_by(&Date.to_gregorian_days/1)}
+                 {text, step,
+                  landed
+                  |> Enum.uniq()
+                  |> Enum.sort_by(&Date.to_gregorian_days/1)}
       end
     end
 
@@ -455,7 +526,11 @@ defmodule Tempo.ShiftOfSetsTest do
 
     defp hebrew_starts(%IntervalSet{} = set) do
       for member <- IntervalSet.members(set) do
-        {:ok, date} = member |> Interval.from() |> Tempo.to_date()
+        {:ok, date} =
+          member
+          |> Interval.from()
+          |> Tempo.to_date()
+
         date
       end
     end

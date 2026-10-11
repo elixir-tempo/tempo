@@ -177,7 +177,9 @@ defmodule Tempo.Matrix.Corpus do
 
   """
   @spec entries() :: [entry()]
-  def entries, do: Enum.uniq_by(written() ++ generated(), &{&1.text, &1.calendar})
+  def entries do
+    Enum.uniq_by(written() ++ generated(), &{&1.text, &1.calendar})
+  end
 
   @doc """
   The entries written by hand: each has its class, its level, its text and
@@ -255,8 +257,13 @@ defmodule Tempo.Matrix.Corpus do
 
   """
   @spec read(entry()) :: {:ok, term()} | {:error, Exception.t()}
-  def read(%{text: text, calendar: nil}), do: Tempo.from_iso8601(text)
-  def read(%{text: text, calendar: calendar}), do: Tempo.from_iso8601(text, calendar)
+  def read(%{text: text, calendar: nil}) do
+    Tempo.from_iso8601(text)
+  end
+
+  def read(%{text: text, calendar: calendar}) do
+    Tempo.from_iso8601(text, calendar)
+  end
 
   @doc """
   The few plain values each two-value operation is run against, in both

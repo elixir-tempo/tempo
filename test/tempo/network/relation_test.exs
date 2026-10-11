@@ -9,28 +9,35 @@ defmodule Tempo.Network.RelationTest do
 
   describe "to_atomic/1 — qualitative relations" do
     test "before / after are strict on the integer scale" do
-      assert Relation.new(:before, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:before, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:end, :a}, {:start, :b}, -1}]
 
-      assert Relation.new(:after, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:after, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:end, :b}, {:start, :a}, -1}]
     end
 
     test "contemporary requires a non-empty overlap" do
-      assert Relation.new(:contemporary, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:contemporary, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:start, :b}, {:end, :a}, 0}, {{:start, :a}, {:end, :b}, 0}]
     end
 
     test "includes and included_in are duals" do
-      assert Relation.new(:includes, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:includes, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:start, :a}, {:start, :b}, 0}, {{:end, :b}, {:end, :a}, 0}]
 
-      assert Relation.new(:included_in, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:included_in, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:start, :b}, {:start, :a}, 0}, {{:end, :a}, {:end, :b}, 0}]
     end
 
     test "equals constrains both boundaries (four edges)" do
-      atomics = Relation.new(:equals, :a, :b) |> Relation.to_atomic()
+      atomics =
+        Relation.new(:equals, :a, :b)
+        |> Relation.to_atomic()
 
       assert atomics == [
                {{:start, :a}, {:start, :b}, 0},
@@ -41,15 +48,18 @@ defmodule Tempo.Network.RelationTest do
     end
 
     test "synchronous_start / synchronous_end pin one shared boundary" do
-      assert Relation.new(:synchronous_start, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:synchronous_start, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:start, :a}, {:start, :b}, 0}, {{:start, :b}, {:start, :a}, 0}]
 
-      assert Relation.new(:synchronous_end, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:synchronous_end, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:end, :a}, {:end, :b}, 0}, {{:end, :b}, {:end, :a}, 0}]
     end
 
     test "overlaps is non-strict per the paper (start ≤ start ≤ end ≤ end)" do
-      assert Relation.new(:overlaps, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:overlaps, :a, :b)
+             |> Relation.to_atomic() ==
                [
                  {{:start, :a}, {:start, :b}, 0},
                  {{:start, :b}, {:end, :a}, 0},
@@ -59,19 +69,22 @@ defmodule Tempo.Network.RelationTest do
 
     test "starts_during places A's start inside B" do
       # start(B) ≤ start(A) ≤ end(B)
-      assert Relation.new(:starts_during, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:starts_during, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:start, :b}, {:start, :a}, 0}, {{:start, :a}, {:end, :b}, 0}]
     end
 
     test "ends_during places A's end inside B" do
       # start(B) ≤ end(A) ≤ end(B)
-      assert Relation.new(:ends_during, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:ends_during, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:start, :b}, {:end, :a}, 0}, {{:end, :a}, {:end, :b}, 0}]
     end
 
     test "starts / started_by share a start and order the ends (Allen starts)" do
       # start(A) = start(B) ∧ end(A) ≤ end(B)
-      assert Relation.new(:starts, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:starts, :a, :b)
+             |> Relation.to_atomic() ==
                [
                  {{:start, :a}, {:start, :b}, 0},
                  {{:start, :b}, {:start, :a}, 0},
@@ -79,7 +92,8 @@ defmodule Tempo.Network.RelationTest do
                ]
 
       # start(A) = start(B) ∧ end(B) ≤ end(A)
-      assert Relation.new(:started_by, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:started_by, :a, :b)
+             |> Relation.to_atomic() ==
                [
                  {{:start, :a}, {:start, :b}, 0},
                  {{:start, :b}, {:start, :a}, 0},
@@ -89,7 +103,8 @@ defmodule Tempo.Network.RelationTest do
 
     test "finishes / finished_by share an end and order the starts (Allen finishes)" do
       # end(A) = end(B) ∧ start(B) ≤ start(A)
-      assert Relation.new(:finishes, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:finishes, :a, :b)
+             |> Relation.to_atomic() ==
                [
                  {{:end, :a}, {:end, :b}, 0},
                  {{:end, :b}, {:end, :a}, 0},
@@ -97,7 +112,8 @@ defmodule Tempo.Network.RelationTest do
                ]
 
       # end(A) = end(B) ∧ start(A) ≤ start(B)
-      assert Relation.new(:finished_by, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:finished_by, :a, :b)
+             |> Relation.to_atomic() ==
                [
                  {{:end, :a}, {:end, :b}, 0},
                  {{:end, :b}, {:end, :a}, 0},
@@ -107,7 +123,8 @@ defmodule Tempo.Network.RelationTest do
 
     test "strictly_contemporary requires a non-empty interior overlap" do
       # start(B) < end(A) ∧ start(A) < end(B)
-      assert Relation.new(:strictly_contemporary, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new(:strictly_contemporary, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:start, :b}, {:end, :a}, -1}, {{:start, :a}, {:end, :b}, -1}]
     end
   end
@@ -163,46 +180,102 @@ defmodule Tempo.Network.RelationTest do
   end
 
   # A and B overlap; and by more than a boundary they share.
-  def contemporary?(a1, a2, b1, b2), do: b1 <= a2 and a1 <= b2
-  def strictly_contemporary?(a1, a2, b1, b2), do: b1 < a2 and a1 < b2
+  def contemporary?(a1, a2, b1, b2) do
+    b1 <= a2 and a1 <= b2
+  end
+
+  def strictly_contemporary?(a1, a2, b1, b2) do
+    b1 < a2 and a1 < b2
+  end
 
   # A contains B, and is contained by it.
-  def includes?(a1, a2, b1, b2), do: a1 <= b1 and b2 <= a2
-  def included_in?(a1, a2, b1, b2), do: b1 <= a1 and a2 <= b2
+  def includes?(a1, a2, b1, b2) do
+    a1 <= b1 and b2 <= a2
+  end
+
+  def included_in?(a1, a2, b1, b2) do
+    b1 <= a1 and a2 <= b2
+  end
 
   # A overlaps B and comes first, and comes after.
-  def overlaps?(a1, a2, b1, b2), do: a1 <= b1 and b1 <= a2 and a2 <= b2
-  def overlapped_by?(a1, a2, b1, b2), do: b1 <= a1 and a1 <= b2 and b2 <= a2
+  def overlaps?(a1, a2, b1, b2) do
+    a1 <= b1 and b1 <= a2 and a2 <= b2
+  end
+
+  def overlapped_by?(a1, a2, b1, b2) do
+    b1 <= a1 and a1 <= b2 and b2 <= a2
+  end
 
   # A's start is within B, and B's within A; then their ends.
-  def starts_during?(a1, _a2, b1, b2), do: b1 <= a1 and a1 <= b2
-  def includes_start?(a1, a2, b1, _b2), do: a1 <= b1 and b1 <= a2
-  def ends_during?(_a1, a2, b1, b2), do: b1 <= a2 and a2 <= b2
-  def includes_end?(a1, a2, _b1, b2), do: a1 <= b2 and b2 <= a2
+  def starts_during?(a1, _a2, b1, b2) do
+    b1 <= a1 and a1 <= b2
+  end
+
+  def includes_start?(a1, a2, b1, _b2) do
+    a1 <= b1 and b1 <= a2
+  end
+
+  def ends_during?(_a1, a2, b1, b2) do
+    b1 <= a2 and a2 <= b2
+  end
+
+  def includes_end?(a1, a2, _b1, b2) do
+    a1 <= b2 and b2 <= a2
+  end
 
   # A is over before B starts, and the dual.
-  def before?(_a1, a2, b1, _b2), do: a2 < b1
-  def after?(a1, _a2, _b1, b2), do: b2 < a1
+  def before?(_a1, a2, b1, _b2) do
+    a2 < b1
+  end
+
+  def after?(a1, _a2, _b1, b2) do
+    b2 < a1
+  end
 
   # A ends where B starts, and starts where B ends.
-  def immediately_precedes?(_a1, a2, b1, _b2), do: a2 == b1
-  def immediately_follows?(a1, _a2, _b1, b2), do: a1 == b2
+  def immediately_precedes?(_a1, a2, b1, _b2) do
+    a2 == b1
+  end
+
+  def immediately_follows?(a1, _a2, _b1, b2) do
+    a1 == b2
+  end
 
   # A boundary shared.
-  def synchronous_start?(a1, _a2, b1, _b2), do: a1 == b1
-  def synchronous_end?(_a1, a2, _b1, b2), do: a2 == b2
-  def equals?(a1, a2, b1, b2), do: a1 == b1 and a2 == b2
+  def synchronous_start?(a1, _a2, b1, _b2) do
+    a1 == b1
+  end
+
+  def synchronous_end?(_a1, a2, _b1, b2) do
+    a2 == b2
+  end
+
+  def equals?(a1, a2, b1, b2) do
+    a1 == b1 and a2 == b2
+  end
 
   # A start shared, A ending no later, and no earlier; then an end shared.
-  def starts?(a1, a2, b1, b2), do: a1 == b1 and a2 <= b2
-  def started_by?(a1, a2, b1, b2), do: a1 == b1 and b2 <= a2
-  def finishes?(a1, a2, b1, b2), do: a2 == b2 and b1 <= a1
-  def finished_by?(a1, a2, b1, b2), do: a2 == b2 and a1 <= b1
+  def starts?(a1, a2, b1, b2) do
+    a1 == b1 and a2 <= b2
+  end
+
+  def started_by?(a1, a2, b1, b2) do
+    a1 == b1 and b2 <= a2
+  end
+
+  def finishes?(a1, a2, b1, b2) do
+    a2 == b2 and b1 <= a1
+  end
+
+  def finished_by?(a1, a2, b1, b2) do
+    a2 == b2 and a1 <= b1
+  end
 
   describe "to_atomic/1 — boundary comparisons" do
     test "the five comparisons cover the boundary lattice" do
       # end(A) < start(B) — strict before.
-      assert Relation.new({:boundary, :end, :before, :start}, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new({:boundary, :end, :before, :start}, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:end, :a}, {:start, :b}, -1}]
 
       # end(A) ≤ start(B).
@@ -219,7 +292,8 @@ defmodule Tempo.Network.RelationTest do
              |> Relation.to_atomic() == [{{:start, :b}, {:start, :a}, 0}]
 
       # start(A) > end(B) — strict after.
-      assert Relation.new({:boundary, :start, :after, :end}, :a, :b) |> Relation.to_atomic() ==
+      assert Relation.new({:boundary, :start, :after, :end}, :a, :b)
+             |> Relation.to_atomic() ==
                [{{:end, :b}, {:start, :a}, -1}]
     end
   end
@@ -267,7 +341,11 @@ defmodule Tempo.Network.RelationTest do
               uniq: true,
               do: allen(a1, a2, b1, b2)
 
-        assert {type, type |> Relation.to_allen() |> List.wrap() |> Enum.sort()} ==
+        assert {type,
+                type
+                |> Relation.to_allen()
+                |> List.wrap()
+                |> Enum.sort()} ==
                  {type, Enum.sort(admitted)}
       end
     end
@@ -289,7 +367,12 @@ defmodule Tempo.Network.RelationTest do
     # network.
     test "from_allen names a relation that admits the Allen relation, and not its converse" do
       for allen <- Relations.full() do
-        admitted = allen |> Relation.from_allen() |> Relation.to_allen() |> List.wrap()
+        admitted =
+          allen
+          |> Relation.from_allen()
+          |> Relation.to_allen()
+          |> List.wrap()
+
         converse = Allen.inverse(allen)
 
         assert {allen, allen in admitted} == {allen, true}
@@ -306,17 +389,55 @@ defmodule Tempo.Network.RelationTest do
   end
 
   # Allen's relation between two periods, by their boundaries alone.
-  defp allen(_a1, a2, b1, _b2) when a2 < b1, do: :precedes
-  defp allen(_a1, a2, b1, _b2) when a2 == b1, do: :meets
-  defp allen(a1, _a2, _b1, b2) when b2 < a1, do: :preceded_by
-  defp allen(a1, _a2, _b1, b2) when b2 == a1, do: :met_by
-  defp allen(a1, a2, b1, b2) when a1 == b1 and a2 == b2, do: :equals
-  defp allen(a1, a2, b1, b2) when a1 == b1 and a2 < b2, do: :starts
-  defp allen(a1, _a2, b1, _b2) when a1 == b1, do: :started_by
-  defp allen(a1, a2, b1, b2) when a2 == b2 and a1 > b1, do: :finishes
-  defp allen(_a1, a2, _b1, b2) when a2 == b2, do: :finished_by
-  defp allen(a1, a2, b1, b2) when a1 > b1 and a2 < b2, do: :during
-  defp allen(a1, a2, b1, b2) when a1 < b1 and a2 > b2, do: :contains
-  defp allen(a1, _a2, b1, _b2) when a1 < b1, do: :overlaps
-  defp allen(_a1, _a2, _b1, _b2), do: :overlapped_by
+  defp allen(_a1, a2, b1, _b2) when a2 < b1 do
+    :precedes
+  end
+
+  defp allen(_a1, a2, b1, _b2) when a2 == b1 do
+    :meets
+  end
+
+  defp allen(a1, _a2, _b1, b2) when b2 < a1 do
+    :preceded_by
+  end
+
+  defp allen(a1, _a2, _b1, b2) when b2 == a1 do
+    :met_by
+  end
+
+  defp allen(a1, a2, b1, b2) when a1 == b1 and a2 == b2 do
+    :equals
+  end
+
+  defp allen(a1, a2, b1, b2) when a1 == b1 and a2 < b2 do
+    :starts
+  end
+
+  defp allen(a1, _a2, b1, _b2) when a1 == b1 do
+    :started_by
+  end
+
+  defp allen(a1, a2, b1, b2) when a2 == b2 and a1 > b1 do
+    :finishes
+  end
+
+  defp allen(_a1, a2, _b1, b2) when a2 == b2 do
+    :finished_by
+  end
+
+  defp allen(a1, a2, b1, b2) when a1 > b1 and a2 < b2 do
+    :during
+  end
+
+  defp allen(a1, a2, b1, b2) when a1 < b1 and a2 > b2 do
+    :contains
+  end
+
+  defp allen(a1, _a2, b1, _b2) when a1 < b1 do
+    :overlaps
+  end
+
+  defp allen(_a1, _a2, _b1, _b2) do
+    :overlapped_by
+  end
 end

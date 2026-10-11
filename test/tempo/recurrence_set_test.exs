@@ -9,17 +9,26 @@ defmodule Tempo.RecurrenceSetTest do
 
   doctest Tempo.RecurrenceSet
 
-  defp named(iso, name), do: %{Tempo.from_iso8601!(iso) | metadata: %{name: name}}
+  defp named(iso, name) do
+    %{Tempo.from_iso8601!(iso) | metadata: %{name: name}}
+  end
 
-  defp isos(set),
-    do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
+  defp isos(set) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
+  end
 
-  defp years(set),
-    do:
-      set
-      |> IntervalSet.members()
-      |> Enum.map(&(&1 |> Interval.from() |> Tempo.year()))
-      |> Enum.sort()
+  defp years(set) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(
+      &(&1
+        |> Interval.from()
+        |> Tempo.year())
+    )
+    |> Enum.sort()
+  end
 
   describe "materialisation" do
     test "materialises each member against a bound and unions" do
@@ -195,10 +204,15 @@ defmodule Tempo.RecurrenceSetTest do
   end
 
   describe "conditional members" do
-    defp typed(iso, type), do: Tempo.put_metadata(Tempo.from_iso8601!(iso), %{type: type})
+    defp typed(iso, type) do
+      Tempo.put_metadata(Tempo.from_iso8601!(iso), %{type: type})
+    end
 
-    defp days(set),
-      do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
+    defp days(set) do
+      set
+      |> IntervalSet.members()
+      |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
+    end
 
     # Japan's Citizens' Holiday: 22 September when the days either side are
     # public holidays — Respect for the Aged Day (the third Monday) and the

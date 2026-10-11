@@ -22,7 +22,9 @@ defmodule Tempo.Iso8601.Edtf.Corpus do
     "1985-04-12T23:20:30+04:30",
     "2004-01-01T10:10:10+00:59"
   ]
-  def level0_dates, do: @level0_dates
+  def level0_dates do
+    @level0_dates
+  end
 
   # Level 1 dates (excluding intervals)
   @level1_dates [
@@ -53,7 +55,9 @@ defmodule Tempo.Iso8601.Edtf.Corpus do
     "-1985-04-12T23:20:30+04:30",
     "-2001-02-03"
   ]
-  def level1_dates, do: @level1_dates
+  def level1_dates do
+    @level1_dates
+  end
 
   # Level 2 dates (excluding intervals)
   @level2_dates [
@@ -83,7 +87,9 @@ defmodule Tempo.Iso8601.Edtf.Corpus do
     "-2001-40",
     "-2001-41"
   ]
-  def level2_dates, do: @level2_dates
+  def level2_dates do
+    @level2_dates
+  end
 
   # Level 0 intervals
   @level0_intervals [
@@ -100,7 +106,9 @@ defmodule Tempo.Iso8601.Edtf.Corpus do
     "1111-01-01/1111",
     "0000-01/0000"
   ]
-  def level0_intervals, do: @level0_intervals
+  def level0_intervals do
+    @level0_intervals
+  end
 
   # Level 1 intervals
   @level1_intervals [
@@ -143,7 +151,9 @@ defmodule Tempo.Iso8601.Edtf.Corpus do
     "-1985-04/..",
     "-1985/"
   ]
-  def level1_intervals, do: @level1_intervals
+  def level1_intervals do
+    @level1_intervals
+  end
 
   # Level 2 intervals
   @level2_intervals [
@@ -198,7 +208,9 @@ defmodule Tempo.Iso8601.Edtf.Corpus do
     "2016-02-28/2016-02-X9",
     "1984-06-?02/2004-06-11%"
   ]
-  def level2_intervals, do: @level2_intervals
+  def level2_intervals do
+    @level2_intervals
+  end
 
   # Invalid dates
   @invalid_dates [
@@ -221,7 +233,9 @@ defmodule Tempo.Iso8601.Edtf.Corpus do
     "2012-10-10T10:1:10",
     "2005-07-25T10:10:10Z/2006-01-01T10:10:10Z"
   ]
-  def invalid_dates, do: @invalid_dates
+  def invalid_dates do
+    @invalid_dates
+  end
 
   # Invalid intervals
   @invalid_intervals [
@@ -244,7 +258,9 @@ defmodule Tempo.Iso8601.Edtf.Corpus do
     "2005-07-25T10:10:10Z/2006-01",
     "2005-07-25/2006-01-01T10:10:10Z"
   ]
-  def invalid_intervals, do: @invalid_intervals
+  def invalid_intervals do
+    @invalid_intervals
+  end
 
   # Invalid datetimes
   @invalid_datetimes [
@@ -261,5 +277,7 @@ defmodule Tempo.Iso8601.Edtf.Corpus do
     "-1985-04-12T23:20:30+24",
     "-1985-04-12T23:20:30Z12:00"
   ]
-  def invalid_datetimes, do: @invalid_datetimes
+  def invalid_datetimes do
+    @invalid_datetimes
+  end
 end

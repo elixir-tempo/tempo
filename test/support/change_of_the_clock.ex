@@ -64,26 +64,33 @@ defmodule Tempo.ChangeOfTheClock do
   The days on which a clock goes forward, as `{zone, date, change}`.
   """
   @spec gaps() :: [{String.t(), Date.t(), String.t()}]
-  def gaps, do: @gaps
+  def gaps do
+    @gaps
+  end
 
   @doc """
   The days on which a clock goes back, as `{zone, date, change}`.
   """
   @spec folds() :: [{String.t(), Date.t(), String.t()}]
-  def folds, do: @folds
+  def folds do
+    @folds
+  end
 
   @doc """
   The day as a Tempo value in its zone.
   """
   @spec day(String.t(), Date.t()) :: Tempo.t()
-  def day(zone, %Date{} = date),
-    do: Tempo.from_iso8601!(Date.to_iso8601(date) <> "[" <> zone <> "]")
+  def day(zone, %Date{} = date) do
+    Tempo.from_iso8601!(Date.to_iso8601(date) <> "[" <> zone <> "]")
+  end
 
   @doc """
   The moment a value starts at, in seconds since 1970.
   """
   @spec moment(Tempo.t()) :: integer()
-  def moment(%Tempo{} = value), do: trunc(Compare.to_utc_seconds(value)) - @unix_epoch
+  def moment(%Tempo{} = value) do
+    trunc(Compare.to_utc_seconds(value)) - @unix_epoch
+  end
 
   ## What Elixir says the clock showed
 
@@ -92,8 +99,9 @@ defmodule Tempo.ChangeOfTheClock do
   shows one of the day after, by `DateTime`.
   """
   @spec day_shown(String.t(), Date.t()) :: {integer(), integer()}
-  def day_shown(zone, %Date{} = date),
-    do: {first_shown(date, zone), first_shown(Date.add(date, 1), zone)}
+  def day_shown(zone, %Date{} = date) do
+    {first_shown(date, zone), first_shown(Date.add(date, 1), zone)}
+  end
 
   defp first_shown(date, zone) do
     case DateTime.new(date, ~T[00:00:00], zone) do
@@ -118,20 +126,28 @@ defmodule Tempo.ChangeOfTheClock do
   end
 
   defp reading_at(moment, zone) do
-    shown = moment |> DateTime.from_unix!() |> DateTime.shift_zone!(zone)
+    shown =
+      moment
+      |> DateTime.from_unix!()
+      |> DateTime.shift_zone!(zone)
+
     {moment, shown.hour, shown.minute}
   end
 
   # A minute goes on the occurrence before it where it is the same hour,
   # the next minute in time, and not the hour's first reading come again.
   defp occurrences([{moment, hour, minute} | readings], [{hour, from, moment} | shown])
-       when minute != 0,
-       do: occurrences(readings, [{hour, from, moment + @minute} | shown])
+       when minute != 0 do
+    occurrences(readings, [{hour, from, moment + @minute} | shown])
+  end
 
-  defp occurrences([{moment, hour, _minute} | readings], shown),
-    do: occurrences(readings, [{hour, moment, moment + @minute} | shown])
+  defp occurrences([{moment, hour, _minute} | readings], shown) do
+    occurrences(readings, [{hour, moment, moment + @minute} | shown])
+  end
 
-  defp occurrences([], shown), do: Enum.reverse(shown)
+  defp occurrences([], shown) do
+    Enum.reverse(shown)
+  end
 
   ## What Tempo gives
 

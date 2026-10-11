@@ -39,6 +39,11 @@ defmodule Tempo.FloatingTempoError do
     "Operation requires a zoned Tempo (floating values have no UTC projection)"
   end
 
-  defp describe_operation(atom) when is_atom(atom), do: Atom.to_string(atom)
-  defp describe_operation(string) when is_binary(string), do: string
+  defp describe_operation(atom) when is_atom(atom) do
+    Atom.to_string(atom)
+  end
+
+  defp describe_operation(string) when is_binary(string) do
+    string
+  end
 end

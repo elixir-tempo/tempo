@@ -94,7 +94,9 @@ defmodule Tempo.Matrix.CalendarCensus do
 
   """
   @spec calendars() :: [module()]
-  def calendars, do: @calendars ++ [fiscal_calendar()]
+  def calendars do
+    @calendars ++ [fiscal_calendar()]
+  end
 
   # A fiscal calendar is made for a territory when it is asked for: the
   # Australian fiscal year begins in July.
@@ -113,7 +115,9 @@ defmodule Tempo.Matrix.CalendarCensus do
 
   """
   @spec observed() :: [module()]
-  def observed, do: [Calendrical.Islamic.Observational, Calendrical.Islamic.Rgsa]
+  def observed do
+    [Calendrical.Islamic.Observational, Calendrical.Islamic.Rgsa]
+  end
 
   @doc """
   A value in each full form, on each of the census's dates.
@@ -137,12 +141,17 @@ defmodule Tempo.Matrix.CalendarCensus do
 
   # The census's dates in the calendar, and for a reform calendar a date in
   # the month the reform cut short.
-  defp anchors(Calendrical.Reform.England = calendar),
-    do: Enum.map(@anchors ++ [~D[1752-09-20]], &Date.convert!(&1, calendar))
+  defp anchors(Calendrical.Reform.England = calendar) do
+    Enum.map(@anchors ++ [~D[1752-09-20]], &Date.convert!(&1, calendar))
+  end
 
-  defp anchors(calendar), do: Enum.map(@anchors, &Date.convert!(&1, calendar))
+  defp anchors(calendar) do
+    Enum.map(@anchors, &Date.convert!(&1, calendar))
+  end
 
-  defp week?(calendar), do: calendar.calendar_base() == :week
+  defp week?(calendar) do
+    calendar.calendar_base() == :week
+  end
 
   # In a calendar of weeks a date's month is its week and its day the day of
   # that week.
@@ -195,30 +204,38 @@ defmodule Tempo.Matrix.CalendarCensus do
     {{elem(hd(months), 0), elem(List.last(months), 1)}, months}
   end
 
-  def expected({:month, y, m}, calendar),
-    do: {month_span(y, m, calendar), Enum.map(month_dates(y, m, calendar), &day_span/1)}
+  def expected({:month, y, m}, calendar) do
+    {month_span(y, m, calendar), Enum.map(month_dates(y, m, calendar), &day_span/1)}
+  end
 
-  def expected({:day, y, m, d, time}, calendar), do: clock(iso(y, m, d, calendar), time)
+  def expected({:day, y, m, d, time}, calendar) do
+    clock(iso(y, m, d, calendar), time)
+  end
 
-  def expected({:first_day, y, m, time}, calendar),
-    do: clock(hd(month_dates(y, m || 1, calendar)), time)
+  def expected({:first_day, y, m, time}, calendar) do
+    clock(hd(month_dates(y, m || 1, calendar)), time)
+  end
 
   def expected({:week_year, y}, calendar) do
     weeks = for w <- 1..weeks_in_year(y, calendar), do: week_span(y, w, calendar)
     {{elem(hd(weeks), 0), elem(List.last(weeks), 1)}, weeks}
   end
 
-  def expected({:week, y, w}, calendar),
-    do: {week_span(y, w, calendar), Enum.map(week_dates(y, w, calendar), &day_span/1)}
+  def expected({:week, y, w}, calendar) do
+    {week_span(y, w, calendar), Enum.map(week_dates(y, w, calendar), &day_span/1)}
+  end
 
-  def expected({:week_day, y, w, k, time}, calendar),
-    do: clock(Enum.at(week_dates(y, w, calendar), k - 1), time)
+  def expected({:week_day, y, w, k, time}, calendar) do
+    clock(Enum.at(week_dates(y, w, calendar), k - 1), time)
+  end
 
-  def expected({:day_in_zone, y, m, d, hour}, calendar),
-    do: hour_in_zone(iso(y, m, d, calendar), hour)
+  def expected({:day_in_zone, y, m, d, hour}, calendar) do
+    hour_in_zone(iso(y, m, d, calendar), hour)
+  end
 
-  def expected({:week_day_in_zone, y, w, k, hour}, calendar),
-    do: hour_in_zone(Enum.at(week_dates(y, w, calendar), k - 1), hour)
+  def expected({:week_day_in_zone, y, w, k, hour}, calendar) do
+    hour_in_zone(Enum.at(week_dates(y, w, calendar), k - 1), hour)
+  end
 
   # A second written to a tenth is a tenth of a second long.
   def expected({:tenth, y, m, d, {hour, minute, second, tenth}}, calendar) do
@@ -230,9 +247,11 @@ defmodule Tempo.Matrix.CalendarCensus do
   # are dates of it, or, in a year that starts within its months, the dates
   # of the nth month the calendar counts.
   defp month_dates(y, m, calendar) do
-    if starts_within_its_months?(y, calendar),
-      do: Enum.map(calendar.month(y, m), &Date.convert!(&1, Calendar.ISO)),
-      else: for(d <- 1..40, calendar.valid_date?(y, m, d), do: iso(y, m, d, calendar))
+    if starts_within_its_months?(y, calendar) do
+      Enum.map(calendar.month(y, m), &Date.convert!(&1, Calendar.ISO))
+    else
+      for(d <- 1..40, calendar.valid_date?(y, m, d), do: iso(y, m, d, calendar))
+    end
   end
 
   defp month_span(y, m, calendar) do
@@ -249,8 +268,9 @@ defmodule Tempo.Matrix.CalendarCensus do
     end
   end
 
-  defp week_dates(y, w, calendar),
-    do: Enum.map(calendar.week(y, w), &Date.convert!(&1, Calendar.ISO))
+  defp week_dates(y, w, calendar) do
+    Enum.map(calendar.week(y, w), &Date.convert!(&1, Calendar.ISO))
+  end
 
   defp week_span(y, w, calendar) do
     dates = week_dates(y, w, calendar)
@@ -262,11 +282,19 @@ defmodule Tempo.Matrix.CalendarCensus do
     weeks
   end
 
-  defp iso(y, m, d, calendar), do: y |> Date.new!(m, d, calendar) |> Date.convert!(Calendar.ISO)
+  defp iso(y, m, d, calendar) do
+    y
+    |> Date.new!(m, d, calendar)
+    |> Date.convert!(Calendar.ISO)
+  end
 
-  defp day_span(%Date{} = day), do: {at(day), at(day) + @day}
+  defp day_span(%Date{} = day) do
+    {at(day), at(day) + @day}
+  end
 
-  defp clock(day, []), do: {day_span(day), for(h <- 0..23, do: unit_span(day, h * 3600, 3600))}
+  defp clock(day, []) do
+    {day_span(day), for(h <- 0..23, do: unit_span(day, h * 3600, 3600))}
+  end
 
   defp clock(day, hour: h) do
     {unit_span(day, h * 3600, 3600), for(mi <- 0..59, do: unit_span(day, h * 3600 + mi * 60, 60))}
@@ -277,19 +305,27 @@ defmodule Tempo.Matrix.CalendarCensus do
     {unit_span(day, from, 60), for(s <- 0..59, do: unit_span(day, from + s, 1))}
   end
 
-  defp clock(day, hour: h, minute: mi, second: s),
-    do: {unit_span(day, h * 3600 + mi * 60 + s, 1), :unchecked}
+  defp clock(day, hour: h, minute: mi, second: s) do
+    {unit_span(day, h * 3600 + mi * 60 + s, 1), :unchecked}
+  end
 
-  defp unit_span(day, seconds, length),
-    do: {at(day) + seconds * @second, at(day) + (seconds + length) * @second}
+  defp unit_span(day, seconds, length) do
+    {at(day) + seconds * @second, at(day) + (seconds + length) * @second}
+  end
 
-  defp at(%Date{} = date), do: Date.to_gregorian_days(date) * @day
+  defp at(%Date{} = date) do
+    Date.to_gregorian_days(date) * @day
+  end
 
   # An hour on a day's own clock in the zone, as the moments it is: Elixir's
   # `DateTime` says when that wall time is.
   defp hour_in_zone(%Date{} = day, hour) do
     moment = DateTime.new!(day, Time.new!(hour, 0, 0), @zone)
-    from = DateTime.to_gregorian_seconds(moment) |> elem(0) |> Kernel.*(@second)
+
+    from =
+      DateTime.to_gregorian_seconds(moment)
+      |> elem(0)
+      |> Kernel.*(@second)
 
     {{from, from + 3600 * @second},
      for(minute <- 0..59, do: {from + minute * 60 * @second, from + (minute + 1) * 60 * @second})}
@@ -346,7 +382,9 @@ defmodule Tempo.Matrix.CalendarCensus do
     days ++ [%{text: "8K", covers: :no_such_value, walk: :unchecked}]
   end
 
-  defp hours_from(from), do: for(h <- 0..23, do: from + h * 3600 * @second)
+  defp hours_from(from) do
+    for(h <- 0..23, do: from + h * 3600 * @second)
+  end
 
   # A calendar that counts nothing with no year: its years are not alike
   # enough to say.
@@ -372,12 +410,18 @@ defmodule Tempo.Matrix.CalendarCensus do
 
     month = %{
       text: "#{m}M",
-      covers: if(followed?, do: {:ok, {from, from + most * @day}}, else: :needs_a_year),
+      covers:
+        if followed? do
+          {:ok, {from, from + most * @day}}
+        else
+          :needs_a_year
+        end,
       walk:
-        if(fewest == most,
-          do: {:ok, for(d <- 1..most, do: from + (d - 1) * @day)},
-          else: :needs_a_year
-        )
+        if fewest == most do
+          {:ok, for(d <- 1..most, do: from + (d - 1) * @day)}
+        else
+          :needs_a_year
+        end
     }
 
     days =
@@ -387,7 +431,12 @@ defmodule Tempo.Matrix.CalendarCensus do
         %{
           text: "#{m}M#{d}D",
           covers: day_covers(d, {fewest, most}, followed?, day_from),
-          walk: if(d in [1, fewest, most], do: {:ok, hours_from(day_from)}, else: :unchecked)
+          walk:
+            if d in [1, fewest, most] do
+              {:ok, hours_from(day_from)}
+            else
+              :unchecked
+            end
         }
       end
 
@@ -398,19 +447,28 @@ defmodule Tempo.Matrix.CalendarCensus do
   # day the longest month has is followed by the first of the next month,
   # where that is the same month in every year. Between the two, and where
   # the month after depends on the year, the day's span needs a year.
-  defp day_covers(d, {_fewest, most}, _followed?, _from) when d > most, do: :no_such_value
+  defp day_covers(d, {_fewest, most}, _followed?, _from) when d > most do
+    :no_such_value
+  end
 
-  defp day_covers(d, {fewest, _most}, _followed?, from) when d < fewest,
-    do: {:ok, {from, from + @day}}
+  defp day_covers(d, {fewest, _most}, _followed?, from) when d < fewest do
+    {:ok, {from, from + @day}}
+  end
 
-  defp day_covers(most, {_fewest, most}, true, from), do: {:ok, {from, from + @day}}
-  defp day_covers(_d, _days, _followed?, _from), do: :needs_a_year
+  defp day_covers(most, {_fewest, most}, true, from) do
+    {:ok, {from, from + @day}}
+  end
+
+  defp day_covers(_d, _days, _followed?, _from) do
+    :needs_a_year
+  end
 
   # A month every year has is followed by the next, and the last month of
   # the year that has the most by the first of the next year. A month
   # between the two is followed by one or the other by the year.
-  defp followed_in_every_year?(m, %{least_months: least, most_months: most}),
-    do: m < least or m == most
+  defp followed_in_every_year?(m, %{least_months: least, most_months: most}) do
+    m < least or m == most
+  end
 
   defp days_before(m, calendar) do
     Enum.sum(
@@ -418,10 +476,13 @@ defmodule Tempo.Matrix.CalendarCensus do
     )
   end
 
-  defp fewest_and_most(count) when is_integer(count), do: {count, count}
+  defp fewest_and_most(count) when is_integer(count) do
+    {count, count}
+  end
 
-  defp fewest_and_most({:ambiguous, %Range{first: first, last: last}}),
-    do: {min(first, last), max(first, last)}
+  defp fewest_and_most({:ambiguous, %Range{first: first, last: last}}) do
+    {min(first, last), max(first, last)}
+  end
 
   ## Shapes, intervals and recurrences
 
@@ -455,10 +516,10 @@ defmodule Tempo.Matrix.CalendarCensus do
     end
   end
 
-  defp month_shapes(%Date{} = date, calendar),
-    do:
-      shaped_months(date, calendar) ++
-        spanned_months(date, calendar) ++ repeated_months(date, calendar)
+  defp month_shapes(%Date{} = date, calendar) do
+    shaped_months(date, calendar) ++
+      spanned_months(date, calendar) ++ repeated_months(date, calendar)
+  end
 
   # A set, a range, a count from the end, a mask and an unspecified unit.
   defp shaped_months(%Date{year: y, month: m}, calendar) do
@@ -475,7 +536,9 @@ defmodule Tempo.Matrix.CalendarCensus do
       shape(
         "a range of days",
         "#{y}Y#{m}M{1..3}D",
-        dates |> Enum.take(3) |> Enum.map(&day_span/1)
+        dates
+        |> Enum.take(3)
+        |> Enum.map(&day_span/1)
       ),
       shape("a set of days", "#{y}Y#{m}M{1,3}D", [
         day_span(hd(dates)),
@@ -554,8 +617,9 @@ defmodule Tempo.Matrix.CalendarCensus do
   end
 
   # Where each of so many months starts, from a month on.
-  defp month_starts(y, m, count, calendar),
-    do: Enum.map(0..(count - 1), &elem(counted_month_span(y, m, &1, calendar), 0))
+  defp month_starts(y, m, count, calendar) do
+    Enum.map(0..(count - 1), &elem(counted_month_span(y, m, &1, calendar), 0))
+  end
 
   defp week_shapes(%Date{year: y, month: w}, calendar) do
     weeks = weeks_in_year(y, calendar)
@@ -573,7 +637,9 @@ defmodule Tempo.Matrix.CalendarCensus do
       shape(
         "a range of days",
         "#{y}Y#{w}W{1..3}K",
-        dates |> Enum.take(3) |> Enum.map(&day_span/1)
+        dates
+        |> Enum.take(3)
+        |> Enum.map(&day_span/1)
       ),
       whole(
         "the last day of a week",
@@ -601,27 +667,38 @@ defmodule Tempo.Matrix.CalendarCensus do
   end
 
   # A value of several members, each its own span, whose walk is not asked.
-  defp shape(name, text, spans),
-    do: %{shape: name, text: text, members: Enum.map(spans, &[&1]), walk: :unchecked}
+  defp shape(name, text, spans) do
+    %{shape: name, text: text, members: Enum.map(spans, &[&1]), walk: :unchecked}
+  end
 
   # A value of one span, and where each value its walk yields starts.
-  defp whole(name, text, span, starts) when is_list(starts),
-    do: %{shape: name, text: text, members: [[span]], walk: {:ok, starts}}
+  defp whole(name, text, span, starts) when is_list(starts) do
+    %{shape: name, text: text, members: [[span]], walk: {:ok, starts}}
+  end
 
-  defp whole(name, text, span, :unchecked),
-    do: %{shape: name, text: text, members: [[span]], walk: :unchecked}
+  defp whole(name, text, span, :unchecked) do
+    %{shape: name, text: text, members: [[span]], walk: :unchecked}
+  end
 
-  defp hours(%Date{} = day), do: hours_from(at(day))
+  defp hours(%Date{} = day) do
+    hours_from(at(day))
+  end
 
-  defp year_span(y, calendar), do: elem(expected({:year, y}, calendar), 0)
+  defp year_span(y, calendar) do
+    elem(expected({:year, y}, calendar), 0)
+  end
 
   # The month so many months on, counted through the months each year has.
-  defp months_on(y, m, 0, _calendar), do: {y, m}
+  defp months_on(y, m, 0, _calendar) do
+    {y, m}
+  end
 
   defp months_on(y, m, count, calendar) do
-    if m < calendar.months_in_year(y),
-      do: months_on(y, m + 1, count - 1, calendar),
-      else: months_on(y + 1, 1, count - 1, calendar)
+    if m < calendar.months_in_year(y) do
+      months_on(y, m + 1, count - 1, calendar)
+    else
+      months_on(y + 1, 1, count - 1, calendar)
+    end
   end
 
   defp counted_month_span(y, m, count, calendar) do
@@ -703,7 +780,12 @@ defmodule Tempo.Matrix.CalendarCensus do
       text: Selections.text(datum),
       selected: selected,
       rule: {"R/#{window}/#{cadence(period)}/FL#{written}N", window},
-      select: if(Keyword.has_key?(parts, :instance), do: nil, else: {window, written})
+      select:
+        if Keyword.has_key?(parts, :instance) do
+          nil
+        else
+          {window, written}
+        end
     }
   end
 
@@ -717,18 +799,42 @@ defmodule Tempo.Matrix.CalendarCensus do
     end
   end
 
-  defp day([value], plain) when value > 0 and value < 40 and value != plain, do: [plain]
-  defp day(written, _plain), do: written
+  defp day([value], plain) when value > 0 and value < 40 and value != plain do
+    [plain]
+  end
 
-  defp weekday([value]) when value > 0 and value < 40, do: [3]
-  defp weekday(written), do: written
+  defp day(written, _plain) do
+    written
+  end
+
+  defp weekday([value]) when value > 0 and value < 40 do
+    [3]
+  end
+
+  defp weekday(written) do
+    written
+  end
 
   # The hours of a day, each of the five ways.
-  defp hour(:one), do: [10]
-  defp hour(:from_end), do: [-1]
-  defp hour(:range_to_end), do: [{22, -1}]
-  defp hour(:both_ends), do: [0, -1]
-  defp hour(:absent), do: [25]
+  defp hour(:one) do
+    [10]
+  end
+
+  defp hour(:from_end) do
+    [-1]
+  end
+
+  defp hour(:range_to_end) do
+    [{22, -1}]
+  end
+
+  defp hour(:both_ends) do
+    [0, -1]
+  end
+
+  defp hour(:absent) do
+    [25]
+  end
 
   # The selections of a calendar of weeks, whose answers are worked out from
   # the calendar's own weeks: the matrix's selections count a week as ISO
@@ -772,11 +878,19 @@ defmodule Tempo.Matrix.CalendarCensus do
     |> Enum.sort()
   end
 
-  defp each_named({first, last}, valid),
-    do: Enum.filter(valid, &(&1 >= counted(first, valid) and &1 <= counted(last, valid)))
+  defp each_named({first, last}, valid) do
+    Enum.filter(valid, &(&1 >= counted(first, valid) and &1 <= counted(last, valid)))
+  end
 
-  defp each_named(value, valid), do: [counted(value, valid)]
+  defp each_named(value, valid) do
+    [counted(value, valid)]
+  end
 
-  defp counted(value, %Range{last: last}) when value < 0, do: last + 1 + value
-  defp counted(value, _valid), do: value
+  defp counted(value, %Range{last: last}) when value < 0 do
+    last + 1 + value
+  end
+
+  defp counted(value, _valid) do
+    value
+  end
 end

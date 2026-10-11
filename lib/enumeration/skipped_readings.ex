@@ -56,7 +56,9 @@ defmodule Tempo.Enumeration.SkippedReadings do
   def first_named(%Tempo{time: time} = value, zone) when is_binary(zone) do
     case named(time) do
       {:ok, named} ->
-        named |> skipped(zone, value) |> Enum.find_value(&named_in(&1, named, value))
+        named
+        |> skipped(zone, value)
+        |> Enum.find_value(&named_in(&1, named, value))
 
       :error ->
         nil
@@ -80,60 +82,110 @@ defmodule Tempo.Enumeration.SkippedReadings do
     end
   end
 
-  defp shape_of([{:year, year}, {:month, month}, {:day, day} | clock]),
-    do: with_clock(:month_and_day, [year, month, day], clock)
+  defp shape_of([{:year, year}, {:month, month}, {:day, day} | clock]) do
+    with_clock(:month_and_day, [year, month, day], clock)
+  end
 
-  defp shape_of([{:year, year}, {:week, week}, {:day_of_week, day} | clock]),
-    do: with_clock(:week_and_day, [year, week, day], clock)
+  defp shape_of([{:year, year}, {:week, week}, {:day_of_week, day} | clock]) do
+    with_clock(:week_and_day, [year, week, day], clock)
+  end
 
-  defp shape_of([{:year, year}, {:day, day} | clock]),
-    do: with_clock(:day_of_year, [year, day], clock)
+  defp shape_of([{:year, year}, {:day, day} | clock]) do
+    with_clock(:day_of_year, [year, day], clock)
+  end
 
-  defp shape_of(_another_shape), do: :error
+  defp shape_of(_another_shape) do
+    :error
+  end
 
-  defp with_clock(shape, date, []), do: {:ok, shape, date, []}
-  defp with_clock(shape, date, hour: hour), do: {:ok, shape, date, [hour]}
+  defp with_clock(shape, date, []) do
+    {:ok, shape, date, []}
+  end
 
-  defp with_clock(shape, date, hour: hour, minute: minute),
-    do: {:ok, shape, date, [hour, minute]}
+  defp with_clock(shape, date, hour: hour) do
+    {:ok, shape, date, [hour]}
+  end
 
-  defp with_clock(shape, date, hour: hour, minute: minute, second: second),
-    do: {:ok, shape, date, [hour, minute, second]}
+  defp with_clock(shape, date, hour: hour, minute: minute) do
+    {:ok, shape, date, [hour, minute]}
+  end
 
-  defp with_clock(_shape, _date, _other_units), do: :error
+  defp with_clock(shape, date, hour: hour, minute: minute, second: second) do
+    {:ok, shape, date, [hour, minute, second]}
+  end
 
-  defp written_to([]), do: :day
-  defp written_to([_hour]), do: :hour
-  defp written_to([_hour, _minute]), do: :minute
-  defp written_to([_hour, _minute, _second]), do: :second
+  defp with_clock(_shape, _date, _other_units) do
+    :error
+  end
+
+  defp written_to([]) do
+    :day
+  end
+
+  defp written_to([_hour]) do
+    :hour
+  end
+
+  defp written_to([_hour, _minute]) do
+    :minute
+  end
+
+  defp written_to([_hour, _minute, _second]) do
+    :second
+  end
 
   defp each_as_ranges(values) do
     ranges = Enum.map(values, &as_ranges/1)
-    if :error in ranges, do: :error, else: {:ok, ranges}
+
+    if :error in ranges do
+      :error
+    else
+      {:ok, ranges}
+    end
   end
 
   # One whole number, or a set of whole numbers and ranges of them. A count
   # from the end (`{1..-1}D` under several months) names other values in
   # each period it is under, and is asked nothing.
-  defp as_ranges(value) when is_integer(value) and value >= 0, do: [value..value]
-
-  defp as_ranges([_ | _] = values) do
-    if Enum.all?(values, &whole?/1), do: Enum.map(values, &as_range/1), else: :error
+  defp as_ranges(value) when is_integer(value) and value >= 0 do
+    [value..value]
   end
 
-  defp as_ranges(_unspecified_digits_or_a_group), do: :error
+  defp as_ranges([_ | _] = values) do
+    if Enum.all?(values, &whole?/1) do
+      Enum.map(values, &as_range/1)
+    else
+      :error
+    end
+  end
 
-  defp whole?(value) when is_integer(value), do: value >= 0
+  defp as_ranges(_unspecified_digits_or_a_group) do
+    :error
+  end
 
-  defp whole?(first..last//1) when is_integer(first) and is_integer(last),
-    do: first >= 0 and last >= first
+  defp whole?(value) when is_integer(value) do
+    value >= 0
+  end
 
-  defp whole?(_other), do: false
+  defp whole?(first..last//1) when is_integer(first) and is_integer(last) do
+    first >= 0 and last >= first
+  end
 
-  defp as_range(value) when is_integer(value), do: value..value
-  defp as_range(%Range{} = range), do: range
+  defp whole?(_other) do
+    false
+  end
 
-  defp among?(value, ranges), do: Enum.any?(ranges, &(value in &1))
+  defp as_range(value) when is_integer(value) do
+    value..value
+  end
+
+  defp as_range(%Range{} = range) do
+    range
+  end
+
+  defp among?(value, ranges) do
+    Enum.any?(ranges, &(value in &1))
+  end
 
   ## What the clock skips
 
@@ -147,9 +199,13 @@ defmodule Tempo.Enumeration.SkippedReadings do
   end
 
   defp skipped(%{date: [years | _rest]}, zone, %Tempo{calendar: calendar}) do
-    if years |> Enum.map(&Range.size/1) |> Enum.sum() <= @years_asked,
-      do: skipped_in(years, zone, calendar),
-      else: []
+    if years
+       |> Enum.map(&Range.size/1)
+       |> Enum.sum() <= @years_asked do
+      skipped_in(years, zone, calendar)
+    else
+      []
+    end
   end
 
   defp skipped_in(years, zone, calendar) do
@@ -169,8 +225,9 @@ defmodule Tempo.Enumeration.SkippedReadings do
     )
   end
 
-  defp starts(year, calendar),
-    do: trunc(Compare.to_wall_seconds(%Tempo{time: [year: year], calendar: calendar}))
+  defp starts(year, calendar) do
+    trunc(Compare.to_wall_seconds(%Tempo{time: [year: year], calendar: calendar}))
+  end
 
   ## Whether the value names a reading in a stretch the clock skips
 
@@ -188,14 +245,17 @@ defmodule Tempo.Enumeration.SkippedReadings do
   defp reading_named(seconds, %{clock: clock, written_to: unit} = named, value) do
     {date, {hour, minute, second}} = reading = :calendar.gregorian_seconds_to_datetime(seconds)
 
-    if each_among?([hour, minute, second], clock) and date_named?(date, named, value),
-      do: {reading, unit}
+    if each_among?([hour, minute, second], clock) and date_named?(date, named, value) do
+      {reading, unit}
+    end
   end
 
   # A reading's units, each among the values the value names for it. The
   # value names no unit finer than the one it is written to.
   defp each_among?(units, named) do
-    units |> Enum.zip(named) |> Enum.all?(fn {unit, ranges} -> among?(unit, ranges) end)
+    units
+    |> Enum.zip(named)
+    |> Enum.all?(fn {unit, ranges} -> among?(unit, ranges) end)
   end
 
   # A Gregorian date as the value writes one, in its calendar.
@@ -212,5 +272,7 @@ defmodule Tempo.Enumeration.SkippedReadings do
     among?(year, years) and among?(calendar.day_of_year(year, month, day), days)
   end
 
-  defp units_named?(_month_or_week_and_day, units, named, _value), do: each_among?(units, named)
+  defp units_named?(_month_or_week_and_day, units, named, _value) do
+    each_among?(units, named)
+  end
 end

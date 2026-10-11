@@ -23,7 +23,9 @@ defmodule Tempo.CronError do
   end
 
   @impl true
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{field: field, value: value}) when not is_nil(field) do
     "Invalid cron #{field} field: #{Calendars.inspect(value)}"
@@ -33,5 +35,7 @@ defmodule Tempo.CronError do
     "Could not parse cron expression #{Calendars.inspect(input)}"
   end
 
-  def message(%__MODULE__{}), do: "Invalid cron expression"
+  def message(%__MODULE__{}) do
+    "Invalid cron expression"
+  end
 end

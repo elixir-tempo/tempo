@@ -27,24 +27,43 @@ defmodule Tempo.WorkdayInACalendarOfWeeksTest do
 
   ## The measure
 
-  defp off?(date, holidays), do: Date.day_of_week(date) in @weekend or date in holidays
+  defp off?(date, holidays) do
+    Date.day_of_week(date) in @weekend or date in holidays
+  end
 
   defp first_workday(date, step, holidays) do
     next = Date.add(date, step)
-    if off?(next, holidays), do: first_workday(next, step, holidays), else: next
+
+    if off?(next, holidays) do
+      first_workday(next, step, holidays)
+    else
+      next
+    end
   end
 
-  defp workdays_on(date, 0, _holidays), do: date
+  defp workdays_on(date, 0, _holidays) do
+    date
+  end
 
-  defp workdays_on(date, count, holidays) when count > 0,
-    do: date |> first_workday(1, holidays) |> workdays_on(count - 1, holidays)
+  defp workdays_on(date, count, holidays) when count > 0 do
+    date
+    |> first_workday(1, holidays)
+    |> workdays_on(count - 1, holidays)
+  end
 
-  defp workdays_on(date, count, holidays),
-    do: date |> first_workday(-1, holidays) |> workdays_on(count + 1, holidays)
+  defp workdays_on(date, count, holidays) do
+    date
+    |> first_workday(-1, holidays)
+    |> workdays_on(count + 1, holidays)
+  end
 
   # The nearer workday, the one before where they are as near.
   defp nearest(date, holidays) do
-    if off?(date, holidays), do: nearest(date, 1, holidays), else: date
+    if off?(date, holidays) do
+      nearest(date, 1, holidays)
+    else
+      date
+    end
   end
 
   defp nearest(date, distance, holidays) do
@@ -63,7 +82,11 @@ defmodule Tempo.WorkdayInACalendarOfWeeksTest do
 
   defp in_weeks(%Date{} = date, clock, suffix \\ "") do
     [year: year, week: week, day_of_week: day] = week_units(date)
-    week = week |> Integer.to_string() |> String.pad_leading(2, "0")
+
+    week =
+      week
+      |> Integer.to_string()
+      |> String.pad_leading(2, "0")
 
     Tempo.from_iso8601!("#{year}-W#{week}-#{day}#{clock}#{suffix}[u-ca=iso-week]")
   end
@@ -82,9 +105,17 @@ defmodule Tempo.WorkdayInACalendarOfWeeksTest do
             {"previous", &Tempo.previous_workday(&1, :US), first_workday(date, -1, [])},
             {"nearest", &Tempo.nearest_workday(&1, :US), nearest(date, [])},
             {"following", &Tempo.roll_to_workday(&1, :US),
-             if(off?(date, []), do: first_workday(date, 1, []), else: date)},
+             if off?(date, []) do
+               first_workday(date, 1, [])
+             else
+               date
+             end},
             {"preceding", &Tempo.roll_to_workday(&1, :US, roll: :preceding),
-             if(off?(date, []), do: first_workday(date, -1, []), else: date)}
+             if off?(date, []) do
+               first_workday(date, -1, [])
+             else
+               date
+             end}
           ] do
         assert %Tempo{calendar: Calendrical.ISOWeek, time: time} =
                  operation.(in_weeks(date, clock))
@@ -108,9 +139,21 @@ defmodule Tempo.WorkdayInACalendarOfWeeksTest do
 
       for except <- [
             IntervalSet.new!(
-              Enum.map(holidays, &(&1 |> Tempo.from_date() |> Tempo.to_interval!()))
+              Enum.map(
+                holidays,
+                &(&1
+                  |> Tempo.from_date()
+                  |> Tempo.to_interval!())
+              )
             ),
-            IntervalSet.new!(Enum.map(holidays, &(&1 |> in_weeks("") |> Tempo.to_interval!())))
+            IntervalSet.new!(
+              Enum.map(
+                holidays,
+                &(&1
+                  |> in_weeks("")
+                  |> Tempo.to_interval!())
+              )
+            )
           ],
           business_days = Tempo.workdays(:US, except: except),
           date <- Date.range(~D[2024-12-23], ~D[2025-01-05]),

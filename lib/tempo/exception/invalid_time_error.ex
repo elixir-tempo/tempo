@@ -25,7 +25,9 @@ defmodule Tempo.InvalidTimeError do
   end
 
   @impl true
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{unit: unit, value: value, valid_range: range})
       when not is_nil(unit) and not is_nil(value) and not is_nil(range) do
@@ -36,5 +38,7 @@ defmodule Tempo.InvalidTimeError do
     "Invalid #{unit}: #{Calendars.inspect(value)}"
   end
 
-  def message(%__MODULE__{}), do: "Invalid time"
+  def message(%__MODULE__{}) do
+    "Invalid time"
+  end
 end

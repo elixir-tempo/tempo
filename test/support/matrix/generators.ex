@@ -44,7 +44,9 @@ defmodule Tempo.Matrix.Generators do
 
   """
   @spec day() :: StreamData.t(Reference.point())
-  def day, do: one_of([day_date(), weekday_date(), ordinal_date()])
+  def day do
+    one_of([day_date(), weekday_date(), ordinal_date()])
+  end
 
   @doc """
   A date coarser than a day: a year, a month or a week.
@@ -55,7 +57,9 @@ defmodule Tempo.Matrix.Generators do
 
   """
   @spec coarse_date() :: StreamData.t(Reference.point())
-  def coarse_date, do: one_of([year_date(), month_date(), week_date()])
+  def coarse_date do
+    one_of([year_date(), month_date(), week_date()])
+  end
 
   @doc """
   A day, alone or with a time of day, with or without a zone.
@@ -66,7 +70,9 @@ defmodule Tempo.Matrix.Generators do
 
   """
   @spec dated_day() :: StreamData.t(Reference.point())
-  def dated_day, do: one_of([day(), datetime(), zoned_datetime()])
+  def dated_day do
+    one_of([day(), datetime(), zoned_datetime()])
+  end
 
   @doc """
   A day written as a year, month and day.
@@ -77,7 +83,9 @@ defmodule Tempo.Matrix.Generators do
 
   """
   @spec calendar_day() :: StreamData.t(Reference.point())
-  def calendar_day, do: day_date()
+  def calendar_day do
+    day_date()
+  end
 
   @doc """
   A time of day with no date: an hour, a minute or a second, the second
@@ -197,7 +205,9 @@ defmodule Tempo.Matrix.Generators do
 
   """
   @spec dated() :: StreamData.t(Reference.point())
-  def dated, do: one_of([date(), datetime(), zoned_datetime()])
+  def dated do
+    one_of([date(), datetime(), zoned_datetime()])
+  end
 
   @doc """
   Any point with a year and no zone.
@@ -208,7 +218,9 @@ defmodule Tempo.Matrix.Generators do
 
   """
   @spec floating() :: StreamData.t(Reference.point())
-  def floating, do: one_of([date(), datetime()])
+  def floating do
+    one_of([date(), datetime()])
+  end
 
   @doc """
   Two points on one line that are likely to be related: a point with no
@@ -245,17 +257,27 @@ defmodule Tempo.Matrix.Generators do
       month = point(year: year, month: month)
       week = point(year: week_year, week: week)
 
-      if month_first?, do: {month, week}, else: {week, month}
+      if month_first? do
+        {month, week}
+      else
+        {week, month}
+      end
     end)
   end
 
   # The points one unit finer than a point, each with the point, and two of
   # them that touch.
-  defp within(%{fraction: {_value, 6}}), do: []
+  defp within(%{fraction: {_value, 6}}) do
+    []
+  end
 
   defp within(point) do
     parts = Reference.finer(point)
-    touching = parts |> Enum.chunk_every(2, 1, :discard) |> Enum.map(&List.to_tuple/1)
+
+    touching =
+      parts
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.map(&List.to_tuple/1)
 
     [
       map(member_of(parts), &{point, &1}),
@@ -273,12 +295,21 @@ defmodule Tempo.Matrix.Generators do
     end
   end
 
-  defp coarser(%{fraction: fraction} = point) when not is_nil(fraction),
-    do: %{point | fraction: nil}
+  defp coarser(%{fraction: fraction} = point) when not is_nil(fraction) do
+    %{point | fraction: nil}
+  end
 
-  defp coarser(%{time: [_ | _] = time} = point), do: %{point | time: Enum.drop(time, -1)}
-  defp coarser(%{date: [year: _year]}), do: nil
-  defp coarser(%{date: date} = point), do: %{point | date: Enum.drop(date, -1)}
+  defp coarser(%{time: [_ | _] = time} = point) do
+    %{point | time: Enum.drop(time, -1)}
+  end
+
+  defp coarser(%{date: [year: _year]}) do
+    nil
+  end
+
+  defp coarser(%{date: date} = point) do
+    %{point | date: Enum.drop(date, -1)}
+  end
 
   # A date of the year a point is in: a month, a day, a week or a day of one.
   defp same_year(%{date: [{:year, year} | _rest]}) do
@@ -351,9 +382,17 @@ defmodule Tempo.Matrix.Generators do
     end)
   end
 
-  defp resolution_units(:year), do: 1
-  defp resolution_units(:month), do: 2
-  defp resolution_units(:day), do: 3
+  defp resolution_units(:year) do
+    1
+  end
+
+  defp resolution_units(:month) do
+    2
+  end
+
+  defp resolution_units(:day) do
+    3
+  end
 
   # Each calendar with years near the present in its own count.
   defp calendars do
@@ -413,16 +452,23 @@ defmodule Tempo.Matrix.Generators do
     {list_of(member_of(units), min_length: 1, max_length: 3), list_of(integer(1..40), length: 3)}
     |> map(fn {chosen, values} ->
       chosen = Enum.uniq(chosen)
-      units |> Enum.filter(&(&1 in chosen)) |> Enum.zip(values)
+
+      units
+      |> Enum.filter(&(&1 in chosen))
+      |> Enum.zip(values)
     end)
   end
 
   ## Dates
 
   # Mostly years near the present, and any year `Date` holds the next of.
-  defp year, do: frequency([{8, integer(1900..2100)}, {2, integer(1..9998)}])
+  defp year do
+    frequency([{8, integer(1900..2100)}, {2, integer(1..9998)}])
+  end
 
-  defp year_date, do: map(year(), &point(year: &1))
+  defp year_date do
+    map(year(), &point(year: &1))
+  end
 
   defp month_date(year \\ year()) do
     map({year, integer(1..12)}, fn {year, month} -> point(year: year, month: month) end)
@@ -450,7 +496,13 @@ defmodule Tempo.Matrix.Generators do
 
   defp ordinal_date(year \\ year()) do
     bind(year, fn year ->
-      days = if ISO.leap_year?(year), do: 366, else: 365
+      days =
+        if ISO.leap_year?(year) do
+          366
+        else
+          365
+        end
+
       map(integer(1..days), fn day -> point(year: year, day_of_year: day) end)
     end)
   end
@@ -461,7 +513,11 @@ defmodule Tempo.Matrix.Generators do
     div(Date.diff(first_monday(year + 1), first_monday(year)), 7)
   end
 
-  defp first_monday(year), do: year |> Date.new!(1, 4) |> Date.beginning_of_week(:monday)
+  defp first_monday(year) do
+    year
+    |> Date.new!(1, 4)
+    |> Date.beginning_of_week(:monday)
+  end
 
   ## Times
 

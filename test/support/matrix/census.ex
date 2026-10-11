@@ -176,8 +176,13 @@ defmodule Tempo.Matrix.Census do
 
   """
   @spec label(Corpus.entry()) :: String.t()
-  def label(%{text: text, calendar: nil}), do: text
-  def label(%{text: text, calendar: calendar}), do: "#{text} in #{inspect(calendar)}"
+  def label(%{text: text, calendar: nil}) do
+    text
+  end
+
+  def label(%{text: text, calendar: calendar}) do
+    "#{text} in #{inspect(calendar)}"
+  end
 
   defp unary_cells(values) do
     for {name, group, raises, function} <- Operations.unary(), {entry, value} <- values do
@@ -209,11 +214,21 @@ defmodule Tempo.Matrix.Census do
     end
   end
 
-  defp partners_of(_entry, _value, partners), do: partners
+  defp partners_of(_entry, _value, partners) do
+    partners
+  end
 
-  defp zoned?(%Tempo{} = value), do: Tempo.zoned?(value)
-  defp zoned?(%Tempo.Interval{from: %Tempo{} = from}), do: Tempo.zoned?(from)
-  defp zoned?(_other), do: false
+  defp zoned?(%Tempo{} = value) do
+    Tempo.zoned?(value)
+  end
+
+  defp zoned?(%Tempo.Interval{from: %Tempo{} = from}) do
+    Tempo.zoned?(from)
+  end
+
+  defp zoned?(_other) do
+    false
+  end
 
   defp pairings(function, label, value, partners) do
     with_partners =

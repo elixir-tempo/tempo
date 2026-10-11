@@ -353,7 +353,9 @@ defmodule Tempo.Parser.Set.Test do
   # numbers are not written so is read member by member, as a set of one of
   # is: each member is what it is alone (decided 2026-10-06).
   describe "a set of whole numbers written with no designator" do
-    defp read(text), do: Tempo.from_iso8601!(text)
+    defp read(text) do
+      Tempo.from_iso8601!(text)
+    end
 
     test "is its members, each as it is read alone, where they are no years" do
       for members <- [

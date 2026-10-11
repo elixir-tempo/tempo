@@ -29,37 +29,56 @@ defmodule Tempo.RollToWorkdayTest do
   @weekends %{US: @us_weekend, SA: [5, 6], IN: [7]}
 
   defp off?(date, weekend, holidays) do
-    day_of_week = date |> Date.convert!(Calendar.ISO) |> Date.day_of_week()
+    day_of_week =
+      date
+      |> Date.convert!(Calendar.ISO)
+      |> Date.day_of_week()
+
     day_of_week in weekend or date in holidays
   end
 
   defp first_workday(date, step, weekend, holidays) do
     next = Date.add(date, step)
-    if off?(next, weekend, holidays), do: first_workday(next, step, weekend, holidays), else: next
+
+    if off?(next, weekend, holidays) do
+      first_workday(next, step, weekend, holidays)
+    else
+      next
+    end
   end
 
   defp rolled(date, roll, weekend, holidays) do
-    if off?(date, weekend, holidays), do: rolled_off(date, roll, weekend, holidays), else: date
+    if off?(date, weekend, holidays) do
+      rolled_off(date, roll, weekend, holidays)
+    else
+      date
+    end
   end
 
-  defp rolled_off(date, :following, weekend, holidays),
-    do: first_workday(date, 1, weekend, holidays)
+  defp rolled_off(date, :following, weekend, holidays) do
+    first_workday(date, 1, weekend, holidays)
+  end
 
-  defp rolled_off(date, :preceding, weekend, holidays),
-    do: first_workday(date, -1, weekend, holidays)
+  defp rolled_off(date, :preceding, weekend, holidays) do
+    first_workday(date, -1, weekend, holidays)
+  end
 
-  defp rolled_off(date, :modified_following, weekend, holidays),
-    do: in_its_month(date, 1, weekend, holidays)
+  defp rolled_off(date, :modified_following, weekend, holidays) do
+    in_its_month(date, 1, weekend, holidays)
+  end
 
-  defp rolled_off(date, :modified_preceding, weekend, holidays),
-    do: in_its_month(date, -1, weekend, holidays)
+  defp rolled_off(date, :modified_preceding, weekend, holidays) do
+    in_its_month(date, -1, weekend, holidays)
+  end
 
   defp in_its_month(date, step, weekend, holidays) do
     workday = first_workday(date, step, weekend, holidays)
 
-    if {workday.year, workday.month} == {date.year, date.month},
-      do: workday,
-      else: first_workday(date, -step, weekend, holidays)
+    if {workday.year, workday.month} == {date.year, date.month} do
+      workday
+    else
+      first_workday(date, -step, weekend, holidays)
+    end
   end
 
   defp date_of(%Tempo{} = day) do
@@ -130,7 +149,14 @@ defmodule Tempo.RollToWorkdayTest do
               ] ++ Enum.to_list(Date.range(~D[2026-12-24], ~D[2027-01-01]))
 
     defp business_days(dates) do
-      days = Enum.map(dates, &(&1 |> Tempo.from_date() |> Tempo.to_interval!()))
+      days =
+        Enum.map(
+          dates,
+          &(&1
+            |> Tempo.from_date()
+            |> Tempo.to_interval!())
+        )
+
       Tempo.workdays(:US, except: IntervalSet.new!(days))
     end
 
@@ -206,7 +232,9 @@ defmodule Tempo.RollToWorkdayTest do
 
     test "is rolled from a date of a week and from a day of the year" do
       # Saturday 30 May 2026 is the sixth day of week 22 and day 150.
-      assert Date.new!(2026, 1, 1) |> Date.add(149) == ~D[2026-05-30]
+      assert Date.new!(2026, 1, 1)
+             |> Date.add(149) == ~D[2026-05-30]
+
       assert :calendar.iso_week_number({2026, 5, 30}) == {2026, 22}
 
       for text <- ["2026-W22-6", "2026-150"], roll <- @rolls do
@@ -232,7 +260,9 @@ defmodule Tempo.RollToWorkdayTest do
       # Some day of them rolls otherwise within its Gregorian month.
       assert Enum.any?(Date.range(~D[2025-11-21], ~D[2026-03-18]), fn gregorian ->
                in_hebrew =
-                 gregorian |> Date.convert!(Hebrew) |> rolled(:modified_following, [6, 7], [])
+                 gregorian
+                 |> Date.convert!(Hebrew)
+                 |> rolled(:modified_following, [6, 7], [])
 
                in_hebrew !=
                  Date.convert!(rolled(gregorian, :modified_following, [6, 7], []), Hebrew)

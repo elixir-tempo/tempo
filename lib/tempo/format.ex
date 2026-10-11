@@ -106,8 +106,9 @@ defmodule Tempo.Format do
   # A season of 21 to 24 is rendered as the dates it has in the territory of
   # the locale it is rendered in, and with no `:locale` in the application's
   # default territory and then the current locale's.
-  defp with_its_seasons_dated(value, options),
-    do: Tempo.with_seasons_dated(value, Keyword.take(options, [:locale]))
+  defp with_its_seasons_dated(value, options) do
+    Tempo.with_seasons_dated(value, Keyword.take(options, [:locale]))
+  end
 
   defp iso8601_or_inspect(value) do
     case Tempo.to_iso8601(value) do
@@ -122,18 +123,28 @@ defmodule Tempo.Format do
   # caller's `:within` window.
   defp render(%Tempo{} = tempo, options, window) do
     cond do
-      not one_span?(tempo) -> tempo |> Tempo.to_interval(window) |> render_materialised(options)
-      unplaced_without_year?(tempo) -> {:error, unplaced_without_year_error(tempo)}
-      true -> render_value(tempo, options)
+      not one_span?(tempo) ->
+        tempo
+        |> Tempo.to_interval(window)
+        |> render_materialised(options)
+
+      unplaced_without_year?(tempo) ->
+        {:error, unplaced_without_year_error(tempo)}
+
+      true ->
+        render_value(tempo, options)
     end
   end
 
   defp render(%Tempo.Interval{} = interval, options, window) do
-    interval |> Tempo.to_interval(window) |> render_materialised(options)
+    interval
+    |> Tempo.to_interval(window)
+    |> render_materialised(options)
   end
 
-  defp render(%Tempo.IntervalSet{} = set, options, _window),
-    do: render_set(set, options, :standard)
+  defp render(%Tempo.IntervalSet{} = set, options, _window) do
+    render_set(set, options, :standard)
+  end
 
   # A one-of set is one of its members, so it renders as their alternatives
   # ("2026 or 2027"); as an interval set it would assert every one.
@@ -150,11 +161,15 @@ defmodule Tempo.Format do
   end
 
   defp render(%Tempo.Set{} = set, options, window) do
-    set |> Tempo.to_interval(window) |> render_materialised(options)
+    set
+    |> Tempo.to_interval(window)
+    |> render_materialised(options)
   end
 
   defp render(%Tempo.RecurrenceSet{} = set, options, window) do
-    set |> Tempo.to_interval(window) |> render_materialised(options)
+    set
+    |> Tempo.to_interval(window)
+    |> render_materialised(options)
   end
 
   # A range among a one-of set's members (`[2020..2025,2030]`) is one of the
@@ -163,7 +178,9 @@ defmodule Tempo.Format do
   defp render(%Tempo.Range{} = range, options, window) do
     with {:ok, %IntervalSet{} = values} <-
            Tempo.to_interval(%Tempo.Set{type: :all, set: [range]}, window) do
-      values |> IntervalSet.coalesce() |> render_set(options, :standard)
+      values
+      |> IntervalSet.coalesce()
+      |> render_set(options, :standard)
     end
   end
 
@@ -185,13 +202,17 @@ defmodule Tempo.Format do
      )}
   end
 
-  defp render_materialised({:ok, %Tempo.Interval{} = interval}, options),
-    do: render_interval(interval, options)
+  defp render_materialised({:ok, %Tempo.Interval{} = interval}, options) do
+    render_interval(interval, options)
+  end
 
-  defp render_materialised({:ok, %IntervalSet{} = set}, options),
-    do: render_set(set, options, :standard)
+  defp render_materialised({:ok, %IntervalSet{} = set}, options) do
+    render_set(set, options, :standard)
+  end
 
-  defp render_materialised({:error, _reason} = error, _options), do: error
+  defp render_materialised({:error, _reason} = error, _options) do
+    error
+  end
 
   defp render_value(%Tempo{} = tempo, options) do
     {unit, _} = Tempo.resolution(tempo)
@@ -209,9 +230,11 @@ defmodule Tempo.Format do
   end
 
   defp render_interval(%Tempo.Interval{from: from, to: to} = interval, options) do
-    if weeks_of_a_calendar_of_weeks?(from, to, options),
-      do: render_weeks(from, last_week(to), options),
-      else: render_dates(interval, options)
+    if weeks_of_a_calendar_of_weeks?(from, to, options) do
+      render_weeks(from, last_week(to), options)
+    else
+      render_dates(interval, options)
+    end
   end
 
   defp render_dates(%Tempo.Interval{} = interval, options) do
@@ -249,7 +272,9 @@ defmodule Tempo.Format do
     end
   end
 
-  defp the_one_value(_interval), do: nil
+  defp the_one_value(_interval) do
+    nil
+  end
 
   # A week of a calendar of weeks is a unit of that calendar as a month is
   # of the Gregorian, and is shown as the locale words one: "week 25 of
@@ -265,38 +290,55 @@ defmodule Tempo.Format do
     Tempo.week_based_calendar?(calendar) and expandable_format?(Keyword.get(options, :format))
   end
 
-  defp week_of_a_calendar_of_weeks?(_value, _options), do: false
+  defp week_of_a_calendar_of_weeks?(_value, _options) do
+    false
+  end
 
   defp weeks_of_a_calendar_of_weeks?(%Tempo{} = from, %Tempo{} = to, options) do
     week_of_a_calendar_of_weeks?(from, options) and week_of_a_calendar_of_weeks?(to, options)
   end
 
-  defp weeks_of_a_calendar_of_weeks?(_from, _to, _options), do: false
+  defp weeks_of_a_calendar_of_weeks?(_from, _to, _options) do
+    false
+  end
 
   # The last week a span of weeks holds is the one before its end.
-  defp last_week(%Tempo{} = to), do: Math.subtract(to, Tempo.Duration.build(week: 1))
+  defp last_week(%Tempo{} = to) do
+    Math.subtract(to, Tempo.Duration.build(week: 1))
+  end
 
-  defp render_weeks(%Tempo{time: time} = first, %Tempo{time: time}, options),
-    do: Localize.Date.to_string(to_locale_map(first), in_weeks(options))
+  defp render_weeks(%Tempo{time: time} = first, %Tempo{time: time}, options) do
+    Localize.Date.to_string(to_locale_map(first), in_weeks(options))
+  end
 
-  defp render_weeks(%Tempo{} = first, %Tempo{} = last, options),
-    do: Localize.Interval.to_string(to_locale_map(first), to_locale_map(last), in_weeks(options))
+  defp render_weeks(%Tempo{} = first, %Tempo{} = last, options) do
+    Localize.Interval.to_string(to_locale_map(first), to_locale_map(last), in_weeks(options))
+  end
 
-  defp render_weeks(_first, {:error, _reason} = error, _options), do: error
+  defp render_weeks(_first, {:error, _reason} = error, _options) do
+    error
+  end
 
-  defp in_weeks(options), do: options |> Keyword.drop([:fields]) |> Keyword.put(:format, :yw)
+  defp in_weeks(options) do
+    options
+    |> Keyword.drop([:fields])
+    |> Keyword.put(:format, :yw)
+  end
 
   # A span whose first and last values are one value is that value, so it
   # renders as a value does and a skeleton format applies to it.
-  defp render_closed(%Tempo{time: time} = from, %Tempo{time: time}, options),
-    do: render_value(from, options)
+  defp render_closed(%Tempo{time: time} = from, %Tempo{time: time}, options) do
+    render_value(from, options)
+  end
 
   defp render_closed(%Tempo{} = from, %Tempo{} = closed_last, options) do
     options = with_default_interval_options(options, from, closed_last)
     format_interval(from, closed_last, options)
   end
 
-  defp render_closed(_from, {:error, _reason} = error, _options), do: error
+  defp render_closed(_from, {:error, _reason} = error, _options) do
+    error
+  end
 
   # The members joined as a CLDR list in the locale: `:standard` for a set's
   # members ("A, B, and C"), `:or` for alternatives. A set without an end has
@@ -328,25 +370,38 @@ defmodule Tempo.Format do
     )
   end
 
-  defp join_rendered({:error, _reason} = error, _options, _style), do: error
+  defp join_rendered({:error, _reason} = error, _options, _style) do
+    error
+  end
 
   # A value whose every component is one concrete value names its own one span.
-  defp one_span?(%Tempo{time: time}), do: Enum.all?(time, &one_value?/1)
+  defp one_span?(%Tempo{time: time}) do
+    Enum.all?(time, &one_value?/1)
+  end
 
-  defp one_value?({:selection, _selection}), do: false
-  defp one_value?({_unit, value}) when is_integer(value), do: true
+  defp one_value?({:selection, _selection}) do
+    false
+  end
+
+  defp one_value?({_unit, value}) when is_integer(value) do
+    true
+  end
 
   defp one_value?({:microsecond, {value, precision}})
-       when is_integer(value) and is_integer(precision),
-       do: true
+       when is_integer(value) and is_integer(precision) do
+    true
+  end
 
   # A margin of error rides on the value it is written beside. Significant
   # digits name the block of values the digits leave open (`1950S2` is the
   # twentieth century), which is a span of its own, as a mask's is.
-  defp one_value?({_unit, {value, meta}}) when is_integer(value) and is_list(meta),
-    do: not Keyword.has_key?(meta, :significant_digits)
+  defp one_value?({_unit, {value, meta}}) when is_integer(value) and is_list(meta) do
+    not Keyword.has_key?(meta, :significant_digits)
+  end
 
-  defp one_value?(_component), do: false
+  defp one_value?(_component) do
+    false
+  end
 
   # A week, a day of the week or a day of the year with no year has no date for
   # Localize to show.
@@ -371,7 +426,13 @@ defmodule Tempo.Format do
   defp to_localize_duration(%Tempo.Duration{time: time}) do
     {weeks, rest} = Keyword.pop(time, :week, 0)
     days = trunc(weeks * Calendars.default().days_in_week())
-    rest = if weeks == 0, do: rest, else: Keyword.update(rest, :day, days, &(&1 + days))
+
+    rest =
+      if weeks == 0 do
+        rest
+      else
+        Keyword.update(rest, :day, days, &(&1 + days))
+      end
 
     %Localize.Duration{
       year: Keyword.get(rest, :year, 0),
@@ -395,9 +456,11 @@ defmodule Tempo.Format do
   def to_relative_string(value, options \\ [])
 
   def to_relative_string(value, options) do
-    if Keyword.keyword?(options),
-      do: relative_string(value, options),
-      else: {:error, options_error("to_relative_string/2", options)}
+    if Keyword.keyword?(options) do
+      relative_string(value, options)
+    else
+      {:error, options_error("to_relative_string/2", options)}
+    end
   end
 
   # A season of 21 to 24 is the span it has in the locale's territory, and
@@ -415,7 +478,9 @@ defmodule Tempo.Format do
      )}
   end
 
-  defp relative_dated(%Tempo{} = tempo, options), do: render_relative(tempo, options)
+  defp relative_dated(%Tempo{} = tempo, options) do
+    render_relative(tempo, options)
+  end
 
   defp relative_dated(%Tempo.Interval{} = interval, options) do
     with {:ok, start} <- interval_start(interval), do: render_relative(start, options)
@@ -448,7 +513,9 @@ defmodule Tempo.Format do
     end
   end
 
-  defp first_occurrence_start(interval), do: {:error, no_start_error(interval)}
+  defp first_occurrence_start(interval) do
+    {:error, no_start_error(interval)}
+  end
 
   defp no_start_error(interval) do
     IntervalEndpointsError.exception(
@@ -462,7 +529,11 @@ defmodule Tempo.Format do
 
   # The moment a value is told from where no other is given: the clock's
   # reading to the second, as `Tempo.utc_now/0` answers a caller with it.
-  defp now, do: Clock.utc_now() |> DateTime.truncate(:second) |> Tempo.from_datetime()
+  defp now do
+    Clock.utc_now()
+    |> DateTime.truncate(:second)
+    |> Tempo.from_datetime()
+  end
 
   defp render_relative(%Tempo{} = tempo, options) do
     {from, options} = Keyword.pop_lazy(options, :from, &now/0)
@@ -489,7 +560,9 @@ defmodule Tempo.Format do
     end
   end
 
-  defp counting_unit(unit, _value, _options, _own_unit), do: {:ok, unit}
+  defp counting_unit(unit, _value, _options, _own_unit) do
+    {:ok, unit}
+  end
 
   # The value and the baseline as Localize counts between them, each from
   # where its span starts. The value is on its own wall clock and in its own
@@ -511,9 +584,11 @@ defmodule Tempo.Format do
   end
 
   defp anchored(%Tempo{} = value) do
-    if Tempo.anchored?(value),
-      do: {:ok, value},
-      else: {:error, UnanchoredError.exception(operation: :to_relative_string, value: value)}
+    if Tempo.anchored?(value) do
+      {:ok, value}
+    else
+      {:error, UnanchoredError.exception(operation: :to_relative_string, value: value)}
+    end
   end
 
   defp anchored(other) do
@@ -540,31 +615,51 @@ defmodule Tempo.Format do
     end
   end
 
-  defp moment(value, :date, _place), do: wall_date(value)
-  defp moment(value, :time, {:zone, zone}), do: zoned_datetime(value, zone)
-  defp moment(value, :time, _place), do: wall_datetime(value)
+  defp moment(value, :date, _place) do
+    wall_date(value)
+  end
+
+  defp moment(value, :time, {:zone, zone}) do
+    zoned_datetime(value, zone)
+  end
+
+  defp moment(value, :time, _place) do
+    wall_datetime(value)
+  end
 
   # A zoned value finer than a day is measured from a baseline on the time
   # line, which a floating one is not.
-  defp baseline(from, :time, place, :floating) when place != :floating,
-    do: {:error, FloatingTempoError.exception(operation: :to_relative_string, value: from)}
+  defp baseline(from, :time, place, :floating) when place != :floating do
+    {:error, FloatingTempoError.exception(operation: :to_relative_string, value: from)}
+  end
 
-  defp baseline(from, _kind, {:zone, zone}, from_place) when from_place != :floating,
-    do: zoned_datetime(from, zone)
+  defp baseline(from, _kind, {:zone, zone}, from_place) when from_place != :floating do
+    zoned_datetime(from, zone)
+  end
 
-  defp baseline(from, _kind, {:offset, offset}, from_place) when from_place != :floating,
-    do: {:ok, NaiveDateTime.from_gregorian_seconds(utc_seconds(from) + offset)}
+  defp baseline(from, _kind, {:offset, offset}, from_place) when from_place != :floating do
+    {:ok, NaiveDateTime.from_gregorian_seconds(utc_seconds(from) + offset)}
+  end
 
-  defp baseline(from, _kind, _place, _from_place), do: wall_datetime(from)
+  defp baseline(from, _kind, _place, _from_place) do
+    wall_datetime(from)
+  end
 
   # A value finer than a day, or counted in a unit finer than a day, is a
   # moment of its day; otherwise it is a date, so 16 June is "in 1 hour"
   # from 23:00 the day before and "tomorrow" in days.
-  defp span_kind(_value, unit) when unit in @time_units, do: :time
+  defp span_kind(_value, unit) when unit in @time_units do
+    :time
+  end
 
   defp span_kind(value, _unit) do
     {resolution, _span} = Tempo.resolution(value)
-    if resolution in @time_units, do: :time, else: :date
+
+    if resolution in @time_units do
+      :time
+    else
+      :date
+    end
   end
 
   # The unit a value is written to: a day for a day of the week or of the
@@ -574,20 +669,31 @@ defmodule Tempo.Format do
     relative_unit(resolution)
   end
 
-  defp relative_unit(unit) when unit in [:year, :month, :week, :day, :hour, :minute, :second],
-    do: unit
+  defp relative_unit(unit) when unit in [:year, :month, :week, :day, :hour, :minute, :second] do
+    unit
+  end
 
-  defp relative_unit(:microsecond), do: :second
-  defp relative_unit(_day), do: :day
+  defp relative_unit(:microsecond) do
+    :second
+  end
+
+  defp relative_unit(_day) do
+    :day
+  end
 
   # Where a value's wall clock is: a named zone, a fixed offset in seconds,
   # or nowhere, for a floating value.
-  defp place(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone), do: {:zone, zone}
+  defp place(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) do
+    {:zone, zone}
+  end
 
-  defp place(%Tempo{shift: shift}) when is_list(shift),
-    do: {:offset, Compare.offset_seconds(shift)}
+  defp place(%Tempo{shift: shift}) when is_list(shift) do
+    {:offset, Compare.offset_seconds(shift)}
+  end
 
-  defp place(%Tempo{}), do: :floating
+  defp place(%Tempo{}) do
+    :floating
+  end
 
   # A value's first moment on its own wall clock, in its own calendar.
   defp wall_datetime(%Tempo{calendar: calendar} = value) do
@@ -612,7 +718,11 @@ defmodule Tempo.Format do
     end
   end
 
-  defp utc_seconds(value), do: value |> Compare.to_utc_seconds() |> floor()
+  defp utc_seconds(value) do
+    value
+    |> Compare.to_utc_seconds()
+    |> floor()
+  end
 
   ## ---------------------------------------------------------
   ## Closed-interval expansion for year/month Tempo values
@@ -636,7 +746,9 @@ defmodule Tempo.Format do
     Keyword.has_key?(time, :year) and expandable_format?(Keyword.get(options, :format))
   end
 
-  defp expand_as_closed_interval?(_unit, _tempo, _options), do: false
+  defp expand_as_closed_interval?(_unit, _tempo, _options) do
+    false
+  end
 
   # Expanding a year into "Jan – Dec 2026" is Rule B's answer to the
   # question "how should a year be shown?" — it is what to do when the
@@ -647,15 +759,26 @@ defmodule Tempo.Format do
   #
   # A named width names both ends of a range as readily as a single
   # value, so those still expand.
-  defp expandable_format?(nil), do: true
-  defp expandable_format?(format) when format in [:short, :medium, :long, :full], do: true
-  defp expandable_format?(_skeleton), do: false
+  defp expandable_format?(nil) do
+    true
+  end
+
+  defp expandable_format?(format) when format in [:short, :medium, :long, :full] do
+    true
+  end
+
+  defp expandable_format?(_skeleton) do
+    false
+  end
 
   # Materialise the Tempo, compute first and closed-last at the
   # iteration unit (one level finer than the Tempo's resolution),
   # then hand off to Localize.Interval.
   defp render_tempo_as_closed_interval(%Tempo{} = tempo, unit, options) do
-    iter_unit = unit |> next_finer_unit() |> named_unit(tempo)
+    iter_unit =
+      unit
+      |> next_finer_unit()
+      |> named_unit(tempo)
 
     case Tempo.to_interval(tempo) do
       {:ok, %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to, unit: unit}} ->
@@ -696,30 +819,61 @@ defmodule Tempo.Format do
   # months are shown by their days: by its months it was "Mar 1750".
   defp named_unit(:month, %Tempo{time: [{:year, year} | _rest], calendar: calendar})
        when is_integer(year) do
-    if UnitValues.year_named_by_its_months?(year, calendar),
-      do: :month,
-      else: :day
+    if UnitValues.year_named_by_its_months?(year, calendar) do
+      :month
+    else
+      :day
+    end
   end
 
-  defp named_unit(unit, %Tempo{}), do: unit
+  defp named_unit(unit, %Tempo{}) do
+    unit
+  end
 
-  defp next_finer_unit(:year), do: :month
-  defp next_finer_unit(:month), do: :day
-  defp next_finer_unit(:week), do: :day_of_week
-  defp next_finer_unit(:day), do: :hour
-  defp next_finer_unit(:hour), do: :minute
-  defp next_finer_unit(:minute), do: :second
-  defp next_finer_unit(:second), do: :second
+  defp next_finer_unit(:year) do
+    :month
+  end
+
+  defp next_finer_unit(:month) do
+    :day
+  end
+
+  defp next_finer_unit(:week) do
+    :day_of_week
+  end
+
+  defp next_finer_unit(:day) do
+    :hour
+  end
+
+  defp next_finer_unit(:hour) do
+    :minute
+  end
+
+  defp next_finer_unit(:minute) do
+    :second
+  end
+
+  defp next_finer_unit(:second) do
+    :second
+  end
 
   # A week's days are days of the week; a duration counts them as days.
-  defp duration_unit(:day_of_week), do: :day
-  defp duration_unit(unit), do: unit
+  defp duration_unit(:day_of_week) do
+    :day
+  end
+
+  defp duration_unit(unit) do
+    unit
+  end
 
   ## ---------------------------------------------------------
   ## Single-value rendering (day, hour, minute, second, time-only)
   ## ---------------------------------------------------------
 
-  defp render_single_value(%Tempo{} = tempo, options), do: dispatch(tempo, options)
+  defp render_single_value(%Tempo{} = tempo, options) do
+    dispatch(tempo, options)
+  end
 
   # Route a plain Tempo to the right Localize function.
   #
@@ -778,7 +932,9 @@ defmodule Tempo.Format do
   end
 
   # A pattern string is the caller spelling out exactly what they want.
-  defp reconcile(format, _tempo), do: format
+  defp reconcile(format, _tempo) do
+    format
+  end
 
   defp trim_time(format, %Tempo{} = tempo) do
     if date_only?(tempo) do
@@ -814,13 +970,26 @@ defmodule Tempo.Format do
   end
 
   # Which half of the clock a format names. Named widths name both.
-  defp axis(format) when format in [:short, :medium, :long, :full], do: :both
-  defp axis(format) when format in [:h, :hm, :hms], do: :time
-  defp axis(format) when format in [:y, :yMMM, :yMMMd, :MMM], do: :date
-  defp axis(_format), do: :both
+  defp axis(format) when format in [:short, :medium, :long, :full] do
+    :both
+  end
+
+  defp axis(format) when format in [:h, :hm, :hms] do
+    :time
+  end
+
+  defp axis(format) when format in [:y, :yMMM, :yMMMd, :MMM] do
+    :date
+  end
+
+  defp axis(_format) do
+    :both
+  end
 
   # The fields Localize is given, so a week date has the day it names.
-  defp has_field?(%Tempo{} = tempo, field), do: Map.has_key?(to_locale_map(tempo), field)
+  defp has_field?(%Tempo{} = tempo, field) do
+    Map.has_key?(to_locale_map(tempo), field)
+  end
 
   # A Tempo is date-only when its time kv list contains none of
   # :hour, :minute, :second. It is time-only when it contains
@@ -872,18 +1041,29 @@ defmodule Tempo.Format do
   # for a date of today leave out: `-0044-03-15` is "Mar 15, 45 BC", where
   # it was "Mar 15, 45", the words for a day ninety years later.
   defp default_format_for_unit(unit, tempo) do
-    if before_the_era?(tempo),
-      do: format_with_era(unit, tempo),
-      else: format_for_unit(unit, tempo)
+    if before_the_era?(tempo) do
+      format_with_era(unit, tempo)
+    else
+      format_for_unit(unit, tempo)
+    end
   end
 
-  defp format_for_unit(:year, _tempo), do: :y
+  defp format_for_unit(:year, _tempo) do
+    :y
+  end
+
   # A month of no particular year is its name alone.
   defp format_for_unit(:month, %Tempo{time: time}) do
-    if Keyword.has_key?(time, :year), do: :yMMM, else: :MMM
+    if Keyword.has_key?(time, :year) do
+      :yMMM
+    else
+      :MMM
+    end
   end
 
-  defp format_for_unit(:day, _tempo), do: :medium
+  defp format_for_unit(:day, _tempo) do
+    :medium
+  end
 
   # `:h` and `:hm` are time-only skeletons. They are right for a value
   # with no date and wrong for one that has both halves, where
@@ -897,17 +1077,39 @@ defmodule Tempo.Format do
     end
   end
 
-  defp format_for_unit(:second, _tempo), do: :medium
-  defp format_for_unit(_other, _tempo), do: :medium
+  defp format_for_unit(:second, _tempo) do
+    :medium
+  end
+
+  defp format_for_unit(_other, _tempo) do
+    :medium
+  end
 
   # CLDR's skeletons that name the era (`G`) beside the fields a value of
   # each resolution holds.
-  defp format_with_era(:year, _tempo), do: :Gy
-  defp format_with_era(:month, _tempo), do: :GyMMM
-  defp format_with_era(:hour, _tempo), do: :GyMMMdj
-  defp format_with_era(:minute, _tempo), do: :GyMMMdjm
-  defp format_with_era(:second, _tempo), do: :GyMMMdjms
-  defp format_with_era(_day_or_another, _tempo), do: :GyMMMd
+  defp format_with_era(:year, _tempo) do
+    :Gy
+  end
+
+  defp format_with_era(:month, _tempo) do
+    :GyMMM
+  end
+
+  defp format_with_era(:hour, _tempo) do
+    :GyMMMdj
+  end
+
+  defp format_with_era(:minute, _tempo) do
+    :GyMMMdjm
+  end
+
+  defp format_with_era(:second, _tempo) do
+    :GyMMMdjms
+  end
+
+  defp format_with_era(_day_or_another, _tempo) do
+    :GyMMMd
+  end
 
   # Whether a value's year is before year 1 of the Gregorian calendar's
   # era, or of a calendar CLDR words as it does the Gregorian (the Julian):
@@ -917,9 +1119,13 @@ defmodule Tempo.Format do
     worded_as_gregorian?(calendar) and in_the_era_before?(year, calendar)
   end
 
-  defp before_the_era?(_value), do: false
+  defp before_the_era?(_value) do
+    false
+  end
 
-  defp worded_as_gregorian?(calendar), do: calendar.cldr_calendar_type() == :gregorian
+  defp worded_as_gregorian?(calendar) do
+    calendar.cldr_calendar_type() == :gregorian
+  end
 
   # The era of a year is the era of its first day, which the calendar gives
   # (`year_of_era/3`): era 0 is the one before the era dates are counted in.
@@ -1013,11 +1219,18 @@ defmodule Tempo.Format do
     end
   end
 
-  defp with_fields(options, :as_they_hold), do: options
-  defp with_fields(options, fields), do: Keyword.put_new(options, :fields, fields)
+  defp with_fields(options, :as_they_hold) do
+    options
+  end
+
+  defp with_fields(options, fields) do
+    Keyword.put_new(options, :fields, fields)
+  end
 
   # Months alone, or the days and the times of day the ends are written to.
-  defp interval_format_with_era(:year_and_month, _from), do: :GyMMM
+  defp interval_format_with_era(:year_and_month, _from) do
+    :GyMMM
+  end
 
   defp interval_format_with_era(_date_or_as_they_hold, %Tempo{} = from) do
     {unit, _span} = Tempo.resolution(from)
@@ -1027,8 +1240,9 @@ defmodule Tempo.Format do
   # Two months of no year (`6M/9M`, June to August of any year) are shown
   # by the fields they hold, which Localize writes as "Jun – Aug". They
   # were asked for with their year, which they have none of.
-  defp interval_fields_for(%Tempo{time: [month: _from_month]}, %Tempo{time: [month: _to_month]}),
-    do: :as_they_hold
+  defp interval_fields_for(%Tempo{time: [month: _from_month]}, %Tempo{time: [month: _to_month]}) do
+    :as_they_hold
+  end
 
   defp interval_fields_for(%Tempo{} = from, %Tempo{} = to) do
     {from_unit, _} = Tempo.resolution(from)
@@ -1044,8 +1258,13 @@ defmodule Tempo.Format do
   end
 
   # A week date's day is a day.
-  defp day_as_day(:day_of_week), do: :day
-  defp day_as_day(unit), do: unit
+  defp day_as_day(:day_of_week) do
+    :day
+  end
+
+  defp day_as_day(unit) do
+    unit
+  end
 
   @unit_order_ctf [:year, :month, :day, :hour, :minute, :second]
 
@@ -1075,7 +1294,12 @@ defmodule Tempo.Format do
   end
 
   defp format_year_only_interval(%Tempo{} = from, %Tempo{} = to, options) do
-    year_format = if before_the_era?(from) or before_the_era?(to), do: :Gy, else: :y
+    year_format =
+      if before_the_era?(from) or before_the_era?(to) do
+        :Gy
+      else
+        :y
+      end
 
     year_opts =
       options
@@ -1104,7 +1328,12 @@ defmodule Tempo.Format do
       {%Tempo{} = from, %Tempo{} = to} ->
         calendar = from.calendar
         {from, to} = on_one_axis(from, to, calendar)
-        unit = %Tempo.Interval{interval | from: from, to: to} |> shown_unit() |> named_unit(from)
+
+        unit =
+          %Tempo.Interval{interval | from: from, to: to}
+          |> shown_unit()
+          |> named_unit(from)
+
         {:ok, Steps.fill_to_unit(from, unit, calendar), Steps.fill_to_unit(to, unit, calendar)}
 
       {from, _to} ->
@@ -1119,28 +1348,40 @@ defmodule Tempo.Format do
     end
   end
 
-  defp open_end(%Tempo{}), do: "end"
-  defp open_end(_open), do: "start"
+  defp open_end(%Tempo{}) do
+    "end"
+  end
+
+  defp open_end(_open) do
+    "start"
+  end
 
   # A week beside a month or a day of one has no unit in common with it, so
   # it is shown as the date its first day is: `2026-W25/2026-07-01` runs
   # from 15 June.
   defp on_one_axis(%Tempo{} = from, %Tempo{} = to, calendar) do
-    if week?(from) == week?(to),
-      do: {from, to},
-      else: {week_as_date(from, calendar), week_as_date(to, calendar)}
+    if week?(from) == week?(to) do
+      {from, to}
+    else
+      {week_as_date(from, calendar), week_as_date(to, calendar)}
+    end
   end
 
-  defp week?(%Tempo{time: time}), do: Keyword.has_key?(time, :week)
+  defp week?(%Tempo{time: time}) do
+    Keyword.has_key?(time, :week)
+  end
 
-  defp week_as_date(%Tempo{time: time} = tempo, calendar),
-    do: %Tempo{tempo | time: week_date_as_day(time, calendar)}
+  defp week_as_date(%Tempo{time: time} = tempo, calendar) do
+    %Tempo{tempo | time: week_date_as_day(time, calendar)}
+  end
 
   # The unit an interval is shown in. A materialised implicit span carries
   # its iteration granularity on `:unit` ("Jan – Dec 2026" for a year). One
   # written with two ends is shown in the unit it is walked by, the finer
   # of its ends', and a range of whole weeks by its days, as a week is.
-  defp shown_unit(%Tempo.Interval{unit: unit}) when not is_nil(unit), do: unit
+  defp shown_unit(%Tempo.Interval{unit: unit}) when not is_nil(unit) do
+    unit
+  end
 
   defp shown_unit(%Tempo.Interval{} = interval) do
     case Tempo.Interval.granularity(interval) do

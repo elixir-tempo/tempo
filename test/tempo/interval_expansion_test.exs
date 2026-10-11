@@ -22,7 +22,10 @@ defmodule Tempo.IntervalExpansion.Test do
       {:ok, %Tempo.IntervalSet{intervals: intervals}} = Tempo.to_interval(tempo)
 
       assert Enum.count(intervals) == 12
-      assert Enum.map(intervals, & &1.from.time[:month]) == 1..12 |> Enum.to_list()
+
+      assert Enum.map(intervals, & &1.from.time[:month]) ==
+               1..12
+               |> Enum.to_list()
 
       assert Enum.all?(intervals, fn i ->
                i.from.time[:day] == 15 and i.to.time[:day] == 16
@@ -109,7 +112,9 @@ defmodule Tempo.IntervalExpansion.Test do
       {:ok, set} = Tempo.to_interval(quarters)
 
       # `2026-33` is the first quarter of 2026.
-      assert set |> IntervalSet.members() |> Enum.map(&{&1.from, &1.to}) == [
+      assert set
+             |> IntervalSet.members()
+             |> Enum.map(&{&1.from, &1.to}) == [
                {~o"2026Y1M", ~o"2026Y4M"},
                {~o"2026Y4M", ~o"2026Y7M"},
                {~o"2026Y7M", ~o"2026Y10M"}

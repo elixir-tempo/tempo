@@ -90,7 +90,11 @@ defmodule Tempo.ShiftZoneTest do
     test "its ISO 8601 form reads back as the same instant in the same calendar" do
       jerusalem = Tempo.from_iso8601!("5787-01-01T10:00:00[Asia/Jerusalem][u-ca=hebrew]")
       {:ok, paris} = Tempo.shift_zone(jerusalem, "Europe/Paris")
-      read_back = paris |> Tempo.to_iso8601!() |> Tempo.from_iso8601!()
+
+      read_back =
+        paris
+        |> Tempo.to_iso8601!()
+        |> Tempo.from_iso8601!()
 
       assert read_back.calendar == Calendrical.Hebrew
       assert Compare.to_utc_seconds(read_back) == Compare.to_utc_seconds(jerusalem)
@@ -156,7 +160,10 @@ defmodule Tempo.ShiftZoneTest do
       {:ambiguous, _first, second} =
         DateTime.new(~D[2026-11-01], ~T[01:30:00], "America/New_York")
 
-      {:ok, round_trip} = second |> Tempo.from_elixir() |> Tempo.to_datetime()
+      {:ok, round_trip} =
+        second
+        |> Tempo.from_elixir()
+        |> Tempo.to_datetime()
 
       assert round_trip.utc_offset + round_trip.std_offset == -5 * 3600
     end

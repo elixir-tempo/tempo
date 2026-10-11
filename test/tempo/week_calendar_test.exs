@@ -18,7 +18,11 @@ defmodule Tempo.WeekCalendarTest do
   alias Tempo.ResolutionError
   alias Tempo.RRule
 
-  defp read_back(value), do: value |> Tempo.to_iso8601!() |> Tempo.from_iso8601!()
+  defp read_back(value) do
+    value
+    |> Tempo.to_iso8601!()
+    |> Tempo.from_iso8601!()
+  end
 
   describe "one shape, however the value is made" do
     test "parsed, built from an Elixir date, converted and shifted into a zone" do
@@ -357,8 +361,14 @@ defmodule Tempo.WeekCalendarTest do
   # selected nothing.
   describe "a recurrence's selection by day of the week" do
     defp occurrence_starts(text, calendar) do
-      {:ok, set} = text |> Tempo.from_iso8601!(calendar) |> Tempo.to_interval()
-      set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+      {:ok, set} =
+        text
+        |> Tempo.from_iso8601!(calendar)
+        |> Tempo.to_interval()
+
+      set
+      |> IntervalSet.members()
+      |> Enum.map(&Interval.from/1)
     end
 
     test "picks each week's day" do
@@ -450,19 +460,37 @@ defmodule Tempo.WeekCalendarTest do
     @saturday 6
     @sunday 7
 
-    defp read(text, calendar), do: Tempo.from_iso8601!(text, calendar)
+    defp read(text, calendar) do
+      Tempo.from_iso8601!(text, calendar)
+    end
 
     # The weekday of the day a value starts on, from Elixir's own calendar.
     defp weekday(%Tempo{} = value) do
-      {:ok, date} = value |> Tempo.trunc(:day) |> Tempo.to_date()
-      date |> Date.convert!(Calendar.ISO) |> Date.day_of_week()
+      {:ok, date} =
+        value
+        |> Tempo.trunc(:day)
+        |> Tempo.to_date()
+
+      date
+      |> Date.convert!(Calendar.ISO)
+      |> Date.day_of_week()
     end
 
-    defp weekdays({:ok, %IntervalSet{} = set}),
-      do: set |> IntervalSet.members() |> Enum.map(&(&1 |> Interval.from() |> weekday()))
+    defp weekdays({:ok, %IntervalSet{} = set}) do
+      set
+      |> IntervalSet.members()
+      |> Enum.map(
+        &(&1
+          |> Interval.from()
+          |> weekday())
+      )
+    end
 
-    defp starts({:ok, %IntervalSet{} = set}),
-      do: set |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+    defp starts({:ok, %IntervalSet{} = set}) do
+      set
+      |> IntervalSet.members()
+      |> Enum.map(&Interval.from/1)
+    end
 
     test "in a value" do
       assert weekday(read("2026Y25W3K", NRF)) == @tuesday

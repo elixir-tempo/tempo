@@ -36,12 +36,17 @@ defmodule Tempo.RRule.WeekNumberFromWkstTest do
 
   ## The measure
 
-  defp week_start(date, wkst), do: Date.beginning_of_week(date, elem(@weekdays[wkst], 0))
+  defp week_start(date, wkst) do
+    Date.beginning_of_week(date, elem(@weekdays[wkst], 0))
+  end
 
-  defp first_week_start(year, wkst), do: week_start(Date.new!(year, 1, 4), wkst)
+  defp first_week_start(year, wkst) do
+    week_start(Date.new!(year, 1, 4), wkst)
+  end
 
-  defp weeks_in(year, wkst),
-    do: div(Date.diff(first_week_start(year + 1, wkst), first_week_start(year, wkst)), 7)
+  defp weeks_in(year, wkst) do
+    div(Date.diff(first_week_start(year + 1, wkst), first_week_start(year, wkst)), 7)
+  end
 
   # The year a day's week belongs to, the week's number in it, and how many
   # weeks that year has.
@@ -115,8 +120,9 @@ defmodule Tempo.RRule.WeekNumberFromWkstTest do
     # The walk goes on from one week named to the next, where each day
     # between was asked its week: a year of them for one week, which a count
     # of many years did not come to the end of.
-    defp days_of_week_of_year(year, week, wkst),
-      do: for(day <- 0..6, do: Date.add(first_week_start(year, wkst), (week - 1) * 7 + day))
+    defp days_of_week_of_year(year, week, wkst) do
+      for(day <- 0..6, do: Date.add(first_week_start(year, wkst), (week - 1) * 7 + day))
+    end
 
     test "has the Monday of week 20 of ninety years" do
       {:ok, rule} =
@@ -141,7 +147,9 @@ defmodule Tempo.RRule.WeekNumberFromWkstTest do
             from: Tempo.from_iso8601!("2026-01-01")
           )
 
-        long_years = 2025..2080 |> Enum.filter(&(weeks_in(&1, wkst) == 53))
+        long_years =
+          2025..2080
+          |> Enum.filter(&(weeks_in(&1, wkst) == 53))
 
         expected =
           long_years

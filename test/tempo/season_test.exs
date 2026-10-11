@@ -51,14 +51,18 @@ defmodule Tempo.SeasonTest do
     {microseconds(first), microseconds(Date.shift(first, month: 3))}
   end
 
-  defp microseconds(%Date{} = date), do: Date.to_gregorian_days(date) * @day
+  defp microseconds(%Date{} = date) do
+    Date.to_gregorian_days(date) * @day
+  end
 
   defp span(value) do
     {:ok, %{spans: [span]}} = Extent.of(value)
     span
   end
 
-  defp season(year, season), do: Tempo.from_iso8601!("#{year}-#{season}")
+  defp season(year, season) do
+    Tempo.from_iso8601!("#{year}-#{season}")
+  end
 
   defp dated(value, territory) do
     {:ok, dated} = Tempo.in_territory(value, territory)
@@ -75,7 +79,9 @@ defmodule Tempo.SeasonTest do
           assert to == next
         end
 
-        assert spans |> Enum.map(fn {from, to} -> div(to - from, @day) end) |> Enum.sum() == 365
+        assert spans
+               |> Enum.map(fn {from, to} -> div(to - from, @day) end)
+               |> Enum.sum() == 365
       end
     end
 

@@ -29,8 +29,10 @@ defmodule Tempo.ChangeOfTheClockTest do
 
   @minute 60
 
-  defp gregorian_seconds(%DateTime{} = moment),
-    do: DateTime.to_gregorian_seconds(moment) |> elem(0)
+  defp gregorian_seconds(%DateTime{} = moment) do
+    DateTime.to_gregorian_seconds(moment)
+    |> elem(0)
+  end
 
   describe "the hours of a day on which the clock changes" do
     for {zone, date, change} <- ChangeOfTheClock.gaps() ++ ChangeOfTheClock.folds() do
@@ -101,7 +103,9 @@ defmodule Tempo.ChangeOfTheClockTest do
       assert Interval.to(span) == ~o"2026Y10M4DT3H[Australia/Lord_Howe]"
       assert Tempo.exactly?(hour, ~o"PT30M")
 
-      assert Enum.to_list(hour) |> List.first() == ~o"2026Y10M4DT2H30M[Australia/Lord_Howe]"
+      assert Enum.to_list(hour)
+             |> List.first() == ~o"2026Y10M4DT2H30M[Australia/Lord_Howe]"
+
       assert Enum.count(hour) == 30
     end
 

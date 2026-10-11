@@ -39,7 +39,9 @@ defmodule Tempo.Iso8601.Group do
   # A duration's units are counts, not a date's: twenty-one months are not
   # the season a date's month 21 is, and `P1Y21M` is a year and twenty-one
   # months. It holds no group to expand.
-  def expand_groups(%Tempo.Duration{} = duration, _calendar), do: {:ok, duration}
+  def expand_groups(%Tempo.Duration{} = duration, _calendar) do
+    {:ok, duration}
+  end
 
   def expand_groups(%Tempo.Interval{} = tempo, calendar) do
     with {:ok, from} <- expand_groups(tempo.from, calendar),
@@ -283,7 +285,9 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  def resolve_seasons(other, _hemisphere), do: {:ok, other}
+  def resolve_seasons(other, _hemisphere) do
+    {:ok, other}
+  end
 
   # A range of seasons in a set is each season between its ends by the time
   # it is read (`expand_divisions/4`), so a set holds its seasons as members.
@@ -299,12 +303,16 @@ defmodule Tempo.Iso8601.Group do
   end
 
   defp in_order(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}, written, hemisphere) do
-    if Compare.compare_endpoints(to, from) == :earlier,
-      do: {:error, season_order_error(written, from, to, hemisphere)},
-      else: :ok
+    if Compare.compare_endpoints(to, from) == :earlier do
+      {:error, season_order_error(written, from, to, hemisphere)}
+    else
+      :ok
+    end
   end
 
-  defp in_order(_an_open_end, _written, _hemisphere), do: :ok
+  defp in_order(_an_open_end, _written, _hemisphere) do
+    :ok
+  end
 
   defp season_order_error(written, from, to, hemisphere) do
     IntervalEndpointsError.exception(
@@ -320,26 +328,44 @@ defmodule Tempo.Iso8601.Group do
   @doc false
   # Whether a value holds a season of 21 to 24 that has no hemisphere yet.
   @spec abstract_season?(term()) :: boolean()
-  def abstract_season?(%Tempo{time: time}) when is_list(time),
-    do: List.keymember?(time, :season, 0)
+  def abstract_season?(%Tempo{time: time}) when is_list(time) do
+    List.keymember?(time, :season, 0)
+  end
 
-  def abstract_season?(%Tempo.Interval{from: from, to: to}),
-    do: abstract_season?(from) or abstract_season?(to)
+  def abstract_season?(%Tempo.Interval{from: from, to: to}) do
+    abstract_season?(from) or abstract_season?(to)
+  end
 
-  def abstract_season?(%Tempo.Set{set: set, except: except}),
-    do:
-      Enum.any?(List.wrap(set), &abstract_season?/1) or
-        Enum.any?(List.wrap(except), &abstract_season?/1)
+  def abstract_season?(%Tempo.Set{set: set, except: except}) do
+    Enum.any?(List.wrap(set), &abstract_season?/1) or
+      Enum.any?(List.wrap(except), &abstract_season?/1)
+  end
 
-  def abstract_season?(_other), do: false
+  def abstract_season?(_other) do
+    false
+  end
 
   # The northern season that has the months a season has in a hemisphere:
   # a southern spring has a northern autumn's.
-  defp northern_months(season, :northern), do: season
-  defp northern_months(21, :southern), do: 23
-  defp northern_months(22, :southern), do: 24
-  defp northern_months(23, :southern), do: 21
-  defp northern_months(24, :southern), do: 22
+  defp northern_months(season, :northern) do
+    season
+  end
+
+  defp northern_months(21, :southern) do
+    23
+  end
+
+  defp northern_months(22, :southern) do
+    24
+  end
+
+  defp northern_months(23, :southern) do
+    21
+  end
+
+  defp northern_months(24, :southern) do
+    22
+  end
 
   # ISO 8601-2's seasons are the seasons of the notation's calendar, by its
   # months.
@@ -351,8 +377,9 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp season_span(year, {season, hemisphere}, calendar) when is_integer(year),
-    do: calendar_season(year, northern_months(season, hemisphere), [], calendar)
+  defp season_span(year, {season, hemisphere}, calendar) when is_integer(year) do
+    calendar_season(year, northern_months(season, hemisphere), [], calendar)
+  end
 
   # A year with unspecified digits keeps them in both ends of a season that
   # is within one year. The season that runs into the next, a northern
@@ -392,19 +419,31 @@ defmodule Tempo.Iso8601.Group do
     %{Qualification.rewritten(value, time) | time: time, calendar: calendar}
   end
 
-  defp end_as_the_value_is(open_end, _value), do: open_end
+  defp end_as_the_value_is(open_end, _value) do
+    open_end
+  end
 
   # An end of an interval is where its value starts, as a month's or a
   # day's is: an interval from the spring of a year to its autumn
   # (`2026-21/2026-23`) runs from the start of the one to the start of the
   # other. Each end was the season's whole span, an interval of two
   # intervals that nothing read.
-  defp start_of(%Tempo.Interval{from: start}), do: start
-  defp start_of(value_or_open_end), do: value_or_open_end
+  defp start_of(%Tempo.Interval{from: start}) do
+    start
+  end
+
+  defp start_of(value_or_open_end) do
+    value_or_open_end
+  end
 
   # An error expanding the rest of the list is the list's error.
-  defp prepend(_first, {:error, _reason} = error), do: error
-  defp prepend(first, time), do: [first | time]
+  defp prepend(_first, {:error, _reason} = error) do
+    error
+  end
+
+  defp prepend(first, time) do
+    [first | time]
+  end
 
   # A set's members, and the members it excludes, each expand as a value does.
   # A range from one division of a year to another is the divisions it names,
@@ -460,7 +499,9 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp expand_member(member, calendar), do: expand_one(member, calendar)
+  defp expand_member(member, calendar) do
+    expand_one(member, calendar)
+  end
 
   defp expand_one(member, calendar) do
     with {:ok, member} <- expand_groups(member, calendar), do: {:ok, [member]}
@@ -476,22 +517,27 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp division(_value), do: nil
+  defp division(_value) do
+    nil
+  end
 
   defp expand_divisions({kind, from}, {kind, to}, range, calendar) when from <= to do
     with {:ok, divisions} <- divisions_between(from, to, kind),
          {:ok, expanded} <- expand_each_division(divisions, range, calendar) do
-      if kind == 21..24 or run_in_time?(expanded),
-        do: {:ok, expanded},
-        else: {:error, division_run_error(from, to)}
+      if kind == 21..24 or run_in_time?(expanded) do
+        {:ok, expanded}
+      else
+        {:error, division_run_error(from, to)}
+      end
     else
       :too_many -> {:error, division_count_error(from, to)}
       {:error, _reason} = error -> error
     end
   end
 
-  defp expand_divisions({_kind, from}, {_other_kind, to}, _range, _calendar),
-    do: {:error, division_order_error(from, to)}
+  defp expand_divisions({_kind, from}, {_other_kind, to}, _range, _calendar) do
+    {:error, division_order_error(from, to)}
+  end
 
   defp divisions_between(from, to, kind) do
     divisions =
@@ -500,11 +546,19 @@ defmodule Tempo.Iso8601.Group do
       |> Stream.take_while(&(&1 <= to))
       |> Enum.take(@most_divisions + 1)
 
-    if Enum.count(divisions) > @most_divisions, do: :too_many, else: {:ok, divisions}
+    if Enum.count(divisions) > @most_divisions do
+      :too_many
+    else
+      {:ok, divisions}
+    end
   end
 
   defp next_division({year, number}, first..last//_) do
-    if number == last, do: {year + 1, first}, else: {year, number + 1}
+    if number == last do
+      {year + 1, first}
+    else
+      {year, number + 1}
+    end
   end
 
   # Each division as the value it is: the range's first and its last as they
@@ -523,9 +577,17 @@ defmodule Tempo.Iso8601.Group do
     |> reversed()
   end
 
-  defp division_as_written(time, %Tempo{time: time} = first, _last), do: first
-  defp division_as_written(time, _first, %Tempo{time: time} = last), do: last
-  defp division_as_written(time, first, _last), do: %{first | time: time, qualifications: nil}
+  defp division_as_written(time, %Tempo{time: time} = first, _last) do
+    first
+  end
+
+  defp division_as_written(time, _first, %Tempo{time: time} = last) do
+    last
+  end
+
+  defp division_as_written(time, first, _last) do
+    %{first | time: time, qualifications: nil}
+  end
 
   # Whether each division begins where the one before it ends.
   defp run_in_time?(divisions) do
@@ -536,10 +598,13 @@ defmodule Tempo.Iso8601.Group do
     |> Enum.all?(&runs_on?/1)
   end
 
-  defp runs_on?({{:ok, %Tempo.Interval{to: ends}}, {:ok, %Tempo.Interval{from: begins}}}),
-    do: Compare.compare_endpoints(ends, begins) == :same
+  defp runs_on?({{:ok, %Tempo.Interval{to: ends}}, {:ok, %Tempo.Interval{from: begins}}}) do
+    Compare.compare_endpoints(ends, begins) == :same
+  end
 
-  defp runs_on?(_no_one_span), do: false
+  defp runs_on?(_no_one_span) do
+    false
+  end
 
   defp division_run_error({from_year, from}, {to_year, to}) do
     InvalidDateError.exception(
@@ -577,11 +642,21 @@ defmodule Tempo.Iso8601.Group do
     )
   end
 
-  defp shown(:undefined), do: "an open end"
-  defp shown(value), do: Calendars.inspect(value)
+  defp shown(:undefined) do
+    "an open end"
+  end
 
-  defp reversed({:ok, members}), do: {:ok, Enum.reverse(members)}
-  defp reversed({:error, _reason} = error), do: error
+  defp shown(value) do
+    Calendars.inspect(value)
+  end
+
+  defp reversed({:ok, members}) do
+    {:ok, Enum.reverse(members)}
+  end
+
+  defp reversed({:error, _reason} = error) do
+    error
+  end
 
   ## Sub-year divisions
 
@@ -624,23 +699,39 @@ defmodule Tempo.Iso8601.Group do
   end
 
   # Calendrical gives each division of a year of a calendar as its dates.
-  defp year_division_date_range(calendar, year, :quarter, number),
-    do: year |> calendar.quarter(number) |> year_division_date_range_result()
+  defp year_division_date_range(calendar, year, :quarter, number) do
+    year
+    |> calendar.quarter(number)
+    |> year_division_date_range_result()
+  end
 
-  defp year_division_date_range(calendar, year, :quadrimester, number),
-    do: year |> calendar.quadrimester(number) |> year_division_date_range_result()
+  defp year_division_date_range(calendar, year, :quadrimester, number) do
+    year
+    |> calendar.quadrimester(number)
+    |> year_division_date_range_result()
+  end
 
-  defp year_division_date_range(calendar, year, :semester, number),
-    do: year |> calendar.semester(number) |> year_division_date_range_result()
+  defp year_division_date_range(calendar, year, :semester, number) do
+    year
+    |> calendar.semester(number)
+    |> year_division_date_range_result()
+  end
 
-  defp year_division_date_range_result(%Date.Range{} = range), do: {:ok, range}
-  defp year_division_date_range_result({:error, reason}), do: {:error, reason}
+  defp year_division_date_range_result(%Date.Range{} = range) do
+    {:ok, range}
+  end
+
+  defp year_division_date_range_result({:error, reason}) do
+    {:error, reason}
+  end
 
   # A week-based calendar numbers its weeks in the date's `month` field.
   defp year_division_unit(calendar) do
-    if Tempo.week_based_calendar?(calendar),
-      do: :week,
-      else: :month
+    if Tempo.week_based_calendar?(calendar) do
+      :week
+    else
+      :month
+    end
   end
 
   ## The container of a group
@@ -663,10 +754,17 @@ defmodule Tempo.Iso8601.Group do
     |> bound_groups_result()
   end
 
-  def bound_groups(other, _calendar), do: {:ok, other}
+  def bound_groups(other, _calendar) do
+    {:ok, other}
+  end
 
-  defp bound_groups_result({:ok, reversed}), do: {:ok, Enum.reverse(reversed)}
-  defp bound_groups_result({:error, _exception} = error), do: error
+  defp bound_groups_result({:ok, reversed}) do
+    {:ok, Enum.reverse(reversed)}
+  end
+
+  defp bound_groups_result({:error, _exception} = error) do
+    error
+  end
 
   defp bound_group(
          {unit, {:group, %Range{first: first, last: last}}} = component,
@@ -691,7 +789,9 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp bound_group(component, _prefix, _calendar), do: {:ok, component}
+  defp bound_group(component, _prefix, _calendar) do
+    {:ok, component}
+  end
 
   @doc false
   # The groups a group of a set names (`{1,2}G3MU`, `{1..-1}G3MU`), each as
@@ -736,25 +836,45 @@ defmodule Tempo.Iso8601.Group do
       end
     end)
     |> case do
-      :unresolved -> :unresolved
-      numbers -> {:ok, numbers |> Enum.reverse() |> Enum.concat()}
+      :unresolved ->
+        :unresolved
+
+      numbers ->
+        {:ok,
+         numbers
+         |> Enum.reverse()
+         |> Enum.concat()}
     end
   end
 
-  defp member_numbers(number, _count) when is_integer(number) and number > 0, do: [number]
-  defp member_numbers(number, nil) when is_integer(number), do: :unresolved
-  defp member_numbers(number, count) when is_integer(number), do: [count + 1 + number]
+  defp member_numbers(number, _count) when is_integer(number) and number > 0 do
+    [number]
+  end
+
+  defp member_numbers(number, nil) when is_integer(number) do
+    :unresolved
+  end
+
+  defp member_numbers(number, count) when is_integer(number) do
+    [count + 1 + number]
+  end
 
   defp member_numbers(%Range{first: first, last: last, step: step}, _count)
-       when first > 0 and last > 0,
-       do: Enum.to_list(first..last//step)
+       when first > 0 and last > 0 do
+    Enum.to_list(first..last//step)
+  end
 
-  defp member_numbers(%Range{last: last}, nil) when last < 0, do: :unresolved
+  defp member_numbers(%Range{last: last}, nil) when last < 0 do
+    :unresolved
+  end
 
-  defp member_numbers(%Range{first: first, last: last, step: step}, count) when last < 0,
-    do: Enum.to_list(first..(count + 1 + last)//step)
+  defp member_numbers(%Range{first: first, last: last, step: step}, count) when last < 0 do
+    Enum.to_list(first..(count + 1 + last)//step)
+  end
 
-  defp member_numbers(_other, _count), do: :unresolved
+  defp member_numbers(_other, _count) do
+    :unresolved
+  end
 
   @doc false
   # The largest value `unit` takes within `prefix`, the components before
@@ -770,14 +890,21 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp integer_component?({_unit, value}), do: is_integer(value)
-  defp integer_component?(_component), do: false
+  defp integer_component?({_unit, value}) do
+    is_integer(value)
+  end
+
+  defp integer_component?(_component) do
+    false
+  end
 
   # The unit a group's unit counts within, when the components before it
   # name one: days count within a month, a week, or (alone with a year)
   # the year, and hours within a day or (alone with a year) the year.
   defp container_unit(units, unit) when unit in [:month, :week] do
-    if :year in units, do: :year
+    if :year in units do
+      :year
+    end
   end
 
   defp container_unit(units, :day) do
@@ -789,7 +916,11 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp container_unit(units, :day_of_week), do: if(:week in units, do: :week)
+  defp container_unit(units, :day_of_week) do
+    if :week in units do
+      :week
+    end
+  end
 
   defp container_unit(units, :hour) do
     cond do
@@ -799,28 +930,61 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp container_unit(units, :minute), do: if(:hour in units, do: :hour)
-  defp container_unit(units, :second), do: if(:minute in units, do: :minute)
-  defp container_unit(_units, _unit), do: nil
+  defp container_unit(units, :minute) do
+    if :hour in units do
+      :hour
+    end
+  end
 
-  defp maximum_within(:year, :month, %{year: year}, calendar), do: calendar.months_in_year(year)
+  defp container_unit(units, :second) do
+    if :minute in units do
+      :minute
+    end
+  end
 
-  defp maximum_within(:year, :week, %{year: year}, calendar),
-    do: UnitValues.iso_weeks_in_year(year, calendar)
+  defp container_unit(_units, _unit) do
+    nil
+  end
 
-  defp maximum_within(:year, :day, %{year: year}, calendar), do: calendar.days_in_year(year)
+  defp maximum_within(:year, :month, %{year: year}, calendar) do
+    calendar.months_in_year(year)
+  end
 
-  defp maximum_within(:year, :hour, %{year: year}, calendar),
-    do: calendar.days_in_year(year) * @hours_per_day - 1
+  defp maximum_within(:year, :week, %{year: year}, calendar) do
+    UnitValues.iso_weeks_in_year(year, calendar)
+  end
 
-  defp maximum_within(:month, :day, %{year: year, month: month}, calendar),
-    do: calendar.days_in_month(year, month)
+  defp maximum_within(:year, :day, %{year: year}, calendar) do
+    calendar.days_in_year(year)
+  end
 
-  defp maximum_within(:week, _unit, _prefix, calendar), do: calendar.days_in_week()
-  defp maximum_within(:day, :hour, _prefix, _calendar), do: @hours_per_day - 1
-  defp maximum_within(:hour, :minute, _prefix, _calendar), do: 59
-  defp maximum_within(:minute, :second, _prefix, _calendar), do: 59
-  defp maximum_within(_container_unit, _unit, _prefix, _calendar), do: nil
+  defp maximum_within(:year, :hour, %{year: year}, calendar) do
+    calendar.days_in_year(year) * @hours_per_day - 1
+  end
+
+  defp maximum_within(:month, :day, %{year: year, month: month}, calendar) do
+    calendar.days_in_month(year, month)
+  end
+
+  defp maximum_within(:week, _unit, _prefix, calendar) do
+    calendar.days_in_week()
+  end
+
+  defp maximum_within(:day, :hour, _prefix, _calendar) do
+    @hours_per_day - 1
+  end
+
+  defp maximum_within(:hour, :minute, _prefix, _calendar) do
+    59
+  end
+
+  defp maximum_within(:minute, :second, _prefix, _calendar) do
+    59
+  end
+
+  defp maximum_within(_container_unit, _unit, _prefix, _calendar) do
+    nil
+  end
 
   ## Season helpers
 
@@ -837,19 +1001,25 @@ defmodule Tempo.Iso8601.Group do
     meteorological_bounds(year, start_month, year, end_month)
   end
 
-  defp gregorian_season(24, year), do: meteorological_bounds(year, 12, year + 1, 3)
+  defp gregorian_season(24, year) do
+    meteorological_bounds(year, 12, year + 1, 3)
+  end
 
-  defp gregorian_season(code, year) when code in [25, 31],
-    do: astronomical_bounds(year, :march, year, :june)
+  defp gregorian_season(code, year) when code in [25, 31] do
+    astronomical_bounds(year, :march, year, :june)
+  end
 
-  defp gregorian_season(code, year) when code in [26, 32],
-    do: astronomical_bounds(year, :june, year, :september)
+  defp gregorian_season(code, year) when code in [26, 32] do
+    astronomical_bounds(year, :june, year, :september)
+  end
 
-  defp gregorian_season(code, year) when code in [27, 29],
-    do: astronomical_bounds(year, :september, year, :december)
+  defp gregorian_season(code, year) when code in [27, 29] do
+    astronomical_bounds(year, :september, year, :december)
+  end
 
-  defp gregorian_season(code, year) when code in [28, 30],
-    do: astronomical_bounds(year, :december, year + 1, :march)
+  defp gregorian_season(code, year) when code in [28, 30] do
+    astronomical_bounds(year, :december, year + 1, :march)
+  end
 
   defp meteorological_bounds(start_year, start_month, end_year, end_month) do
     with {:ok, start_date} <- season_date(start_year, start_month),
@@ -894,7 +1064,9 @@ defmodule Tempo.Iso8601.Group do
     season_date_before(Date.new(year, month, day_of_month, calendar), end_date, day)
   end
 
-  defp nth_day_of_season(_start_date, end_date, day), do: season_day_error(day, end_date)
+  defp nth_day_of_season(_start_date, end_date, day) do
+    season_day_error(day, end_date)
+  end
 
   defp season_date_before({:ok, date}, end_date, day) do
     case Compare.compare_days(date, end_date) do
@@ -903,8 +1075,9 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp season_date_before({:error, _reason}, end_date, day),
-    do: season_day_error(day, end_date)
+  defp season_date_before({:error, _reason}, end_date, day) do
+    season_day_error(day, end_date)
+  end
 
   defp season_day_error(day, end_date) do
     {:error,
@@ -927,17 +1100,23 @@ defmodule Tempo.Iso8601.Group do
   end
 
   defp season_boundary_date(year, event) when event in [:march, :september] do
-    year |> Astro.equinox(event) |> season_boundary(year, event)
+    year
+    |> Astro.equinox(event)
+    |> season_boundary(year, event)
   end
 
   defp season_boundary_date(year, event) when event in [:june, :december] do
-    year |> Astro.solstice(event) |> season_boundary(year, event)
+    year
+    |> Astro.solstice(event)
+    |> season_boundary(year, event)
   end
 
   # Astro gives the instant in Elixir's own calendar, and its day is made a
   # date of the notation's calendar as it arrives.
   defp season_boundary({:ok, %DateTime{} = datetime}, _year, _event) do
-    datetime |> DateTime.to_date() |> Date.convert(Calendars.default())
+    datetime
+    |> DateTime.to_date()
+    |> Date.convert(Calendars.default())
   end
 
   # Astro computes equinoxes and solstices for a bounded span of years
@@ -951,10 +1130,21 @@ defmodule Tempo.Iso8601.Group do
      )}
   end
 
-  defp boundary_name(:march), do: "March equinox"
-  defp boundary_name(:june), do: "June solstice"
-  defp boundary_name(:september), do: "September equinox"
-  defp boundary_name(:december), do: "December solstice"
+  defp boundary_name(:march) do
+    "March equinox"
+  end
+
+  defp boundary_name(:june) do
+    "June solstice"
+  end
+
+  defp boundary_name(:september) do
+    "September equinox"
+  end
+
+  defp boundary_name(:december) do
+    "December solstice"
+  end
 
   defp build_season_interval(%Date{} = start_date, %Date{} = end_date, rest, calendar) do
     season_interval(
@@ -966,9 +1156,17 @@ defmodule Tempo.Iso8601.Group do
 
   # The first month of a meteorological season and the month after its
   # last.
-  defp meteorological_months(21), do: {3, 6}
-  defp meteorological_months(22), do: {6, 9}
-  defp meteorological_months(23), do: {9, 12}
+  defp meteorological_months(21) do
+    {3, 6}
+  end
+
+  defp meteorological_months(22) do
+    {6, 9}
+  end
+
+  defp meteorological_months(23) do
+    {9, 12}
+  end
 
   # A meteorological season runs over whole months.
   defp meteorological_span(start_date, end_date, calendar) do
@@ -1020,8 +1218,13 @@ defmodule Tempo.Iso8601.Group do
     |> season_interval_result()
   end
 
-  defp season_interval_result({:ok, interval}), do: interval
-  defp season_interval_result({:error, _reason} = error), do: error
+  defp season_interval_result({:ok, interval}) do
+    interval
+  end
+
+  defp season_interval_result({:error, _reason} = error) do
+    error
+  end
 
   # The season `code` that starts within `year` of a calendar other than
   # the Gregorian, found among the Gregorian seasons of the years it
@@ -1055,7 +1258,9 @@ defmodule Tempo.Iso8601.Group do
   defp season_starting_within(code, first, last, year, calendar) do
     first.year..last.year//1
     |> Enum.reduce_while(:none, fn label, :none ->
-      code |> gregorian_season(label) |> starting_within(first, last)
+      code
+      |> gregorian_season(label)
+      |> starting_within(first, last)
     end)
     |> season_found(code, year, calendar)
   end
@@ -1068,7 +1273,9 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp starting_within({:error, _reason} = error, _first, _last), do: {:halt, error}
+  defp starting_within({:error, _reason} = error, _first, _last) do
+    {:halt, error}
+  end
 
   defp season_found(:none, code, year, calendar) do
     {:error,
@@ -1077,7 +1284,9 @@ defmodule Tempo.Iso8601.Group do
      )}
   end
 
-  defp season_found(found, _code, _year, _calendar), do: found
+  defp season_found(found, _code, _year, _calendar) do
+    found
+  end
 
   defp calendar_season_span(start_date, end_date, [{:day, day} | rest], calendar) do
     with {:ok, date} <- nth_day_of_season(start_date, end_date, day) do
@@ -1108,8 +1317,13 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp date_components(:month, year, month, day), do: [year: year, month: month, day: day]
-  defp date_components(:week, year, week, day), do: [year: year, week: week, day_of_week: day]
+  defp date_components(:month, year, month, day) do
+    [year: year, month: month, day: day]
+  end
+
+  defp date_components(:week, year, week, day) do
+    [year: year, week: week, day_of_week: day]
+  end
 
   ## Weeks of a month
 
@@ -1210,9 +1424,11 @@ defmodule Tempo.Iso8601.Group do
   ## Calendar weeks
 
   defp calendar_week(year, week, rest, calendar) do
-    if Tempo.week_based_calendar?(calendar),
-      do: [{:year, year}, {:week, week} | rest],
-      else: month_calendar_week(year, week, rest, calendar)
+    if Tempo.week_based_calendar?(calendar) do
+      [{:year, year}, {:week, week} | rest]
+    else
+      month_calendar_week(year, week, rest, calendar)
+    end
   end
 
   # A negative week counts back from the year's last, as `-1W` does.

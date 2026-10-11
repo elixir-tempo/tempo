@@ -28,18 +28,27 @@ defmodule Tempo.Qualification do
 
   @doc false
   # The units a qualifier can be written for (§8.3).
-  def units, do: @units
+  def units do
+    @units
+  end
 
   @doc false
   # The qualifications of a value all of whose components are qualified
   # alike: a complete qualification (§8.2.1) of the units of `time`.
-  def complete(_time, nil), do: nil
-
-  def complete(time, qualification) when is_list(time) do
-    time |> present() |> Map.new(&{&1, qualification}) |> compact()
+  def complete(_time, nil) do
+    nil
   end
 
-  def complete(_time, _qualification), do: nil
+  def complete(time, qualification) when is_list(time) do
+    time
+    |> present()
+    |> Map.new(&{&1, qualification})
+    |> compact()
+  end
+
+  def complete(_time, _qualification) do
+    nil
+  end
 
   @doc false
   # A complete qualification laid over the qualifications a value has, a
@@ -50,46 +59,76 @@ defmodule Tempo.Qualification do
 
   @doc false
   # Two maps of qualifications as one.
-  def merge(nil, other), do: other
-  def merge(qualifications, nil), do: qualifications
+  def merge(nil, other) do
+    other
+  end
 
-  def merge(%{} = qualifications, %{} = other),
-    do: Map.merge(qualifications, other, fn _unit, first, second -> combine(first, second) end)
+  def merge(qualifications, nil) do
+    qualifications
+  end
+
+  def merge(%{} = qualifications, %{} = other) do
+    Map.merge(qualifications, other, fn _unit, first, second -> combine(first, second) end)
+  end
 
   @doc false
   # `?` (uncertain) and `~` (approximate) on one component are `%`, uncertain
   # and approximate, and a qualifier given twice is itself.
-  def combine(qualifier, qualifier), do: qualifier
-  def combine(_first, _second), do: :uncertain_and_approximate
+  def combine(qualifier, qualifier) do
+    qualifier
+  end
+
+  def combine(_first, _second) do
+    :uncertain_and_approximate
+  end
 
   @doc false
   # The qualifier every component of a value carries, when they carry one
   # and the same: what a qualifier written after the value says (§8.2.1).
-  def whole(%Tempo{qualifications: nil}), do: nil
+  def whole(%Tempo{qualifications: nil}) do
+    nil
+  end
 
   def whole(%Tempo{time: time, qualifications: %{} = qualifications}) when is_list(time) do
     units = present(time)
 
-    case units |> Enum.map(&Map.get(qualifications, &1)) |> Enum.uniq() do
+    case units
+         |> Enum.map(&Map.get(qualifications, &1))
+         |> Enum.uniq() do
       [qualification] when not is_nil(qualification) ->
-        if map_size(qualifications) == length(units), do: qualification
+        if map_size(qualifications) == length(units) do
+          qualification
+        end
 
       _none_or_several ->
         nil
     end
   end
 
-  def whole(%Tempo{}), do: nil
+  def whole(%Tempo{}) do
+    nil
+  end
 
   @doc false
   # A value's qualifications kept for the units it holds, as an operation
   # that drops a unit leaves them.
-  def only(%Tempo{qualifications: nil} = tempo), do: tempo
+  def only(%Tempo{qualifications: nil} = tempo) do
+    tempo
+  end
 
-  def only(%Tempo{time: time, qualifications: %{} = qualifications} = tempo) when is_list(time),
-    do: %{tempo | qualifications: qualifications |> Map.take(present(time)) |> compact()}
+  def only(%Tempo{time: time, qualifications: %{} = qualifications} = tempo) when is_list(time) do
+    %{
+      tempo
+      | qualifications:
+          qualifications
+          |> Map.take(present(time))
+          |> compact()
+    }
+  end
 
-  def only(%Tempo{} = tempo), do: tempo
+  def only(%Tempo{} = tempo) do
+    tempo
+  end
 
   @doc false
   # The qualifications of a value whose date is written again in other
@@ -98,7 +137,9 @@ defmodule Tempo.Qualification do
   # worked out from all of the units it was written with, so a qualifier of
   # any of them qualifies every one: `2026-W25-1?` is `2026-06-15?`. A
   # qualified time of day is its own.
-  def rewritten(%Tempo{qualifications: nil} = tempo, _resolved), do: tempo
+  def rewritten(%Tempo{qualifications: nil} = tempo, _resolved) do
+    tempo
+  end
 
   def rewritten(%Tempo{qualifications: %{} = qualifications} = tempo, resolved)
       when is_list(resolved) do
@@ -116,7 +157,9 @@ defmodule Tempo.Qualification do
     end
   end
 
-  def rewritten(%Tempo{} = tempo, _resolved), do: tempo
+  def rewritten(%Tempo{} = tempo, _resolved) do
+    tempo
+  end
 
   # The qualifiable units a time list holds. A group of a set is a 3-tuple
   # and a selection holds no unit of its own.
@@ -130,14 +173,27 @@ defmodule Tempo.Qualification do
     for entry <- time, unit <- units_of(entry), uniq: true, do: unit
   end
 
-  defp units_of({:group, [_ | _] = group}),
-    do: for({unit, _size} <- group, unit in @units, do: unit)
+  defp units_of({:group, [_ | _] = group}) do
+    for({unit, _size} <- group, unit in @units, do: unit)
+  end
 
-  defp units_of(entry) when is_tuple(entry),
-    do: if(elem(entry, 0) in @units, do: [elem(entry, 0)], else: [])
+  defp units_of(entry) when is_tuple(entry) do
+    if elem(entry, 0) in @units do
+      [elem(entry, 0)]
+    else
+      []
+    end
+  end
 
-  defp units_of(_entry), do: []
+  defp units_of(_entry) do
+    []
+  end
 
-  defp compact(qualifications) when map_size(qualifications) == 0, do: nil
-  defp compact(qualifications), do: qualifications
+  defp compact(qualifications) when map_size(qualifications) == 0 do
+    nil
+  end
+
+  defp compact(qualifications) do
+    qualifications
+  end
 end

@@ -304,7 +304,15 @@ defmodule Tempo.Matrix.Shapes do
     end
   end
 
-  defp spelling(unit, shaped), do: Map.get(shaped, unit, @plain[unit])
+  defp spelling(unit, shaped) do
+    Map.get(shaped, unit, @plain[unit])
+  end
 
-  defp designator(first), do: if(String.contains?(first, "GT"), do: "", else: "T")
+  defp designator(first) do
+    if String.contains?(first, "GT") do
+      ""
+    else
+      "T"
+    end
+  end
 end

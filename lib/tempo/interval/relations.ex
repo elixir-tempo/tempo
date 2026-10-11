@@ -44,7 +44,9 @@ defmodule Tempo.Interval.Relations do
 
   """
   @spec full() :: t()
-  def full, do: Composition.relations()
+  def full do
+    Composition.relations()
+  end
 
   @doc """
   Whether a relation set is empty — the contradiction.
@@ -70,7 +72,9 @@ defmodule Tempo.Interval.Relations do
 
   """
   @spec empty?(t()) :: boolean()
-  def empty?(relations) when is_list(relations), do: relations == []
+  def empty?(relations) when is_list(relations) do
+    relations == []
+  end
 
   @doc """
   Put a relation set in canonical form — deduplicated and in Allen's order.

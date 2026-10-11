@@ -11,6 +11,11 @@ defmodule Tempo.Sigils.Options do
 
   alias Tempo.Calendars
 
-  def calendar_from([?W]), do: Calendars.weeks()
-  def calendar_from([]), do: nil
+  def calendar_from([?W]) do
+    Calendars.weeks()
+  end
+
+  def calendar_from([]) do
+    nil
+  end
 end

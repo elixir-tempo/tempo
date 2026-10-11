@@ -37,15 +37,25 @@ defmodule Tempo.RRule.StartPartsTest do
     ~D[2026-03-31]
   ]
 
-  defp read(rrule, %Date{} = start), do: RRule.parse!(rrule, from: Tempo.from_date(start))
+  defp read(rrule, %Date{} = start) do
+    RRule.parse!(rrule, from: Tempo.from_date(start))
+  end
 
   # The day each occurrence starts on and how many days long it is.
   defp occurrences(rule) do
     {:ok, set} = Tempo.to_interval(rule, within: @window)
 
     for occurrence <- IntervalSet.members(set) do
-      {:ok, date} = occurrence |> Interval.from() |> Tempo.to_date()
-      {:ok, next} = occurrence |> Interval.to() |> Tempo.to_date()
+      {:ok, date} =
+        occurrence
+        |> Interval.from()
+        |> Tempo.to_date()
+
+      {:ok, next} =
+        occurrence
+        |> Interval.to()
+        |> Tempo.to_date()
+
       {date, Date.diff(next, date)}
     end
   end
@@ -75,7 +85,9 @@ defmodule Tempo.RRule.StartPartsTest do
     for {year, month} <- year_months, {:ok, date} <- [Date.new(year, month, day)], do: date
   end
 
-  defp day_long(dates), do: Enum.map(dates, &{&1, 1})
+  defp day_long(dates) do
+    Enum.map(dates, &{&1, 1})
+  end
 
   describe "a weekly rule read from an RRULE" do
     test "lists its start's weekday in each week it reaches" do
@@ -84,7 +96,10 @@ defmodule Tempo.RRule.StartPartsTest do
         rule = read("FREQ=WEEKLY;INTERVAL=#{interval}", start)
 
         assert {start, interval, occurrences(rule)} ==
-                 {start, interval, expected |> in_window(start) |> day_long()}
+                 {start, interval,
+                  expected
+                  |> in_window(start)
+                  |> day_long()}
       end
     end
 
@@ -100,11 +115,18 @@ defmodule Tempo.RRule.StartPartsTest do
   describe "a monthly rule read from an RRULE" do
     test "lists its start's day in each month it reaches that has the day" do
       for start <- @starts, interval <- [1, 2, 3, 5] do
-        expected = start |> months_from(interval) |> existing(start.day)
+        expected =
+          start
+          |> months_from(interval)
+          |> existing(start.day)
+
         rule = read("FREQ=MONTHLY;INTERVAL=#{interval}", start)
 
         assert {start, interval, occurrences(rule)} ==
-                 {start, interval, expected |> in_window(start) |> day_long()}
+                 {start, interval,
+                  expected
+                  |> in_window(start)
+                  |> day_long()}
       end
     end
 
@@ -117,7 +139,12 @@ defmodule Tempo.RRule.StartPartsTest do
           |> existing(start.day)
 
         rule = read("FREQ=MONTHLY;BYMONTH=2,4,5", start)
-        assert {start, occurrences(rule)} == {start, expected |> in_window(start) |> day_long()}
+
+        assert {start, occurrences(rule)} ==
+                 {start,
+                  expected
+                  |> in_window(start)
+                  |> day_long()}
       end
     end
 
@@ -147,7 +174,11 @@ defmodule Tempo.RRule.StartPartsTest do
         rule = read("FREQ=YEARLY;INTERVAL=#{interval}", start)
 
         assert {start, interval, occurrences(rule)} ==
-                 {start, interval, years |> existing(start.day) |> in_window(start) |> day_long()}
+                 {start, interval,
+                  years
+                  |> existing(start.day)
+                  |> in_window(start)
+                  |> day_long()}
       end
     end
 
@@ -158,7 +189,10 @@ defmodule Tempo.RRule.StartPartsTest do
 
         assert {start, months, occurrences(rule)} ==
                  {start, months,
-                  year_months |> existing(start.day) |> in_window(start) |> day_long()}
+                  year_months
+                  |> existing(start.day)
+                  |> in_window(start)
+                  |> day_long()}
       end
     end
 
@@ -168,7 +202,11 @@ defmodule Tempo.RRule.StartPartsTest do
         rule = read("FREQ=YEARLY;BYMONTHDAY=#{day}", start)
 
         assert {start, day, occurrences(rule)} ==
-                 {start, day, years |> existing(day) |> in_window(start) |> day_long()}
+                 {start, day,
+                  years
+                  |> existing(day)
+                  |> in_window(start)
+                  |> day_long()}
       end
     end
 

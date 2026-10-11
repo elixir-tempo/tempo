@@ -38,24 +38,51 @@ defmodule Tempo.RuleToAnEndTest do
 
   ## The measure
 
-  defp named?(:sunday, date), do: Date.day_of_week(date) == 7
-  defp named?(:thirty_first, date), do: date.day == 31
-  defp named?(:monday_or_friday, date), do: Date.day_of_week(date) in [1, 5]
-  defp named?(:fifteenth, date), do: date.day == 15
-  defp named?(:last_of_month, date), do: date == Date.end_of_month(date)
-  defp named?(:third_of_november, date), do: date.month == 11 and date.day == 3
+  defp named?(:sunday, date) do
+    Date.day_of_week(date) == 7
+  end
+
+  defp named?(:thirty_first, date) do
+    date.day == 31
+  end
+
+  defp named?(:monday_or_friday, date) do
+    Date.day_of_week(date) in [1, 5]
+  end
+
+  defp named?(:fifteenth, date) do
+    date.day == 15
+  end
+
+  defp named?(:last_of_month, date) do
+    date == Date.end_of_month(date)
+  end
+
+  defp named?(:third_of_november, date) do
+    date.month == 11 and date.day == 3
+  end
 
   # The days a rule names that are over by the end, which is the first
   # instant of its day: those before it.
   defp named_before(name, the_end, since) do
-    since |> Date.range(Date.add(the_end, -1)) |> Enum.filter(&named?(name, &1))
+    since
+    |> Date.range(Date.add(the_end, -1))
+    |> Enum.filter(&named?(name, &1))
   end
 
-  defp nearest(name, the_end, count),
-    do: name |> named_before(the_end, Date.add(the_end, -5 * 366)) |> Enum.take(-count)
+  defp nearest(name, the_end, count) do
+    name
+    |> named_before(the_end, Date.add(the_end, -5 * 366))
+    |> Enum.take(-count)
+  end
 
-  defp days_of({:ok, %Interval{} = one}), do: [day_of(one)]
-  defp days_of({:ok, %IntervalSet{} = set}), do: Enum.map(IntervalSet.members(set), &day_of/1)
+  defp days_of({:ok, %Interval{} = one}) do
+    [day_of(one)]
+  end
+
+  defp days_of({:ok, %IntervalSet{} = set}) do
+    Enum.map(IntervalSet.members(set), &day_of/1)
+  end
 
   defp day_of(%Interval{} = occurrence) do
     {:ok, date} = Tempo.to_date(Interval.from(occurrence))

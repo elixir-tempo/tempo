@@ -135,7 +135,9 @@ defmodule Tempo.Iso8601.SetMembersTest do
     # count from the end, so a range of them is each of its years. The walk
     # took a negative end of a range for a count from the end and refused to
     # list it.
-    defp years(value), do: Enum.map(value, &Tempo.year/1)
+    defp years(value) do
+      Enum.map(value, &Tempo.year/1)
+    end
 
     test "is each of its years" do
       for {text, expected} <- [

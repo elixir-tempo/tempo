@@ -11,10 +11,15 @@ defmodule Tempo.EnumerationWalk.Test do
   # that raised an unnamed error or never returned, and the values that
   # were read without their context.
 
-  defp units(enumerable, unit), do: Enum.map(enumerable, & &1.time[unit])
+  defp units(enumerable, unit) do
+    Enum.map(enumerable, & &1.time[unit])
+  end
 
-  defp member_starts({:ok, %IntervalSet{} = set}),
-    do: set |> IntervalSet.members() |> Enum.map(& &1.from)
+  defp member_starts({:ok, %IntervalSet{} = set}) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(& &1.from)
+  end
 
   describe "an unspecified or masked unit of every kind" do
     test "a masked and an unspecified week" do
@@ -683,7 +688,11 @@ defmodule Tempo.EnumerationWalk.Test do
 
     test "is walked as far as it is asked" do
       assert Enum.take(~o"2026Y/..", 3) == [~o"2026Y", ~o"2027Y", ~o"2028Y"]
-      assert ~o"2026Y/.." |> Stream.drop(3) |> Enum.take(1) == [~o"2029Y"]
+
+      assert ~o"2026Y/.."
+             |> Stream.drop(3)
+             |> Enum.take(1) == [~o"2029Y"]
+
       assert Enum.find(~o"2026Y/..", &(Tempo.year(&1) == 2028)) == ~o"2028Y"
       refute Interval.empty?(~o"2026Y/..")
     end

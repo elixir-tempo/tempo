@@ -57,10 +57,13 @@ defmodule Tempo.Iso8601.Tokenizer do
   # (`Tempo.parse/2`) asks it too, so that a text the tokenizer refuses for
   # its length is not then read another way.
   @spec within_length(binary()) :: :ok | {:error, ParseError.t()}
-  def within_length(string) when byte_size(string) > @max_input_bytes,
-    do: {:error, too_long(string)}
+  def within_length(string) when byte_size(string) > @max_input_bytes do
+    {:error, too_long(string)}
+  end
 
-  def within_length(_string), do: :ok
+  def within_length(_string) do
+    :ok
+  end
 
   defp too_long(string) do
     ParseError.exception(
@@ -135,12 +138,17 @@ defmodule Tempo.Iso8601.Tokenizer do
   # The grammar's reading of a string, whatever its form: what
   # `tokenize/1` gives for every string, and the measure the scan of the
   # plain forms is held to.
-  def tokenize_by_grammar(string) when byte_size(string) > @max_input_bytes,
-    do: tokenize(string)
+  def tokenize_by_grammar(string) when byte_size(string) > @max_input_bytes do
+    tokenize(string)
+  end
 
   def tokenize_by_grammar(string) do
     with :ok <- within_limits(string) do
-      Memo.reading(fn -> string |> iso8601() |> return(string) end)
+      Memo.reading(fn ->
+        string
+        |> iso8601()
+        |> return(string)
+      end)
     end
   end
 
@@ -234,15 +242,28 @@ defmodule Tempo.Iso8601.Tokenizer do
   def tokenize(string, profile) when profile in @profiles do
     with :ok <- within_limits(string) do
       Memo.reading(fn ->
-        string |> parse_profile(profile) |> return_profile(string, profile)
+        string
+        |> parse_profile(profile)
+        |> return_profile(string, profile)
       end)
     end
   end
 
-  defp parse_profile(string, :date), do: date_only(string)
-  defp parse_profile(string, :datetime), do: datetime_only(string)
-  defp parse_profile(string, :time), do: time_only(string)
-  defp parse_profile(string, :interval), do: interval_only(string)
+  defp parse_profile(string, :date) do
+    date_only(string)
+  end
+
+  defp parse_profile(string, :datetime) do
+    datetime_only(string)
+  end
+
+  defp parse_profile(string, :time) do
+    time_only(string)
+  end
+
+  defp parse_profile(string, :interval) do
+    interval_only(string)
+  end
 
   # Mirrors `return/2` but names the profile in the failure, so the
   # error says what the value was required to be rather than only that
@@ -271,10 +292,21 @@ defmodule Tempo.Iso8601.Tokenizer do
      )}
   end
 
-  defp article(:date), do: "a date"
-  defp article(:datetime), do: "a datetime"
-  defp article(:time), do: "a time"
-  defp article(:interval), do: "an interval"
+  defp article(:date) do
+    "a date"
+  end
+
+  defp article(:datetime) do
+    "a datetime"
+  end
+
+  defp article(:time) do
+    "a time"
+  end
+
+  defp article(:interval) do
+    "an interval"
+  end
 
   # Walks the text once and says which bound it is past, if any.
   #
@@ -291,33 +323,48 @@ defmodule Tempo.Iso8601.Tokenizer do
   end
 
   defp over_a_limit(<<char, rest::binary>>, open, digits) when char in ?0..?9 or char == ?X do
-    if digits < @max_digits,
-      do: over_a_limit(rest, open, digits + 1),
-      else: "A number exceeds the limit of #{@max_digits} digits"
+    if digits < @max_digits do
+      over_a_limit(rest, open, digits + 1)
+    else
+      "A number exceeds the limit of #{@max_digits} digits"
+    end
   end
 
   defp over_a_limit(<<char, rest::binary>>, open, _digits) when char in [?{, ?[] do
-    if opened(open, :bracket) < @max_nesting_depth,
-      do: over_a_limit(rest, [:bracket | open], 0),
-      else: "Set/group nesting exceeds the depth limit of #{@max_nesting_depth}"
+    if opened(open, :bracket) < @max_nesting_depth do
+      over_a_limit(rest, [:bracket | open], 0)
+    else
+      "Set/group nesting exceeds the depth limit of #{@max_nesting_depth}"
+    end
   end
 
   defp over_a_limit(<<?L, rest::binary>>, open, _digits) do
-    if opened(open, :selection) < @max_selection_depth,
-      do: over_a_limit(rest, [:selection | open], 0),
-      else: "Selection nesting exceeds the depth limit of #{@max_selection_depth}"
+    if opened(open, :selection) < @max_selection_depth do
+      over_a_limit(rest, [:selection | open], 0)
+    else
+      "Selection nesting exceeds the depth limit of #{@max_selection_depth}"
+    end
   end
 
-  defp over_a_limit(<<char, rest::binary>>, open, _digits) when char in [?}, ?]],
-    do: over_a_limit(rest, bracket_closed(open), 0)
+  defp over_a_limit(<<char, rest::binary>>, open, _digits) when char in [?}, ?]] do
+    over_a_limit(rest, bracket_closed(open), 0)
+  end
 
-  defp over_a_limit(<<?N, rest::binary>>, [:selection | open], _digits),
-    do: over_a_limit(rest, open, 0)
+  defp over_a_limit(<<?N, rest::binary>>, [:selection | open], _digits) do
+    over_a_limit(rest, open, 0)
+  end
 
-  defp over_a_limit(<<_char, rest::binary>>, open, _digits), do: over_a_limit(rest, open, 0)
-  defp over_a_limit(<<>>, _open, _digits), do: nil
+  defp over_a_limit(<<_char, rest::binary>>, open, _digits) do
+    over_a_limit(rest, open, 0)
+  end
 
-  defp opened(open, kind), do: Enum.count(open, &(&1 == kind))
+  defp over_a_limit(<<>>, _open, _digits) do
+    nil
+  end
+
+  defp opened(open, kind) do
+    Enum.count(open, &(&1 == kind))
+  end
 
   defp bracket_closed(open) do
     case Enum.drop_while(open, &(&1 != :bracket)) do
@@ -360,7 +407,9 @@ defmodule Tempo.Iso8601.Tokenizer do
 
   # The IXDTF suffix alone, which follows a value the scan of the plain
   # forms has read (`plain_with_suffix/2`).
-  defparsec :suffix_only, Extended.extended_suffix() |> eos()
+  defparsec :suffix_only,
+            Extended.extended_suffix()
+            |> eos()
 
   # A second entry point admitting *only* a duration. `duration_parser`
   # already tags its result `:duration`, so the token shape matches what
@@ -370,7 +419,8 @@ defmodule Tempo.Iso8601.Tokenizer do
   # duration carrying a qualifier) is rejected rather than silently
   # truncated.
   defparsec :duration_only,
-            parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser}) |> eos()
+            parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser})
+            |> eos()
 
   # Profile entry points, one per shape a caller may want to *require*.
   # Each wraps its core parser in `profile_tokenizer/1` (so EDTF
@@ -379,14 +429,18 @@ defmodule Tempo.Iso8601.Tokenizer do
   # not a datetime, and `2026-06-15/2026-06-20` is not a date, even
   # though the general grammar can begin parsing both as one.
   defparsec :date_only,
-            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Date, :date_parser})) |> eos()
+            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Date, :date_parser}))
+            |> eos()
 
   defparsec :datetime_only,
-            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_parser})) |> eos()
+            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_parser}))
+            |> eos()
 
   defparsec :time_only,
-            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Time, :time_parser})) |> eos()
+            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Time, :time_parser}))
+            |> eos()
 
   defparsec :interval_only,
-            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser})) |> eos()
+            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser}))
+            |> eos()
 end

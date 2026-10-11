@@ -32,7 +32,9 @@ defmodule Tempo.UnboundedRecurrenceError do
   end
 
   @impl true
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{}) do
     "Cannot list the occurrences of an unbounded recurrence (recurrence: :infinity, no UNTIL). " <>

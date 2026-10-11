@@ -28,14 +28,31 @@ defmodule Tempo.RRule.SelectionCountedTest do
 
   ## The measure
 
-  defp to_say(count) when count > @most, do: :refused
-  defp to_say(count), do: {:spans, count}
+  defp to_say(count) when count > @most do
+    :refused
+  end
 
-  defp said({:ok, %IntervalSet{} = set}), do: {:spans, IntervalSet.count(set)}
-  defp said({:ok, %Interval{}}), do: {:spans, 1}
-  defp said({:error, %ConversionError{reason: :too_many_values}}), do: :refused
+  defp to_say(count) do
+    {:spans, count}
+  end
 
-  defp converted(text), do: text |> Tempo.from_iso8601!() |> Tempo.to_interval()
+  defp said({:ok, %IntervalSet{} = set}) do
+    {:spans, IntervalSet.count(set)}
+  end
+
+  defp said({:ok, %Interval{}}) do
+    {:spans, 1}
+  end
+
+  defp said({:error, %ConversionError{reason: :too_many_values}}) do
+    :refused
+  end
+
+  defp converted(text) do
+    text
+    |> Tempo.from_iso8601!()
+    |> Tempo.to_interval()
+  end
 
   # The seconds of a day's first hours that the clock of a zone shows.
   defp seconds_shown(date, hours, zone) do
@@ -121,7 +138,13 @@ defmodule Tempo.RRule.SelectionCountedTest do
 
     test "is one of them where there are 10,000 or fewer, and refused past them" do
       for {text, candidates} <- @positioned do
-        picked = if candidates > @most, do: :refused, else: {:spans, 1}
+        picked =
+          if candidates > @most do
+            :refused
+          else
+            {:spans, 1}
+          end
+
         assert {text, said(converted(text))} == {text, picked}
       end
     end
@@ -176,10 +199,13 @@ defmodule Tempo.RRule.SelectionCountedTest do
     # once, whatever its count or its window (decided 2026-10-08): every
     # minute of the working hours of a year was 140,000 occurrences made for
     # a count of ten. The measure is the product of what its parts name.
-    defp numbers(range), do: Enum.join(range, ",")
+    defp numbers(range) do
+      Enum.join(range, ",")
+    end
 
-    defp rule(text, from),
-      do: RRule.parse(text, from: Tempo.from_iso8601!(from))
+    defp rule(text, from) do
+      RRule.parse(text, from: Tempo.from_iso8601!(from))
+    end
 
     test "is refused where it gives more than 10,000 occurrences, however few are counted" do
       {:ok, minutes_of_working_hours} =
@@ -214,7 +240,13 @@ defmodule Tempo.RRule.SelectionCountedTest do
             "2026-06-15T00:00:00"
           )
 
-        expected = if count > @most, do: :refused, else: {:spans, 5}
+        expected =
+          if count > @most do
+            :refused
+          else
+            {:spans, 5}
+          end
+
         assert {count, said(Tempo.to_interval(daily))} == {count, expected}
       end
 

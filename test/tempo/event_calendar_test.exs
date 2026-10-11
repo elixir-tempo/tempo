@@ -44,7 +44,9 @@ defmodule Tempo.EventCalendarTest do
   @events ~w(easter orthodox-easter march-equinox september-equinox december-solstice new-moon
              qingming)
 
-  defp read(text, calendar), do: Tempo.from_iso8601!(text, calendar)
+  defp read(text, calendar) do
+    Tempo.from_iso8601!(text, calendar)
+  end
 
   # The Gregorian years about a year of a calendar, more than its neighbours
   # run through.
@@ -62,18 +64,29 @@ defmodule Tempo.EventCalendarTest do
         do: Date.convert!(date, calendar)
   end
 
-  defp in_year(dates, year), do: Enum.filter(dates, &(&1.year == year))
-  defp from_year(dates, year), do: Enum.filter(dates, &(&1.year >= year))
+  defp in_year(dates, year) do
+    Enum.filter(dates, &(&1.year == year))
+  end
+
+  defp from_year(dates, year) do
+    Enum.filter(dates, &(&1.year >= year))
+  end
 
   # The day each member of a set starts on, as a date of the set's calendar.
   defp dates({:ok, %IntervalSet{} = set}) do
     for member <- IntervalSet.members(set) do
-      {:ok, date} = member |> Interval.from() |> Tempo.to_date()
+      {:ok, date} =
+        member
+        |> Interval.from()
+        |> Tempo.to_date()
+
       date
     end
   end
 
-  defp gregorian(dates), do: Enum.map(dates, &Date.convert!(&1, Calendar.ISO))
+  defp gregorian(dates) do
+    Enum.map(dates, &Date.convert!(&1, Calendar.ISO))
+  end
 
   describe "a computed event in a year of another calendar" do
     for {calendar, year} <- @years do
@@ -85,7 +98,10 @@ defmodule Tempo.EventCalendarTest do
           selected = dates(Tempo.to_interval(every_year, within: read("#{year}Y", calendar)))
 
           assert {event, year, selected} ==
-                   {event, year, event |> event_dates(year, calendar) |> in_year(year)}
+                   {event, year,
+                    event
+                    |> event_dates(year, calendar)
+                    |> in_year(year)}
         end
       end
 
@@ -98,7 +114,10 @@ defmodule Tempo.EventCalendarTest do
 
           assert {event, selected} ==
                    {event,
-                    event |> event_dates(year, calendar) |> from_year(year) |> Enum.take(4)}
+                    event
+                    |> event_dates(year, calendar)
+                    |> from_year(year)
+                    |> Enum.take(4)}
         end
       end
 
@@ -107,7 +126,11 @@ defmodule Tempo.EventCalendarTest do
         year = unquote(year)
 
         for event <- @events do
-          in_the_year = event |> event_dates(year, calendar) |> in_year(year)
+          in_the_year =
+            event
+            |> event_dates(year, calendar)
+            |> in_year(year)
+
           span = read("#{year}Y", calendar)
 
           assert {event, dates(Tempo.select(span, read("L(#{event})eN", calendar)))} ==
@@ -161,9 +184,19 @@ defmodule Tempo.EventCalendarTest do
       test "is selected from the period of #{inspect(calendar)} it falls in" do
         calendar = unquote(calendar)
         year = unquote(year)
-        unit = if calendar in @weeks, do: "W", else: "M"
 
-        for event <- @events, date <- event |> event_dates(year, calendar) |> in_year(year) do
+        unit =
+          if calendar in @weeks do
+            "W"
+          else
+            "M"
+          end
+
+        for event <- @events,
+            date <-
+              event
+              |> event_dates(year, calendar)
+              |> in_year(year) do
           selector = read("L(#{event})eN", calendar)
           period = read("#{year}Y#{date.month}#{unit}", calendar)
           before = read("#{year}Y#{max(date.month - 1, 1)}#{unit}", calendar)
@@ -171,7 +204,11 @@ defmodule Tempo.EventCalendarTest do
           assert {event, dates(Tempo.select(period, selector))} == {event, [date]}
 
           if date.month > 1 do
-            others = event |> event_dates(year, calendar) |> in_year(year)
+            others =
+              event
+              |> event_dates(year, calendar)
+              |> in_year(year)
+
             in_before = Enum.filter(others, &(&1.month == date.month - 1))
 
             assert {event, dates(Tempo.select(before, selector))} == {event, in_before}
@@ -247,7 +284,10 @@ defmodule Tempo.EventCalendarTest do
 
         expected =
           for year <- 5780..5799,
-              date <- "easter" |> event_dates(year, Hebrew) |> in_year(year),
+              date <-
+                "easter"
+                |> event_dates(year, Hebrew)
+                |> in_year(year),
               date.month == month,
               do: date
 

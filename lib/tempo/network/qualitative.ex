@@ -73,7 +73,9 @@ defmodule Tempo.Network.Qualitative do
           RelationNetwork.t() | {:error, :inconsistent | Exception.t()}
   def from_network(%Network{} = network) do
     with :ok <- Network.check(network) do
-      network |> Calendars.inside() |> read_relations()
+      network
+      |> Calendars.inside()
+      |> read_relations()
     end
   end
 
@@ -163,10 +165,17 @@ defmodule Tempo.Network.Qualitative do
 
   # Only a set narrowed to one relation is convex enough for the metric
   # network. Two or more is a disjunction it cannot express.
-  defp determined_relation([single]) when is_atom(single), do: single
-  defp determined_relation(_ambiguous_or_error), do: nil
+  defp determined_relation([single]) when is_atom(single) do
+    single
+  end
 
-  defp add_determined(nil, network, _a, _b), do: network
+  defp determined_relation(_ambiguous_or_error) do
+    nil
+  end
+
+  defp add_determined(nil, network, _a, _b) do
+    network
+  end
 
   defp add_determined(allen, network, a, b) do
     type = Relation.from_allen(allen)

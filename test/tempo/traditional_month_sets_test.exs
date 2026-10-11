@@ -23,8 +23,13 @@ defmodule Tempo.TraditionalMonthSetsTest do
 
   # 5786 is a Hebrew year of twelve months, and 5787 and 5790 years of
   # thirteen. The Chinese year 4660 has a leap month after its second.
-  defp hebrew(text), do: Tempo.from_iso8601!(text <> "[u-ca=hebrew]")
-  defp chinese(text), do: Tempo.from_iso8601!(text <> "[u-ca=chinese]")
+  defp hebrew(text) do
+    Tempo.from_iso8601!(text <> "[u-ca=hebrew]")
+  end
+
+  defp chinese(text) do
+    Tempo.from_iso8601!(text <> "[u-ca=chinese]")
+  end
 
   defp members(value) do
     {:ok, set} = Tempo.to_interval_set(value)
@@ -32,7 +37,11 @@ defmodule Tempo.TraditionalMonthSetsTest do
   end
 
   # The name of the month each member of a value starts in.
-  defp month_names(value), do: value |> members() |> Enum.map(&name_of_month/1)
+  defp month_names(value) do
+    value
+    |> members()
+    |> Enum.map(&name_of_month/1)
+  end
 
   defp name_of_month(%Interval{from: %Tempo{time: time, calendar: calendar}}) do
     fields = %{year: time[:year], month: time[:month], calendar: calendar}

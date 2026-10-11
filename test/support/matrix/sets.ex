@@ -30,7 +30,9 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec ordered([span()]) :: [span()]
-  def ordered(spans), do: Enum.sort(spans)
+  def ordered(spans) do
+    Enum.sort(spans)
+  end
 
   @doc """
   The members of both lists.
@@ -45,7 +47,9 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec union([span()], [span()]) :: [span()]
-  def union(a, b), do: ordered(a ++ b)
+  def union(a, b) do
+    ordered(a ++ b)
+  end
 
   @doc """
   The time a list covers.
@@ -107,7 +111,9 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec pairwise([span()], [span()]) :: [span()]
-  def pairwise(a, b), do: pairwise(a, b, &first_mark/2)
+  def pairwise(a, b) do
+    pairwise(a, b, &first_mark/2)
+  end
 
   @doc """
   Each member of the first list cut to each member of the second it
@@ -136,7 +142,9 @@ defmodule Tempo.Matrix.Sets do
     )
   end
 
-  defp first_mark(mark, _other), do: mark
+  defp first_mark(mark, _other) do
+    mark
+  end
 
   @doc """
   Each member of the first list without the time the second covers.
@@ -173,7 +181,13 @@ defmodule Tempo.Matrix.Sets do
         end
       end)
 
-    Enum.reverse(if left < to, do: [{left, to} | parts], else: parts)
+    Enum.reverse(
+      if left < to do
+        [{left, to} | parts]
+      else
+        parts
+      end
+    )
   end
 
   @doc """
@@ -189,7 +203,9 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec symmetric_difference([span()], [span()]) :: [span()]
-  def symmetric_difference(a, b), do: ordered(difference(a, b) ++ difference(b, a))
+  def symmetric_difference(a, b) do
+    ordered(difference(a, b) ++ difference(b, a))
+  end
 
   @doc """
   The members of the first list that overlap a member of the second.
@@ -204,7 +220,11 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec members_overlapping([span()], [span()]) :: [span()]
-  def members_overlapping(a, b), do: a |> Enum.filter(&overlaps_any?(&1, b)) |> ordered()
+  def members_overlapping(a, b) do
+    a
+    |> Enum.filter(&overlaps_any?(&1, b))
+    |> ordered()
+  end
 
   @doc """
   The members of the first list that overlap no member of the second.
@@ -219,7 +239,11 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec members_outside([span()], [span()]) :: [span()]
-  def members_outside(a, b), do: a |> Enum.reject(&overlaps_any?(&1, b)) |> ordered()
+  def members_outside(a, b) do
+    a
+    |> Enum.reject(&overlaps_any?(&1, b))
+    |> ordered()
+  end
 
   @doc """
   The members of either list that overlap no member of the other.
@@ -234,14 +258,15 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec members_in_exactly_one([span()], [span()]) :: [span()]
-  def members_in_exactly_one(a, b),
-    do: ordered(members_outside(a, b) ++ members_outside(b, a))
+  def members_in_exactly_one(a, b) do
+    ordered(members_outside(a, b) ++ members_outside(b, a))
+  end
 
-  defp overlaps_any?({from, to, _id}, others),
-    do:
-      Enum.any?(others, fn {other_from, other_to, _other_id} ->
-        from < other_to and other_from < to
-      end)
+  defp overlaps_any?({from, to, _id}, others) do
+    Enum.any?(others, fn {other_from, other_to, _other_id} ->
+      from < other_to and other_from < to
+    end)
+  end
 
   @doc """
   Whether two members of one list overlap each other.
@@ -286,7 +311,10 @@ defmodule Tempo.Matrix.Sets do
   @spec covered([span()], pos_integer()) :: [stretch()]
   def covered(spans, at_least) do
     edges =
-      spans |> Enum.flat_map(fn {from, to, _id} -> [from, to] end) |> Enum.uniq() |> Enum.sort()
+      spans
+      |> Enum.flat_map(fn {from, to, _id} -> [from, to] end)
+      |> Enum.uniq()
+      |> Enum.sort()
 
     edges
     |> Enum.chunk_every(2, 1, :discard)
@@ -372,7 +400,10 @@ defmodule Tempo.Matrix.Sets do
   """
   @spec difference_on_cycle([span()], [span()], pos_integer()) :: [span()]
   def difference_on_cycle(a, b, cells) do
-    taken = b |> Enum.flat_map(&arc_cells(&1, cells)) |> MapSet.new()
+    taken =
+      b
+      |> Enum.flat_map(&arc_cells(&1, cells))
+      |> MapSet.new()
 
     ordered(
       for {_from, _to, id} = member <- a,
@@ -399,7 +430,9 @@ defmodule Tempo.Matrix.Sets do
 
   """
   @spec pairwise_on_cycle([span()], [span()], pos_integer()) :: [span()]
-  def pairwise_on_cycle(a, b, cells), do: pairwise_on_cycle(a, b, cells, &first_mark/2)
+  def pairwise_on_cycle(a, b, cells) do
+    pairwise_on_cycle(a, b, cells, &first_mark/2)
+  end
 
   @doc """
   The parts `pairwise_on_cycle/3` gives, marked by both members.
@@ -449,7 +482,10 @@ defmodule Tempo.Matrix.Sets do
   """
   @spec members_on_cycle([span()], [span()], pos_integer(), :overlapping | :outside) :: [span()]
   def members_on_cycle(a, b, cells, kept) do
-    held = b |> Enum.flat_map(&arc_cells(&1, cells)) |> MapSet.new()
+    held =
+      b
+      |> Enum.flat_map(&arc_cells(&1, cells))
+      |> MapSet.new()
 
     a
     |> Enum.filter(fn member ->
@@ -478,10 +514,13 @@ defmodule Tempo.Matrix.Sets do
   # The cycle cut at every end of an arc: between two cuts next to each
   # other every arc either holds all of the cell or none of it. The last
   # cell runs through the cycle's end to the first cut.
-  defp cells_around([], _length), do: []
+  defp cells_around([], _length) do
+    []
+  end
 
-  defp cells_around([first | later] = cuts, length),
-    do: Enum.zip(cuts, later ++ [first + length])
+  defp cells_around([first | later] = cuts, length) do
+    Enum.zip(cuts, later ++ [first + length])
+  end
 
   # How many arcs hold a position: those it is no further round from the
   # start of than the arc is long.
@@ -491,8 +530,13 @@ defmodule Tempo.Matrix.Sets do
     end)
   end
 
-  defp reach(from, from, length), do: length
-  defp reach(from, to, length), do: Integer.mod(to - from, length)
+  defp reach(from, from, length) do
+    length
+  end
+
+  defp reach(from, to, length) do
+    Integer.mod(to - from, length)
+  end
 
   # The runs of covered cells, going round from a cell that is not covered
   # so that no run is cut where the list starts.
@@ -501,8 +545,13 @@ defmodule Tempo.Matrix.Sets do
     runs_from(rest, leading, length)
   end
 
-  defp runs_from([], [], _length), do: []
-  defp runs_from([], _all_covered, _length), do: [{0, 0}]
+  defp runs_from([], [], _length) do
+    []
+  end
+
+  defp runs_from([], _all_covered, _length) do
+    [{0, 0}]
+  end
 
   defp runs_from(rest, leading, length) do
     next_turn =

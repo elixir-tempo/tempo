@@ -65,20 +65,35 @@ defmodule Tempo.DayWithNoMonthTest do
     |> Enum.map(&Date.add(first, &1 - 1))
   end
 
-  defp counted(number, last) when number < 0, do: last + 1 + number
-  defp counted(number, _last), do: number
+  defp counted(number, last) when number < 0 do
+    last + 1 + number
+  end
+
+  defp counted(number, _last) do
+    number
+  end
 
   # The day each span starts on, each span a day long.
   defp days({:ok, %IntervalSet{} = set}) do
     for member <- IntervalSet.members(set) do
-      {:ok, from} = member |> Interval.from() |> Tempo.to_date()
-      {:ok, to} = member |> Interval.to() |> Tempo.to_date()
+      {:ok, from} =
+        member
+        |> Interval.from()
+        |> Tempo.to_date()
+
+      {:ok, to} =
+        member
+        |> Interval.to()
+        |> Tempo.to_date()
+
       assert Date.diff(to, from) == 1
       from
     end
   end
 
-  defp read(text, calendar \\ Calendar.ISO), do: Tempo.from_iso8601!(text, calendar)
+  defp read(text, calendar \\ Calendar.ISO) do
+    Tempo.from_iso8601!(text, calendar)
+  end
 
   describe "a value's selection after a year" do
     test "is the days of the year it names" do

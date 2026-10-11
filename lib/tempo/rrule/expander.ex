@@ -196,13 +196,29 @@ defmodule Tempo.RRule.Expander do
   # §3.3.10, RFC 8984 §4.3.3), and where it has a count that is a number of
   # occurrences, none or more. One that steps by nothing gave its start
   # again for each of its count, and a count of none was read as no count.
-  defp steps_by(nil), do: {:ok, 1}
-  defp steps_by(interval) when is_integer(interval) and interval > 0, do: {:ok, interval}
-  defp steps_by(other), do: {:error, {:invalid_interval, other}}
+  defp steps_by(nil) do
+    {:ok, 1}
+  end
 
-  defp counted(nil), do: {:ok, :infinity}
-  defp counted(count) when is_integer(count) and count >= 0, do: {:ok, count}
-  defp counted(other), do: {:error, {:invalid_count, other}}
+  defp steps_by(interval) when is_integer(interval) and interval > 0 do
+    {:ok, interval}
+  end
+
+  defp steps_by(other) do
+    {:error, {:invalid_interval, other}}
+  end
+
+  defp counted(nil) do
+    {:ok, :infinity}
+  end
+
+  defp counted(count) when is_integer(count) and count >= 0 do
+    {:ok, count}
+  end
+
+  defp counted(other) do
+    {:error, {:invalid_count, other}}
+  end
 
   defp recurring(%Rule{} = rule, dtstart, interval, recurrence, options) do
     cadence = %Tempo.Duration{time: [{rule.freq, interval}]}
@@ -236,12 +252,20 @@ defmodule Tempo.RRule.Expander do
   # `Tempo.RRule.Rule.to_selection/1` — the single source of truth for the
   # RRULE/cron → selection mapping — so this path and `Tempo.RRule.parse/2`
   # cannot diverge. Returns nil for the simple recurrence with no BY-rules.
-  defp repeat_rule(%Rule{} = rule, dtstart), do: Rule.to_selection(rule, dtstart)
+  defp repeat_rule(%Rule{} = rule, dtstart) do
+    Rule.to_selection(rule, dtstart)
+  end
 
-  defp put_if_given(map, _key, nil, _pred), do: map
+  defp put_if_given(map, _key, nil, _pred) do
+    map
+  end
 
   defp put_if_given(map, key, value, pred) do
-    if pred.(value), do: Map.put(map, key, value), else: map
+    if pred.(value) do
+      Map.put(map, key, value)
+    else
+      map
+    end
   end
 
   ## ------------------------------------------------------------
@@ -322,33 +346,101 @@ defmodule Tempo.RRule.Expander do
       end
     end
 
-    defp map_freq(:secondly), do: {:ok, :second}
-    defp map_freq(:minutely), do: {:ok, :minute}
-    defp map_freq(:hourly), do: {:ok, :hour}
-    defp map_freq(:daily), do: {:ok, :day}
-    defp map_freq(:weekly), do: {:ok, :week}
-    defp map_freq(:monthly), do: {:ok, :month}
-    defp map_freq(:yearly), do: {:ok, :year}
-    defp map_freq(_), do: :error
+    defp map_freq(:secondly) do
+      {:ok, :second}
+    end
 
-    defp convert_until(nil), do: nil
-    defp convert_until(%DateTime{} = dt), do: Tempo.from_elixir(Calendars.in_rule(dt))
-    defp convert_until(%Date{} = d), do: Tempo.from_elixir(Calendars.in_rule(d))
-    defp convert_until(%NaiveDateTime{} = ndt), do: Tempo.from_elixir(Calendars.in_rule(ndt))
-    defp convert_until(_), do: nil
+    defp map_freq(:minutely) do
+      {:ok, :minute}
+    end
 
-    defp map_weekday(nil), do: nil
-    defp map_weekday(:monday), do: 1
-    defp map_weekday(:tuesday), do: 2
-    defp map_weekday(:wednesday), do: 3
-    defp map_weekday(:thursday), do: 4
-    defp map_weekday(:friday), do: 5
-    defp map_weekday(:saturday), do: 6
-    defp map_weekday(:sunday), do: 7
-    defp map_weekday(_), do: nil
+    defp map_freq(:hourly) do
+      {:ok, :hour}
+    end
 
-    defp map_byday(nil), do: nil
-    defp map_byday([]), do: nil
+    defp map_freq(:daily) do
+      {:ok, :day}
+    end
+
+    defp map_freq(:weekly) do
+      {:ok, :week}
+    end
+
+    defp map_freq(:monthly) do
+      {:ok, :month}
+    end
+
+    defp map_freq(:yearly) do
+      {:ok, :year}
+    end
+
+    defp map_freq(_) do
+      :error
+    end
+
+    defp convert_until(nil) do
+      nil
+    end
+
+    defp convert_until(%DateTime{} = dt) do
+      Tempo.from_elixir(Calendars.in_rule(dt))
+    end
+
+    defp convert_until(%Date{} = d) do
+      Tempo.from_elixir(Calendars.in_rule(d))
+    end
+
+    defp convert_until(%NaiveDateTime{} = ndt) do
+      Tempo.from_elixir(Calendars.in_rule(ndt))
+    end
+
+    defp convert_until(_) do
+      nil
+    end
+
+    defp map_weekday(nil) do
+      nil
+    end
+
+    defp map_weekday(:monday) do
+      1
+    end
+
+    defp map_weekday(:tuesday) do
+      2
+    end
+
+    defp map_weekday(:wednesday) do
+      3
+    end
+
+    defp map_weekday(:thursday) do
+      4
+    end
+
+    defp map_weekday(:friday) do
+      5
+    end
+
+    defp map_weekday(:saturday) do
+      6
+    end
+
+    defp map_weekday(:sunday) do
+      7
+    end
+
+    defp map_weekday(_) do
+      nil
+    end
+
+    defp map_byday(nil) do
+      nil
+    end
+
+    defp map_byday([]) do
+      nil
+    end
 
     defp map_byday(entries) when is_list(entries) do
       Enum.map(entries, &map_byday_entry/1)

@@ -52,7 +52,9 @@ defmodule Tempo.Network.ChronoLog do
   """
   @spec from_file(Path.t()) :: Network.t()
   def from_file(path) do
-    path |> File.read!() |> from_json()
+    path
+    |> File.read!()
+    |> from_json()
   end
 
   @doc """
@@ -117,7 +119,9 @@ defmodule Tempo.Network.ChronoLog do
     end
   end
 
-  defp years(count), do: Tempo.from_iso8601!("P#{count}Y")
+  defp years(count) do
+    Tempo.from_iso8601!("P#{count}Y")
+  end
 
   # --- synchronisms ----------------------------------------------
 
@@ -152,30 +156,60 @@ defmodule Tempo.Network.ChronoLog do
   end
 
   # Qualitative synchronisms with a one-to-one Tempo relation.
-  defp relation_for(type) when type in ["Equals", "Equality"], do: :equals
-  defp relation_for("Starts with"), do: :synchronous_start
-  defp relation_for("Ends with"), do: :synchronous_end
-  defp relation_for(type) when type in ["Included in", "Is included in"], do: :included_in
-  defp relation_for("Includes"), do: :includes
+  defp relation_for(type) when type in ["Equals", "Equality"] do
+    :equals
+  end
+
+  defp relation_for("Starts with") do
+    :synchronous_start
+  end
+
+  defp relation_for("Ends with") do
+    :synchronous_end
+  end
+
+  defp relation_for(type) when type in ["Included in", "Is included in"] do
+    :included_in
+  end
+
+  defp relation_for("Includes") do
+    :includes
+  end
 
   # Single-boundary inequalities map to the boundary-comparison relation.
 
   # start(A) ≥ start(B).
-  defp relation_for(type) when type in ["Starts after or at start of", "Starts after start of"],
-    do: {:boundary, :start, :at_or_after, :start}
+  defp relation_for(type) when type in ["Starts after or at start of", "Starts after start of"] do
+    {:boundary, :start, :at_or_after, :start}
+  end
 
   # end(A) ≥ start(B).
-  defp relation_for(type) when type in ["Ends after or at start of", "Ends after start of"],
-    do: {:boundary, :end, :at_or_after, :start}
+  defp relation_for(type) when type in ["Ends after or at start of", "Ends after start of"] do
+    {:boundary, :end, :at_or_after, :start}
+  end
 
   # end(A) ≤ start(B).
-  defp relation_for("Ends before or at start of"),
-    do: {:boundary, :end, :at_or_before, :start}
+  defp relation_for("Ends before or at start of") do
+    {:boundary, :end, :at_or_before, :start}
+  end
 
-  defp comparison("e"), do: :exactly
-  defp comparison("l"), do: :at_least
-  defp comparison("m"), do: :at_most
+  defp comparison("e") do
+    :exactly
+  end
 
-  defp boundary("s"), do: :start
-  defp boundary("e"), do: :end
+  defp comparison("l") do
+    :at_least
+  end
+
+  defp comparison("m") do
+    :at_most
+  end
+
+  defp boundary("s") do
+    :start
+  end
+
+  defp boundary("e") do
+    :end
+  end
 end

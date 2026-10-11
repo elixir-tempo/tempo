@@ -136,7 +136,11 @@ defmodule Tempo.Interval.RelationNetwork do
           Relations.t() | {:error, {:unknown_label, label()}}
   def between(%__MODULE__{} = network, a, b) do
     with :ok <- known(network, a), :ok <- known(network, b) do
-      if a == b, do: [:equals], else: Map.fetch!(network.edges, {a, b})
+      if a == b do
+        [:equals]
+      else
+        Map.fetch!(network.edges, {a, b})
+      end
     end
   end
 
@@ -290,7 +294,9 @@ defmodule Tempo.Interval.RelationNetwork do
   # Queue-driven fixpoint. A pair is queued when its set narrows; each
   # queued pair is re-examined against every third label, in both the
   # `(i,j),(j,k)` and `(k,i),(i,j)` directions, because either can tighten.
-  defp run(network, []), do: {:ok, network}
+  defp run(network, []) do
+    {:ok, network}
+  end
 
   defp run(network, [{i, j} | queue]) do
     case revise_through(network, i, j, queue) do
@@ -348,6 +354,10 @@ defmodule Tempo.Interval.RelationNetwork do
   end
 
   defp known(%__MODULE__{labels: labels}, label) do
-    if label in labels, do: :ok, else: {:error, {:unknown_label, label}}
+    if label in labels do
+      :ok
+    else
+      {:error, {:unknown_label, label}}
+    end
   end
 end

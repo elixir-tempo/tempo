@@ -181,16 +181,25 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  def as_long_as_its_start(metadata, _frequency, _start, _makes_points?), do: metadata
+  def as_long_as_its_start(metadata, _frequency, _start, _makes_points?) do
+    metadata
+  end
 
   # The unit a start is precise to, as the unit of a length: a day however
   # it is counted. A start precise to a fraction of a second, or to no unit
   # a length is counted in, leaves its rule's occurrences as long as it steps.
-  defp unit_of_a_length(unit) when unit in [:year, :month, :week, :day, :hour, :minute, :second],
-    do: {:ok, unit}
+  defp unit_of_a_length(unit)
+       when unit in [:year, :month, :week, :day, :hour, :minute, :second] do
+    {:ok, unit}
+  end
 
-  defp unit_of_a_length(unit) when unit in [:day_of_week, :day_of_year], do: {:ok, :day}
-  defp unit_of_a_length(_other), do: :error
+  defp unit_of_a_length(unit) when unit in [:day_of_week, :day_of_year] do
+    {:ok, :day}
+  end
+
+  defp unit_of_a_length(_other) do
+    :error
+  end
 
   @doc """
   Reads a month as a rule writes it.
@@ -228,7 +237,9 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  def month_from_text(_other), do: :error
+  def month_from_text(_other) do
+    :error
+  end
 
   @doc """
   Returns whether the leap months a rule names are ones its calendar can have.
@@ -275,11 +286,17 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  defp leap_month?({_month, :leap}), do: true
-  defp leap_month?(_month), do: false
+  defp leap_month?({_month, :leap}) do
+    true
+  end
 
-  defp leap_months_in(nil, leap, _leap_months, _skip),
-    do: {:error, {:leap_month_without_rscale, leap}}
+  defp leap_month?(_month) do
+    false
+  end
+
+  defp leap_months_in(nil, leap, _leap_months, _skip) do
+    {:error, {:leap_month_without_rscale, leap}}
+  end
 
   defp leap_months_in(calendar, leap, leap_months, skip) do
     case UnitValues.in_any_year(:month, [], calendar) do
@@ -300,7 +317,9 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  defp moved_within_the_year(_leap_months, _last_month, _skip), do: :ok
+  defp moved_within_the_year(_leap_months, _last_month, _skip) do
+    :ok
+  end
 
   @doc """
   Returns the calendar a rule's `RSCALE` names.
@@ -334,7 +353,9 @@ defmodule Tempo.RRule.Rule do
   """
   @spec calendar_from_rscale(String.t() | nil) ::
           {:ok, module() | nil} | {:error, {:unsupported_rscale, term()}}
-  def calendar_from_rscale(nil), do: {:ok, nil}
+  def calendar_from_rscale(nil) do
+    {:ok, nil}
+  end
 
   def calendar_from_rscale(name) when is_binary(name) do
     case Calendrical.calendar_from_cldr_calendar_type(String.downcase(name)) do
@@ -343,7 +364,9 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  def calendar_from_rscale(other), do: {:error, {:unsupported_rscale, other}}
+  def calendar_from_rscale(other) do
+    {:error, {:unsupported_rscale, other}}
+  end
 
   # RFC 7529 names the calendar every RFC 5545 rule is counted in GREGORIAN,
   # and a rule that says so is the rule that names none: its calendar is the
@@ -351,9 +374,11 @@ defmodule Tempo.RRule.Rule do
   defp named_by_rscale(calendar) do
     of_a_rule = Calendars.rule()
 
-    if calendar.cldr_calendar_type() == of_a_rule.cldr_calendar_type(),
-      do: of_a_rule,
-      else: calendar
+    if calendar.cldr_calendar_type() == of_a_rule.cldr_calendar_type() do
+      of_a_rule
+    else
+      calendar
+    end
   end
 
   @doc """
@@ -386,11 +411,17 @@ defmodule Tempo.RRule.Rule do
   """
   @spec start_in_rscale(t(), Tempo.t() | nil) ::
           {:ok, Tempo.t() | nil} | {:error, {:from_is_no_date, Tempo.t()}}
-  def start_in_rscale(%__MODULE__{rscale: nil}, start), do: {:ok, start}
-  def start_in_rscale(%__MODULE__{}, nil), do: {:ok, nil}
+  def start_in_rscale(%__MODULE__{rscale: nil}, start) do
+    {:ok, start}
+  end
 
-  def start_in_rscale(%__MODULE__{rscale: calendar}, %Tempo{calendar: calendar} = start),
-    do: {:ok, start}
+  def start_in_rscale(%__MODULE__{}, nil) do
+    {:ok, nil}
+  end
+
+  def start_in_rscale(%__MODULE__{rscale: calendar}, %Tempo{calendar: calendar} = start) do
+    {:ok, start}
+  end
 
   def start_in_rscale(%__MODULE__{rscale: calendar}, %Tempo{} = start) do
     case Tempo.to_calendar(start, calendar) do
@@ -524,7 +555,9 @@ defmodule Tempo.RRule.Rule do
   # year. That is the traditional month (`m`) in a calendar whose years
   # differ in their months, and the month in order (`M`) in every other,
   # where the two are one.
-  defp month_unit(nil), do: :month
+  defp month_unit(nil) do
+    :month
+  end
 
   defp month_unit(calendar) do
     case UnitValues.in_any_year(:month, [], calendar) do
@@ -550,10 +583,17 @@ defmodule Tempo.RRule.Rule do
     |> push_by(rule.bysecond, :second)
   end
 
-  defp push_times(acc, _rule, false), do: acc
+  defp push_times(acc, _rule, false) do
+    acc
+  end
 
-  defp non_default_wkst?(%__MODULE__{wkst: wkst}) when is_integer(wkst) and wkst != 1, do: true
-  defp non_default_wkst?(_rule), do: false
+  defp non_default_wkst?(%__MODULE__{wkst: wkst}) when is_integer(wkst) and wkst != 1 do
+    true
+  end
+
+  defp non_default_wkst?(_rule) do
+    false
+  end
 
   # ISO 8601-2 Annex C.3 lists what RFC 5545 takes from the start of a rule
   # that does not say it, and Annex C.4 has a conversion state each one: the
@@ -574,16 +614,24 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  defp with_parts_of_start(rule, _no_start), do: rule
+  defp with_parts_of_start(rule, _no_start) do
+    rule
+  end
 
   defp with_parts_of(%__MODULE__{freq: :week} = rule, _month, _day, dtstart) do
-    if names_weekday?(rule), do: rule, else: with_weekday_of(rule, dtstart)
+    if names_weekday?(rule) do
+      rule
+    else
+      with_weekday_of(rule, dtstart)
+    end
   end
 
   defp with_parts_of(%__MODULE__{freq: :month} = rule, _month, day, _dtstart) do
-    if names_day_of_month?(rule) or names_weekday?(rule) or keeps_last_day?(rule),
-      do: rule,
-      else: %{rule | bymonthday: [day]}
+    if names_day_of_month?(rule) or names_weekday?(rule) or keeps_last_day?(rule) do
+      rule
+    else
+      %{rule | bymonthday: [day]}
+    end
   end
 
   defp with_parts_of(%__MODULE__{freq: :year, byyearday: days} = rule, month, day, dtstart)
@@ -593,7 +641,9 @@ defmodule Tempo.RRule.Rule do
     |> with_day_of_start(rule, day, dtstart)
   end
 
-  defp with_parts_of(rule, _month, _day, _dtstart), do: rule
+  defp with_parts_of(rule, _month, _day, _dtstart) do
+    rule
+  end
 
   # "If no BYMONTH or BYWEEKNO parameter is set: if the BYMONTHDAY parameter
   # is provided, then the BYMONTH selection is inherited from the calendar
@@ -615,9 +665,11 @@ defmodule Tempo.RRule.Rule do
   # month's place, as `SKIP=FORWARD` does, whatever the rule's `SKIP`.
   defp with_month_of_start(rule, written, month, %Tempo{calendar: calendar})
        when is_notation(calendar) do
-    if takes_month_of_start?(written) and not keeps_last_day?(written),
-      do: %{rule | bymonth: [month]},
-      else: rule
+    if takes_month_of_start?(written) and not keeps_last_day?(written) do
+      %{rule | bymonth: [month]}
+    else
+      rule
+    end
   end
 
   defp with_month_of_start(
@@ -635,7 +687,9 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  defp with_month_of_start(rule, _written, _month, _dtstart), do: rule
+  defp with_month_of_start(rule, _written, _month, _dtstart) do
+    rule
+  end
 
   defp takes_month_of_start?(written) do
     empty?(written.bymonth) and empty?(written.byweekno) and
@@ -658,11 +712,14 @@ defmodule Tempo.RRule.Rule do
   # A rule that keeps the last day of a period without its start's day
   # (`skip: :backward`) leaves the day, and the month it is in, to the step
   # from its start, which the calendar's own arithmetic takes to that day.
-  defp keeps_last_day?(%__MODULE__{skip: skip}), do: skip == :backward
+  defp keeps_last_day?(%__MODULE__{skip: skip}) do
+    skip == :backward
+  end
 
   # The weekday is Monday 1 to Sunday 7, as BYDAY numbers it.
-  defp with_weekday_of(rule, dtstart),
-    do: %{rule | byday: [{nil, Tempo.day_of_week(dtstart, :monday)}]}
+  defp with_weekday_of(rule, dtstart) do
+    %{rule | byday: [{nil, Tempo.day_of_week(dtstart, :monday)}]}
+  end
 
   # A cron day of the month that is the nearest weekday, or a day of the
   # month or of the week, names its day as BYMONTHDAY and BYDAY do.
@@ -671,17 +728,33 @@ defmodule Tempo.RRule.Rule do
            empty?(rule.bymonthday_or_byday))
   end
 
-  defp names_weekday?(%__MODULE__{} = rule),
-    do: not (empty?(rule.byday) and empty?(rule.bymonthday_or_byday))
+  defp names_weekday?(%__MODULE__{} = rule) do
+    not (empty?(rule.byday) and empty?(rule.bymonthday_or_byday))
+  end
 
-  defp empty?(part), do: part in [nil, []]
+  defp empty?(part) do
+    part in [nil, []]
+  end
 
-  defp push_by(acc, nil, _unit), do: acc
-  defp push_by(acc, [], _unit), do: acc
-  defp push_by(acc, [single], unit), do: [{unit, single} | acc]
-  defp push_by(acc, list, unit) when is_list(list), do: [{unit, list} | acc]
+  defp push_by(acc, nil, _unit) do
+    acc
+  end
 
-  defp push_or_day(acc, nil), do: acc
+  defp push_by(acc, [], _unit) do
+    acc
+  end
+
+  defp push_by(acc, [single], unit) do
+    [{unit, single} | acc]
+  end
+
+  defp push_by(acc, list, unit) when is_list(list) do
+    [{unit, list} | acc]
+  end
+
+  defp push_or_day(acc, nil) do
+    acc
+  end
 
   defp push_or_day(acc, {monthdays, byday_entries}) do
     [{:or_day, {List.wrap(monthdays), List.wrap(byday_entries)}} | acc]
@@ -699,8 +772,13 @@ defmodule Tempo.RRule.Rule do
   #   * an ordinal beside a BYSETPOS, which takes the selection's one position,
   #     and one beside a part that narrows what a position counts, stay
   #     `{:byday, entries}` too.
-  defp push_byday(acc, nil, _position), do: acc
-  defp push_byday(acc, [], _position), do: acc
+  defp push_byday(acc, nil, _position) do
+    acc
+  end
+
+  defp push_byday(acc, [], _position) do
+    acc
+  end
 
   defp push_byday(acc, entries, position) when is_list(entries) do
     cond do
@@ -721,11 +799,14 @@ defmodule Tempo.RRule.Rule do
   # BYSETPOS for the selection's one position, or would not say the same
   # (`numbered_weekday_is_position?/3`).
   defp position_of_numbered_weekday(%__MODULE__{byday: [_ | _] = byday, bysetpos: nil} = rule) do
-    if numbered_weekday_is_position?(rule.freq, rule.bymonth, names_another_day?(rule)),
-      do: single_weekday_ordinals(byday)
+    if numbered_weekday_is_position?(rule.freq, rule.bymonth, names_another_day?(rule)) do
+      single_weekday_ordinals(byday)
+    end
   end
 
-  defp position_of_numbered_weekday(_rule), do: nil
+  defp position_of_numbered_weekday(_rule) do
+    nil
+  end
 
   defp names_another_day?(%__MODULE__{} = rule) do
     names_day_of_month?(rule) or not (empty?(rule.byyearday) and empty?(rule.byweekno))
@@ -749,19 +830,30 @@ defmodule Tempo.RRule.Rule do
   # Months as a rule lists them, or as a selection holds them: one number,
   # or a list of numbers and ranges.
   defp several?(months) do
-    case months |> List.wrap() |> Enum.flat_map(&each_month/1) do
+    case months
+         |> List.wrap()
+         |> Enum.flat_map(&each_month/1) do
       [_first, _second | _rest] -> true
       _one_or_none -> false
     end
   end
 
-  defp each_month(%Range{} = months), do: Enum.to_list(months)
-  defp each_month(month), do: [month]
+  defp each_month(%Range{} = months) do
+    Enum.to_list(months)
+  end
+
+  defp each_month(month) do
+    [month]
+  end
 
   # `{day, ordinals}` when every entry carries a non-nil ordinal on a single
   # distinct weekday; `nil` otherwise. One ordinal collapses to an integer.
   defp single_weekday_ordinals(entries) do
-    days = entries |> Enum.map(fn {_ordinal, day} -> day end) |> Enum.uniq()
+    days =
+      entries
+      |> Enum.map(fn {_ordinal, day} -> day end)
+      |> Enum.uniq()
+
     ordinals = Enum.map(entries, fn {ordinal, _day} -> ordinal end)
 
     if match?([_], days) and Enum.all?(ordinals, &(not is_nil(&1))) do
@@ -769,11 +861,21 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  defp collapse_single([one]), do: one
-  defp collapse_single(many), do: many
+  defp collapse_single([one]) do
+    one
+  end
 
-  defp push_day_of_week(acc, [single]), do: [{:day_of_week, single} | acc]
-  defp push_day_of_week(acc, days), do: [{:day_of_week, days} | acc]
+  defp collapse_single(many) do
+    many
+  end
+
+  defp push_day_of_week(acc, [single]) do
+    [{:day_of_week, single} | acc]
+  end
+
+  defp push_day_of_week(acc, days) do
+    [{:day_of_week, days} | acc]
+  end
 
   # A rule's `:skip` is written into its selection where it moves a day: in
   # a monthly or a yearly rule that states a day of the month some month
@@ -785,12 +887,16 @@ defmodule Tempo.RRule.Rule do
   # has none moves to the month before it or after it (RFC 7529 §4.1).
   defp push_skip(acc, %__MODULE__{skip: skip} = rule, calendar)
        when skip in [:backward, :forward] do
-    if moves_a_day?(rule, calendar) or Enum.any?(List.wrap(rule.bymonth), &leap_month?/1),
-      do: [{:skip, skip} | acc],
-      else: acc
+    if moves_a_day?(rule, calendar) or Enum.any?(List.wrap(rule.bymonth), &leap_month?/1) do
+      [{:skip, skip} | acc]
+    else
+      acc
+    end
   end
 
-  defp push_skip(acc, _rule, _calendar), do: acc
+  defp push_skip(acc, _rule, _calendar) do
+    acc
+  end
 
   # Whether a rule states a day of the month that some month of its calendar
   # may lack, counted from either end: a day past the fewest days any of the
@@ -808,7 +914,9 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  defp moves_a_day?(_rule, _calendar), do: false
+  defp moves_a_day?(_rule, _calendar) do
+    false
+  end
 
   # The fewest days a month of the calendar has, of every month it may have
   # and in every year, as `Tempo.UnitValues.in_any_year/3` reads the
@@ -831,11 +939,21 @@ defmodule Tempo.RRule.Rule do
     end
   end
 
-  defp calendar_of_start(%Tempo{calendar: calendar}) when not is_nil(calendar), do: calendar
-  defp calendar_of_start(_no_start), do: Calendars.default()
+  defp calendar_of_start(%Tempo{calendar: calendar}) when not is_nil(calendar) do
+    calendar
+  end
+
+  defp calendar_of_start(_no_start) do
+    Calendars.default()
+  end
 
   # Only emit `{:wkst, n}` for a non-default week start (WKST=MO is 1); the
   # common case keeps the AST identical and the token signals intent.
-  defp push_wkst(acc, wkst) when is_integer(wkst) and wkst in 2..7, do: [{:wkst, wkst} | acc]
-  defp push_wkst(acc, _wkst), do: acc
+  defp push_wkst(acc, wkst) when is_integer(wkst) and wkst in 2..7 do
+    [{:wkst, wkst} | acc]
+  end
+
+  defp push_wkst(acc, _wkst) do
+    acc
+  end
 end

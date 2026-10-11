@@ -77,7 +77,9 @@ defmodule Tempo.Schedule do
 
   """
   @spec new() :: t()
-  def new, do: %__MODULE__{network: Network.new()}
+  def new do
+    %__MODULE__{network: Network.new()}
+  end
 
   @doc """
   Add a task to the schedule.
@@ -174,7 +176,10 @@ defmodule Tempo.Schedule do
           | {:error, :infeasible | Exception.t()}
   def solve(%__MODULE__{network: network} = schedule) do
     if Calendars.outside?(schedule) do
-      schedule |> Calendars.inside() |> solve() |> Calendars.outside()
+      schedule
+      |> Calendars.inside()
+      |> solve()
+      |> Calendars.outside()
     else
       solved(Solver.propagate(network))
     end
@@ -262,9 +267,14 @@ defmodule Tempo.Schedule do
           Tempo.Interval.t() | {:error, Exception.t()}
   def span(plan) when is_map(plan) do
     if Calendars.outside?(plan) do
-      plan |> Calendars.inside() |> span() |> Calendars.outside()
+      plan
+      |> Calendars.inside()
+      |> span()
+      |> Calendars.outside()
     else
-      case plan |> Map.values() |> Enum.map(& &1.early) do
+      case plan
+           |> Map.values()
+           |> Enum.map(& &1.early) do
         [_ | _] = schedules -> span_of(schedules)
         [] -> {:error, no_span("A plan with no tasks has no span.")}
       end
@@ -273,8 +283,16 @@ defmodule Tempo.Schedule do
 
   defp span_of(schedules) do
     if Enum.all?(schedules, &match?(%Interval{}, &1)) do
-      from = schedules |> Enum.map(&Interval.from/1) |> Enum.min_by(&Compare.to_utc_seconds/1)
-      to = schedules |> Enum.map(&Interval.to/1) |> Enum.max_by(&Compare.to_utc_seconds/1)
+      from =
+        schedules
+        |> Enum.map(&Interval.from/1)
+        |> Enum.min_by(&Compare.to_utc_seconds/1)
+
+      to =
+        schedules
+        |> Enum.map(&Interval.to/1)
+        |> Enum.max_by(&Compare.to_utc_seconds/1)
+
       Interval.new!(from: from, to: to)
     else
       {:error,
@@ -285,7 +303,9 @@ defmodule Tempo.Schedule do
     end
   end
 
-  defp no_span(reason), do: IntervalEndpointsError.exception(operation: :span, reason: reason)
+  defp no_span(reason) do
+    IntervalEndpointsError.exception(operation: :span, reason: reason)
+  end
 
   # --- task options → period bounds ------------------------------
 
@@ -295,8 +315,9 @@ defmodule Tempo.Schedule do
     |> add_dependencies(id, Keyword.get(options, :after, []))
   end
 
-  defp add_task(network, _id, _options, {:error, exception}),
-    do: Network.record_error(network, exception)
+  defp add_task(network, _id, _options, {:error, exception}) do
+    Network.record_error(network, exception)
+  end
 
   defp task_options(options) do
     if Keyword.keyword?(options) do
@@ -309,21 +330,26 @@ defmodule Tempo.Schedule do
     end
   end
 
-  defp unknown_task_option(nil, options), do: within_option(Keyword.get(options, :within))
+  defp unknown_task_option(nil, options) do
+    within_option(Keyword.get(options, :within))
+  end
 
-  defp unknown_task_option(:earliest, _options),
-    do: {:error, invalid("takes :not_before where 1.x took :earliest")}
+  defp unknown_task_option(:earliest, _options) do
+    {:error, invalid("takes :not_before where 1.x took :earliest")}
+  end
 
-  defp unknown_task_option(key, _options),
-    do:
-      {:error,
-       invalid(
-         "does not take #{Calendars.inspect(key)}; its options are #{Calendars.inspect(@task_options)}"
-       )}
+  defp unknown_task_option(key, _options) do
+    {:error,
+     invalid(
+       "does not take #{Calendars.inspect(key)}; its options are #{Calendars.inspect(@task_options)}"
+     )}
+  end
 
   # A window is a value or an interval with both its ends, as it is
   # wherever `:within` is taken. It was a `{from, to}` pair here alone.
-  defp within_option(nil), do: :ok
+  defp within_option(nil) do
+    :ok
+  end
 
   defp within_option({_from, _to}) do
     {:error,
@@ -347,17 +373,28 @@ defmodule Tempo.Schedule do
     end
   end
 
-  defp window_ends(%Tempo.Interval{} = window), do: ends_of(Tempo.to_interval(window))
-  defp window_ends(%Tempo{} = window), do: ends_of(Tempo.to_interval(window))
-  defp window_ends(_other), do: :error
+  defp window_ends(%Tempo.Interval{} = window) do
+    ends_of(Tempo.to_interval(window))
+  end
+
+  defp window_ends(%Tempo{} = window) do
+    ends_of(Tempo.to_interval(window))
+  end
+
+  defp window_ends(_other) do
+    :error
+  end
 
   # A bound is a point: a month given as one is read as any day of it, so
   # the window's ends are written to the day they fall on, where they are
   # coarser than one. June's end is the start of 1 July.
-  defp ends_of({:ok, %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}}),
-    do: {:ok, {to_the_day(from), to_the_day(to)}}
+  defp ends_of({:ok, %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}}) do
+    {:ok, {to_the_day(from), to_the_day(to)}}
+  end
 
-  defp ends_of(_no_one_span), do: :error
+  defp ends_of(_no_one_span) do
+    :error
+  end
 
   defp to_the_day(%Tempo{} = point) do
     case Tempo.extend_resolution(point, :day) do
@@ -366,7 +403,9 @@ defmodule Tempo.Schedule do
     end
   end
 
-  defp invalid(phrase), do: ArgumentError.exception("Tempo.Schedule.task/3 #{phrase}.")
+  defp invalid(phrase) do
+    ArgumentError.exception("Tempo.Schedule.task/3 #{phrase}.")
+  end
 
   defp period_options(options) do
     []
@@ -375,8 +414,13 @@ defmodule Tempo.Schedule do
     |> put_to(options)
   end
 
-  defp put_duration(opts, nil), do: opts
-  defp put_duration(opts, duration), do: Keyword.put(opts, :duration, duration)
+  defp put_duration(opts, nil) do
+    opts
+  end
+
+  defp put_duration(opts, duration) do
+    Keyword.put(opts, :duration, duration)
+  end
 
   defp put_from(opts, options) do
     cond do
@@ -392,9 +436,11 @@ defmodule Tempo.Schedule do
   end
 
   defp put_to(opts, options) do
-    if Keyword.has_key?(options, :deadline),
-      do: Keyword.put(opts, :to, {:not_after, Keyword.fetch!(options, :deadline)}),
-      else: within(opts, :to, :not_after, options)
+    if Keyword.has_key?(options, :deadline) do
+      Keyword.put(opts, :to, {:not_after, Keyword.fetch!(options, :deadline)})
+    else
+      within(opts, :to, :not_after, options)
+    end
   end
 
   # The window's start bounds the task's start and its end the task's end,
@@ -402,7 +448,16 @@ defmodule Tempo.Schedule do
   defp within(opts, bound, kind, options) do
     case window_ends(Keyword.get(options, :within)) do
       {:ok, {from, to}} ->
-        Keyword.put(opts, bound, {kind, if(bound == :from, do: from, else: to)})
+        Keyword.put(
+          opts,
+          bound,
+          {kind,
+           if bound == :from do
+             from
+           else
+             to
+           end}
+        )
 
       :error ->
         opts
@@ -433,8 +488,13 @@ defmodule Tempo.Schedule do
   # A schedule is known when both its ends are: the early one when the
   # plan is placed by a fixed start or :not_before date, the late one
   # when something bounds how late the task can run.
-  defp schedule_interval(%Tempo{} = from, %Tempo{} = to), do: %Interval{from: from, to: to}
-  defp schedule_interval(_from, _to), do: nil
+  defp schedule_interval(%Tempo{} = from, %Tempo{} = to) do
+    %Interval{from: from, to: to}
+  end
+
+  defp schedule_interval(_from, _to) do
+    nil
+  end
 
   # Critical when the early and late starts coincide (no slack). When
   # there is no deadline the late start is unbounded (`nil`) and
@@ -443,7 +503,9 @@ defmodule Tempo.Schedule do
     Compare.compare_endpoints(earliest, latest) == :same
   end
 
-  defp critical?(_earliest, _latest), do: nil
+  defp critical?(_earliest, _latest) do
+    nil
+  end
 
   defp start_not_after?(a, b) do
     Compare.compare_endpoints(a, b) in [:earlier, :same]

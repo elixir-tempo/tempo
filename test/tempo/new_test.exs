@@ -190,7 +190,11 @@ defmodule Tempo.NewTest do
 
       assert t.extended.tags == %{"source" => ["form"], "x-kind" => ["a1", "b2"]}
       assert Tempo.metadata(t) == %{}
-      assert {:ok, ^t} = t |> Tempo.to_iso8601!() |> Tempo.from_iso8601()
+
+      assert {:ok, ^t} =
+               t
+               |> Tempo.to_iso8601!()
+               |> Tempo.from_iso8601()
     end
 
     test "a tag IXDTF cannot write is an error, never a crash in to_iso8601/1" do
@@ -220,7 +224,9 @@ defmodule Tempo.NewTest do
       value = Tempo.put_metadata(~o"2026Y{6,12}M", %{kind: :solstice_month})
       {:ok, set} = Tempo.to_interval(value)
 
-      assert set |> IntervalSet.members() |> Enum.map(&Interval.metadata/1) ==
+      assert set
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.metadata/1) ==
                [%{kind: :solstice_month}, %{kind: :solstice_month}]
     end
 

@@ -603,6 +603,9 @@ defmodule Tempo.CronTest do
   defp firings(expression, from, within) do
     {:ok, cron} = Cron.parse(expression, from: from)
     {:ok, set} = Tempo.to_interval(cron, within: within)
-    set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&Tempo.to_iso8601!/1)
   end
 end

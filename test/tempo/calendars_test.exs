@@ -20,12 +20,29 @@ defmodule Tempo.CalendarsTest do
   # Whether a term holds a module anywhere in it, read whole: every element
   # of a list and of a tuple, every key and value of a map and of a struct.
   # A stream is what a value keeps to give later, and is not read.
-  defp holds?(module, module), do: true
-  defp holds?(%Stream{}, _module), do: false
-  defp holds?([head | tail], module), do: holds?(head, module) or holds?(tail, module)
-  defp holds?(term, module) when is_tuple(term), do: holds?(Tuple.to_list(term), module)
-  defp holds?(term, module) when is_map(term), do: holds?(Map.to_list(term), module)
-  defp holds?(_term, _module), do: false
+  defp holds?(module, module) do
+    true
+  end
+
+  defp holds?(%Stream{}, _module) do
+    false
+  end
+
+  defp holds?([head | tail], module) do
+    holds?(head, module) or holds?(tail, module)
+  end
+
+  defp holds?(term, module) when is_tuple(term) do
+    holds?(Tuple.to_list(term), module)
+  end
+
+  defp holds?(term, module) when is_map(term) do
+    holds?(Map.to_list(term), module)
+  end
+
+  defp holds?(_term, _module) do
+    false
+  end
 
   # What is wrong with a term's crossing, if anything.
   defp crossing(term) do
@@ -160,7 +177,10 @@ defmodule Tempo.CalendarsTest do
       plain =
         for path <- Path.wildcard("lib/**/*.ex"),
             path not in own_writers,
-            {line, number} <- path |> File.read!() |> code_lines(),
+            {line, number} <-
+              path
+              |> File.read!()
+              |> code_lines(),
             Regex.match?(~r/(?<![.\w])inspect\(|&inspect\//, line),
             do: "#{path}:#{number}"
 
@@ -168,8 +188,9 @@ defmodule Tempo.CalendarsTest do
     end
   end
 
-  defp message_of({:error, exception}) when is_exception(exception),
-    do: Exception.message(exception)
+  defp message_of({:error, exception}) when is_exception(exception) do
+    Exception.message(exception)
+  end
 
   # The lines of a source file that are code: no comment, and no line of a
   # `@doc`, a `@moduledoc` or a `@typedoc`.

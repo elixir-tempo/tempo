@@ -35,12 +35,15 @@ defmodule Tempo.InvalidDateError do
   # it could have been (`Tempo.Validation.conform/3`).
   @impl true
   def message(%__MODULE__{reason: reason, valid_range: range})
-      when is_binary(reason) and not is_nil(range),
-      do: reason
+      when is_binary(reason) and not is_nil(range) do
+    reason
+  end
 
   # A year a calendar does not have is said as it is: the calendar has no
   # run of years to list beside it.
-  def message(%__MODULE__{unit: :year, reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{unit: :year, reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{unit: unit, value: value, valid_range: range, year: y, month: m})
       when not is_nil(unit) and not is_nil(value) and not is_nil(range) do
@@ -53,18 +56,35 @@ defmodule Tempo.InvalidDateError do
     "Invalid #{unit}: #{Calendars.inspect(value)}"
   end
 
-  def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
+    reason
+  end
 
   def message(%__MODULE__{reason: reason}) when is_atom(reason) and not is_nil(reason) do
     "Invalid date: #{reason}"
   end
 
-  def message(%__MODULE__{}), do: "Invalid date"
+  def message(%__MODULE__{}) do
+    "Invalid date"
+  end
 
-  defp date_context(nil, nil), do: ""
-  defp date_context(y, nil), do: " in #{y}"
-  defp date_context(nil, m), do: " in month #{m}"
-  defp date_context(y, m), do: " in #{y}-#{pad2(m)}"
+  defp date_context(nil, nil) do
+    ""
+  end
 
-  defp pad2(m) when is_integer(m), do: String.pad_leading(Integer.to_string(m), 2, "0")
+  defp date_context(y, nil) do
+    " in #{y}"
+  end
+
+  defp date_context(nil, m) do
+    " in month #{m}"
+  end
+
+  defp date_context(y, m) do
+    " in #{y}-#{pad2(m)}"
+  end
+
+  defp pad2(m) when is_integer(m) do
+    String.pad_leading(Integer.to_string(m), 2, "0")
+  end
 end

@@ -76,7 +76,9 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
 
   ## The rules measured
 
-  defp parts(named), do: Enum.reject(named, fn {_part, value} -> is_nil(value) end)
+  defp parts(named) do
+    Enum.reject(named, fn {_part, value} -> is_nil(value) end)
+  end
 
   defp monthly(intervals, months, days_of_month, weekdays, positions, times) do
     for interval <- intervals,
@@ -124,8 +126,13 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
   ## The measure: `Date` and `NaiveDateTime` alone
 
   # The years a rule is measured over, from the start of its start's year.
-  defp years(:yearly), do: 4
-  defp years(_monthly_or_weekly), do: 2
+  defp years(:yearly) do
+    4
+  end
+
+  defp years(_monthly_or_weekly) do
+    2
+  end
 
   # Each occurrence of a rule from its start, as the moments it runs from
   # and to.
@@ -136,7 +143,10 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
     unit = unit_of(parts, start)
 
     for days <- periods(frequency, parts, start.date, ends),
-        from <- days |> Enum.filter(&day?(frequency, parts, &1, start.date)) |> set(parts, start),
+        from <-
+          days
+          |> Enum.filter(&day?(frequency, parts, &1, start.date))
+          |> set(parts, start),
         NaiveDateTime.compare(from, start.moment) != :lt,
         NaiveDateTime.compare(from, window_ends) == :lt,
         do: {from, NaiveDateTime.add(from, 1, unit)}
@@ -177,7 +187,11 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
   defp periods(:monthly, parts, start, ends) do
     start
     |> Date.beginning_of_month()
-    |> Stream.iterate(&(&1 |> Date.end_of_month() |> Date.add(1)))
+    |> Stream.iterate(
+      &(&1
+        |> Date.end_of_month()
+        |> Date.add(1))
+    )
     |> Stream.take_every(Keyword.get(parts, :interval, 1))
     |> Enum.take_while(&(Date.compare(&1, ends) == :lt))
     |> Enum.map(&Enum.to_list(Date.range(&1, Date.end_of_month(&1))))
@@ -215,52 +229,80 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
   end
 
   defp of_start(:monthly, named, start) do
-    if Keyword.has_key?(named, :day_of_month) or Keyword.has_key?(named, :weekday),
-      do: [],
-      else: [day_of_month: [start.day]]
+    if Keyword.has_key?(named, :day_of_month) or Keyword.has_key?(named, :weekday) do
+      []
+    else
+      [day_of_month: [start.day]]
+    end
   end
 
   defp of_start(:weekly, named, start) do
-    if Keyword.has_key?(named, :weekday),
-      do: [],
-      else: [weekday: [{nil, Date.day_of_week(start)}]]
+    if Keyword.has_key?(named, :weekday) do
+      []
+    else
+      [weekday: [{nil, Date.day_of_week(start)}]]
+    end
   end
 
   # What a numbered weekday is counted in: the month, and in a yearly rule
   # the year where its days are of no one month — it names none, and names
   # no day of the month to be in its start's.
   defp counted_in(:yearly, named) do
-    if Keyword.has_key?(named, :month) or Keyword.has_key?(named, :day_of_month),
-      do: :month,
-      else: :year
+    if Keyword.has_key?(named, :month) or Keyword.has_key?(named, :day_of_month) do
+      :month
+    else
+      :year
+    end
   end
 
-  defp counted_in(_monthly_or_weekly, _named), do: :month
+  defp counted_in(_monthly_or_weekly, _named) do
+    :month
+  end
 
-  defp holds?({:month, months}, date, _counted_in), do: date.month in months
+  defp holds?({:month, months}, date, _counted_in) do
+    date.month in months
+  end
 
-  defp holds?({:weekday, weekdays}, date, counted_in),
-    do: Enum.any?(weekdays, &weekday?(&1, date, counted_in))
+  defp holds?({:weekday, weekdays}, date, counted_in) do
+    Enum.any?(weekdays, &weekday?(&1, date, counted_in))
+  end
 
   # A day is counted from the start of its month or, by a negative number,
   # from its end.
-  defp holds?({:day_of_month, days}, date, _counted_in),
-    do: date.day in days or (date.day - Date.days_in_month(date) - 1) in days
+  defp holds?({:day_of_month, days}, date, _counted_in) do
+    date.day in days or (date.day - Date.days_in_month(date) - 1) in days
+  end
 
-  defp weekday?({nil, day}, date, _counted_in), do: Date.day_of_week(date) == day
+  defp weekday?({nil, day}, date, _counted_in) do
+    Date.day_of_week(date) == day
+  end
 
   defp weekday?({nth, day}, date, counted_in) do
     {place, last} = place_in(date, counted_in)
-    nth_of_its_kind = if nth > 0, do: div(place - 1, 7) + 1, else: -(div(last - place, 7) + 1)
+
+    nth_of_its_kind =
+      if nth > 0 do
+        div(place - 1, 7) + 1
+      else
+        -(div(last - place, 7) + 1)
+      end
 
     Date.day_of_week(date) == day and nth_of_its_kind == nth
   end
 
   # A date's place in its month or its year, and the place of the last day.
-  defp place_in(date, :month), do: {date.day, Date.days_in_month(date)}
+  defp place_in(date, :month) do
+    {date.day, Date.days_in_month(date)}
+  end
 
-  defp place_in(date, :year),
-    do: {Date.day_of_year(date), if(Date.leap_year?(date), do: 366, else: 365)}
+  defp place_in(date, :year) do
+    {Date.day_of_year(date),
+     if Date.leap_year?(date) do
+       366
+     else
+       365
+     end}
+  end
 
   # A period's set: each time of day the rule names, or its start has, on
   # each of its days, in the order of time, and of those the ones a position
@@ -275,13 +317,25 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
     counted(moments, Keyword.get(parts, :position))
   end
 
-  defp hours(parts, %{time: nil}), do: Keyword.get(parts, :hour, [0])
-  defp hours(parts, %{time: time}), do: Keyword.get(parts, :hour, [time.hour])
+  defp hours(parts, %{time: nil}) do
+    Keyword.get(parts, :hour, [0])
+  end
 
-  defp minutes(parts, %{time: nil}), do: Keyword.get(parts, :minute, [0])
-  defp minutes(parts, %{time: time}), do: Keyword.get(parts, :minute, [time.minute])
+  defp hours(parts, %{time: time}) do
+    Keyword.get(parts, :hour, [time.hour])
+  end
 
-  defp counted(moments, nil), do: moments
+  defp minutes(parts, %{time: nil}) do
+    Keyword.get(parts, :minute, [0])
+  end
+
+  defp minutes(parts, %{time: time}) do
+    Keyword.get(parts, :minute, [time.minute])
+  end
+
+  defp counted(moments, nil) do
+    moments
+  end
 
   defp counted(moments, positions) do
     positions
@@ -297,22 +351,45 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
   ## The rule as an RRULE, and what the library gives for it
 
   defp rrule({frequency, parts}) do
-    Enum.join(
-      ["FREQ=#{frequency |> Atom.to_string() |> String.upcase()}" | Enum.map(parts, &by_part/1)],
-      ";"
-    )
+    written =
+      frequency
+      |> Atom.to_string()
+      |> String.upcase()
+
+    Enum.join(["FREQ=#{written}" | Enum.map(parts, &by_part/1)], ";")
   end
 
-  defp by_part({:interval, interval}), do: "INTERVAL=#{interval}"
-  defp by_part({:week_start, day}), do: "WKST=#{@day_names[day]}"
-  defp by_part({:month, months}), do: "BYMONTH=#{Enum.join(months, ",")}"
-  defp by_part({:day_of_month, days}), do: "BYMONTHDAY=#{Enum.join(days, ",")}"
-  defp by_part({:hour, hours}), do: "BYHOUR=#{Enum.join(hours, ",")}"
-  defp by_part({:minute, minutes}), do: "BYMINUTE=#{Enum.join(minutes, ",")}"
-  defp by_part({:position, positions}), do: "BYSETPOS=#{Enum.join(positions, ",")}"
+  defp by_part({:interval, interval}) do
+    "INTERVAL=#{interval}"
+  end
 
-  defp by_part({:weekday, weekdays}),
-    do: "BYDAY=" <> Enum.map_join(weekdays, ",", fn {nth, day} -> "#{nth}#{@day_names[day]}" end)
+  defp by_part({:week_start, day}) do
+    "WKST=#{@day_names[day]}"
+  end
+
+  defp by_part({:month, months}) do
+    "BYMONTH=#{Enum.join(months, ",")}"
+  end
+
+  defp by_part({:day_of_month, days}) do
+    "BYMONTHDAY=#{Enum.join(days, ",")}"
+  end
+
+  defp by_part({:hour, hours}) do
+    "BYHOUR=#{Enum.join(hours, ",")}"
+  end
+
+  defp by_part({:minute, minutes}) do
+    "BYMINUTE=#{Enum.join(minutes, ",")}"
+  end
+
+  defp by_part({:position, positions}) do
+    "BYSETPOS=#{Enum.join(positions, ",")}"
+  end
+
+  defp by_part({:weekday, weekdays}) do
+    "BYDAY=" <> Enum.map_join(weekdays, ",", fn {nth, day} -> "#{nth}#{@day_names[day]}" end)
+  end
 
   # The occurrences of an RRULE from a start, in so many years from the
   # start of the start's year, as the moments each runs from and to.
@@ -331,7 +408,9 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
   # The moment an occurrence starts or ends at, or the value itself where it
   # names none.
   defp moment(endpoint) do
-    case endpoint |> Tempo.extend_resolution(:second) |> Tempo.to_naive_datetime() do
+    case endpoint
+         |> Tempo.extend_resolution(:second)
+         |> Tempo.to_naive_datetime() do
       {:ok, moment} -> moment
       {:error, _no_moment} -> endpoint
     end
@@ -366,7 +445,11 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
     end
   end
 
-  defp first(occurrences), do: occurrences |> Enum.take(3) |> Enum.map(&elem(&1, 0))
+  defp first(occurrences) do
+    occurrences
+    |> Enum.take(3)
+    |> Enum.map(&elem(&1, 0))
+  end
 
   describe "a monthly rule read from an RRULE" do
     test "selects the days that satisfy every part that names one" do
@@ -468,7 +551,9 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
     test "asks a month of the days it makes, not of the day its start steps to" do
       # From a Saturday, the week of Monday 30 March 2026 is stepped to by
       # Saturday 4 April: its Tuesday is in March, and its Saturday is not.
-      assert "FREQ=WEEKLY;BYMONTH=3;BYDAY=TU" |> days(@the_31st) |> Enum.take(5) ==
+      assert "FREQ=WEEKLY;BYMONTH=3;BYDAY=TU"
+             |> days(@the_31st)
+             |> Enum.take(5) ==
                [~D[2026-03-03], ~D[2026-03-10], ~D[2026-03-17], ~D[2026-03-24], ~D[2026-03-31]]
 
       in_april = days("FREQ=WEEKLY;BYMONTH=4;BYDAY=TU,SA", @the_31st)

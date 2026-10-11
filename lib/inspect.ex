@@ -32,7 +32,9 @@ defmodule Tempo.Inspect do
 
   """
   @spec to_iodata(term()) :: iodata()
-  def to_iodata(value), do: to_iodata(value, Calendars.default())
+  def to_iodata(value) do
+    to_iodata(value, Calendars.default())
+  end
 
   # The encoding with a value in `implied` left unnamed: the Gregorian
   # calendar a bare ISO 8601 string reads as, or the ISO week calendar the
@@ -41,7 +43,9 @@ defmodule Tempo.Inspect do
     {value, qualification} = hoist_shared_qualification(value)
     {value, zone, tags} = hoist_shared_zone(value)
 
-    case value |> with_calendar_names(implied) |> hoist_calendar_name(implied) do
+    case value
+         |> with_calendar_names(implied)
+         |> hoist_calendar_name(implied) do
       {value, calendar} ->
         with_trailers(inspect_value(value), [qualification, zone, calendar, tags])
     end
@@ -49,14 +53,21 @@ defmodule Tempo.Inspect do
 
   # A value with nothing written after it is its body alone.
   defp with_trailers(body, trailers) do
-    if Enum.all?(trailers, &(&1 == [])), do: body, else: [body | trailers]
+    if Enum.all?(trailers, &(&1 == [])) do
+      body
+    else
+      [body | trailers]
+    end
   end
 
   # A qualification written after a set qualifies each of its members, and a
   # member's own inside the braces does not parse, so one the members share
   # is written once, after the set, before any suffix.
   defp hoist_shared_qualification(%Tempo.Set{} = set) do
-    case set |> named_values() |> Enum.map(&Qualification.whole/1) |> Enum.uniq() do
+    case set
+         |> named_values()
+         |> Enum.map(&Qualification.whole/1)
+         |> Enum.uniq() do
       [qualification] when not is_nil(qualification) ->
         {map_named(set, &%{&1 | qualifications: nil}), inspect_qualification(qualification)}
 
@@ -65,24 +76,33 @@ defmodule Tempo.Inspect do
     end
   end
 
-  defp hoist_shared_qualification(value), do: {value, []}
+  defp hoist_shared_qualification(value) do
+    {value, []}
+  end
 
   # The zone and tags a set's members share are written once, after the set,
   # where they read back as each member's — in IXDTF's order, the zone before
   # the calendar and the tags after it. A recurrence's domain is a set, whose
   # zone is written after the recurrence. Members in different zones keep
   # their own, each written after its member, as it is read there.
-  defp hoist_shared_zone(%Tempo.Set{} = set), do: hoist_zone(set)
+  defp hoist_shared_zone(%Tempo.Set{} = set) do
+    hoist_zone(set)
+  end
 
   defp hoist_shared_zone(%Tempo.Interval{from: %Tempo.Set{} = domain} = interval) do
     {domain, zone, tags} = hoist_zone(domain)
     {%{interval | from: domain}, zone, tags}
   end
 
-  defp hoist_shared_zone(value), do: {value, [], []}
+  defp hoist_shared_zone(value) do
+    {value, [], []}
+  end
 
   defp hoist_zone(set) do
-    case set |> named_values() |> Enum.map(&zone_of/1) |> Enum.uniq() do
+    case set
+         |> named_values()
+         |> Enum.map(&zone_of/1)
+         |> Enum.uniq() do
       [%{} = shared] ->
         {map_named(set, &without_zone/1), [zone_id_trailer(shared), zone_offset_trailer(shared)],
          tags_trailer(shared)}
@@ -96,11 +116,14 @@ defmodule Tempo.Inspect do
     zone = Map.take(extended, [:zone_id, :zone_offset, :zone_critical, :tags])
 
     if is_binary(zone[:zone_id]) or is_integer(zone[:zone_offset]) or
-         map_size(zone[:tags] || %{}) > 0,
-       do: zone
+         map_size(zone[:tags] || %{}) > 0 do
+      zone
+    end
   end
 
-  defp zone_of(_value), do: nil
+  defp zone_of(_value) do
+    nil
+  end
 
   defp without_zone(%Tempo{extended: %{} = extended} = tempo) do
     unzoned =
@@ -109,7 +132,9 @@ defmodule Tempo.Inspect do
     %{tempo | extended: unzoned}
   end
 
-  defp without_zone(tempo), do: tempo
+  defp without_zone(tempo) do
+    tempo
+  end
 
   @doc """
   The calendar in a Tempo value that ISO 8601 cannot write: one with no IXDTF
@@ -122,11 +147,18 @@ defmodule Tempo.Inspect do
   def unnamed_calendar(value) do
     value
     |> unnamed_values()
-    |> Enum.find_value(fn tempo -> if not reads_as_gregorian?(tempo), do: tempo.calendar end)
+    |> Enum.find_value(fn tempo ->
+      if not reads_as_gregorian?(tempo) do
+        tempo.calendar
+      end
+    end)
   end
 
-  defp unnamed_values(value),
-    do: value |> named_values() |> Enum.filter(&(calendar_name(&1) == :unnamed))
+  defp unnamed_values(value) do
+    value
+    |> named_values()
+    |> Enum.filter(&(calendar_name(&1) == :unnamed))
+  end
 
   # A value in a calendar without a name reads back as Gregorian, which names
   # the same days when the two number them alike from where its span starts —
@@ -168,13 +200,17 @@ defmodule Tempo.Inspect do
   # set's members, the ends of its ranges and the members it excludes carry
   # it; a selection's own values and a recurrence's rule take theirs from the
   # value around them.
-  defp with_calendar_names(value, implied),
-    do: map_named(value, &with_calendar_name(&1, implied))
+  defp with_calendar_names(value, implied) do
+    map_named(value, &with_calendar_name(&1, implied))
+  end
 
-  defp map_named(%Tempo{} = tempo, fun), do: fun.(tempo)
+  defp map_named(%Tempo{} = tempo, fun) do
+    fun.(tempo)
+  end
 
-  defp map_named(%Tempo.Interval{from: from, to: to} = interval, fun),
-    do: %{interval | from: map_named(from, fun), to: map_named(to, fun)}
+  defp map_named(%Tempo.Interval{from: from, to: to} = interval, fun) do
+    %{interval | from: map_named(from, fun), to: map_named(to, fun)}
+  end
 
   defp map_named(%Tempo.Set{set: members, except: except} = set, fun) do
     %{
@@ -184,23 +220,33 @@ defmodule Tempo.Inspect do
     }
   end
 
-  defp map_named(%Tempo.Range{first: first, last: last} = range, fun),
-    do: %{range | first: map_named(first, fun), last: map_named(last, fun)}
+  defp map_named(%Tempo.Range{first: first, last: last} = range, fun) do
+    %{range | first: map_named(first, fun), last: map_named(last, fun)}
+  end
 
-  defp map_named(value, _fun), do: value
+  defp map_named(value, _fun) do
+    value
+  end
 
-  defp named_values(%Tempo{} = tempo), do: [tempo]
+  defp named_values(%Tempo{} = tempo) do
+    [tempo]
+  end
 
-  defp named_values(%Tempo.Interval{from: from, to: to}),
-    do: named_values(from) ++ named_values(to)
+  defp named_values(%Tempo.Interval{from: from, to: to}) do
+    named_values(from) ++ named_values(to)
+  end
 
-  defp named_values(%Tempo.Set{set: members, except: except}),
-    do: Enum.flat_map(members ++ except, &named_values/1)
+  defp named_values(%Tempo.Set{set: members, except: except}) do
+    Enum.flat_map(members ++ except, &named_values/1)
+  end
 
-  defp named_values(%Tempo.Range{first: first, last: last}),
-    do: named_values(first) ++ named_values(last)
+  defp named_values(%Tempo.Range{first: first, last: last}) do
+    named_values(first) ++ named_values(last)
+  end
 
-  defp named_values(_value), do: []
+  defp named_values(_value) do
+    []
+  end
 
   # A suffix inside a set's braces does not parse, so the calendar a set's
   # members share is written once, after the set, where it reads back as the
@@ -208,24 +254,32 @@ defmodule Tempo.Inspect do
   # after the whole recurrence, which a start in the same calendar shares; its
   # domain counts Gregorian years whatever the rule's calendar, and is written
   # without one. Parts in different calendars keep their own names.
-  defp hoist_calendar_name(%Tempo.Set{} = set, _implied),
-    do: hoist_shared_name(set, written_names(set))
+  defp hoist_calendar_name(%Tempo.Set{} = set, _implied) do
+    hoist_shared_name(set, written_names(set))
+  end
 
-  defp hoist_calendar_name(%Tempo.Interval{from: nil} = interval, _implied), do: {interval, []}
+  defp hoist_calendar_name(%Tempo.Interval{from: nil} = interval, _implied) do
+    {interval, []}
+  end
 
   defp hoist_calendar_name(
          %Tempo.Interval{from: %Tempo.Set{} = domain, repeat_rule: rule} = interval,
          implied
        ) do
-    if Enum.all?(written_names(domain), &is_nil/1),
-      do: {interval, rule_trailer(rule, implied)},
-      else: {interval, []}
+    if Enum.all?(written_names(domain), &is_nil/1) do
+      {interval, rule_trailer(rule, implied)}
+    else
+      {interval, []}
+    end
   end
 
-  defp hoist_calendar_name(%Tempo.Interval{repeat_rule: %Tempo{} = rule} = interval, implied),
-    do: hoist_shared_name(interval, written_names(interval) ++ rule_names(rule, implied))
+  defp hoist_calendar_name(%Tempo.Interval{repeat_rule: %Tempo{} = rule} = interval, implied) do
+    hoist_shared_name(interval, written_names(interval) ++ rule_names(rule, implied))
+  end
 
-  defp hoist_calendar_name(value, _implied), do: {value, []}
+  defp hoist_calendar_name(value, _implied) do
+    {value, []}
+  end
 
   defp rule_trailer(rule, implied) do
     case rule_names(rule, implied) do
@@ -244,14 +298,27 @@ defmodule Tempo.Inspect do
     end
   end
 
-  defp written_names(value),
-    do: value |> named_values() |> Enum.map(&written_name/1)
+  defp written_names(value) do
+    value
+    |> named_values()
+    |> Enum.map(&written_name/1)
+  end
 
-  defp written_name(%Tempo{extended: %{calendar: name}}), do: name
-  defp written_name(%Tempo{}), do: nil
+  defp written_name(%Tempo{extended: %{calendar: name}}) do
+    name
+  end
 
-  defp rule_names(%Tempo{} = rule, implied), do: [calendar_name(rule, implied)]
-  defp rule_names(_no_rule, _implied), do: []
+  defp written_name(%Tempo{}) do
+    nil
+  end
+
+  defp rule_names(%Tempo{} = rule, implied) do
+    [calendar_name(rule, implied)]
+  end
+
+  defp rule_names(_no_rule, _implied) do
+    []
+  end
 
   defp with_calendar_name(%Tempo{} = tempo, implied) do
     case calendar_name(tempo, implied) do
@@ -267,25 +334,41 @@ defmodule Tempo.Inspect do
   # out from the calendar module, the one record a value keeps of its
   # calendar, and carried in the `extended` of the copy being written.
   defp calendar_name(%Tempo{calendar: calendar}, implied \\ Calendars.default()) do
-    if calendar in [Calendars.default(), implied], do: nil, else: faithful_name(calendar)
+    if calendar in [Calendars.default(), implied] do
+      nil
+    else
+      faithful_name(calendar)
+    end
   end
 
-  defp week_based?(calendar), do: Tempo.week_based_calendar?(calendar)
+  defp week_based?(calendar) do
+    Tempo.week_based_calendar?(calendar)
+  end
 
   defp faithful_name(calendar) do
     [additional_calendar_module_name(calendar), cldr_calendar_type(calendar)]
     |> Enum.find_value(:unnamed, fn
-      {:ok, name} -> if names?(name, calendar), do: name
-      :error -> nil
+      {:ok, name} ->
+        if names?(name, calendar) do
+          name
+        end
+
+      :error ->
+        nil
     end)
   end
 
-  defp names?(name, calendar),
-    do: Calendrical.calendar_from_cldr_calendar_type(name) == {:ok, calendar}
+  defp names?(name, calendar) do
+    Calendrical.calendar_from_cldr_calendar_type(name) == {:ok, calendar}
+  end
 
-  defp cldr_calendar_type(calendar), do: {:ok, calendar.cldr_calendar_type()}
+  defp cldr_calendar_type(calendar) do
+    {:ok, calendar.cldr_calendar_type()}
+  end
 
-  defp put_calendar_name(%Tempo{extended: nil} = tempo, nil), do: tempo
+  defp put_calendar_name(%Tempo{extended: nil} = tempo, nil) do
+    tempo
+  end
 
   defp put_calendar_name(%Tempo{extended: nil} = tempo, name) do
     %{
@@ -300,8 +383,9 @@ defmodule Tempo.Inspect do
     }
   end
 
-  defp put_calendar_name(%Tempo{extended: extended} = tempo, name),
-    do: %{tempo | extended: Map.put(extended, :calendar, name)}
+  defp put_calendar_name(%Tempo{extended: extended} = tempo, name) do
+    %{tempo | extended: Map.put(extended, :calendar, name)}
+  end
 
   @doc """
   The construct in a Tempo value that has no ISO 8601 form, found before
@@ -312,29 +396,53 @@ defmodule Tempo.Inspect do
   end (RFC 5545 `UNTIL`, `:until`). `nil` when the value has none.
   """
   @spec unencodable(term()) :: :byday | :nearest_weekday | :or_day | :skip | :until | nil
-  def unencodable(%Tempo{time: time}), do: unencodable_in(time)
+  def unencodable(%Tempo{time: time}) do
+    unencodable_in(time)
+  end
 
   # An end beside a cadence is RFC 5545's `UNTIL`. ISO 8601's own
   # duration/end form leaves the start undefined rather than absent.
   def unencodable(%Tempo.Interval{from: from, to: %Tempo{}, duration: %Tempo.Duration{}})
-      when is_nil(from) or is_struct(from, Tempo),
-      do: :until
+      when is_nil(from) or is_struct(from, Tempo) do
+    :until
+  end
 
-  def unencodable(%Tempo.Interval{} = interval),
-    do: Enum.find_value([interval.from, interval.to, interval.repeat_rule], &unencodable/1)
+  def unencodable(%Tempo.Interval{} = interval) do
+    Enum.find_value([interval.from, interval.to, interval.repeat_rule], &unencodable/1)
+  end
 
-  def unencodable(%Tempo.Set{set: members}), do: Enum.find_value(members, &unencodable/1)
-  def unencodable(_value), do: nil
+  def unencodable(%Tempo.Set{set: members}) do
+    Enum.find_value(members, &unencodable/1)
+  end
+
+  def unencodable(_value) do
+    nil
+  end
 
   defp unencodable_in({construct, _value})
-       when construct in [:byday, :nearest_weekday, :or_day, :skip],
-       do: construct
+       when construct in [:byday, :nearest_weekday, :or_day, :skip] do
+    construct
+  end
 
-  defp unencodable_in({_key, value}), do: unencodable_in(value)
-  defp unencodable_in(list) when is_list(list), do: Enum.find_value(list, &unencodable_in/1)
-  defp unencodable_in(%Tempo.Interval{} = interval), do: unencodable(interval)
-  defp unencodable_in(%Tempo{} = tempo), do: unencodable(tempo)
-  defp unencodable_in(_value), do: nil
+  defp unencodable_in({_key, value}) do
+    unencodable_in(value)
+  end
+
+  defp unencodable_in(list) when is_list(list) do
+    Enum.find_value(list, &unencodable_in/1)
+  end
+
+  defp unencodable_in(%Tempo.Interval{} = interval) do
+    unencodable(interval)
+  end
+
+  defp unencodable_in(%Tempo{} = tempo) do
+    unencodable(tempo)
+  end
+
+  defp unencodable_in(_value) do
+    nil
+  end
 
   # Inspect wraps the encoding `Tempo.to_iso8601/1` writes in sigil
   # syntax. Keeping encoding in one place — `to_iodata/1` — means the
@@ -402,8 +510,14 @@ defmodule Tempo.Inspect do
   # its module.
   defp encoded(value, tag, render, implied \\ Calendars.default()) do
     case unencodable(value) do
-      nil -> value |> to_iodata(implied) |> IO.iodata_to_binary() |> render.()
-      _construct -> "#" <> tag <> "<not ISO 8601 expressible>"
+      nil ->
+        value
+        |> to_iodata(implied)
+        |> IO.iodata_to_binary()
+        |> render.()
+
+      _construct ->
+        "#" <> tag <> "<not ISO 8601 expressible>"
     end
   end
 
@@ -432,8 +546,13 @@ defmodule Tempo.Inspect do
     |> Enum.join(" ")
   end
 
-  defp unit_tag(nil), do: ""
-  defp unit_tag(unit), do: "unit: " <> Atom.to_string(unit)
+  defp unit_tag(nil) do
+    ""
+  end
+
+  defp unit_tag(unit) do
+    "unit: " <> Atom.to_string(unit)
+  end
 
   # --------------------------------------------------------------
   # IXDTF trailer helpers — used by the Tempo clauses above to
@@ -442,7 +561,9 @@ defmodule Tempo.Inspect do
   # faithful.
   # --------------------------------------------------------------
 
-  defp extended_trailer(%Tempo{extended: nil}), do: ""
+  defp extended_trailer(%Tempo{extended: nil}) do
+    ""
+  end
 
   defp extended_trailer(%Tempo{extended: extended}) do
     [
@@ -457,7 +578,13 @@ defmodule Tempo.Inspect do
   defp zone_id_trailer(%{zone_id: zone_id} = extended)
        when is_binary(zone_id) and zone_id != "" do
     # Re-emit the RFC 9557 critical flag so a `[!zone]` round-trips.
-    critical = if Map.get(extended, :zone_critical, false), do: "!", else: ""
+    critical =
+      if Map.get(extended, :zone_critical, false) do
+        "!"
+      else
+        ""
+      end
+
     ["[", critical, zone_id, "]"]
   end
 
@@ -465,28 +592,48 @@ defmodule Tempo.Inspect do
   # since RFC 9557 has a suffix that is not understood passed over. It is
   # written so and in the zone's place, first, which is where it is read as
   # one again: it was written as `[unknown_zone=…]`, which no suffix reads.
-  defp zone_id_trailer(%{tags: %{"unknown_zone" => written}}),
-    do: ["[", format_tag_value(written), "]"]
+  defp zone_id_trailer(%{tags: %{"unknown_zone" => written}}) do
+    ["[", format_tag_value(written), "]"]
+  end
 
-  defp zone_id_trailer(_), do: []
+  defp zone_id_trailer(_) do
+    []
+  end
 
   # An IXDTF numeric offset (`[+08:45]`) is stored as signed minutes from UTC;
   # render it back in the bracketed `[±HH:MM]` form so it round-trips. It is a
   # time zone annotation, and RFC 9557 gives a value one, so beside a zone
   # name it is not written: the value's offset is its shift.
-  defp zone_offset_trailer(%{zone_id: zone_id}) when is_binary(zone_id) and zone_id != "",
-    do: []
+  defp zone_offset_trailer(%{zone_id: zone_id}) when is_binary(zone_id) and zone_id != "" do
+    []
+  end
 
   defp zone_offset_trailer(%{zone_offset: minutes} = extended) when is_integer(minutes) do
-    critical = if Map.get(extended, :zone_critical, false), do: "!", else: ""
-    sign = if minutes < 0, do: "-", else: "+"
+    critical =
+      if Map.get(extended, :zone_critical, false) do
+        "!"
+      else
+        ""
+      end
+
+    sign =
+      if minutes < 0 do
+        "-"
+      else
+        "+"
+      end
+
     absolute = abs(minutes)
     ["[", critical, sign, pad_two(div(absolute, 60)), ":", pad_two(rem(absolute, 60)), "]"]
   end
 
-  defp zone_offset_trailer(_), do: []
+  defp zone_offset_trailer(_) do
+    []
+  end
 
-  defp pad_two(number), do: String.pad_leading(Integer.to_string(number), 2, "0")
+  defp pad_two(number) do
+    String.pad_leading(Integer.to_string(number), 2, "0")
+  end
 
   defp calendar_trailer(%{calendar: cal}) when is_atom(cal) and not is_nil(cal) do
     # Emit the IXDTF `[u-ca=value]` form (the `=` separator, borrowed from
@@ -499,7 +646,9 @@ defmodule Tempo.Inspect do
     end
   end
 
-  defp calendar_trailer(_), do: []
+  defp calendar_trailer(_) do
+    []
+  end
 
   # `U.encode/2` raises on an atom that is not a CLDR calendar, so it is
   # asked only of those CLDR knows (`Localize.known_calendars/0`), and
@@ -507,9 +656,11 @@ defmodule Tempo.Inspect do
   # Calendrical resolves (e.g. `:julian`) is not a CLDR identifier, so Localize
   # will not encode it — its IXDTF value is the atom's own spelling.
   defp encode_calendar(cal) do
-    if cal in Localize.known_calendars(),
-      do: cldr_identifier(cal),
-      else: additional_calendar_identifier(cal)
+    if cal in Localize.known_calendars() do
+      cldr_identifier(cal)
+    else
+      additional_calendar_identifier(cal)
+    end
   end
 
   defp cldr_identifier(cal) do
@@ -532,8 +683,9 @@ defmodule Tempo.Inspect do
   # Calendrical's additional-calendar registry, a CLDR one through its calendar
   # type. Gregorian and the ISO week calendar are the defaults and add nothing.
   defp repeat_rule_calendar_trailer(%Tempo{calendar: calendar})
-       when is_notation(calendar) or is_notation_weeks(calendar),
-       do: []
+       when is_notation(calendar) or is_notation_weeks(calendar) do
+    []
+  end
 
   defp repeat_rule_calendar_trailer(%Tempo{calendar: calendar}) when is_atom(calendar) do
     case calendar_module_identifier(calendar) do
@@ -542,7 +694,9 @@ defmodule Tempo.Inspect do
     end
   end
 
-  defp repeat_rule_calendar_trailer(_), do: []
+  defp repeat_rule_calendar_trailer(_) do
+    []
+  end
 
   defp calendar_module_identifier(calendar) do
     case additional_calendar_module_name(calendar) do
@@ -555,16 +709,22 @@ defmodule Tempo.Inspect do
   # it, with hyphens for its underscores (`julian_march25` is
   # `julian-march25`), as CLDR's `islamic_civil` is `islamic-civil`.
   defp ixdtf_identifier(identifier) do
-    identifier |> Atom.to_string() |> String.replace("_", "-")
+    identifier
+    |> Atom.to_string()
+    |> String.replace("_", "-")
   end
 
   defp additional_calendar_module_name(calendar) do
     Enum.find_value(Calendrical.additional_calendars(), :error, fn {name, module} ->
-      if module == calendar, do: {:ok, name}
+      if module == calendar do
+        {:ok, name}
+      end
     end)
   end
 
-  defp cldr_calendar_identifier(calendar), do: encode_calendar(calendar.cldr_calendar_type())
+  defp cldr_calendar_identifier(calendar) do
+    encode_calendar(calendar.cldr_calendar_type())
+  end
 
   # Render a recurrence's written start with its IXDTF `[u-ca=…]` calendar
   # lifted off into a separate trailing suffix, so a whole-value calendar reads
@@ -577,7 +737,9 @@ defmodule Tempo.Inspect do
     {inspect_value(%{tempo | extended: %{extended | calendar: nil}}), calendar_trailer(extended)}
   end
 
-  defp hoist_calendar_suffix(endpoint), do: {inspect_value(endpoint), []}
+  defp hoist_calendar_suffix(endpoint) do
+    {inspect_value(endpoint), []}
+  end
 
   # The suffix kept as it was written is in the zone's place where the value
   # has no zone (`zone_id_trailer/1`), and here, after the zone, where it has
@@ -588,25 +750,42 @@ defmodule Tempo.Inspect do
     |> Enum.map(&tag_trailer/1)
   end
 
-  defp tags_trailer(_), do: []
+  defp tags_trailer(_) do
+    []
+  end
 
-  defp written_in_the_zones_place?({"unknown_zone", _written}, extended),
-    do: not is_binary(Map.get(extended, :zone_id))
+  defp written_in_the_zones_place?({"unknown_zone", _written}, extended) do
+    not is_binary(Map.get(extended, :zone_id))
+  end
 
-  defp written_in_the_zones_place?(_tag, _extended), do: false
+  defp written_in_the_zones_place?(_tag, _extended) do
+    false
+  end
 
-  defp tag_trailer({"unknown_zone", written}), do: ["[", format_tag_value(written), "]"]
-  defp tag_trailer({key, value}), do: ["[", key, "=", format_tag_value(value), "]"]
+  defp tag_trailer({"unknown_zone", written}) do
+    ["[", format_tag_value(written), "]"]
+  end
 
-  defp format_tag_value(values) when is_list(values), do: Enum.join(values, "-")
-  defp format_tag_value(value), do: to_string(value)
+  defp tag_trailer({key, value}) do
+    ["[", key, "=", format_tag_value(value), "]"]
+  end
+
+  defp format_tag_value(values) when is_list(values) do
+    Enum.join(values, "-")
+  end
+
+  defp format_tag_value(value) do
+    to_string(value)
+  end
 
   # --------------------------------------------------------------
   # Interval metadata compact label. Shown as the trailing tag
   # inside `#Tempo.Interval<...>` when metadata is non-empty.
   # --------------------------------------------------------------
 
-  defp interval_metadata_tag(metadata) when map_size(metadata) == 0, do: ""
+  defp interval_metadata_tag(metadata) when map_size(metadata) == 0 do
+    ""
+  end
 
   defp interval_metadata_tag(%{summary: s} = metadata) when is_binary(s) do
     location = Map.get(metadata, :location)
@@ -618,7 +797,9 @@ defmodule Tempo.Inspect do
     end
   end
 
-  defp interval_metadata_tag(%{uid: uid}) when is_binary(uid), do: "· uid=" <> uid
+  defp interval_metadata_tag(%{uid: uid}) when is_binary(uid) do
+    "· uid=" <> uid
+  end
 
   defp interval_metadata_tag(metadata) do
     "· " <> Integer.to_string(map_size(metadata)) <> " metadata key(s)"
@@ -649,12 +830,22 @@ defmodule Tempo.Inspect do
 
     rendered =
       Enum.map(shown, fn iv ->
-        Kernel.inspect(iv, opts |> Map.from_struct() |> Enum.into([]))
+        Kernel.inspect(
+          iv,
+          opts
+          |> Map.from_struct()
+          |> Enum.into([])
+        )
       end)
 
     # Emit the ellipsis as a trailing element so it joins with the same
     # `", "` separator — `[a, b, …]`, matching how Elixir truncates a list.
-    elements = if truncated?, do: rendered ++ [ellipsis()], else: rendered
+    elements =
+      if truncated? do
+        rendered ++ [ellipsis()]
+      else
+        rendered
+      end
 
     "#Tempo.IntervalSet<[" <>
       Enum.join(elements, ", ") <> "]" <> set_metadata_tag(metadata) <> ">"
@@ -673,7 +864,12 @@ defmodule Tempo.Inspect do
   end
 
   defp take_within_limit(set, limit) when is_integer(limit) and limit >= 0 do
-    {shown, rest} = set |> IntervalSet.walk() |> Enum.take(limit + 1) |> Enum.split(limit)
+    {shown, rest} =
+      set
+      |> IntervalSet.walk()
+      |> Enum.take(limit + 1)
+      |> Enum.split(limit)
+
     {shown, rest != []}
   end
 
@@ -690,9 +886,13 @@ defmodule Tempo.Inspect do
   # Set-level metadata tag. For a calendar import the most
   # interesting fields are the calendar name and the prodid; show
   # those verbatim when present.
-  defp set_metadata_tag(nil), do: ""
+  defp set_metadata_tag(nil) do
+    ""
+  end
 
-  defp set_metadata_tag(metadata) when map_size(metadata) == 0, do: ""
+  defp set_metadata_tag(metadata) when map_size(metadata) == 0 do
+    ""
+  end
 
   defp set_metadata_tag(%{name: name}) when is_binary(name) do
     " · " <> name
@@ -802,12 +1002,14 @@ defmodule Tempo.Inspect do
   # years -1999 to -1900 and `-0C` the years -99 to 0 (ISO 8601-2 §4.4.1.8).
   # It was written as a group with a negative count, which is not read.
   defp inspect_value({:year, {:group, %Range{first: first, last: last}}})
-       when first < 0 and last - first == 99 and rem(last, 100) == 0,
-       do: [?-, Integer.to_string(div(-last, 100)), ?C]
+       when first < 0 and last - first == 99 and rem(last, 100) == 0 do
+    [?-, Integer.to_string(div(-last, 100)), ?C]
+  end
 
   defp inspect_value({:year, {:group, %Range{first: first, last: last}}})
-       when first < 0 and last - first == 9 and rem(last, 10) == 0,
-       do: [?-, Integer.to_string(div(-last, 10)), ?J]
+       when first < 0 and last - first == 9 and rem(last, 10) == 0 do
+    [?-, Integer.to_string(div(-last, 10)), ?J]
+  end
 
   # A group renders as the `nGsizeU` it was declared as. Its values count
   # from the unit's first (month 1, hour 0), so the nth group of `size`
@@ -1013,7 +1215,11 @@ defmodule Tempo.Inspect do
   end
 
   defp inspect_value(%Tempo.Interval{recurrence: 1, from: from, to: to, duration: nil}) do
-    written_from = from |> in_its_own_calendar(to) |> drop_shared_suffix(to)
+    written_from =
+      from
+      |> in_its_own_calendar(to)
+      |> drop_shared_suffix(to)
+
     [inspect_value(written_from), ?/, inspect_value(abbreviate(to, from))]
   end
 
@@ -1086,7 +1292,9 @@ defmodule Tempo.Inspect do
 
   # The zero duration has no components to imply the `T`/units, and a
   # bare `P` does not re-parse; ISO 8601's zero duration is `PT0S`.
-  defp inspect_value(%Tempo.Duration{time: []}), do: "PT0S"
+  defp inspect_value(%Tempo.Duration{time: []}) do
+    "PT0S"
+  end
 
   defp inspect_value(%Tempo.Duration{time: time}) do
     [?P, inspect_value(fold_microsecond(time))]
@@ -1120,24 +1328,47 @@ defmodule Tempo.Inspect do
     [inspect_list(value), inspect_qualification(qualifier), unit_designator(unit)]
   end
 
-  defp inspect_value({:year, year}), do: [inspect_list(year), ?Y]
-  defp inspect_value({:month, month}), do: [inspect_list(month), ?M]
+  defp inspect_value({:year, year}) do
+    [inspect_list(year), ?Y]
+  end
+
+  defp inspect_value({:month, month}) do
+    [inspect_list(month), ?M]
+  end
 
   # A traditional month renders with the lowercase `m` extension
   # designator — `<n>m`, and `<n>+m` for the intercalary month. It survives only
   # in a selection frame (a recurrence has no year to resolve against); a
   # concrete traditional month is lowered to its ordinal `M` during validation.
-  defp inspect_value({:traditional_month, {month, :leap}}), do: [inspect_list(month), ?+, ?m]
-  defp inspect_value({:traditional_month, month}), do: [inspect_list(month), ?m]
+  defp inspect_value({:traditional_month, {month, :leap}}) do
+    [inspect_list(month), ?+, ?m]
+  end
+
+  defp inspect_value({:traditional_month, month}) do
+    [inspect_list(month), ?m]
+  end
 
   # A season of 21 to 24 with no hemisphere is written as ISO 8601-2 writes
   # it, in the month's place.
-  defp inspect_value({:season, season}), do: [inspect_list(season), ?M]
+  defp inspect_value({:season, season}) do
+    [inspect_list(season), ?M]
+  end
 
-  defp inspect_value({:day, day}), do: [inspect_list(day), ?D]
-  defp inspect_value({:day_of_year, day}), do: [inspect_list(day), ?O]
-  defp inspect_value({:hour, hour}), do: [inspect_list(hour), ?H]
-  defp inspect_value({:minute, minute}), do: [inspect_list(minute), ?M]
+  defp inspect_value({:day, day}) do
+    [inspect_list(day), ?D]
+  end
+
+  defp inspect_value({:day_of_year, day}) do
+    [inspect_list(day), ?O]
+  end
+
+  defp inspect_value({:hour, hour}) do
+    [inspect_list(hour), ?H]
+  end
+
+  defp inspect_value({:minute, minute}) do
+    [inspect_list(minute), ?M]
+  end
 
   # A negative fractional second is a sign-consistent pair
   # (`[second: -1, microsecond: {-500000, 1}]` is −1.5 s); render one
@@ -1145,28 +1376,54 @@ defmodule Tempo.Inspect do
   # `-1.-5S`. A zero second still needs the explicit sign: `-0.2S`.
   defp inspect_value({:second, {:micro, second, {value, precision}}}) when value < 0 do
     digits = Microsecond.to_digits_string({-value, precision})
-    leading = if second == 0, do: "-0", else: inspect_list(second)
+
+    leading =
+      if second == 0 do
+        "-0"
+      else
+        inspect_list(second)
+      end
+
     [leading, ?., digits, ?S]
   end
 
-  defp inspect_value({:second, {:micro, second, microsecond}}),
-    do: [inspect_list(second), ?., fraction_digits(microsecond), ?S]
+  defp inspect_value({:second, {:micro, second, microsecond}}) do
+    [inspect_list(second), ?., fraction_digits(microsecond), ?S]
+  end
 
-  defp inspect_value({:second, second}), do: [inspect_list(second), ?S]
-  defp inspect_value({:day_of_week, day}), do: [inspect_list(day), ?K]
-  defp inspect_value({:week, week}), do: [inspect_list(week), ?W]
-  defp inspect_value({:calendar_week, week}), do: [inspect_list(week), ?w]
+  defp inspect_value({:second, second}) do
+    [inspect_list(second), ?S]
+  end
+
+  defp inspect_value({:day_of_week, day}) do
+    [inspect_list(day), ?K]
+  end
+
+  defp inspect_value({:week, week}) do
+    [inspect_list(week), ?W]
+  end
+
+  defp inspect_value({:calendar_week, week}) do
+    [inspect_list(week), ?w]
+  end
 
   # A week of a month, as a rule read in its period holds it
   # (`Tempo.RRule.Selection.read_in_its_period/1`), is written as it was.
-  defp inspect_value({:week_of_month, week}), do: [inspect_list(week), ?W]
-  defp inspect_value({:instance, instance}), do: [inspect_list(instance), ?I]
+  defp inspect_value({:week_of_month, week}) do
+    [inspect_list(week), ?W]
+  end
+
+  defp inspect_value({:instance, instance}) do
+    [inspect_list(instance), ?I]
+  end
 
   # A computed-event selection renders as `(name)e` — the project-specific
   # designator for an algorithmically resolved recurrence (Easter, an
   # astronomical event). The name is a plain lowercase identifier, so it
   # round-trips through the grammar's `selection_event/0`.
-  defp inspect_value({:event, name}) when is_binary(name), do: [?(, name, ?), ?e]
+  defp inspect_value({:event, name}) when is_binary(name) do
+    [?(, name, ?), ?e]
+  end
 
   # A `:byday` selection survives only for the one shape ISO 8601-2 cannot
   # express: ordinals spread across *distinct* weekdays (`BYDAY=2MO,2WE`,
@@ -1186,7 +1443,9 @@ defmodule Tempo.Inspect do
   # so a recurrence carrying it round-trips through `inspect/1`/`to_iso8601/1`
   # rather than crashing; the canonical external form remains the RRULE string.
   # (Set position is the ISO 8601-2 §12.9 `I` — see the `:instance` clause above.)
-  defp inspect_value({:wkst, weekday}), do: [inspect_list(weekday), ?q]
+  defp inspect_value({:wkst, weekday}) do
+    [inspect_list(weekday), ?q]
+  end
 
   # A nearest-weekday selection (cron `W`, parsed to `:nearest_weekday`) has
   # no ISO 8601 designator and — unlike the `q` week-start above — was
@@ -1209,29 +1468,53 @@ defmodule Tempo.Inspect do
     raise Iso8601EncodeError.exception(construct: :skip)
   end
 
-  defp inspect_value({:interval, interval}), do: inspect_value(interval)
-  defp inspect_value({:duration, duration}), do: inspect_value(duration)
-  defp inspect_value(:undefined), do: ".."
+  defp inspect_value({:interval, interval}) do
+    inspect_value(interval)
+  end
+
+  defp inspect_value({:duration, duration}) do
+    inspect_value(duration)
+  end
+
+  defp inspect_value(:undefined) do
+    ".."
+  end
 
   # The units of a time of day after its `T`, and then what follows them: a
   # selection within the time (`T10HLT30MN`, the thirtieth minute of the
   # hour), which is written as a selection is.
   defp inspect_time_of_day([{unit, _value} = entry | rest])
-       when unit in [:hour, :minute, :second],
-       do: [inspect_value(entry) | inspect_time_of_day(rest)]
+       when unit in [:hour, :minute, :second] do
+    [inspect_value(entry) | inspect_time_of_day(rest)]
+  end
 
-  defp inspect_time_of_day(rest), do: inspect_value(rest)
+  defp inspect_time_of_day(rest) do
+    inspect_value(rest)
+  end
 
-  defp group_time_designator(unit) when unit in [:hour, :minute, :second], do: ?T
-  defp group_time_designator(_unit), do: []
+  defp group_time_designator(unit) when unit in [:hour, :minute, :second] do
+    ?T
+  end
 
-  defp written_as_pairs(time) when is_list(time), do: Enum.map(time, &written_as_pair/1)
-  defp written_as_pairs(time), do: time
+  defp group_time_designator(_unit) do
+    []
+  end
 
-  defp written_as_pair({unit, {:group, {_set_type, _values} = set}, size}),
-    do: {unit, {:group_of_set, set, size}}
+  defp written_as_pairs(time) when is_list(time) do
+    Enum.map(time, &written_as_pair/1)
+  end
 
-  defp written_as_pair(component), do: component
+  defp written_as_pairs(time) do
+    time
+  end
+
+  defp written_as_pair({unit, {:group, {_set_type, _values} = set}, size}) do
+    {unit, {:group_of_set, set, size}}
+  end
+
+  defp written_as_pair(component) do
+    component
+  end
 
   # ISO 8601-2 §8.2.4: when every present component carries the same
   # qualifier, prefer the compact *complete* form (one trailing
@@ -1250,8 +1533,13 @@ defmodule Tempo.Inspect do
   # marker so the leaf renderer can emit the qualifier between the
   # value and its designator (`2004~Y`). The `{unit, _}` shape is
   # preserved so the list-walking clauses still route correctly.
-  defp apply_qualifications(time, nil), do: time
-  defp apply_qualifications(time, qualifications) when qualifications == %{}, do: time
+  defp apply_qualifications(time, nil) do
+    time
+  end
+
+  defp apply_qualifications(time, qualifications) when qualifications == %{} do
+    time
+  end
 
   defp apply_qualifications(time, qualifications) do
     Enum.map(time, fn
@@ -1263,18 +1551,25 @@ defmodule Tempo.Inspect do
     end)
   end
 
-  defp inspect_shift(nil),
-    do: ""
+  defp inspect_shift(nil) do
+    ""
+  end
 
-  defp inspect_shift(hour: 0),
-    do: ?Z
+  defp inspect_shift(hour: 0) do
+    ?Z
+  end
 
   # ISO 8601-2 §7.4 writes a shift ahead of UTC with no sign (`Z8H`,
   # `Z7H33M14S`) and one behind it with a minus before its units (`Z-5H30M`).
   # A shift carries its sign on its first unit that is not zero, so `-00:30`
   # is `[hour: 0, minute: -30]` and is written `Z-0H30M`.
   defp inspect_shift(shift) when is_list(shift) do
-    sign = if Enum.any?(shift, fn {_unit, value} -> value < 0 end), do: [?-], else: []
+    sign =
+      if Enum.any?(shift, fn {_unit, value} -> value < 0 end) do
+        [?-]
+      else
+        []
+      end
 
     units =
       Enum.map(shift, fn {unit, value} -> [inspect_value(abs(value)), unit_designator(unit)] end)
@@ -1282,21 +1577,61 @@ defmodule Tempo.Inspect do
     [?Z, sign, units]
   end
 
-  defp inspect_qualification(nil), do: []
-  defp inspect_qualification(:uncertain), do: "?"
-  defp inspect_qualification(:approximate), do: "~"
-  defp inspect_qualification(:uncertain_and_approximate), do: "%"
+  defp inspect_qualification(nil) do
+    []
+  end
 
-  defp unit_designator(:year), do: ?Y
-  defp unit_designator(:month), do: ?M
-  defp unit_designator(:season), do: ?M
-  defp unit_designator(:day), do: ?D
-  defp unit_designator(:day_of_year), do: ?O
-  defp unit_designator(:hour), do: ?H
-  defp unit_designator(:minute), do: ?M
-  defp unit_designator(:second), do: ?S
-  defp unit_designator(:day_of_week), do: ?K
-  defp unit_designator(:week), do: ?W
+  defp inspect_qualification(:uncertain) do
+    "?"
+  end
+
+  defp inspect_qualification(:approximate) do
+    "~"
+  end
+
+  defp inspect_qualification(:uncertain_and_approximate) do
+    "%"
+  end
+
+  defp unit_designator(:year) do
+    ?Y
+  end
+
+  defp unit_designator(:month) do
+    ?M
+  end
+
+  defp unit_designator(:season) do
+    ?M
+  end
+
+  defp unit_designator(:day) do
+    ?D
+  end
+
+  defp unit_designator(:day_of_year) do
+    ?O
+  end
+
+  defp unit_designator(:hour) do
+    ?H
+  end
+
+  defp unit_designator(:minute) do
+    ?M
+  end
+
+  defp unit_designator(:second) do
+    ?S
+  end
+
+  defp unit_designator(:day_of_week) do
+    ?K
+  end
+
+  defp unit_designator(:week) do
+    ?W
+  end
 
   # Fold a trailing `:microsecond` component into the preceding
   # `:second` so the per-unit renderer and the T-marker arity logic
@@ -1306,9 +1641,17 @@ defmodule Tempo.Inspect do
     [{:second, {:micro, second, microsecond}} | fold_microsecond(rest)]
   end
 
-  defp fold_microsecond([head | rest]), do: [head | fold_microsecond(rest)]
-  defp fold_microsecond([]), do: []
-  defp fold_microsecond(other), do: other
+  defp fold_microsecond([head | rest]) do
+    [head | fold_microsecond(rest)]
+  end
+
+  defp fold_microsecond([]) do
+    []
+  end
+
+  defp fold_microsecond(other) do
+    other
+  end
 
   # The digits of a fraction of a second. The fractions an enumeration of a
   # second holds (`Tempo.extend/2` writes a second as its ten tenths) are a
@@ -1319,17 +1662,26 @@ defmodule Tempo.Inspect do
     [open(:all), fraction_set(fractions, digits), close(:all)]
   end
 
-  defp fraction_digits(fraction), do: Microsecond.to_digits_string(fraction)
+  defp fraction_digits(fraction) do
+    Microsecond.to_digits_string(fraction)
+  end
 
   # Fractions that run on from one another are written from the first to the
   # last, and any others one by one.
-  defp fraction_set(_fractions, []), do: []
-  defp fraction_set(_fractions, [digits]), do: digits
+  defp fraction_set(_fractions, []) do
+    []
+  end
+
+  defp fraction_set(_fractions, [digits]) do
+    digits
+  end
 
   defp fraction_set(fractions, digits) do
-    if run_of_fractions?(fractions),
-      do: [hd(digits), "..", List.last(digits)],
-      else: Enum.intersperse(digits, ?,)
+    if run_of_fractions?(fractions) do
+      [hd(digits), "..", List.last(digits)]
+    else
+      Enum.intersperse(digits, ?,)
+    end
   end
 
   defp run_of_fractions?([{first, precision} | rest]) do
@@ -1352,21 +1704,51 @@ defmodule Tempo.Inspect do
     inspect_value(value)
   end
 
-  defp open(:all), do: ?{
-  defp open(:one), do: ?[
-  defp close(:all), do: ?}
-  defp close(:one), do: ?]
+  defp open(:all) do
+    ?{
+  end
+
+  defp open(:one) do
+    ?[
+  end
+
+  defp close(:all) do
+    ?}
+  end
+
+  defp close(:one) do
+    ?]
+  end
 
   # The `e`/`o`/`l`/`c` year filter a recurrence domain may carry after its
   # closing brace (`{2000Y..2020Y}e`).
-  defp filter_marker(:even), do: ?e
-  defp filter_marker(:odd), do: ?o
-  defp filter_marker(:leap), do: ?l
-  defp filter_marker(:common), do: ?c
-  defp filter_marker(_none), do: []
+  defp filter_marker(:even) do
+    ?e
+  end
 
-  defp recurrence(:infinity), do: <<>>
-  defp recurrence(recurrence), do: Integer.to_string(recurrence)
+  defp filter_marker(:odd) do
+    ?o
+  end
+
+  defp filter_marker(:leap) do
+    ?l
+  end
+
+  defp filter_marker(:common) do
+    ?c
+  end
+
+  defp filter_marker(_none) do
+    []
+  end
+
+  defp recurrence(:infinity) do
+    <<>>
+  end
+
+  defp recurrence(recurrence) do
+    Integer.to_string(recurrence)
+  end
 
   # IXDTF binds an interval's extended suffix to its *end*, and
   # `Tempo.Interval.propagate_endpoint_frame/2` flows a zone between the
@@ -1396,19 +1778,30 @@ defmodule Tempo.Inspect do
     end
   end
 
-  defp in_its_own_calendar(from, _to), do: from
+  defp in_its_own_calendar(from, _to) do
+    from
+  end
 
-  defp tagged_with_calendar(nil, type),
-    do: %{zone_id: nil, zone_offset: nil, zone_critical: false, calendar: type, tags: %{}}
+  defp tagged_with_calendar(nil, type) do
+    %{zone_id: nil, zone_offset: nil, zone_critical: false, calendar: type, tags: %{}}
+  end
 
-  defp tagged_with_calendar(%{} = extended, type), do: %{extended | calendar: type}
+  defp tagged_with_calendar(%{} = extended, type) do
+    %{extended | calendar: type}
+  end
 
   defp drop_shared_suffix(%Tempo{extended: same} = from, %Tempo{extended: same})
        when not is_nil(same) do
-    if propagating_suffix?(same), do: %{from | extended: nil}, else: from
+    if propagating_suffix?(same) do
+      %{from | extended: nil}
+    else
+      from
+    end
   end
 
-  defp drop_shared_suffix(from, _to), do: from
+  defp drop_shared_suffix(from, _to) do
+    from
+  end
 
   defp propagating_suffix?(%{} = extended) do
     Map.get(extended, :tags, %{}) == %{} and
@@ -1458,7 +1851,9 @@ defmodule Tempo.Inspect do
     end
   end
 
-  defp abbreviate(to, _from), do: to
+  defp abbreviate(to, _from) do
+    to
+  end
 
   defp implied_by?(%Tempo{} = to, %Tempo{} = from) do
     to.shift == from.shift and to.calendar == from.calendar and
@@ -1469,9 +1864,23 @@ defmodule Tempo.Inspect do
   # They are implied by the start only when the end stays on the start's axis:
   # the first that differs is the start's unit with another value, or the end
   # goes on where the start stops.
-  defp shared_prefix([same | to_rest], [same | from_rest]), do: shared_prefix(to_rest, from_rest)
-  defp shared_prefix([{unit, _value} | _] = to_units, [{unit, _other} | _]), do: to_units
-  defp shared_prefix(to_units, []), do: to_units
-  defp shared_prefix([], _from_units), do: []
-  defp shared_prefix(_to_units, _from_units), do: :another_axis
+  defp shared_prefix([same | to_rest], [same | from_rest]) do
+    shared_prefix(to_rest, from_rest)
+  end
+
+  defp shared_prefix([{unit, _value} | _] = to_units, [{unit, _other} | _]) do
+    to_units
+  end
+
+  defp shared_prefix(to_units, []) do
+    to_units
+  end
+
+  defp shared_prefix([], _from_units) do
+    []
+  end
+
+  defp shared_prefix(_to_units, _from_units) do
+    :another_axis
+  end
 end

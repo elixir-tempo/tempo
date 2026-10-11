@@ -133,7 +133,9 @@ defmodule Tempo.GroupResolution.Test do
     end
   end
 
-  defp four_digits(year), do: String.pad_leading(Integer.to_string(year), 4, "0")
+  defp four_digits(year) do
+    String.pad_leading(Integer.to_string(year), 4, "0")
+  end
 
   describe "a season in another calendar" do
     test "is the Gregorian season that starts within its year" do
@@ -240,8 +242,11 @@ defmodule Tempo.GroupResolution.Test do
     end
 
     test "walks the values its container holds" do
-      assert ~o"2026Y3G5MU" |> Enum.map(& &1.time[:month]) == [11, 12]
-      assert ~o"T16H1GT15MU" |> Enum.map(& &1.time[:minute]) == Enum.to_list(0..14)
+      assert ~o"2026Y3G5MU"
+             |> Enum.map(& &1.time[:month]) == [11, 12]
+
+      assert ~o"T16H1GT15MU"
+             |> Enum.map(& &1.time[:minute]) == Enum.to_list(0..14)
     end
 
     test "takes a duration as its size, not a date" do
@@ -258,7 +263,10 @@ defmodule Tempo.GroupResolution.Test do
 
     defp spans(value) do
       {:ok, set} = Tempo.to_interval(value)
-      set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+
+      set
+      |> IntervalSet.members()
+      |> Enum.map(&Tempo.to_iso8601!/1)
     end
 
     test "converts to a span for each group" do

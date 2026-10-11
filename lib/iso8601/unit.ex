@@ -84,9 +84,11 @@ defmodule Tempo.Iso8601.Unit do
 
   """
   def implicit_enumerator(:year = unit, calendar) do
-    if Tempo.week_based_calendar?(calendar),
-      do: {:week, 1..-1//1},
-      else: Map.get(@unit_after, unit)
+    if Tempo.week_based_calendar?(calendar) do
+      {:week, 1..-1//1}
+    else
+      Map.get(@unit_after, unit)
+    end
   end
 
   # A week is walked by its days, which the calendar counts.
@@ -101,7 +103,9 @@ defmodule Tempo.Iso8601.Unit do
   # A value with no components has no unit to enumerate below — the same
   # answer as the finest unit, rather than a FunctionClauseError four
   # frames down.
-  def implicit_enumerator(_unit, _calendar), do: nil
+  def implicit_enumerator(_unit, _calendar) do
+    nil
+  end
 
   @doc false
   # The unit a value's span is said to be walked by, given the unit its walk
@@ -113,10 +117,17 @@ defmodule Tempo.Iso8601.Unit do
   # of the week (`Tempo.Interval.Steps.fill_to_unit/3`), so both walk the
   # same days.
   @spec walked_by(atom(), module() | nil) :: atom()
-  def walked_by(:day_of_week, calendar),
-    do: if(Tempo.week_based_calendar?(calendar), do: :day_of_week, else: :day)
+  def walked_by(:day_of_week, calendar) do
+    if Tempo.week_based_calendar?(calendar) do
+      :day_of_week
+    else
+      :day
+    end
+  end
 
-  def walked_by(unit, _calendar), do: unit
+  def walked_by(unit, _calendar) do
+    unit
+  end
 
   @doc """
   The range of values a unit can take, where that range is fixed
@@ -154,7 +165,9 @@ defmodule Tempo.Iso8601.Unit do
 
   """
   @spec value_range(atom(), module()) :: {:ok, Range.t()} | :unknown
-  def value_range(:day_of_week, calendar), do: {:ok, 1..calendar.days_in_week()}
+  def value_range(:day_of_week, calendar) do
+    {:ok, 1..calendar.days_in_week()}
+  end
 
   def value_range(unit, _calendar) do
     case @value_ranges do
@@ -250,26 +263,48 @@ defmodule Tempo.Iso8601.Unit do
     |> ordered_units?()
   end
 
-  defp non_scale_token?({:wkst, _value}), do: true
+  defp non_scale_token?({:wkst, _value}) do
+    true
+  end
+
   # RFC 7529's `SKIP`, what a rule does with a day a month lacks, is context
   # too.
-  defp non_scale_token?({:skip, _value}), do: true
+  defp non_scale_token?({:skip, _value}) do
+    true
+  end
+
   # A §12.10 window (`[selection]/[duration]`) nests a whole selection; it is
   # not a flat scale unit, so it is skipped when checking resolution order.
-  defp non_scale_token?({:interval, _value}), do: true
-  defp non_scale_token?(_other), do: false
+  defp non_scale_token?({:interval, _value}) do
+    true
+  end
+
+  defp non_scale_token?(_other) do
+    false
+  end
 
   # A computed event (`(easter)e`) names a single day, so it orders at day
   # scale: a weekday limit (`(qingming)e7K`) may follow it, a day of month may
   # not. It is not a time unit in its own right, so it has no `@sort_keys` entry.
-  defp scale_token({:event, value}), do: {:day, value}
-  defp scale_token(token), do: token
+  defp scale_token({:event, value}) do
+    {:day, value}
+  end
 
-  defp collapse_weekday_run([{:day_of_week, _} = weekday, {:day_of_week, _} | rest]),
-    do: collapse_weekday_run([weekday | rest])
+  defp scale_token(token) do
+    token
+  end
 
-  defp collapse_weekday_run([entry | rest]), do: [entry | collapse_weekday_run(rest)]
-  defp collapse_weekday_run([]), do: []
+  defp collapse_weekday_run([{:day_of_week, _} = weekday, {:day_of_week, _} | rest]) do
+    collapse_weekday_run([weekday | rest])
+  end
+
+  defp collapse_weekday_run([entry | rest]) do
+    [entry | collapse_weekday_run(rest)]
+  end
+
+  defp collapse_weekday_run([]) do
+    []
+  end
 
   defp ordered_units?([unit, :group | rest]) when is_atom(unit) do
     ordered_units?([unit | rest])
@@ -288,19 +323,36 @@ defmodule Tempo.Iso8601.Unit do
   end
 
   defp ordered_units?([unit_1, unit_2 | rest]) when is_atom(unit_1) and is_atom(unit_2) do
-    if coarser?(unit_1, unit_2), do: ordered_units?([unit_2 | rest]), else: false
+    if coarser?(unit_1, unit_2) do
+      ordered_units?([unit_2 | rest])
+    else
+      false
+    end
   end
 
   defp ordered_units?([{unit_1, _value_1}, {unit_2, _value_2} | rest]) do
-    if coarser?(unit_1, unit_2), do: ordered_units?([unit_2 | rest]), else: false
+    if coarser?(unit_1, unit_2) do
+      ordered_units?([unit_2 | rest])
+    else
+      false
+    end
   end
 
   defp ordered_units?([unit_1, {unit_2, _value_2} | rest]) when is_atom(unit_1) do
-    if coarser?(unit_1, unit_2), do: ordered_units?([unit_2 | rest]), else: false
+    if coarser?(unit_1, unit_2) do
+      ordered_units?([unit_2 | rest])
+    else
+      false
+    end
   end
 
-  defp ordered_units?([_unit]), do: true
-  defp ordered_units?([]), do: true
+  defp ordered_units?([_unit]) do
+    true
+  end
+
+  defp ordered_units?([]) do
+    true
+  end
 
   # Whether `unit_1` is strictly coarser than `unit_2`. A token with no sort key
   # is not ordered, so the check reports an ordering error rather than raising.

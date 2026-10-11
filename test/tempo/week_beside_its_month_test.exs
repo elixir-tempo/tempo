@@ -33,18 +33,29 @@ defmodule Tempo.WeekBesideItsMonthTest do
 
   @months for year <- 2024..2027, month <- 1..12, do: {year, month}
 
-  defp monday_of(date), do: Date.beginning_of_week(date, :monday)
+  defp monday_of(date) do
+    Date.beginning_of_week(date, :monday)
+  end
 
   # The Monday a month's first week starts on: the week that holds four or
   # more of the month's days, which is the one with its first Thursday.
   defp first_monday(first) do
     monday = monday_of(first)
-    if Date.diff(first, monday) <= 3, do: monday, else: Date.add(monday, 7)
+
+    if Date.diff(first, monday) <= 3 do
+      monday
+    else
+      Date.add(monday, 7)
+    end
   end
 
   # A week of a month, from its Monday to the Monday after.
   defp week(year, month, week) do
-    start = Date.new!(year, month, 1) |> first_monday() |> Date.add(7 * (week - 1))
+    start =
+      Date.new!(year, month, 1)
+      |> first_monday()
+      |> Date.add(7 * (week - 1))
+
     {start, Date.add(start, 7)}
   end
 
@@ -52,7 +63,11 @@ defmodule Tempo.WeekBesideItsMonthTest do
   # week of the next.
   defp weeks_in(year, month) do
     first = Date.new!(year, month, 1)
-    next = first |> Date.end_of_month() |> Date.add(1)
+
+    next =
+      first
+      |> Date.end_of_month()
+      |> Date.add(1)
 
     div(Date.diff(first_monday(next), first_monday(first)), 7)
   end
@@ -63,26 +78,46 @@ defmodule Tempo.WeekBesideItsMonthTest do
   defp week_of_its_month(date) do
     thursday = Date.add(monday_of(date), 3)
 
-    if {thursday.year, thursday.month} == {date.year, date.month},
-      do: div(Date.diff(monday_of(date), first_monday(Date.beginning_of_month(date))), 7) + 1
+    if {thursday.year, thursday.month} == {date.year, date.month} do
+      div(Date.diff(monday_of(date), first_monday(Date.beginning_of_month(date))), 7) + 1
+    end
   end
 
-  defp week_of_its_year(date), do: date |> Date.to_erl() |> :calendar.iso_week_number() |> elem(1)
+  defp week_of_its_year(date) do
+    date
+    |> Date.to_erl()
+    |> :calendar.iso_week_number()
+    |> elem(1)
+  end
 
-  defp seconds(%Date{} = date),
-    do:
-      date |> NaiveDateTime.new!(~T[00:00:00]) |> NaiveDateTime.to_gregorian_seconds() |> elem(0)
+  defp seconds(%Date{} = date) do
+    date
+    |> NaiveDateTime.new!(~T[00:00:00])
+    |> NaiveDateTime.to_gregorian_seconds()
+    |> elem(0)
+  end
 
-  defp seconds({%Date{} = from, %Date{} = to}), do: {seconds(from), seconds(to)}
+  defp seconds({%Date{} = from, %Date{} = to}) do
+    {seconds(from), seconds(to)}
+  end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
-  defp spans({:ok, %IntervalSet{} = set}), do: set |> IntervalSet.members() |> Enum.map(&bounds/1)
+  defp spans({:ok, %IntervalSet{} = set}) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&bounds/1)
+  end
 
-  defp days(dates), do: for(date <- dates, do: seconds({date, Date.add(date, 1)}))
+  defp days(dates) do
+    for(date <- dates, do: seconds({date, Date.add(date, 1)}))
+  end
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   describe "a week beside a month, in a year" do
     test "is that week of the month, for each week of each month" do

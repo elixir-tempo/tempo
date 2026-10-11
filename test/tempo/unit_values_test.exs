@@ -167,7 +167,11 @@ defmodule Tempo.UnitValuesTest do
     test "the days of a month of any year are the fewest and the most its years give it" do
       for calendar <- @calendars do
         years = many_years(calendar)
-        most_months = years |> Enum.map(&calendar.months_in_year/1) |> Enum.max()
+
+        most_months =
+          years
+          |> Enum.map(&calendar.months_in_year/1)
+          |> Enum.max()
 
         for month <- 1..most_months do
           lengths =
@@ -242,10 +246,22 @@ defmodule Tempo.UnitValuesTest do
           assert UnitValues.last(:day, context, calendar) == {:ok, List.last(valid)}
 
           for day <- valid do
-            expected = if (day + 1) in valid, do: {:ok, day + 1}, else: :last
+            expected =
+              if (day + 1) in valid do
+                {:ok, day + 1}
+              else
+                :last
+              end
+
             assert UnitValues.following(:day, day, context, calendar) == expected
 
-            expected = if (day - 1) in valid, do: {:ok, day - 1}, else: :first
+            expected =
+              if (day - 1) in valid do
+                {:ok, day - 1}
+              else
+                :first
+              end
+
             assert UnitValues.preceding(:day, day, context, calendar) == expected
           end
         end
@@ -261,10 +277,22 @@ defmodule Tempo.UnitValuesTest do
         assert UnitValues.last(:month, context, calendar) == {:ok, List.last(valid)}
 
         for month <- valid do
-          expected = if (month + 1) in valid, do: {:ok, month + 1}, else: :last
+          expected =
+            if (month + 1) in valid do
+              {:ok, month + 1}
+            else
+              :last
+            end
+
           assert UnitValues.following(:month, month, context, calendar) == expected
 
-          expected = if (month - 1) in valid, do: {:ok, month - 1}, else: :first
+          expected =
+            if (month - 1) in valid do
+              {:ok, month - 1}
+            else
+              :first
+            end
+
           assert UnitValues.preceding(:month, month, context, calendar) == expected
         end
       end
@@ -323,7 +351,11 @@ defmodule Tempo.UnitValuesTest do
           valid = Enum.filter(1..40, &calendar.valid_date?(year, month, &1))
 
           for day <- 1..40 do
-            expected = valid |> Enum.filter(&(&1 <= day)) |> List.last()
+            expected =
+              valid
+              |> Enum.filter(&(&1 <= day))
+              |> List.last()
+
             assert UnitValues.at_or_before(:day, day, context, calendar) == {:ok, expected}
           end
         end
@@ -351,7 +383,11 @@ defmodule Tempo.UnitValuesTest do
     test "a day is followed by the next where every year has it, and is the last where no year has another" do
       for calendar <- @calendars do
         years = many_years(calendar)
-        most_months = years |> Enum.map(&calendar.months_in_year/1) |> Enum.max()
+
+        most_months =
+          years
+          |> Enum.map(&calendar.months_in_year/1)
+          |> Enum.max()
 
         for month <- 1..most_months do
           lengths =
@@ -373,7 +409,13 @@ defmodule Tempo.UnitValuesTest do
                    "#{inspect(calendar)} #{month}-#{day}"
           end
 
-          expected = if fewest == most, do: {:ok, most}, else: {:error, :unanchored}
+          expected =
+            if fewest == most do
+              {:ok, most}
+            else
+              {:error, :unanchored}
+            end
+
           assert UnitValues.last(:day, [month: month], calendar) == expected
         end
       end
@@ -382,7 +424,10 @@ defmodule Tempo.UnitValuesTest do
     test "a month is followed by the next where every year has it, and is the last where no year has another" do
       for calendar <- @calendars do
         {fewest, most} =
-          calendar |> many_years() |> Enum.map(&calendar.months_in_year/1) |> Enum.min_max()
+          calendar
+          |> many_years()
+          |> Enum.map(&calendar.months_in_year/1)
+          |> Enum.min_max()
 
         for month <- 1..most do
           expected =
@@ -401,7 +446,11 @@ defmodule Tempo.UnitValuesTest do
     test "a day every year's month has is itself, and one past a month of one length its last" do
       for calendar <- @calendars do
         years = many_years(calendar)
-        most_months = years |> Enum.map(&calendar.months_in_year/1) |> Enum.max()
+
+        most_months =
+          years
+          |> Enum.map(&calendar.months_in_year/1)
+          |> Enum.max()
 
         for month <- 1..most_months do
           lengths =
@@ -465,15 +514,22 @@ defmodule Tempo.UnitValuesTest do
   # The rule as a condition on one value: it is the number written, counted
   # from the end when that is negative, or it lies between a range's ends on
   # one of the range's steps.
-  defp names?(index, value, values) when is_integer(index), do: value == counted(index, values)
+  defp names?(index, value, values) when is_integer(index) do
+    value == counted(index, values)
+  end
 
   defp names?(%Range{first: first, last: last, step: step}, value, values) do
     from = counted(first, values)
     value >= from and value <= counted(last, values) and rem(value - from, step) == 0
   end
 
-  defp counted(index, %Range{last: last}) when index < 0, do: last + 1 + index
-  defp counted(index, _values), do: index
+  defp counted(index, %Range{last: last}) when index < 0 do
+    last + 1 + index
+  end
+
+  defp counted(index, _values) do
+    index
+  end
 
   describe "named/2" do
     property "names each value of the unit that a written number or range names, once and in order" do
@@ -587,9 +643,11 @@ defmodule Tempo.UnitValuesTest do
       check all(index <- integer(-70..70), values <- values()) do
         counted = UnitValues.from_end(index, values)
 
-        if index < 0,
-          do: assert(counted - values.last == index + 1),
-          else: assert(counted == index)
+        if index < 0 do
+          assert(counted - values.last == index + 1)
+        else
+          assert(counted == index)
+        end
       end
     end
   end
@@ -599,7 +657,9 @@ defmodule Tempo.UnitValuesTest do
     # converted to Elixir's calendar: every week of a calendar of weeks
     # starts on the same day.
     defp weekday_of_week_day(calendar, {year, week}, day) do
-      Date.new!(year, week, day, calendar) |> Date.convert!(Calendar.ISO) |> Date.day_of_week()
+      Date.new!(year, week, day, calendar)
+      |> Date.convert!(Calendar.ISO)
+      |> Date.day_of_week()
     end
 
     test "a day of a calendar of weeks is the weekday its dates fall on" do

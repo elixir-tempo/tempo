@@ -199,16 +199,23 @@ defmodule Tempo.RRule.Encoder do
     end
   end
 
-  defp day_left_to_start(_interval), do: :none
+  defp day_left_to_start(_interval) do
+    :none
+  end
 
   # A rule's selection and the units after it, which are parts of it too. A
   # rule of another shape has no RRULE form, and is refused by its own name.
-  defp selection_of(nil), do: {:ok, []}
+  defp selection_of(nil) do
+    {:ok, []}
+  end
 
-  defp selection_of(%Tempo{time: [{:selection, selection} | units]}),
-    do: {:ok, selection ++ units}
+  defp selection_of(%Tempo{time: [{:selection, selection} | units]}) do
+    {:ok, selection ++ units}
+  end
 
-  defp selection_of(_another_shape), do: :error
+  defp selection_of(_another_shape) do
+    :error
+  end
 
   # The months a start's day is put in: those the rule names, and with none
   # named every month for a step of months and the start's for one of years.
@@ -222,11 +229,17 @@ defmodule Tempo.RRule.Encoder do
     end
   end
 
-  defp months_named(nil, :month, _start_month, every_month), do: Enum.to_list(every_month)
-  defp months_named(nil, :year, start_month, _every_month), do: [start_month]
+  defp months_named(nil, :month, _start_month, every_month) do
+    Enum.to_list(every_month)
+  end
 
-  defp months_named(named, _unit, _start_month, every_month),
-    do: UnitValues.named(named, every_month)
+  defp months_named(nil, :year, start_month, _every_month) do
+    [start_month]
+  end
+
+  defp months_named(named, _unit, _start_month, every_month) do
+    UnitValues.named(named, every_month)
+  end
 
   # The last day each month reached has in every year, and in its longest.
   defp month_ends(months, calendar) do
@@ -237,7 +250,11 @@ defmodule Tempo.RRule.Encoder do
 
   defp last_day_stated(interval, day, months, calendar) do
     ends = month_ends(months, calendar)
-    shortest = ends |> Enum.map(&elem(&1, 0)) |> Enum.min(fn -> day end)
+
+    shortest =
+      ends
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.min(fn -> day end)
 
     cond do
       # Every month reached has the day in every year.
@@ -263,10 +280,13 @@ defmodule Tempo.RRule.Encoder do
   # BYSETPOS counts within a period of the rule's frequency: a month of a
   # monthly rule, and the year of a yearly one, which is one month's days
   # where the rule reaches one month.
-  defp one_set_a_period?(%Tempo.Interval{duration: %Tempo.Duration{time: [{:month, _count}]}}, _),
-    do: true
+  defp one_set_a_period?(%Tempo.Interval{duration: %Tempo.Duration{time: [{:month, _count}]}}, _) do
+    true
+  end
 
-  defp one_set_a_period?(_yearly, months), do: match?([_], months)
+  defp one_set_a_period?(_yearly, months) do
+    match?([_], months)
+  end
 
   # The last of the days up to the start's is a position, which would count
   # a position the rule already holds and the several times of a day it names.
@@ -320,10 +340,13 @@ defmodule Tempo.RRule.Encoder do
     }
   end
 
-  defp selection_and_units(%Tempo{time: [{:selection, selection} | units]}),
-    do: {selection, units}
+  defp selection_and_units(%Tempo{time: [{:selection, selection} | units]}) do
+    {selection, units}
+  end
 
-  defp selection_and_units(nil), do: {[], []}
+  defp selection_and_units(nil) do
+    {[], []}
+  end
 
   # `BYMONTHDAY` with no `BYMONTH` in a yearly rule is read as a day of the
   # start's month by some and of every month by others, so the month is said.
@@ -334,10 +357,16 @@ defmodule Tempo.RRule.Encoder do
          },
          coarser
        ) do
-    if Keyword.has_key?(coarser, :month), do: [], else: [month: Keyword.get(time, :month)]
+    if Keyword.has_key?(coarser, :month) do
+      []
+    else
+      [month: Keyword.get(time, :month)]
+    end
   end
 
-  defp month_of_start(_monthly, _coarser), do: []
+  defp month_of_start(_monthly, _coarser) do
+    []
+  end
 
   ## FREQ + INTERVAL
 
@@ -378,7 +407,9 @@ defmodule Tempo.RRule.Encoder do
 
   ## COUNT vs UNTIL vs neither
 
-  defp bound_part(%Tempo.Interval{recurrence: :infinity, to: nil}), do: {:ok, nil}
+  defp bound_part(%Tempo.Interval{recurrence: :infinity, to: nil}) do
+    {:ok, nil}
+  end
 
   # A recurrence's count is the number of its occurrences, and is written
   # whatever it is. One occurrence was written with no count, which is a
@@ -453,14 +484,20 @@ defmodule Tempo.RRule.Encoder do
   # rule part is present." A rule that holds a skip is counted in the
   # Gregorian calendar, the one an RRULE is written for, and says so.
   defp rscale_part(%Tempo{time: [{:selection, selection} | _units]}) do
-    if Keyword.has_key?(selection, :skip), do: "RSCALE=GREGORIAN"
+    if Keyword.has_key?(selection, :skip) do
+      "RSCALE=GREGORIAN"
+    end
   end
 
-  defp rscale_part(_no_selection), do: nil
+  defp rscale_part(_no_selection) do
+    nil
+  end
 
   ## BY* rules
 
-  defp by_parts(nil, _interval), do: {:ok, []}
+  defp by_parts(nil, _interval) do
+    {:ok, []}
+  end
 
   # A selection encodes only when every token has an RRULE BY-part; one
   # that has none is an error naming it, never a part silently dropped. The
@@ -517,14 +554,15 @@ defmodule Tempo.RRule.Encoder do
   # unspecified digits (`1XD`) stands for each value its digits match, which
   # the RFC has no way to say.
   defp numbers_alone(parts, interval) do
-    if Enum.any?(parts, &(match?({_unit, {:mask, _mask}}, &1) or match?({_unit, :any}, &1))),
-      do:
-        {:error,
-         not_allowed(
-           "a part written with unspecified digits (X), which stands for each number they match",
-           interval
-         )},
-      else: :ok
+    if Enum.any?(parts, &(match?({_unit, {:mask, _mask}}, &1) or match?({_unit, :any}, &1))) do
+      {:error,
+       not_allowed(
+         "a part written with unspecified digits (X), which stands for each number they match",
+         interval
+       )}
+    else
+      :ok
+    end
   end
 
   # WKST says the day a rule's weeks begin, which is Monday where none is
@@ -555,11 +593,13 @@ defmodule Tempo.RRule.Encoder do
 
   # The calendar a recurrence's occurrences are counted in: that of its
   # start, and with no start that of its rule.
-  defp counted_in(%Tempo.Interval{from: %Tempo{calendar: calendar}}),
-    do: calendar
+  defp counted_in(%Tempo.Interval{from: %Tempo{calendar: calendar}}) do
+    calendar
+  end
 
-  defp counted_in(%Tempo.Interval{repeat_rule: %Tempo{calendar: calendar}}),
-    do: calendar
+  defp counted_in(%Tempo.Interval{repeat_rule: %Tempo{calendar: calendar}}) do
+    calendar
+  end
 
   # BYDAY names weekdays, and a selection holds days of the week of its
   # rule's calendar, the last of them written `-1K`. Each is written as the
@@ -578,19 +618,30 @@ defmodule Tempo.RRule.Encoder do
 
   defp weekday_named({:day_of_week, days}, calendar) do
     case UnitValues.in_period(:day_of_week, [], calendar) do
-      {:ok, week} -> {:day_of_week, days |> UnitValues.named(week) |> weekdays(calendar)}
-      {:error, _cannot_count} -> {:day_of_week, days}
+      {:ok, week} ->
+        {:day_of_week,
+         days
+         |> UnitValues.named(week)
+         |> weekdays(calendar)}
+
+      {:error, _cannot_count} ->
+        {:day_of_week, days}
     end
   end
 
-  defp weekday_named(entry, _calendar), do: entry
+  defp weekday_named(entry, _calendar) do
+    entry
+  end
 
   # One weekday is written as a number, so that with a position after it it
   # is an ordinal weekday again (`2MO`).
-  defp weekdays([day], calendar), do: UnitValues.iso_weekday_from_day_of_week(day, calendar)
+  defp weekdays([day], calendar) do
+    UnitValues.iso_weekday_from_day_of_week(day, calendar)
+  end
 
-  defp weekdays(days, calendar),
-    do: Enum.map(days, &UnitValues.iso_weekday_from_day_of_week(&1, calendar))
+  defp weekdays(days, calendar) do
+    Enum.map(days, &UnitValues.iso_weekday_from_day_of_week(&1, calendar))
+  end
 
   defp no_such_weekday({:day_of_week, days}, interval) do
     ConversionError.exception(
@@ -630,28 +681,41 @@ defmodule Tempo.RRule.Encoder do
       )
   end
 
-  defp frequency(%Tempo.Interval{duration: %Tempo.Duration{time: [{unit, _count}]}}), do: unit
-  defp frequency(_interval), do: nil
+  defp frequency(%Tempo.Interval{duration: %Tempo.Duration{time: [{unit, _count}]}}) do
+    unit
+  end
+
+  defp frequency(_interval) do
+    nil
+  end
 
   # Fuse a single-weekday `day_of_week` immediately followed by `instance`
   # back into an ordinal `:byday` entry (the inverse of the §12.9 lowering in
   # `Tempo.RRule.Rule.push_byday/2`). Adjacency is guaranteed: the lowering
   # emits the pair together, ahead of any time element. A list-valued
   # `day_of_week` is a real multi-weekday set-position and is not fused.
-  defp recombine_ordinal_byday(selection, false), do: selection
+  defp recombine_ordinal_byday(selection, false) do
+    selection
+  end
 
   defp recombine_ordinal_byday([{:day_of_week, day}, {:instance, ordinals} | rest], true)
        when is_integer(day) do
     [{:byday, ordinal_byday_pairs(day, ordinals)} | recombine_ordinal_byday(rest, true)]
   end
 
-  defp recombine_ordinal_byday([entry | rest], true),
-    do: [entry | recombine_ordinal_byday(rest, true)]
+  defp recombine_ordinal_byday([entry | rest], true) do
+    [entry | recombine_ordinal_byday(rest, true)]
+  end
 
-  defp recombine_ordinal_byday([], true), do: []
+  defp recombine_ordinal_byday([], true) do
+    []
+  end
 
   defp ordinal_byday_pairs(day, ordinals) do
-    ordinals |> List.wrap() |> expand_ranges() |> Enum.map(&{&1, day})
+    ordinals
+    |> List.wrap()
+    |> expand_ranges()
+    |> Enum.map(&{&1, day})
   end
 
   # RFC 5545 §3.3.10: "The BYMONTHDAY rule part MUST NOT be specified when
@@ -694,19 +758,30 @@ defmodule Tempo.RRule.Encoder do
   end
 
   defp forbidden({:instance, _positions}, _unit, parts) do
-    if Enum.any?(parts, fn {token, _value} -> token in @by_parts end),
-      do: nil,
-      else: "BYSETPOS with no other BY part"
+    if Enum.any?(parts, fn {token, _value} -> token in @by_parts end) do
+      nil
+    else
+      "BYSETPOS with no other BY part"
+    end
   end
 
   defp forbidden({token, _value}, unit, _parts) do
-    if unit in Map.get(@forbidden_at, token, []),
-      do: "#{by_part_name(token)} in a #{Map.fetch!(@freq_for, unit)} rule"
+    if unit in Map.get(@forbidden_at, token, []) do
+      "#{by_part_name(token)} in a #{Map.fetch!(@freq_for, unit)} rule"
+    end
   end
 
-  defp by_part_name(:day), do: "BYMONTHDAY"
-  defp by_part_name(:day_of_year), do: "BYYEARDAY"
-  defp by_part_name(:week), do: "BYWEEKNO"
+  defp by_part_name(:day) do
+    "BYMONTHDAY"
+  end
+
+  defp by_part_name(:day_of_year) do
+    "BYYEARDAY"
+  end
+
+  defp by_part_name(:week) do
+    "BYWEEKNO"
+  end
 
   defp not_allowed(why, interval) do
     ConversionError.exception(
@@ -716,52 +791,106 @@ defmodule Tempo.RRule.Encoder do
     )
   end
 
-  defp encode_by_entry({:month, v}), do: ["BYMONTH=#{list_csv(v)}"]
-  defp encode_by_entry({:day, v}), do: ["BYMONTHDAY=#{list_csv(v)}"]
-  defp encode_by_entry({:day_of_year, v}), do: ["BYYEARDAY=#{list_csv(v)}"]
-  defp encode_by_entry({:week, v}), do: ["BYWEEKNO=#{list_csv(v)}"]
-  defp encode_by_entry({:hour, v}), do: ["BYHOUR=#{list_csv(v)}"]
-  defp encode_by_entry({:minute, v}), do: ["BYMINUTE=#{list_csv(v)}"]
-  defp encode_by_entry({:second, v}), do: ["BYSECOND=#{list_csv(v)}"]
-  defp encode_by_entry({:instance, v}), do: ["BYSETPOS=#{list_csv(v)}"]
-  defp encode_by_entry({:day_of_week, v}), do: ["BYDAY=#{byday_csv(v)}"]
+  defp encode_by_entry({:month, v}) do
+    ["BYMONTH=#{list_csv(v)}"]
+  end
 
-  defp encode_by_entry({:byday, pairs}) when is_list(pairs),
-    do: ["BYDAY=#{byday_pairs_csv(pairs)}"]
+  defp encode_by_entry({:day, v}) do
+    ["BYMONTHDAY=#{list_csv(v)}"]
+  end
 
-  defp encode_by_entry({:wkst, w}) when is_integer(w),
-    do: ["WKST=#{Map.fetch!(@weekday_code, w)}"]
+  defp encode_by_entry({:day_of_year, v}) do
+    ["BYYEARDAY=#{list_csv(v)}"]
+  end
 
-  defp encode_by_entry({:skip, :forward}), do: ["SKIP=FORWARD"]
-  defp encode_by_entry({:skip, :backward}), do: ["SKIP=BACKWARD"]
+  defp encode_by_entry({:week, v}) do
+    ["BYWEEKNO=#{list_csv(v)}"]
+  end
+
+  defp encode_by_entry({:hour, v}) do
+    ["BYHOUR=#{list_csv(v)}"]
+  end
+
+  defp encode_by_entry({:minute, v}) do
+    ["BYMINUTE=#{list_csv(v)}"]
+  end
+
+  defp encode_by_entry({:second, v}) do
+    ["BYSECOND=#{list_csv(v)}"]
+  end
+
+  defp encode_by_entry({:instance, v}) do
+    ["BYSETPOS=#{list_csv(v)}"]
+  end
+
+  defp encode_by_entry({:day_of_week, v}) do
+    ["BYDAY=#{byday_csv(v)}"]
+  end
+
+  defp encode_by_entry({:byday, pairs}) when is_list(pairs) do
+    ["BYDAY=#{byday_pairs_csv(pairs)}"]
+  end
+
+  defp encode_by_entry({:wkst, w}) when is_integer(w) do
+    ["WKST=#{Map.fetch!(@weekday_code, w)}"]
+  end
+
+  defp encode_by_entry({:skip, :forward}) do
+    ["SKIP=FORWARD"]
+  end
+
+  defp encode_by_entry({:skip, :backward}) do
+    ["SKIP=BACKWARD"]
+  end
 
   # What a selection token with no RRULE BY-part selects, and why RFC 5545
   # cannot say it.
-  defp token_description(:calendar_week),
-    do: "a calendar week (w), since BYWEEKNO counts ISO 8601 weeks"
+  defp token_description(:calendar_week) do
+    "a calendar week (w), since BYWEEKNO counts ISO 8601 weeks"
+  end
 
-  defp token_description(:week_of_month),
-    do: "a week of a month (W after a month), since BYWEEKNO counts the weeks of a year"
+  defp token_description(:week_of_month) do
+    "a week of a month (W after a month), since BYWEEKNO counts the weeks of a year"
+  end
 
-  defp token_description(:traditional_month),
-    do: "a traditional month (m), since BYMONTH numbers a month by its position"
+  defp token_description(:traditional_month) do
+    "a traditional month (m), since BYMONTH numbers a month by its position"
+  end
 
-  defp token_description(:event), do: "a computed event (e)"
-  defp token_description(:year), do: "a year (Y)"
-  defp token_description(:interval), do: "a selection window (ISO 8601-2 §12.10)"
-  defp token_description(:nearest_weekday), do: "a nearest weekday (cron W)"
+  defp token_description(:event) do
+    "a computed event (e)"
+  end
 
-  defp token_description(:or_day),
-    do: "a day of the month or of the week (cron), since RRULE BY-parts all hold at once"
+  defp token_description(:year) do
+    "a year (Y)"
+  end
 
-  defp token_description(token), do: Calendars.inspect(token)
+  defp token_description(:interval) do
+    "a selection window (ISO 8601-2 §12.10)"
+  end
+
+  defp token_description(:nearest_weekday) do
+    "a nearest weekday (cron W)"
+  end
+
+  defp token_description(:or_day) do
+    "a day of the month or of the week (cron), since RRULE BY-parts all hold at once"
+  end
+
+  defp token_description(token) do
+    Calendars.inspect(token)
+  end
 
   ## BYDAY helpers
 
-  defp byday_csv(day) when is_integer(day), do: Map.fetch!(@weekday_code, day)
+  defp byday_csv(day) when is_integer(day) do
+    Map.fetch!(@weekday_code, day)
+  end
 
   defp byday_csv(days) when is_list(days) do
-    days |> expand_ranges() |> Enum.map_join(",", &Map.fetch!(@weekday_code, &1))
+    days
+    |> expand_ranges()
+    |> Enum.map_join(",", &Map.fetch!(@weekday_code, &1))
   end
 
   defp byday_pairs_csv(pairs) do
@@ -773,10 +902,15 @@ defmodule Tempo.RRule.Encoder do
 
   ## Small helpers
 
-  defp list_csv(n) when is_integer(n), do: Integer.to_string(n)
+  defp list_csv(n) when is_integer(n) do
+    Integer.to_string(n)
+  end
 
-  defp list_csv(list) when is_list(list),
-    do: list |> expand_ranges() |> Enum.map_join(",", &Integer.to_string/1)
+  defp list_csv(list) when is_list(list) do
+    list
+    |> expand_ranges()
+    |> Enum.map_join(",", &Integer.to_string/1)
+  end
 
   # A selection value may carry consolidated ranges (`[1..5]`); RRULE `BY…`
   # parts are comma-separated integers, so expand them back before joining.
@@ -788,8 +922,12 @@ defmodule Tempo.RRule.Encoder do
   end
 
   defp pad(n, width) when is_integer(n) and n >= 0 do
-    n |> Integer.to_string() |> String.pad_leading(width, "0")
+    n
+    |> Integer.to_string()
+    |> String.pad_leading(width, "0")
   end
 
-  defp pad(n, _), do: Integer.to_string(n)
+  defp pad(n, _) do
+    Integer.to_string(n)
+  end
 end

@@ -46,17 +46,21 @@ defmodule Tempo.Interval.RelationNetworkTest do
     end
 
     test "a period equals itself" do
-      assert Net.new([:a]) |> Net.between(:a, :a) == [:equals]
+      assert Net.new([:a])
+             |> Net.between(:a, :a) == [:equals]
     end
 
     test "duplicate labels are collapsed" do
-      assert Net.new([:a, :a, :b]) |> Net.between(:a, :b) == Relations.full()
+      assert Net.new([:a, :a, :b])
+             |> Net.between(:a, :b) == Relations.full()
     end
   end
 
   describe "constrain/4" do
     test "records the inverse on the reverse pair" do
-      net = Net.new([:a, :b]) |> Net.constrain(:a, [:precedes, :meets], :b)
+      net =
+        Net.new([:a, :b])
+        |> Net.constrain(:a, [:precedes, :meets], :b)
 
       assert Net.between(net, :a, :b) == [:precedes, :meets]
       assert Net.between(net, :b, :a) == [:met_by, :preceded_by]
@@ -153,7 +157,8 @@ defmodule Tempo.Interval.RelationNetworkTest do
 
     test "a disjunction survives — the case Tempo.Network cannot represent" do
       net =
-        Net.new([:fire, :rebuild]) |> Net.constrain(:fire, [:precedes, :preceded_by], :rebuild)
+        Net.new([:fire, :rebuild])
+        |> Net.constrain(:fire, [:precedes, :preceded_by], :rebuild)
 
       assert {:ok, solved} = Net.propagate(net)
       assert Net.between(solved, :fire, :rebuild) == [:precedes, :preceded_by]

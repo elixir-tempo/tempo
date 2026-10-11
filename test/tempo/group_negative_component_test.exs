@@ -11,11 +11,19 @@ defmodule Tempo.GroupNegativeComponentTest do
   alias Tempo.IntervalSet
 
   defp expand_dates(iso) do
-    {:ok, set} = iso |> Tempo.from_iso8601!() |> Tempo.to_interval()
+    {:ok, set} =
+      iso
+      |> Tempo.from_iso8601!()
+      |> Tempo.to_interval()
 
     set
     |> IntervalSet.members()
-    |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_date() |> elem(1)))
+    |> Enum.map(
+      &(&1
+        |> Interval.from()
+        |> Tempo.to_date()
+        |> elem(1))
+    )
   end
 
   test "the last day of each month of a year" do
@@ -44,10 +52,15 @@ defmodule Tempo.GroupNegativeComponentTest do
   end
 
   test "a negative month resolves against each grouped year" do
-    {:ok, set} = "{2025,2026}Y-1M" |> Tempo.from_iso8601!() |> Tempo.to_interval()
+    {:ok, set} =
+      "{2025,2026}Y-1M"
+      |> Tempo.from_iso8601!()
+      |> Tempo.to_interval()
 
     months =
-      set |> IntervalSet.members() |> Enum.map(&{&1.from.time[:year], &1.from.time[:month]})
+      set
+      |> IntervalSet.members()
+      |> Enum.map(&{&1.from.time[:year], &1.from.time[:month]})
 
     assert months == [{2025, 12}, {2026, 12}]
   end
@@ -65,7 +78,12 @@ defmodule Tempo.GroupNegativeComponentTest do
     selection_dates =
       selected
       |> IntervalSet.members()
-      |> Enum.map(&(&1 |> Interval.from() |> Tempo.to_date() |> elem(1)))
+      |> Enum.map(
+        &(&1
+          |> Interval.from()
+          |> Tempo.to_date()
+          |> elem(1))
+      )
 
     assert literal == open_ended
     assert literal == recurrence
@@ -106,7 +124,15 @@ defmodule Tempo.GroupNegativeComponentTest do
 
     test "materialisation and enumeration agree" do
       iso = "{2026,2027}Y{1..-1}M{1..-1}D"
-      enumerated = iso |> Tempo.from_iso8601!() |> Enum.map(&(&1 |> Tempo.to_date() |> elem(1)))
+
+      enumerated =
+        iso
+        |> Tempo.from_iso8601!()
+        |> Enum.map(
+          &(&1
+            |> Tempo.to_date()
+            |> elem(1))
+        )
 
       assert expand_dates(iso) == enumerated
       assert Enum.count(enumerated) == 730

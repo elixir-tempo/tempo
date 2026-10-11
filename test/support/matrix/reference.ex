@@ -94,7 +94,9 @@ defmodule Tempo.Matrix.Reference do
 
   """
   @spec start(point()) :: {:ok, Tempo.Matrix.Extent.line(), integer()} | :none
-  def start(%{date: []} = point), do: {:ok, {:cycle, :hour}, elem(clock_span(point), 0)}
+  def start(%{date: []} = point) do
+    {:ok, {:cycle, :hour}, elem(clock_span(point), 0)}
+  end
 
   def start(point) do
     {from, _to} = wall_span(point)
@@ -185,17 +187,21 @@ defmodule Tempo.Matrix.Reference do
     for day <- 1..7, do: %{point | date: [year: year, week: week, day_of_week: day]}
   end
 
-  def finer(%{time: []} = point), do: for(hour <- 0..23, do: %{point | time: [hour: hour]})
+  def finer(%{time: []} = point) do
+    for(hour <- 0..23, do: %{point | time: [hour: hour]})
+  end
 
-  def finer(%{time: [hour: hour]} = point),
-    do: for(minute <- 0..59, do: %{point | time: [hour: hour, minute: minute]})
+  def finer(%{time: [hour: hour]} = point) do
+    for(minute <- 0..59, do: %{point | time: [hour: hour, minute: minute]})
+  end
 
   def finer(%{time: [hour: hour, minute: minute], fraction: nil} = point) do
     for second <- 0..59, do: %{point | time: [hour: hour, minute: minute, second: second]}
   end
 
-  def finer(%{time: [hour: _, minute: _, second: _], fraction: nil} = point),
-    do: for(tenth <- 0..9, do: %{point | fraction: {tenth, 1}})
+  def finer(%{time: [hour: _, minute: _, second: _], fraction: nil} = point) do
+    for(tenth <- 0..9, do: %{point | fraction: {tenth, 1}})
+  end
 
   def finer(%{time: [hour: _, minute: _, second: _], fraction: {value, digits}} = point)
       when digits < 6 do
@@ -235,22 +241,40 @@ defmodule Tempo.Matrix.Reference do
     %{point | date: day, time: clock}
   end
 
-  defp date_unit(unit) when unit in [:day_of_week, :day_of_year], do: :day
-  defp date_unit(unit), do: unit
+  defp date_unit(unit) when unit in [:day_of_week, :day_of_year] do
+    :day
+  end
+
+  defp date_unit(unit) do
+    unit
+  end
 
   # A proleptic Gregorian date in the units a date is written in.
-  defp dated([year: _], %Date{year: year}), do: [year: year]
-  defp dated([year: _, month: _], %Date{year: year, month: month}), do: [year: year, month: month]
+  defp dated([year: _], %Date{year: year}) do
+    [year: year]
+  end
 
-  defp dated([year: _, month: _, day: _], %Date{} = date),
-    do: [year: date.year, month: date.month, day: date.day]
+  defp dated([year: _, month: _], %Date{year: year, month: month}) do
+    [year: year, month: month]
+  end
 
-  defp dated([year: _, day_of_year: _], %Date{} = date),
-    do: [year: date.year, day_of_year: Date.day_of_year(date)]
+  defp dated([year: _, month: _, day: _], %Date{} = date) do
+    [year: date.year, month: date.month, day: date.day]
+  end
+
+  defp dated([year: _, day_of_year: _], %Date{} = date) do
+    [year: date.year, day_of_year: Date.day_of_year(date)]
+  end
 
   defp dated([{:year, _year}, {:week, _week} | day], %Date{} = date) do
     {year, week} = :calendar.iso_week_number(Date.to_erl(date))
-    weekday = if day == [], do: [], else: [day_of_week: Date.day_of_week(date)]
+
+    weekday =
+      if day == [] do
+        []
+      else
+        [day_of_week: Date.day_of_week(date)]
+      end
 
     [year: year, week: week] ++ weekday
   end
@@ -296,33 +320,54 @@ defmodule Tempo.Matrix.Reference do
 
   """
   @spec first_date(point()) :: Date.t()
-  def first_date(%{date: date, calendar: calendar}), do: first_date(date, calendar)
-
-  defp first_date([year: year], calendar), do: date(year, 1, 1, calendar)
-  defp first_date([year: year, month: month], calendar), do: date(year, month, 1, calendar)
-
-  defp first_date([year: year, month: month, day: day], calendar),
-    do: date(year, month, day, calendar)
-
-  defp first_date([year: year, week: week], _calendar), do: week_start(year, week)
-
-  defp first_date([year: year, week: week, day_of_week: day], _calendar),
-    do: Date.add(week_start(year, week), day - 1)
-
-  defp first_date([year: year, day_of_year: day], _calendar),
-    do: Date.add(Date.new!(year, 1, 1), day - 1)
-
-  # The day after the last a point's date covers.
-  defp next_date(%{date: [year: year], calendar: calendar}), do: date(year + 1, 1, 1, calendar)
-
-  defp next_date(%{date: [year: year, month: month], calendar: calendar}) do
-    if month == months_in_year(year, calendar),
-      do: date(year + 1, 1, 1, calendar),
-      else: date(year, month + 1, 1, calendar)
+  def first_date(%{date: date, calendar: calendar}) do
+    first_date(date, calendar)
   end
 
-  defp next_date(%{date: [year: _, week: _]} = point), do: Date.add(first_date(point), 7)
-  defp next_date(point), do: Date.add(first_date(point), 1)
+  defp first_date([year: year], calendar) do
+    date(year, 1, 1, calendar)
+  end
+
+  defp first_date([year: year, month: month], calendar) do
+    date(year, month, 1, calendar)
+  end
+
+  defp first_date([year: year, month: month, day: day], calendar) do
+    date(year, month, day, calendar)
+  end
+
+  defp first_date([year: year, week: week], _calendar) do
+    week_start(year, week)
+  end
+
+  defp first_date([year: year, week: week, day_of_week: day], _calendar) do
+    Date.add(week_start(year, week), day - 1)
+  end
+
+  defp first_date([year: year, day_of_year: day], _calendar) do
+    Date.add(Date.new!(year, 1, 1), day - 1)
+  end
+
+  # The day after the last a point's date covers.
+  defp next_date(%{date: [year: year], calendar: calendar}) do
+    date(year + 1, 1, 1, calendar)
+  end
+
+  defp next_date(%{date: [year: year, month: month], calendar: calendar}) do
+    if month == months_in_year(year, calendar) do
+      date(year + 1, 1, 1, calendar)
+    else
+      date(year, month + 1, 1, calendar)
+    end
+  end
+
+  defp next_date(%{date: [year: _, week: _]} = point) do
+    Date.add(first_date(point), 7)
+  end
+
+  defp next_date(point) do
+    Date.add(first_date(point), 1)
+  end
 
   # ISO 8601-1 §4.2.2: weeks begin on Monday, and a year's first week is the
   # one that holds its 4 January.
@@ -333,10 +378,15 @@ defmodule Tempo.Matrix.Reference do
     |> Date.add((week - 1) * 7)
   end
 
-  defp date(year, month, day, Calendrical.Gregorian), do: Date.new!(year, month, day)
+  defp date(year, month, day, Calendrical.Gregorian) do
+    Date.new!(year, month, day)
+  end
 
-  defp date(year, month, day, calendar),
-    do: year |> Date.new!(month, day, calendar) |> Date.convert!(ISO)
+  defp date(year, month, day, calendar) do
+    year
+    |> Date.new!(month, day, calendar)
+    |> Date.convert!(ISO)
+  end
 
   @doc """
   The months a year has in a calendar.
@@ -353,8 +403,13 @@ defmodule Tempo.Matrix.Reference do
 
   """
   @spec months_in_year(integer(), module()) :: pos_integer()
-  def months_in_year(_year, Calendrical.Gregorian), do: 12
-  def months_in_year(year, calendar), do: calendar.months_in_year(year)
+  def months_in_year(_year, Calendrical.Gregorian) do
+    12
+  end
+
+  def months_in_year(year, calendar) do
+    calendar.months_in_year(year)
+  end
 
   @doc """
   The days a month has in a calendar.
@@ -371,12 +426,17 @@ defmodule Tempo.Matrix.Reference do
 
   """
   @spec days_in_month(integer(), pos_integer(), module()) :: pos_integer()
-  def days_in_month(year, month, Calendrical.Gregorian),
-    do: ISO.days_in_month(year, month)
+  def days_in_month(year, month, Calendrical.Gregorian) do
+    ISO.days_in_month(year, month)
+  end
 
-  def days_in_month(year, month, calendar), do: calendar.days_in_month(year, month)
+  def days_in_month(year, month, calendar) do
+    calendar.days_in_month(year, month)
+  end
 
-  defp midnight(date), do: NaiveDateTime.new!(date, Time.new!(0, 0, 0, {0, 6}))
+  defp midnight(date) do
+    NaiveDateTime.new!(date, Time.new!(0, 0, 0, {0, 6}))
+  end
 
   # The microseconds after midnight a point's time of day starts and ends
   # at: the unit after its last is the hour, the minute, the second or the
@@ -387,24 +447,51 @@ defmodule Tempo.Matrix.Reference do
     {from, from + unit_microseconds(time, fraction)}
   end
 
-  defp fraction_microseconds(nil), do: 0
-  defp fraction_microseconds({value, digits}), do: value * Integer.pow(10, 6 - digits)
+  defp fraction_microseconds(nil) do
+    0
+  end
 
-  defp unit_microseconds(_time, {_value, digits}), do: Integer.pow(10, 6 - digits)
-  defp unit_microseconds([hour: _], nil), do: 3_600 * @microseconds
-  defp unit_microseconds([hour: _, minute: _], nil), do: 60 * @microseconds
-  defp unit_microseconds([hour: _, minute: _, second: _], nil), do: @microseconds
+  defp fraction_microseconds({value, digits}) do
+    value * Integer.pow(10, 6 - digits)
+  end
+
+  defp unit_microseconds(_time, {_value, digits}) do
+    Integer.pow(10, 6 - digits)
+  end
+
+  defp unit_microseconds([hour: _], nil) do
+    3_600 * @microseconds
+  end
+
+  defp unit_microseconds([hour: _, minute: _], nil) do
+    60 * @microseconds
+  end
+
+  defp unit_microseconds([hour: _, minute: _, second: _], nil) do
+    @microseconds
+  end
 
   ## Positions
 
-  defp line(nil), do: :floating
-  defp line(_zone), do: :time
+  defp line(nil) do
+    :floating
+  end
 
-  defp position(naive, nil), do: {:ok, gregorian(naive)}
-  defp position(naive, :utc), do: {:ok, gregorian(naive)}
+  defp line(_zone) do
+    :time
+  end
 
-  defp position(naive, {:offset, minutes}),
-    do: {:ok, gregorian(naive) - minutes * 60 * @microseconds}
+  defp position(naive, nil) do
+    {:ok, gregorian(naive)}
+  end
+
+  defp position(naive, :utc) do
+    {:ok, gregorian(naive)}
+  end
+
+  defp position(naive, {:offset, minutes}) do
+    {:ok, gregorian(naive) - minutes * 60 * @microseconds}
+  end
 
   # A wall time a zone's clocks skip, or show twice, is no one moment.
   defp position(naive, {:zone, name}) do
@@ -422,13 +509,23 @@ defmodule Tempo.Matrix.Reference do
     seconds * @microseconds + microseconds
   end
 
-  defp nonempty(from, to) when from < to, do: [{from, to}]
-  defp nonempty(_from, _to), do: []
+  defp nonempty(from, to) when from < to do
+    [{from, to}]
+  end
+
+  defp nonempty(_from, _to) do
+    []
+  end
 
   # A time of day lies on the day, and a span that runs through midnight
   # is cut there.
-  defp on_day(from, to) when to <= @day, do: [{from, to}]
-  defp on_day(from, to), do: [{0, to - @day}, {from, @day}]
+  defp on_day(from, to) when to <= @day do
+    [{from, to}]
+  end
+
+  defp on_day(from, to) do
+    [{0, to - @day}, {from, @day}]
+  end
 
   ## Elixir values
 
@@ -451,14 +548,25 @@ defmodule Tempo.Matrix.Reference do
 
   """
   @spec elixir(point()) :: {:ok, Date.t() | Time.t() | NaiveDateTime.t() | DateTime.t()} | :none
-  def elixir(%{time: []} = point), do: elixir_date(point)
+  def elixir(%{time: []} = point) do
+    elixir_date(point)
+  end
 
-  def elixir(%{date: [], time: [hour: hour, minute: minute, second: second]} = point),
-    do: {:ok, Time.new!(hour, minute, second, precision(point.fraction))}
+  def elixir(%{date: [], time: [hour: hour, minute: minute, second: second]} = point) do
+    {:ok, Time.new!(hour, minute, second, precision(point.fraction))}
+  end
 
-  def elixir(%{time: [hour: _, minute: _, second: _], zone: nil} = point), do: naive(point)
-  def elixir(%{time: [hour: _, minute: _, second: _]} = point), do: datetime(point)
-  def elixir(_point), do: :none
+  def elixir(%{time: [hour: _, minute: _, second: _], zone: nil} = point) do
+    naive(point)
+  end
+
+  def elixir(%{time: [hour: _, minute: _, second: _]} = point) do
+    datetime(point)
+  end
+
+  def elixir(_point) do
+    :none
+  end
 
   @doc """
   The `Date` a point of a day is, in its own calendar.
@@ -480,11 +588,17 @@ defmodule Tempo.Matrix.Reference do
     end
   end
 
-  def elixir_date(%{date: [year: _, week: _, day_of_week: _]} = point),
-    do: {:ok, first_date(point)}
+  def elixir_date(%{date: [year: _, week: _, day_of_week: _]} = point) do
+    {:ok, first_date(point)}
+  end
 
-  def elixir_date(%{date: [year: _, day_of_year: _]} = point), do: {:ok, first_date(point)}
-  def elixir_date(_point), do: :none
+  def elixir_date(%{date: [year: _, day_of_year: _]} = point) do
+    {:ok, first_date(point)}
+  end
+
+  def elixir_date(_point) do
+    :none
+  end
 
   @doc """
   The `NaiveDateTime` a point of a date and a time to the second is, its
@@ -506,7 +620,9 @@ defmodule Tempo.Matrix.Reference do
     end
   end
 
-  def naive(_point), do: :none
+  def naive(_point) do
+    :none
+  end
 
   @doc """
   The `DateTime` a point with a zone is: in its zone when it names one,
@@ -522,7 +638,9 @@ defmodule Tempo.Matrix.Reference do
 
   """
   @spec datetime(point()) :: {:ok, DateTime.t()} | :none
-  def datetime(%{zone: nil}), do: :none
+  def datetime(%{zone: nil}) do
+    :none
+  end
 
   def datetime(%{zone: {:zone, name}} = point) do
     with {:ok, naive} <- naive(point),
@@ -541,9 +659,19 @@ defmodule Tempo.Matrix.Reference do
     end
   end
 
-  defp offset_seconds(:utc), do: 0
-  defp offset_seconds({:offset, minutes}), do: minutes * 60
+  defp offset_seconds(:utc) do
+    0
+  end
 
-  defp precision(nil), do: {0, 0}
-  defp precision({value, digits}), do: {value * Integer.pow(10, 6 - digits), digits}
+  defp offset_seconds({:offset, minutes}) do
+    minutes * 60
+  end
+
+  defp precision(nil) do
+    {0, 0}
+  end
+
+  defp precision({value, digits}) do
+    {value * Integer.pow(10, 6 - digits), digits}
+  end
 end

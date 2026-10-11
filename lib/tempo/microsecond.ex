@@ -121,7 +121,9 @@ defmodule Tempo.Microsecond do
     true
   end
 
-  def valid?(_other), do: false
+  def valid?(_other) do
+    false
+  end
 
   @doc """
   Render a microsecond component as its fractional-digit string,
@@ -152,7 +154,9 @@ defmodule Tempo.Microsecond do
 
   """
   @spec to_digits_string(t()) :: String.t()
-  def to_digits_string({_value, 0}), do: ""
+  def to_digits_string({_value, 0}) do
+    ""
+  end
 
   def to_digits_string({value, precision})
       when is_integer(value) and is_integer(precision) and precision > 0 do
@@ -163,12 +167,35 @@ defmodule Tempo.Microsecond do
   end
 
   @compile {:inline, pow10: 1}
-  defp pow10(0), do: 1
-  defp pow10(1), do: 10
-  defp pow10(2), do: 100
-  defp pow10(3), do: 1_000
-  defp pow10(4), do: 10_000
-  defp pow10(5), do: 100_000
-  defp pow10(6), do: 1_000_000
-  defp pow10(n) when n > 6, do: 1_000_000 * pow10(n - 6)
+  defp pow10(0) do
+    1
+  end
+
+  defp pow10(1) do
+    10
+  end
+
+  defp pow10(2) do
+    100
+  end
+
+  defp pow10(3) do
+    1_000
+  end
+
+  defp pow10(4) do
+    10_000
+  end
+
+  defp pow10(5) do
+    100_000
+  end
+
+  defp pow10(6) do
+    1_000_000
+  end
+
+  defp pow10(n) when n > 6 do
+    1_000_000 * pow10(n - 6)
+  end
 end

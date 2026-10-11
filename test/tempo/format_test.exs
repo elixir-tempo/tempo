@@ -571,7 +571,12 @@ defmodule Tempo.FormatTest do
 
     test "no combination fails" do
       for {label, value} <- @values, format <- @formats do
-        options = if format, do: [format: format, locale: :en], else: [locale: :en]
+        options =
+          if format do
+            [format: format, locale: :en]
+          else
+            [locale: :en]
+          end
 
         assert match?({:ok, string} when is_binary(string), Tempo.to_string(value, options)),
                "#{label} with #{inspect(format)} did not return a string"
@@ -582,7 +587,13 @@ defmodule Tempo.FormatTest do
       # An empty field shows up as a separator with nothing before or
       # after it: a leading ":", a doubled "::", or a stray ", ".
       for {label, value} <- @values, format <- @formats do
-        options = if format, do: [format: format, locale: :en], else: [locale: :en]
+        options =
+          if format do
+            [format: format, locale: :en]
+          else
+            [locale: :en]
+          end
+
         {:ok, rendered} = Tempo.to_string(value, options)
 
         refute rendered =~ ~r/(^|\s):/,

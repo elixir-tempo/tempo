@@ -11,7 +11,9 @@ end
 # functions a caller of the behaviour calls, which no caller names.
 callbacks = fn module ->
   for behaviour <-
-        module.module_info(:attributes) |> Keyword.get_values(:behaviour) |> List.flatten(),
+        module.module_info(:attributes)
+        |> Keyword.get_values(:behaviour)
+        |> List.flatten(),
       Code.ensure_loaded?(behaviour),
       function_exported?(behaviour, :behaviour_info, 1),
       callback <- behaviour.behaviour_info(:callbacks),
@@ -20,7 +22,10 @@ end
 
 rows =
   for module <- Application.spec(:ex_tempo, :modules),
-      source = module.module_info(:compile)[:source] |> to_string() |> Path.relative_to_cwd(),
+      source =
+        module.module_info(:compile)[:source]
+        |> to_string()
+        |> Path.relative_to_cwd(),
       String.starts_with?(source, "lib/"),
       {:docs_v1, _anno, _language, _format, moduledoc, _meta, docs} = Code.fetch_docs(module),
       implemented = callbacks.(module),

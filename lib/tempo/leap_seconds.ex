@@ -76,7 +76,9 @@ defmodule Tempo.LeapSeconds do
   @dialyzer {:nowarn_function, dates: 0}
 
   @spec dates() :: [{integer(), 1..12, 1..31}, ...]
-  def dates, do: @leap_second_dates
+  def dates do
+    @leap_second_dates
+  end
 
   @doc """
   Return `true` when a positive leap second was inserted at the
@@ -155,5 +157,7 @@ defmodule Tempo.LeapSeconds do
   # a non-empty future without the nowarn suppression flipping.
   @dialyzer {:nowarn_function, removals: 0}
   @spec removals() :: [{integer(), 1..12, 1..31}]
-  def removals, do: []
+  def removals do
+    []
+  end
 end

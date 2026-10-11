@@ -501,7 +501,10 @@ defmodule Tempo do
     calendar = Keyword.get(components, :calendar)
 
     if is_nil(calendar) or Calendars.outside?(calendar) do
-      components |> Calendars.inside() |> do_new() |> Calendars.outside()
+      components
+      |> Calendars.inside()
+      |> do_new()
+      |> Calendars.outside()
     else
       do_new(components)
     end
@@ -597,7 +600,9 @@ defmodule Tempo do
   # (`:hebrew`, "hebrew"). What was given was held as the value's calendar
   # and called as a module where the value was first checked or used, which
   # raised.
-  defp validate_calendar(nil), do: :ok
+  defp validate_calendar(nil) do
+    :ok
+  end
 
   defp validate_calendar(calendar) do
     case Calendars.validated(calendar) do
@@ -609,18 +614,29 @@ defmodule Tempo do
   # A zone is the name of one the time zone database has. What was given
   # was held as the value's zone: an unknown one is read as UTC, and what
   # is no name was not written with the value.
-  defp validate_zone(nil), do: :ok
-
-  defp validate_zone(zone) when is_binary(zone) do
-    if TimeZoneDatabase.zone_exists?(zone),
-      do: :ok,
-      else: {:error, UnknownZoneError.exception(zone_id: zone)}
+  defp validate_zone(nil) do
+    :ok
   end
 
-  defp validate_zone(zone), do: {:error, UnknownZoneError.exception(zone_id: zone)}
+  defp validate_zone(zone) when is_binary(zone) do
+    if TimeZoneDatabase.zone_exists?(zone) do
+      :ok
+    else
+      {:error, UnknownZoneError.exception(zone_id: zone)}
+    end
+  end
 
-  defp validate_qualification(nil), do: :ok
-  defp validate_qualification(value) when value in @qualification_values, do: :ok
+  defp validate_zone(zone) do
+    {:error, UnknownZoneError.exception(zone_id: zone)}
+  end
+
+  defp validate_qualification(nil) do
+    :ok
+  end
+
+  defp validate_qualification(value) when value in @qualification_values do
+    :ok
+  end
 
   defp validate_qualification(other) do
     {:error,
@@ -629,7 +645,9 @@ defmodule Tempo do
      )}
   end
 
-  defp validate_metadata(metadata) when is_map(metadata), do: :ok
+  defp validate_metadata(metadata) when is_map(metadata) do
+    :ok
+  end
 
   defp validate_metadata(other) do
     {:error, ArgumentError.exception(":metadata must be a map, got #{Calendars.inspect(other)}")}
@@ -641,7 +659,11 @@ defmodule Tempo do
   # own option, so `u-ca` is not a tag here.
   defp validate_tags(tags) when is_map(tags) do
     Enum.find_value(tags, :ok, fn {key, value} ->
-      if valid_tag?(key, value), do: nil, else: invalid_tag(key, value)
+      if valid_tag?(key, value) do
+        nil
+      else
+        invalid_tag(key, value)
+      end
     end)
   end
 
@@ -653,16 +675,25 @@ defmodule Tempo do
     Regex.match?(~r/\A[a-z_][a-z0-9_-]*\z/, key) and valid_tag_value?(tag_segments(value))
   end
 
-  defp valid_tag?(_key, _value), do: false
+  defp valid_tag?(_key, _value) do
+    false
+  end
 
   defp valid_tag_value?([_ | _] = segments) do
     Enum.all?(segments, &(is_binary(&1) and Regex.match?(~r/\A[A-Za-z0-9]+\z/, &1)))
   end
 
-  defp valid_tag_value?(_segments), do: false
+  defp valid_tag_value?(_segments) do
+    false
+  end
 
-  defp tag_segments(value) when is_binary(value), do: String.split(value, "-")
-  defp tag_segments(value), do: value
+  defp tag_segments(value) when is_binary(value) do
+    String.split(value, "-")
+  end
+
+  defp tag_segments(value) do
+    value
+  end
 
   defp invalid_tag(key, value) do
     {:error,
@@ -704,11 +735,17 @@ defmodule Tempo do
 
   # A fraction of a second is the pair Elixir's types hold: its microseconds
   # and the digits it is written to.
-  defp component_value?(:microsecond, {value, precision}),
-    do: value in 0..999_999 and precision in 0..6
+  defp component_value?(:microsecond, {value, precision}) do
+    value in 0..999_999 and precision in 0..6
+  end
 
-  defp component_value?(:microsecond, _value), do: false
-  defp component_value?(_unit, value), do: is_integer(value)
+  defp component_value?(:microsecond, _value) do
+    false
+  end
+
+  defp component_value?(_unit, value) do
+    is_integer(value)
+  end
 
   defp component_value_error(:microsecond, value) do
     InvalidDateError.exception(
@@ -718,8 +755,9 @@ defmodule Tempo do
     )
   end
 
-  defp component_value_error(unit, value),
-    do: InvalidDateError.exception(unit: unit, value: value, reason: "must be an integer")
+  defp component_value_error(unit, value) do
+    InvalidDateError.exception(unit: unit, value: value, reason: "must be an integer")
+  end
 
   # A fraction is of the second it follows, and one written to no digits is
   # none.
@@ -732,10 +770,11 @@ defmodule Tempo do
         {:ok, components}
 
       {fraction, without_fraction} ->
-        if Keyword.has_key?(without_fraction, :second),
-          do: {:ok, without_fraction ++ [microsecond: fraction]},
-          else:
-            {:error, ArgumentError.exception("Tempo.new/1 needs a :second for a :microsecond.")}
+        if Keyword.has_key?(without_fraction, :second) do
+          {:ok, without_fraction ++ [microsecond: fraction]}
+        else
+          {:error, ArgumentError.exception("Tempo.new/1 needs a :second for a :microsecond.")}
+        end
     end
   end
 
@@ -801,9 +840,11 @@ defmodule Tempo do
         {:ok, components}
 
       {day_of_year, without_day_of_year} ->
-        if Validation.written_in_another_calendar?(components, calendar),
-          do: {:ok, components},
-          else: ordinal_date(without_day_of_year, day_of_year, calendar)
+        if Validation.written_in_another_calendar?(components, calendar) do
+          {:ok, components}
+        else
+          ordinal_date(without_day_of_year, day_of_year, calendar)
+        end
     end
   end
 
@@ -865,7 +906,9 @@ defmodule Tempo do
   end
 
   # A value with neither a zone nor a tag carries no extended information.
-  defp new_extended(nil, tags) when map_size(tags) == 0, do: nil
+  defp new_extended(nil, tags) when map_size(tags) == 0 do
+    nil
+  end
 
   defp new_extended(zone, tags) do
     %{zone_id: zone, zone_offset: nil, zone_critical: false, tags: tags}
@@ -1014,7 +1057,9 @@ defmodule Tempo do
            | Tempo.Set.t()}
           | {:error, error_reason()}
   def from_iso8601(string, calendar_or_options \\ []) do
-    string |> read(Calendars.inside(calendar_or_options)) |> Calendars.outside()
+    string
+    |> read(Calendars.inside(calendar_or_options))
+    |> Calendars.outside()
   end
 
   @doc false
@@ -1067,25 +1112,41 @@ defmodule Tempo do
     ParseError.exception(reason: "Could not parse #{written}: it is not a string")
   end
 
-  defp strict?(options), do: Keyword.get(options, :strict, false) == true
+  defp strict?(options) do
+    Keyword.get(options, :strict, false) == true
+  end
 
   # A season of 21 to 24 is given a hemisphere where it is read with a
   # territory or a locale, and is left as it is written where it is read
   # with neither: the current locale is not asked here, since the sigil
   # reads when it is compiled. A territory wins over a locale.
   defp in_territory_given(value, options) do
-    if Group.abstract_season?(value),
-      do: options |> Territory.named() |> season_in_territory_given(value),
-      else: {:ok, value}
+    if Group.abstract_season?(value) do
+      options
+      |> Territory.named()
+      |> season_in_territory_given(value)
+    else
+      {:ok, value}
+    end
   end
 
-  defp season_in_territory_given({:ok, nil}, value), do: {:ok, value}
-  defp season_in_territory_given({:ok, territory}, value), do: in_territory(value, territory)
-  defp season_in_territory_given({:error, _reason} = error, _value), do: error
+  defp season_in_territory_given({:ok, nil}, value) do
+    {:ok, value}
+  end
+
+  defp season_in_territory_given({:ok, territory}, value) do
+    in_territory(value, territory)
+  end
+
+  defp season_in_territory_given({:error, _reason} = error, _value) do
+    error
+  end
 
   defp do_from_iso8601(string, requested_calendar, strict?) do
     with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string) do
-      tokens |> from_tokens(extended, requested_calendar, strict?) |> named_as_written(string)
+      tokens
+      |> from_tokens(extended, requested_calendar, strict?)
+      |> named_as_written(string)
     end
   end
 
@@ -1110,13 +1171,17 @@ defmodule Tempo do
     end
   end
 
-  defp named_as_written(result, _string), do: result
+  defp named_as_written(result, _string) do
+    result
+  end
 
-  defp with_reason(%IntervalEndpointsError{} = exception, reason),
-    do: %{exception | reason: reason}
+  defp with_reason(%IntervalEndpointsError{} = exception, reason) do
+    %{exception | reason: reason}
+  end
 
-  defp with_reason(%InvalidDateError{} = exception, reason),
-    do: %{exception | reason: reason, unit: nil, value: nil, valid_range: nil}
+  defp with_reason(%InvalidDateError{} = exception, reason) do
+    %{exception | reason: reason, unit: nil, value: nil, valid_range: nil}
+  end
 
   defp basic_end_reason(string, date, time, digits) do
     "The end #{Calendars.inspect(digits)} of #{Calendars.inspect(string)} is read as #{basic_end_reading(digits)}: " <>
@@ -1125,10 +1190,13 @@ defmodule Tempo do
       basic_end_advice(date, time, digits)
   end
 
-  defp basic_end_reading(<<year::binary-4>>), do: "the year #{String.to_integer(year)}"
+  defp basic_end_reading(<<year::binary-4>>) do
+    "the year #{String.to_integer(year)}"
+  end
 
-  defp basic_end_reading(<<year::binary-4, month::binary-2>>),
-    do: "the year #{String.to_integer(year)} and the month #{month}"
+  defp basic_end_reading(<<year::binary-4, month::binary-2>>) do
+    "the year #{String.to_integer(year)} and the month #{month}"
+  end
 
   # An end of four digits after a date may be meant for its month and day,
   # which the extended format writes without the ambiguity, or for a time of
@@ -1149,11 +1217,14 @@ defmodule Tempo do
   end
 
   defp month_and_day(<<month::binary-2, day::binary-2>>) do
-    if String.to_integer(month) in 1..12 and String.to_integer(day) in 1..31,
-      do: "#{month}-#{day}"
+    if String.to_integer(month) in 1..12 and String.to_integer(day) in 1..31 do
+      "#{month}-#{day}"
+    end
   end
 
-  defp month_and_day(_six_digits), do: nil
+  defp month_and_day(_six_digits) do
+    nil
+  end
 
   # Everything after tokenization. Shared by `from_iso8601/1,2` and by
   # the profile parsers (`parse_date/1` and friends), which differ only
@@ -1193,8 +1264,9 @@ defmodule Tempo do
   # module, and a value read from text is equal to the same value made with a
   # calendar module. What is left of a suffix is its zone and its tags, or
   # `nil` when it had neither.
-  defp without_calendar_names(%__MODULE__{extended: %{} = extended} = tempo),
-    do: %{tempo | extended: zone_and_tags(extended)}
+  defp without_calendar_names(%__MODULE__{extended: %{} = extended} = tempo) do
+    %{tempo | extended: zone_and_tags(extended)}
+  end
 
   defp without_calendar_names(%Tempo.Interval{} = interval) do
     %{
@@ -1205,13 +1277,17 @@ defmodule Tempo do
     }
   end
 
-  defp without_calendar_names(%Tempo.Set{} = set),
-    do: map_members(set, &without_calendar_names/1)
+  defp without_calendar_names(%Tempo.Set{} = set) do
+    map_members(set, &without_calendar_names/1)
+  end
 
-  defp without_calendar_names(%Tempo.Range{first: first, last: last} = range),
-    do: %{range | first: without_calendar_names(first), last: without_calendar_names(last)}
+  defp without_calendar_names(%Tempo.Range{first: first, last: last} = range) do
+    %{range | first: without_calendar_names(first), last: without_calendar_names(last)}
+  end
 
-  defp without_calendar_names(other), do: other
+  defp without_calendar_names(other) do
+    other
+  end
 
   defp zone_and_tags(extended) do
     case Map.delete(extended, :calendar) do
@@ -1231,13 +1307,17 @@ defmodule Tempo do
   end
 
   # A set's member that is an interval is read as an interval is.
-  defp propagate_endpoint_frame(%Tempo.Set{} = set),
-    do: map_members(set, &propagate_endpoint_frame/1)
+  defp propagate_endpoint_frame(%Tempo.Set{} = set) do
+    map_members(set, &propagate_endpoint_frame/1)
+  end
 
-  defp propagate_endpoint_frame(other), do: other
+  defp propagate_endpoint_frame(other) do
+    other
+  end
 
-  defp map_members(%Tempo.Set{set: members, except: except} = set, fun),
-    do: %{set | set: Enum.map(members, fun), except: Enum.map(except, fun)}
+  defp map_members(%Tempo.Set{set: members, except: except} = set, fun) do
+    %{set | set: Enum.map(members, fun), except: Enum.map(except, fun)}
+  end
 
   # A per-endpoint IXDTF `u-ca` suffix (`1447Y9M1D[u-ca=islamic-civil]/…`,
   # the form `to_iso8601/1` emits for non-Gregorian interval endpoints)
@@ -1255,8 +1335,9 @@ defmodule Tempo do
     }
   end
 
-  defp maybe_resolve_endpoint_calendars(%Tempo.Set{} = set, :from_ixdtf_or_default),
-    do: map_members(set, &maybe_resolve_endpoint_calendars(&1, :from_ixdtf_or_default))
+  defp maybe_resolve_endpoint_calendars(%Tempo.Set{} = set, :from_ixdtf_or_default) do
+    map_members(set, &maybe_resolve_endpoint_calendars(&1, :from_ixdtf_or_default))
+  end
 
   # A member of a set, and each end of a range in one, is in the calendar its
   # own suffix names, as an end of an interval is.
@@ -1268,10 +1349,13 @@ defmodule Tempo do
     }
   end
 
-  defp maybe_resolve_endpoint_calendars(%__MODULE__{} = member, :from_ixdtf_or_default),
-    do: resolve_endpoint_calendar(member)
+  defp maybe_resolve_endpoint_calendars(%__MODULE__{} = member, :from_ixdtf_or_default) do
+    resolve_endpoint_calendar(member)
+  end
 
-  defp maybe_resolve_endpoint_calendars(other, _requested_calendar), do: other
+  defp maybe_resolve_endpoint_calendars(other, _requested_calendar) do
+    other
+  end
 
   defp resolve_endpoint_calendar(%__MODULE__{extended: %{calendar: type}} = endpoint)
        when is_atom(type) and not is_nil(type) do
@@ -1281,7 +1365,9 @@ defmodule Tempo do
     end
   end
 
-  defp resolve_endpoint_calendar(endpoint), do: endpoint
+  defp resolve_endpoint_calendar(endpoint) do
+    endpoint
+  end
 
   # Resolve the effective calendar for a parse.
   #
@@ -1289,17 +1375,21 @@ defmodule Tempo do
   # * Otherwise, if the IXDTF `[u-ca=NAME]` suffix is present, its
   #   atom is resolved to a calendar module (`Tempo.Calendars.named/1`).
   # * Otherwise, the calendar of a value that names none.
-  defp resolve_calendar(:from_ixdtf_or_default, nil),
-    do: {:ok, Calendars.default()}
+  defp resolve_calendar(:from_ixdtf_or_default, nil) do
+    {:ok, Calendars.default()}
+  end
 
-  defp resolve_calendar(:from_ixdtf_or_default, %{calendar: nil}),
-    do: {:ok, Calendars.default()}
+  defp resolve_calendar(:from_ixdtf_or_default, %{calendar: nil}) do
+    {:ok, Calendars.default()}
+  end
 
-  defp resolve_calendar(:from_ixdtf_or_default, %{calendar: name}) when is_atom(name),
-    do: Calendars.named(name)
+  defp resolve_calendar(:from_ixdtf_or_default, %{calendar: name}) when is_atom(name) do
+    Calendars.named(name)
+  end
 
-  defp resolve_calendar(:from_ixdtf_or_default, _extended),
-    do: {:ok, Calendars.default()}
+  defp resolve_calendar(:from_ixdtf_or_default, _extended) do
+    {:ok, Calendars.default()}
+  end
 
   # An explicit calendar always wins — but validate it is a usable
   # calendar module first. Passing a namespace like `Calendrical.Islamic`
@@ -1313,7 +1403,9 @@ defmodule Tempo do
   end
 
   @doc false
-  def attach_extended(result, nil), do: result
+  def attach_extended(result, nil) do
+    result
+  end
 
   def attach_extended(%__MODULE__{extended: existing} = tempo, extended) do
     # An endpoint-local `:extended` parsed from a per-endpoint IXDTF
@@ -1349,23 +1441,31 @@ defmodule Tempo do
   # A set's suffix is each member's that has none of its own, as an
   # interval's is each endpoint's: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]`
   # is two times in Paris. Its calendar is already the members' calendar.
-  def attach_extended(%Tempo.Set{} = set, extended),
-    do: map_members(set, &attach_extended(&1, %{extended | calendar: nil}))
+  def attach_extended(%Tempo.Set{} = set, extended) do
+    map_members(set, &attach_extended(&1, %{extended | calendar: nil}))
+  end
 
-  def attach_extended(other, _extended), do: other
+  def attach_extended(other, _extended) do
+    other
+  end
 
   # A recurrence with no start of its own (`R/../P1Y/FL3M20DN[+09:00]`) keeps
   # the suffix on its rule, which gives it to the start a window supplies, so
   # its occurrences are in the zone the suffix names.
-  defp rule_extended(%Tempo.Interval{from: %__MODULE__{}, repeat_rule: rule}, _extended), do: rule
+  defp rule_extended(%Tempo.Interval{from: %__MODULE__{}, repeat_rule: rule}, _extended) do
+    rule
+  end
 
   # The calendar a suffix names is already the rule's calendar, so only the
   # zone and the tags are kept on it.
   defp rule_extended(%Tempo.Interval{from: from, repeat_rule: %__MODULE__{} = rule}, extended)
-       when from in [nil, :undefined],
-       do: attach_extended(rule, %{extended | calendar: nil})
+       when from in [nil, :undefined] do
+    attach_extended(rule, %{extended | calendar: nil})
+  end
 
-  defp rule_extended(%Tempo.Interval{repeat_rule: rule}, _extended), do: rule
+  defp rule_extended(%Tempo.Interval{repeat_rule: rule}, _extended) do
+    rule
+  end
 
   @doc """
   Bang variant of `from_iso8601/2`: the parsed value, or a raised
@@ -1462,7 +1562,9 @@ defmodule Tempo do
     end
   end
 
-  def parse_duration(not_a_string), do: {:error, not_a_string(not_a_string)}
+  def parse_duration(not_a_string) do
+    {:error, not_a_string(not_a_string)}
+  end
 
   @doc """
   Raising version of `parse_duration/1`.
@@ -1552,7 +1654,9 @@ defmodule Tempo do
   def parse_date(string, options \\ [])
 
   def parse_date(string, options) when is_binary(string) and is_list(options) do
-    string |> parse_kind(:date, Calendars.inside(options)) |> Calendars.outside()
+    string
+    |> parse_kind(:date, Calendars.inside(options))
+    |> Calendars.outside()
   end
 
   def parse_date(not_a_string, options) when not is_binary(not_a_string) and is_list(options) do
@@ -1627,7 +1731,9 @@ defmodule Tempo do
   def parse_datetime(string, options \\ [])
 
   def parse_datetime(string, options) when is_binary(string) and is_list(options) do
-    string |> parse_kind(:datetime, Calendars.inside(options)) |> Calendars.outside()
+    string
+    |> parse_kind(:datetime, Calendars.inside(options))
+    |> Calendars.outside()
   end
 
   def parse_datetime(not_a_string, options)
@@ -1722,7 +1828,9 @@ defmodule Tempo do
   def parse_time(string, options \\ [])
 
   def parse_time(string, options) when is_binary(string) and is_list(options) do
-    string |> parse_kind(:time, Calendars.inside(options)) |> Calendars.outside()
+    string
+    |> parse_kind(:time, Calendars.inside(options))
+    |> Calendars.outside()
   end
 
   def parse_time(not_a_string, options) when not is_binary(not_a_string) and is_list(options) do
@@ -1804,7 +1912,9 @@ defmodule Tempo do
   def parse_interval(string, options \\ [])
 
   def parse_interval(string, options) when is_binary(string) and is_list(options) do
-    string |> parse_kind(:interval, Calendars.inside(options)) |> Calendars.outside()
+    string
+    |> parse_kind(:interval, Calendars.inside(options))
+    |> Calendars.outside()
   end
 
   def parse_interval(not_a_string, options)
@@ -1883,7 +1993,9 @@ defmodule Tempo do
     end
   end
 
-  defp value_kind(%Interval{}), do: :interval
+  defp value_kind(%Interval{}) do
+    :interval
+  end
 
   defp value_kind(%__MODULE__{} = tempo) do
     case split(tempo) do
@@ -1893,14 +2005,33 @@ defmodule Tempo do
     end
   end
 
-  defp kind_phrase(:date), do: "a date"
-  defp kind_phrase(:datetime), do: "a datetime"
-  defp kind_phrase(:time), do: "a time of day"
-  defp kind_phrase(:interval), do: "an interval"
+  defp kind_phrase(:date) do
+    "a date"
+  end
 
-  defp raise_on_error({:ok, value}), do: value
-  defp raise_on_error({:error, exception}) when is_exception(exception), do: raise(exception)
-  defp raise_on_error({:error, reason}), do: raise(ArgumentError, Calendars.inspect(reason))
+  defp kind_phrase(:datetime) do
+    "a datetime"
+  end
+
+  defp kind_phrase(:time) do
+    "a time of day"
+  end
+
+  defp kind_phrase(:interval) do
+    "an interval"
+  end
+
+  defp raise_on_error({:ok, value}) do
+    value
+  end
+
+  defp raise_on_error({:error, exception}) when is_exception(exception) do
+    raise(exception)
+  end
+
+  defp raise_on_error({:error, reason}) do
+    raise(ArgumentError, Calendars.inspect(reason))
+  end
 
   # Apply the `strict: true` IXDTF offset/zone consistency check when
   # requested; otherwise the value passes through unchanged.
@@ -1917,7 +2048,9 @@ defmodule Tempo do
     end
   end
 
-  defp enforce_strict(other, _options), do: {:ok, other}
+  defp enforce_strict(other, _options) do
+    {:ok, other}
+  end
 
   ## ---------------------------------------------------------
   ## A time shift and a zone on one value (RFC 9557 §3.4)
@@ -1983,7 +2116,9 @@ defmodule Tempo do
     end
   end
 
-  defp on_the_clock_of_its_zone(other, _strict?), do: {:ok, other}
+  defp on_the_clock_of_its_zone(other, _strict?) do
+    {:ok, other}
+  end
 
   # An end is where its value starts, so one that is a span on the zone's
   # clock is the start of it.
@@ -2005,15 +2140,30 @@ defmodule Tempo do
     |> reversed_members()
   end
 
-  defp each_on_the_clock(members, _strict?), do: {:ok, members}
+  defp each_on_the_clock(members, _strict?) do
+    {:ok, members}
+  end
 
-  defp reversed_members({:ok, placed}), do: {:ok, Enum.reverse(placed)}
-  defp reversed_members({:error, _reason} = error), do: error
+  defp reversed_members({:ok, placed}) do
+    {:ok, Enum.reverse(placed)}
+  end
+
+  defp reversed_members({:error, _reason} = error) do
+    error
+  end
 
   # The zone a suffix names: a zone of the database, or an offset.
-  defp zone_beside(%{zone_id: zone}) when is_binary(zone) and zone != "", do: zone
-  defp zone_beside(%{zone_offset: minutes}) when is_integer(minutes), do: {:offset, minutes}
-  defp zone_beside(_no_zone), do: nil
+  defp zone_beside(%{zone_id: zone}) when is_binary(zone) and zone != "" do
+    zone
+  end
+
+  defp zone_beside(%{zone_offset: minutes}) when is_integer(minutes) do
+    {:offset, minutes}
+  end
+
+  defp zone_beside(_no_zone) do
+    nil
+  end
 
   defp on_the_clock_of(%__MODULE__{shift: shift, time: time} = value, zone, strict?) do
     cond do
@@ -2080,8 +2230,9 @@ defmodule Tempo do
     }
   end
 
-  defp zone_critical?(%__MODULE__{extended: extended}) when is_map(extended),
-    do: Map.get(extended, :zone_critical, false)
+  defp zone_critical?(%__MODULE__{extended: extended}) when is_map(extended) do
+    Map.get(extended, :zone_critical, false)
+  end
 
   @doc """
   Parse a date, time, datetime, interval, duration or recurrence,
@@ -2162,10 +2313,14 @@ defmodule Tempo do
   def parse(input, options \\ [])
 
   def parse(input, options) when is_binary(input) do
-    input |> do_parse(Calendars.inside(options)) |> Calendars.outside()
+    input
+    |> do_parse(Calendars.inside(options))
+    |> Calendars.outside()
   end
 
-  def parse(not_a_string, _options), do: {:error, not_a_string(not_a_string)}
+  def parse(not_a_string, _options) do
+    {:error, not_a_string(not_a_string)}
+  end
 
   defp do_parse(input, options) do
     case read(input, options) do
@@ -2220,7 +2375,9 @@ defmodule Tempo do
   # it is told nothing.
   defp parse_text(input, options) do
     as_fields =
-      options |> Keyword.put_new(:calendar, Calendars.default()) |> Keyword.put(:as, :map)
+      options
+      |> Keyword.put_new(:calendar, Calendars.default())
+      |> Keyword.put(:as, :map)
 
     with :ok <- Tokenizer.within_length(input),
          {:ok, value} <- Calendrical.parse(input, as_fields),
@@ -2229,7 +2386,9 @@ defmodule Tempo do
     end
   end
 
-  defp parsed_to_tempo(%{} = map), do: new(sanitise_parsed_map(map))
+  defp parsed_to_tempo(%{} = map) do
+    new(sanitise_parsed_map(map))
+  end
 
   defp parsed_to_tempo({%{} = from_map, %{} = to_map}) do
     with {:ok, from} <- new(sanitise_parsed_map(from_map)),
@@ -2263,12 +2422,18 @@ defmodule Tempo do
   end
 
   defp put_zone_or_shift(%{time_zone: time_zone} = map, offset) do
-    if fixed_offset_zone?(time_zone, offset),
-      do: map |> Map.delete(:time_zone) |> Map.put(:shift, iso_shift(offset)),
-      else: rename_key(map, :time_zone, :zone)
+    if fixed_offset_zone?(time_zone, offset) do
+      map
+      |> Map.delete(:time_zone)
+      |> Map.put(:shift, iso_shift(offset))
+    else
+      rename_key(map, :time_zone, :zone)
+    end
   end
 
-  defp put_zone_or_shift(map, _offset), do: map
+  defp put_zone_or_shift(map, _offset) do
+    map
+  end
 
   # Whether a time zone is a fixed offset's and no zone of the time zone
   # database. From its 1.4 Localize names the time zone of a date and time
@@ -2277,10 +2442,13 @@ defmodule Tempo do
   # not zero, which a caller may still give. A fixed offset is a `:shift` in
   # Tempo, as `from_iso8601/1` reads one: read as a zone it is one no
   # database has, and was taken for UTC.
-  defp fixed_offset_zone?("Etc/UTC", offset), do: offset != 0
+  defp fixed_offset_zone?("Etc/UTC", offset) do
+    offset != 0
+  end
 
-  defp fixed_offset_zone?(time_zone, _offset),
-    do: match?({:ok, _seconds}, Localize.TimeZoneDatabase.fixed_offset(time_zone))
+  defp fixed_offset_zone?(time_zone, _offset) do
+    match?({:ok, _seconds}, Localize.TimeZoneDatabase.fixed_offset(time_zone))
+  end
 
   # The shift `from_iso8601/1` gives an offset written with minutes:
   # "+05:00" is `[hour: 5, minute: 0]`, "-03:30" `[hour: -3, minute: 30]`.
@@ -2300,15 +2468,25 @@ defmodule Tempo do
     |> put_week_based_year(week_based_year)
   end
 
-  defp put_iso_week(map), do: map
+  defp put_iso_week(map) do
+    map
+  end
 
-  defp put_week_based_year(map, nil), do: map
-  defp put_week_based_year(map, year), do: Map.put(map, :year, year)
+  defp put_week_based_year(map, nil) do
+    map
+  end
 
-  defp drop_implied_weekday(%{year: _, month: _, day: _, day_of_week: _} = map),
-    do: Map.delete(map, :day_of_week)
+  defp put_week_based_year(map, year) do
+    Map.put(map, :year, year)
+  end
 
-  defp drop_implied_weekday(map), do: map
+  defp drop_implied_weekday(%{year: _, month: _, day: _, day_of_week: _} = map) do
+    Map.delete(map, :day_of_week)
+  end
+
+  defp drop_implied_weekday(map) do
+    map
+  end
 
   defp rename_key(map, from, to) do
     case Map.pop(map, from) do
@@ -2380,7 +2558,10 @@ defmodule Tempo do
 
     with nil <- Tempo.Inspect.unencodable(value),
          nil <- Tempo.Inspect.unnamed_calendar(value) do
-      {:ok, value |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()}
+      {:ok,
+       value
+       |> Tempo.Inspect.to_iodata()
+       |> IO.iodata_to_binary()}
     else
       construct when construct in [:byday, :nearest_weekday, :or_day, :skip, :until] ->
         {:error, Iso8601EncodeError.exception(construct: construct, value: value)}
@@ -2391,8 +2572,9 @@ defmodule Tempo do
     end
   end
 
-  def to_iso8601(value),
-    do: {:error, Iso8601EncodeError.exception(construct: unencodable_type(value), value: value)}
+  def to_iso8601(value) do
+    {:error, Iso8601EncodeError.exception(construct: unencodable_type(value), value: value)}
+  end
 
   @doc """
   Encode a Tempo value back into an ISO 8601-2 string, raising for a value
@@ -2426,10 +2608,21 @@ defmodule Tempo do
     end
   end
 
-  defp unencodable_type(%Tempo.RecurrenceSet{}), do: :recurrence_set
-  defp unencodable_type(%IntervalSet{}), do: :interval_set
-  defp unencodable_type(%Conditional{}), do: :conditional
-  defp unencodable_type(_value), do: :value
+  defp unencodable_type(%Tempo.RecurrenceSet{}) do
+    :recurrence_set
+  end
+
+  defp unencodable_type(%IntervalSet{}) do
+    :interval_set
+  end
+
+  defp unencodable_type(%Conditional{}) do
+    :conditional
+  end
+
+  defp unencodable_type(_value) do
+    :value
+  end
 
   @doc """
   Creates a `t:Tempo.t/0` struct from a `t:Date.t/0`.
@@ -2458,7 +2651,10 @@ defmodule Tempo do
 
   @spec from_date(date :: Date.t()) :: t()
   def from_date(date) when is_outside(date) do
-    date |> Calendars.inside() |> from_date() |> Calendars.outside()
+    date
+    |> Calendars.inside()
+    |> from_date()
+    |> Calendars.outside()
   end
 
   def from_date(%{year: year, month: month, day: day, calendar: calendar}) do
@@ -2471,9 +2667,11 @@ defmodule Tempo do
   # in them, so its values take ISO 8601's week date shape as a parsed one does.
   @spec date_units(integer(), integer(), integer(), module()) :: keyword()
   def date_units(year, month, day, calendar) do
-    if week_based_calendar?(calendar),
-      do: [year: year, week: month, day_of_week: day],
-      else: [year: year, month: month, day: day]
+    if week_based_calendar?(calendar) do
+      [year: year, week: month, day_of_week: day]
+    else
+      [year: year, month: month, day: day]
+    end
   end
 
   @doc false
@@ -2481,12 +2679,19 @@ defmodule Tempo do
   # dates are a year, a week and a day of the week. It is the calendar's to
   # say (`calendar_base/0`), and this is the one function that asks it.
   @spec week_based_calendar?(module()) :: boolean()
-  def week_based_calendar?(calendar), do: calendar.calendar_base() == :week
+  def week_based_calendar?(calendar) do
+    calendar.calendar_base() == :week
+  end
 
   # The unit of a day in a calendar's dates: the day of the week in a
   # week-based calendar.
-  defp day_unit(calendar),
-    do: if(week_based_calendar?(calendar), do: :day_of_week, else: :day)
+  defp day_unit(calendar) do
+    if week_based_calendar?(calendar) do
+      :day_of_week
+    else
+      :day
+    end
+  end
 
   @doc """
   Create a `t:Tempo.Interval.t/0` from an Elixir `Date.Range`,
@@ -2542,7 +2747,10 @@ defmodule Tempo do
   def from_date_range(range, options \\ [])
 
   def from_date_range(%Date.Range{first: first} = range, options) when is_outside(first) do
-    range |> Calendars.inside() |> from_date_range(options) |> Calendars.outside()
+    range
+    |> Calendars.inside()
+    |> from_date_range(options)
+    |> Calendars.outside()
   end
 
   def from_date_range(%Date.Range{step: 1, first: first, last: last} = range, options) do
@@ -2628,7 +2836,10 @@ defmodule Tempo do
   """
   @spec from_time(time :: Time.t()) :: t()
   def from_time(time) when is_outside(time) do
-    time |> Calendars.inside() |> from_time() |> Calendars.outside()
+    time
+    |> Calendars.inside()
+    |> from_time()
+    |> Calendars.outside()
   end
 
   def from_time(%{hour: hour, minute: minute, second: second} = time) do
@@ -2656,7 +2867,10 @@ defmodule Tempo do
   """
   @spec from_naive_datetime(naive_datetime :: NaiveDateTime.t()) :: t()
   def from_naive_datetime(naive) when is_outside(naive) do
-    naive |> Calendars.inside() |> from_naive_datetime() |> Calendars.outside()
+    naive
+    |> Calendars.inside()
+    |> from_naive_datetime()
+    |> Calendars.outside()
   end
 
   def from_naive_datetime(
@@ -2718,7 +2932,10 @@ defmodule Tempo do
   """
   @spec from_datetime(DateTime.t()) :: t()
   def from_datetime(datetime) when is_outside(datetime) do
-    datetime |> Calendars.inside() |> from_datetime() |> Calendars.outside()
+    datetime
+    |> Calendars.inside()
+    |> from_datetime()
+    |> Calendars.outside()
   end
 
   def from_datetime(
@@ -2754,9 +2971,11 @@ defmodule Tempo do
   # The zone a `DateTime` is in, which is none where its time zone is a
   # fixed offset's: the shift says all of it.
   defp zone_of(time_zone, total_offset) do
-    if fixed_offset_zone?(time_zone, total_offset),
-      do: nil,
-      else: %{zone_id: time_zone, zone_offset: nil, zone_critical: false, tags: %{}}
+    if fixed_offset_zone?(time_zone, total_offset) do
+      nil
+    else
+      %{zone_id: time_zone, zone_offset: nil, zone_critical: false, tags: %{}}
+    end
   end
 
   # Elixir's `Time`/`NaiveDateTime`/`DateTime` carry sub-second data in
@@ -2764,12 +2983,17 @@ defmodule Tempo do
   # Tempo's `:microsecond` component. Thread it through verbatim when
   # `precision > 0`; `{0, 0}` (no sub-second) adds nothing, keeping the
   # value at second resolution.
-  defp microsecond_component(%{microsecond: {_value, 0}}), do: []
+  defp microsecond_component(%{microsecond: {_value, 0}}) do
+    []
+  end
 
-  defp microsecond_component(%{microsecond: {value, precision}}),
-    do: [microsecond: {value, precision}]
+  defp microsecond_component(%{microsecond: {value, precision}}) do
+    [microsecond: {value, precision}]
+  end
 
-  defp microsecond_component(_), do: []
+  defp microsecond_component(_) do
+    []
+  end
 
   @doc """
   Returns the resolution of a `t:Tempo.t/0` struct.
@@ -2801,7 +3025,9 @@ defmodule Tempo do
 
   """
   @spec resolution(tempo :: t()) :: {atom(), atom() | non_neg_integer()}
-  def resolution(%__MODULE__{time: []}), do: {:none, 0}
+  def resolution(%__MODULE__{time: []}) do
+    {:none, 0}
+  end
 
   def resolution(%__MODULE__{time: units}) when is_list(units) do
     units
@@ -2810,7 +3036,9 @@ defmodule Tempo do
     |> unit_resolution()
   end
 
-  def resolution(value), do: raise(not_one_value("resolution/1", value))
+  def resolution(value) do
+    raise(not_one_value("resolution/1", value))
+  end
 
   # The finest and coarsest units of a value, as `{finest, coarsest}`:
   # `2022Y1M2G3DU` is `{:day, :year}`. The ISO 8601 parser calls it.
@@ -2826,35 +3054,61 @@ defmodule Tempo do
     {min, max}
   end
 
-  defp unit_resolution({:selection, selection}), do: unit_min_max(selection)
+  defp unit_resolution({:selection, selection}) do
+    unit_min_max(selection)
+  end
 
   # A computed event names a day, the week start (`q`) is context at the
   # scale of the day of the week, as `Tempo.Iso8601.Unit.ordered?/1` reads
   # them, and a §12.10 window runs from a day.
-  defp unit_resolution({:event, _name}), do: {:day, 1}
-  defp unit_resolution({:interval, _window}), do: {:day, 1}
-  defp unit_resolution({:wkst, _day}), do: {:day_of_week, 1}
-  defp unit_resolution({:skip, _skip}), do: {:day, 1}
-  defp unit_resolution({unit, {:group, first..last//_}}), do: {unit, last - first + 1}
+  defp unit_resolution({:event, _name}) do
+    {:day, 1}
+  end
+
+  defp unit_resolution({:interval, _window}) do
+    {:day, 1}
+  end
+
+  defp unit_resolution({:wkst, _day}) do
+    {:day_of_week, 1}
+  end
+
+  defp unit_resolution({:skip, _skip}) do
+    {:day, 1}
+  end
+
+  defp unit_resolution({unit, {:group, first..last//_}}) do
+    {unit, last - first + 1}
+  end
 
   # A materialised group is `{unit, {:group, members}, size}` — the
   # third element is the group's own size, which is its resolution.
-  defp unit_resolution({unit, {:group, _members}, size}) when is_integer(size), do: {unit, size}
-  defp unit_resolution({unit, %Range{last: last}}), do: {unit, last}
+  defp unit_resolution({unit, {:group, _members}, size}) when is_integer(size) do
+    {unit, size}
+  end
+
+  defp unit_resolution({unit, %Range{last: last}}) do
+    {unit, last}
+  end
 
   # A microsecond component is `{value, precision}`; the precision
   # (digit count) is its resolution scale — `{:microsecond, 3}` is
   # millisecond resolution.
-  defp unit_resolution({:microsecond, {_value, precision}}) when is_integer(precision),
-    do: {:microsecond, precision}
+  defp unit_resolution({:microsecond, {_value, precision}}) when is_integer(precision) do
+    {:microsecond, precision}
+  end
 
-  defp unit_resolution({unit, {_value, meta}}) when is_list(meta),
-    do: {unit, Keyword.get(meta, :margin_of_error, 1)}
+  defp unit_resolution({unit, {_value, meta}}) when is_list(meta) do
+    {unit, Keyword.get(meta, :margin_of_error, 1)}
+  end
 
-  defp unit_resolution({unit, {_value, continuation}}) when is_function(continuation),
-    do: {unit, 1}
+  defp unit_resolution({unit, {_value, continuation}}) when is_function(continuation) do
+    {unit, 1}
+  end
 
-  defp unit_resolution({unit, _value}), do: {unit, 1}
+  defp unit_resolution({unit, _value}) do
+    {unit, 1}
+  end
 
   # Order of units from coarsest to finest. Used by the component
   # accessors (`year/1`, `month/1`, `day/1`, `hour/1`, `minute/1`,
@@ -2902,7 +3156,11 @@ defmodule Tempo do
     end}
 
         iex> Tempo.#{unit}(~o"2026")
-        #{if unit == :year, do: 2026, else: "nil"}
+        #{if unit == :year do
+      2026
+    else
+      "nil"
+    end}
 
     """
     @spec unquote(unit)(t() | Tempo.Interval.t()) :: integer() | nil
@@ -2959,8 +3217,13 @@ defmodule Tempo do
     end
   end
 
-  def season(%Tempo.Interval{}), do: nil
-  def season(value), do: raise(no_component_error(:season, value))
+  def season(%Tempo.Interval{}) do
+    nil
+  end
+
+  def season(value) do
+    raise(no_component_error(:season, value))
+  end
 
   @doc """
   Return the `week` component of a Tempo value, or `nil` if the
@@ -3025,7 +3288,9 @@ defmodule Tempo do
     end
   end
 
-  def week(value), do: raise(no_component_error(:week, value))
+  def week(value) do
+    raise(no_component_error(:week, value))
+  end
 
   defp span_week(%Tempo.Interval{from: %__MODULE__{} = from, to: to}) do
     from_week = week(from)
@@ -3070,7 +3335,9 @@ defmodule Tempo do
     end
   end
 
-  defp component(value, unit), do: raise(no_component_error(unit, value))
+  defp component(value, unit) do
+    raise(no_component_error(unit, value))
+  end
 
   defp span_component(
          %Tempo.Interval{from: %__MODULE__{} = from, to: to} = interval,
@@ -3096,11 +3363,14 @@ defmodule Tempo do
   # its two ends, and each end as the point it names (`20C/21C` is
   # `2000Y/2100Y`). A recurrence is many spans, and an end that names several
   # is none; each raises its error.
-  defp read_span(%Tempo.Interval{recurrence: recurrence} = interval) when recurrence != 1,
-    do: raise(ConversionError.exception(value: interval, reason: :recurring_interval))
+  defp read_span(%Tempo.Interval{recurrence: recurrence} = interval) when recurrence != 1 do
+    raise(ConversionError.exception(value: interval, reason: :recurring_interval))
+  end
 
   defp read_span(%Tempo.Interval{} = interval) do
-    case interval |> Interval.resolve_duration_form() |> Interval.endpoints_as_points() do
+    case interval
+         |> Interval.resolve_duration_form()
+         |> Interval.endpoints_as_points() do
       {:ok, %Tempo.Interval{to: nil, duration: %Duration{}}} -> raise uncounted_duration(interval)
       {:ok, span} -> span
       {:error, exception} -> raise exception
@@ -3149,10 +3419,15 @@ defmodule Tempo do
   defp single_granule_unit(%__MODULE__{} = from, %__MODULE__{} = to) do
     {unit, _value} = resolution(from)
     stepped = Math.add(from, %Tempo.Duration{time: [{unit, 1}]})
-    if Compare.compare_endpoints(stepped, to) == :same, do: unit
+
+    if Compare.compare_endpoints(stepped, to) == :same do
+      unit
+    end
   end
 
-  defp single_granule_unit(_from, _to), do: nil
+  defp single_granule_unit(_from, _to) do
+    nil
+  end
 
   # `u_res` is finer-or-equal to `u_target` iff u_res's index in
   # @unit_order is >= u_target's index. (:year is coarsest at 0;
@@ -3207,7 +3482,9 @@ defmodule Tempo do
     false
   end
 
-  def anchored?(value), do: raise(not_one_value("anchored?/1", value))
+  def anchored?(value) do
+    raise(not_one_value("anchored?/1", value))
+  end
 
   @doc false
   # Check that an IXDTF value's explicit numeric offset agrees with its
@@ -3307,7 +3584,10 @@ defmodule Tempo do
   def trunc(tempo, truncate_to \\ :day)
 
   def trunc(tempo, truncate_to) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> trunc(truncate_to) |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> trunc(truncate_to)
+    |> Calendars.outside()
   end
 
   def trunc(%__MODULE__{} = tempo, truncate_to) do
@@ -3333,16 +3613,20 @@ defmodule Tempo do
     end
   end
 
-  def trunc(value, _truncate_to), do: {:error, not_one_value("trunc/2", value)}
+  def trunc(value, _truncate_to) do
+    {:error, not_one_value("trunc/2", value)}
+  end
 
   # An end taken up to the start of the next unit, or left on the start of
   # the unit it is on. One written to a coarser unit is on the start of one
   # already, and `trunc/2` gives it back.
   defp taken_up(%__MODULE__{} = to, unit) do
     with %__MODULE__{} = down <- trunc(to, unit) do
-      if Compare.compare_endpoints(down, to) == :same,
-        do: down,
-        else: shift(down, [{unit, 1}])
+      if Compare.compare_endpoints(down, to) == :same do
+        down
+      else
+        shift(down, [{unit, 1}])
+      end
     end
   end
 
@@ -3367,8 +3651,9 @@ defmodule Tempo do
     end
   end
 
-  defp with_its_ends(%Interval{} = recurrence, function),
-    do: {:error, not_one_interval(function, recurrence)}
+  defp with_its_ends(%Interval{} = recurrence, function) do
+    {:error, not_one_interval(function, recurrence)}
+  end
 
   defp not_one_interval(function, value) do
     ArgumentError.exception(
@@ -3387,40 +3672,60 @@ defmodule Tempo do
     end
   end
 
-  defp end_moved(open_or_absent, _move), do: {:ok, open_or_absent}
+  defp end_moved(open_or_absent, _move) do
+    {:ok, open_or_absent}
+  end
 
   # A value written with an offset, cut or rounded to a coarser unit or
   # placed at another time, is at the offset its zone is at on the reading
   # it then has (`Tempo.Enumeration.Zone.at_its_offset/1`): 03:00 at −04:00
   # on the day New York's clocks go forward is cut to a day that begins at
   # −05:00, and was given the day at the offset of the hour.
-  defp at_its_offset(%__MODULE__{} = value), do: Zone.at_its_offset(value)
-  defp at_its_offset(other), do: other
+  defp at_its_offset(%__MODULE__{} = value) do
+    Zone.at_its_offset(value)
+  end
+
+  defp at_its_offset(other) do
+    other
+  end
 
   # The same for what `extend/2` writes, which is `{:ok, value}`.
-  defp written_at_its_offset({:ok, %__MODULE__{} = value}), do: {:ok, Zone.at_its_offset(value)}
-  defp written_at_its_offset(not_written), do: not_written
+  defp written_at_its_offset({:ok, %__MODULE__{} = value}) do
+    {:ok, Zone.at_its_offset(value)}
+  end
+
+  defp written_at_its_offset(not_written) do
+    not_written
+  end
 
   # A group of a set (`{1,2}G3MU`) is kept as a three-element entry that names
   # a span in each of its groups, so a value that holds one is no one value to
   # truncate, to place or to read a day from.
   defp one_value(%__MODULE__{time: time} = tempo) when is_list(time) do
-    if Enum.any?(time, &match?({_unit, {:group, _members}, _size}, &1)),
-      do: {:error, materialisation_error(tempo, :grouped_component)},
-      else: :ok
+    if Enum.any?(time, &match?({_unit, {:group, _members}, _size}, &1)) do
+      {:error, materialisation_error(tempo, :grouped_component)}
+    else
+      :ok
+    end
   end
 
-  defp one_value(_value), do: :ok
+  defp one_value(_value) do
+    :ok
+  end
 
   # A season of 21 to 24 has no dates until it has a hemisphere, so what
   # needs its months or its days is refused, and says how it is given one.
   defp has_its_dates(%__MODULE__{time: time} = value, operation) when is_list(time) do
-    if List.keymember?(time, :season, 0),
-      do: {:error, AbstractSeasonError.exception(value: value, operation: operation)},
-      else: :ok
+    if List.keymember?(time, :season, 0) do
+      {:error, AbstractSeasonError.exception(value: value, operation: operation)}
+    else
+      :ok
+    end
   end
 
-  defp has_its_dates(_value, _operation), do: :ok
+  defp has_its_dates(_value, _operation) do
+    :ok
+  end
 
   # A value already on the week axis holds `:week` as a component, so
   # the ordinary rule applies.
@@ -3467,7 +3772,9 @@ defmodule Tempo do
          ResolutionError.exception(
            operation: :trunc,
            target: truncate_to,
-           current: resolution(tempo) |> elem(0),
+           current:
+             resolution(tempo)
+             |> elem(0),
            reason: :empty_resolution
          )}
 
@@ -3479,12 +3786,16 @@ defmodule Tempo do
   # A selection (`2026Y4ML1K1IN`, the first Monday of April) is finer than the
   # units before it. Truncating to one of them drops it (`2026Y4M`), and
   # truncating to a unit finer than them all leaves the value as it is.
-  defp kept_with_selection(kept, _dated, [], _truncate_to), do: kept
+  defp kept_with_selection(kept, _dated, [], _truncate_to) do
+    kept
+  end
 
   defp kept_with_selection(kept, dated, selection, truncate_to) do
-    if kept == dated and Unit.compare(List.last(dated), truncate_to) == :gt,
-      do: dated ++ selection,
-      else: kept
+    if kept == dated and Unit.compare(List.last(dated), truncate_to) == :gt do
+      dated ++ selection
+    else
+      kept
+    end
   end
 
   # Units that belong to one calendar axis and no other. `:year`,
@@ -3502,13 +3813,18 @@ defmodule Tempo do
   # day a week begins on *is* expressible on every axis.
   defp same_axis(time, truncate_to, tempo) do
     with target when target != :any <- axis_of([truncate_to]),
-         value when value != :any <- time |> Keyword.keys() |> value_axis(truncate_to),
+         value when value != :any <-
+           time
+           |> Keyword.keys()
+           |> value_axis(truncate_to),
          true <- target != value do
       {:error,
        ResolutionError.exception(
          operation: :trunc,
          target: truncate_to,
-         current: resolution(tempo) |> elem(0),
+         current:
+           resolution(tempo)
+           |> elem(0),
          reason:
            "#{Calendars.inspect(truncate_to)} is on the #{target} axis and this value is on the " <>
              "#{value} axis — truncating between axes is not a coarsening. Convert the " <>
@@ -3523,10 +3839,16 @@ defmodule Tempo do
   # the week axis when a month is asked of it, with or without a day of the
   # week. Asked for a day it is left as it is: it is coarser than one.
   defp value_axis(units, :month) do
-    if :week in units, do: :week, else: axis_of(units)
+    if :week in units do
+      :week
+    else
+      axis_of(units)
+    end
   end
 
-  defp value_axis(units, _truncate_to), do: axis_of(units)
+  defp value_axis(units, _truncate_to) do
+    axis_of(units)
+  end
 
   defp axis_of(units) do
     cond do
@@ -3610,7 +3932,10 @@ defmodule Tempo do
   def round(tempo, round_to \\ :day)
 
   def round(tempo, round_to) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> round(round_to) |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> round(round_to)
+    |> Calendars.outside()
   end
 
   def round(%__MODULE__{} = tempo, round_to) do
@@ -3637,20 +3962,29 @@ defmodule Tempo do
     end
   end
 
-  def round(value, _round_to), do: {:error, not_one_value("round/2", value)}
+  def round(value, _round_to) do
+    {:error, not_one_value("round/2", value)}
+  end
 
   defp rounded_end(%__MODULE__{} = endpoint, unit) do
     {written_to, _span} = resolution(endpoint)
 
-    if Unit.compare(unit, written_to) == :lt,
-      do: endpoint,
-      else: round(endpoint, unit)
+    if Unit.compare(unit, written_to) == :lt do
+      endpoint
+    else
+      round(endpoint, unit)
+    end
   end
 
   # A value's qualifications name the units it holds, so one that has dropped
   # a unit has dropped its qualifier.
-  defp qualified_as_it_stands(%__MODULE__{} = tempo), do: Qualification.only(tempo)
-  defp qualified_as_it_stands(other), do: other
+  defp qualified_as_it_stands(%__MODULE__{} = tempo) do
+    Qualification.only(tempo)
+  end
+
+  defp qualified_as_it_stands(other) do
+    other
+  end
 
   # Rounding reads each unit as the one number it is, so a value that holds
   # several (a set, a mask, an unspecified unit, a group) is none to round.
@@ -3699,7 +4033,10 @@ defmodule Tempo do
   """
   @spec split(t()) :: {t() | nil, t() | nil}
   def split(tempo) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> split() |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> split()
+    |> Calendars.outside()
   end
 
   def split(%__MODULE__{time: time} = tempo) when is_list(time) do
@@ -3716,7 +4053,9 @@ defmodule Tempo do
     end
   end
 
-  def split(value), do: raise(not_one_value("split/1", value))
+  def split(value) do
+    raise(not_one_value("split/1", value))
+  end
 
   # Merge `from`'s components into `base`, validated in `base`'s own
   # calendar — the engine of `at/2` and `on/2`, which are the public way to
@@ -3733,9 +4072,11 @@ defmodule Tempo do
   def merge(%__MODULE__{} = base, %Tempo{} = from) do
     calendar = base.calendar
 
-    if Validation.written_in_another_calendar?(from.time, calendar),
-      do: {:error, placed_by_month_error(base, from, calendar)},
-      else: merge_in(base, from, calendar)
+    if Validation.written_in_another_calendar?(from.time, calendar) do
+      {:error, placed_by_month_error(base, from, calendar)}
+    else
+      merge_in(base, from, calendar)
+    end
   end
 
   defp merge_in(base, from, calendar) do
@@ -3765,33 +4106,51 @@ defmodule Tempo do
     end
   end
 
-  defp frame(%__MODULE__{shift: nil, extended: nil}), do: nil
+  defp frame(%__MODULE__{shift: nil, extended: nil}) do
+    nil
+  end
 
   defp frame(%__MODULE__{shift: shift, extended: extended}) do
     zone = {shift, zone_field(extended, :zone_id), zone_field(extended, :zone_offset)}
-    if zone == {nil, nil, nil}, do: nil, else: zone
+
+    if zone == {nil, nil, nil} do
+      nil
+    else
+      zone
+    end
   end
 
-  defp zone_field(nil, _field), do: nil
-  defp zone_field(extended, field), do: Map.get(extended, field)
+  defp zone_field(nil, _field) do
+    nil
+  end
+
+  defp zone_field(extended, field) do
+    Map.get(extended, field)
+  end
 
   defp in_frame_of(base, %__MODULE__{shift: shift, extended: extended}) do
     %{base | shift: shift, extended: with_zone_of(base.extended, extended)}
   end
 
-  defp with_zone_of(nil, extended), do: zone_alone(extended)
+  defp with_zone_of(nil, extended) do
+    zone_alone(extended)
+  end
 
-  defp with_zone_of(base_extended, extended),
-    do:
-      Map.merge(
-        base_extended,
-        Map.take(extended || %{}, [:zone_id, :zone_offset, :zone_critical])
-      )
+  defp with_zone_of(base_extended, extended) do
+    Map.merge(
+      base_extended,
+      Map.take(extended || %{}, [:zone_id, :zone_offset, :zone_critical])
+    )
+  end
 
   # The zone of a value's annotations, without its tags, which stay its own.
-  defp zone_alone(nil), do: nil
+  defp zone_alone(nil) do
+    nil
+  end
 
-  defp zone_alone(%{zone_id: nil, zone_offset: nil}), do: nil
+  defp zone_alone(%{zone_id: nil, zone_offset: nil}) do
+    nil
+  end
 
   defp zone_alone(extended) do
     Map.merge(
@@ -3922,8 +4281,13 @@ defmodule Tempo do
     end
   end
 
-  def at(%Interval{} = interval, %__MODULE__{} = other), do: place_interval(interval, other)
-  def at(%__MODULE__{} = value, %Interval{} = interval), do: place_interval(interval, value)
+  def at(%Interval{} = interval, %__MODULE__{} = other) do
+    place_interval(interval, other)
+  end
+
+  def at(%__MODULE__{} = value, %Interval{} = interval) do
+    place_interval(interval, value)
+  end
 
   def at(value, other) do
     {:error,
@@ -3956,15 +4320,20 @@ defmodule Tempo do
   # the other's. A time of day is the same in every calendar and is placed on
   # any.
   defp one_calendar(%__MODULE__{} = value, %__MODULE__{} = other) do
-    if dated?(value) and dated?(other) and value.calendar != other.calendar,
-      do: {:error, two_calendars_error(value, other)},
-      else: :ok
+    if dated?(value) and dated?(other) and value.calendar != other.calendar do
+      {:error, two_calendars_error(value, other)}
+    else
+      :ok
+    end
   end
 
-  defp dated?(%__MODULE__{time: time}) when is_list(time),
-    do: Enum.any?(time, &(elem(&1, 0) not in [:hour, :minute, :second, :microsecond]))
+  defp dated?(%__MODULE__{time: time}) when is_list(time) do
+    Enum.any?(time, &(elem(&1, 0) not in [:hour, :minute, :second, :microsecond]))
+  end
 
-  defp dated?(%__MODULE__{}), do: false
+  defp dated?(%__MODULE__{}) do
+    false
+  end
 
   # A month or a day placed on a value of a calendar of weeks keeps the error
   # that says what such a calendar takes.
@@ -3989,8 +4358,9 @@ defmodule Tempo do
     end
   end
 
-  defp by_month_on_weeks?(%__MODULE__{time: time}, %__MODULE__{} = base),
-    do: Validation.written_in_another_calendar?(time, base.calendar)
+  defp by_month_on_weeks?(%__MODULE__{time: time}, %__MODULE__{} = base) do
+    Validation.written_in_another_calendar?(time, base.calendar)
+  end
 
   # An interval is placed endpoint by endpoint; an open end, or one its
   # duration gives, has nothing to place.
@@ -4010,23 +4380,37 @@ defmodule Tempo do
     end
   end
 
-  defp place_endpoint(open_or_derived, _other), do: {:ok, open_or_derived}
+  defp place_endpoint(open_or_derived, _other) do
+    {:ok, open_or_derived}
+  end
 
   # A value placed is held to the clock of its zone, as a value that is read
   # is; a span, a week of a month, is the dates it names.
-  defp shown_by_its_zone(%__MODULE__{} = placed), do: Validation.validate_zone_existence(placed)
-  defp shown_by_its_zone(%Interval{}), do: :ok
+  defp shown_by_its_zone(%__MODULE__{} = placed) do
+    Validation.validate_zone_existence(placed)
+  end
+
+  defp shown_by_its_zone(%Interval{}) do
+    :ok
+  end
 
   defp in_order(%__MODULE__{} = from, %__MODULE__{} = to) do
     with {:ok, _interval} <- Interval.new(from, to), do: :ok
   end
 
-  defp in_order(_from, _to), do: :ok
+  defp in_order(_from, _to) do
+    :ok
+  end
 
   # A value that is an unspecified year and nothing else (`X*Y`) names no
   # unit to place, so the other value is where it was.
-  defp place(value, %__MODULE__{time: [{:year, :any}]}, _year, _other_year), do: {:ok, value}
-  defp place(%__MODULE__{time: [{:year, :any}]}, other, _year, _other_year), do: {:ok, other}
+  defp place(value, %__MODULE__{time: [{:year, :any}]}, _year, _other_year) do
+    {:ok, value}
+  end
+
+  defp place(%__MODULE__{time: [{:year, :any}]}, other, _year, _other_year) do
+    {:ok, other}
+  end
 
   defp place(value, other, true = _year, true = _other_year) do
     {:error,
@@ -4036,17 +4420,29 @@ defmodule Tempo do
      )}
   end
 
-  defp place(value, other, false = _year, true = _other_year), do: grafted(other, value)
-  defp place(value, other, true = _year, false = _other_year), do: grafted(value, other)
-
-  defp place(value, other, false = _year, false = _other_year) do
-    if leading_key(value) >= leading_key(other),
-      do: grafted(value, other),
-      else: grafted(other, value)
+  defp place(value, other, false = _year, true = _other_year) do
+    grafted(other, value)
   end
 
-  defp placed(%__MODULE__{} = tempo), do: {:ok, tempo}
-  defp placed(error), do: error
+  defp place(value, other, true = _year, false = _other_year) do
+    grafted(value, other)
+  end
+
+  defp place(value, other, false = _year, false = _other_year) do
+    if leading_key(value) >= leading_key(other) do
+      grafted(value, other)
+    else
+      grafted(other, value)
+    end
+  end
+
+  defp placed(%__MODULE__{} = tempo) do
+    {:ok, tempo}
+  end
+
+  defp placed(error) do
+    error
+  end
 
   # A value's units placed under another's. A date is written by its month
   # and day, by its week and day of it, or by its day of the year, and the
@@ -4057,18 +4453,24 @@ defmodule Tempo do
   # selects by the one from the other, which is the one reading of a unit
   # in a period: the 15th placed on week 25 of 2026 is 15 June.
   defp grafted(%__MODULE__{} = high, %__MODULE__{} = low) do
-    if of_two_axes?(high, low),
-      do: selected_on(high, low, anchored?(high)),
-      else: placed(graft(high, low))
+    if of_two_axes?(high, low) do
+      selected_on(high, low, anchored?(high))
+    else
+      placed(graft(high, low))
+    end
   end
 
   defp of_two_axes?(%__MODULE__{time: high_time}, %__MODULE__{time: [_ | _] = low_time}) do
-    if List.keymember?(high_time, :selection, 0) or List.keymember?(low_time, :selection, 0),
-      do: false,
-      else: mixed_axes?(units_grafted(high_time, low_time))
+    if List.keymember?(high_time, :selection, 0) or List.keymember?(low_time, :selection, 0) do
+      false
+    else
+      mixed_axes?(units_grafted(high_time, low_time))
+    end
   end
 
-  defp of_two_axes?(_high, _low), do: false
+  defp of_two_axes?(_high, _low) do
+    false
+  end
 
   # The units a graft holds: those of the one value coarser than the first
   # of the other, and the other's (`graft_units/2`).
@@ -4133,7 +4535,11 @@ defmodule Tempo do
   defp value_selected(%Tempo.Interval{from: %__MODULE__{} = from, to: to} = selected) do
     case Interval.next_unit_boundary(from) do
       {:ok, {_lower, upper}, _unit} ->
-        if Compare.compare_endpoints(upper, to) == :same, do: from, else: selected
+        if Compare.compare_endpoints(upper, to) == :same do
+          from
+        else
+          selected
+        end
 
       {:error, _reason} ->
         selected
@@ -4142,10 +4548,13 @@ defmodule Tempo do
 
   # An unspecified year (`X*Y6M`) is no year, so it is where the year of the
   # value it is placed on goes.
-  defp without_unspecified_year(%__MODULE__{time: [{:year, :any} | [_ | _] = rest]} = value),
-    do: %{value | time: rest}
+  defp without_unspecified_year(%__MODULE__{time: [{:year, :any} | [_ | _] = rest]} = value) do
+    %{value | time: rest}
+  end
 
-  defp without_unspecified_year(%__MODULE__{} = value), do: value
+  defp without_unspecified_year(%__MODULE__{} = value) do
+    value
+  end
 
   # How coarse a value's leading unit is; a value with none is the finest.
   #
@@ -4167,17 +4576,30 @@ defmodule Tempo do
     end
   end
 
-  defp leading_key(%__MODULE__{}), do: -1
+  defp leading_key(%__MODULE__{}) do
+    -1
+  end
 
   # How coarse a part of a selection is: its unit's own place, a day's for a
   # part that names days in another way (a numbered weekday, an event, a
   # window), and none for what is no unit (a position, the week's start).
   @day_parts [:byday, :event, :interval, :nearest_weekday, :or_day]
 
-  defp selected_key({part, _value}) when part in [:instance, :wkst, :skip], do: []
-  defp selected_key({part, _value}) when part in @day_parts, do: [Unit.sort_key(:day)]
-  defp selected_key({:traditional_month, _value}), do: [Unit.sort_key(:month)]
-  defp selected_key({:calendar_week, _value}), do: [Unit.sort_key(:week)]
+  defp selected_key({part, _value}) when part in [:instance, :wkst, :skip] do
+    []
+  end
+
+  defp selected_key({part, _value}) when part in @day_parts do
+    [Unit.sort_key(:day)]
+  end
+
+  defp selected_key({:traditional_month, _value}) do
+    [Unit.sort_key(:month)]
+  end
+
+  defp selected_key({:calendar_week, _value}) do
+    [Unit.sort_key(:week)]
+  end
 
   defp selected_key({unit, _value}) do
     case Unit.fetch_sort_key(unit) do
@@ -4186,7 +4608,9 @@ defmodule Tempo do
     end
   end
 
-  defp selected_key(_another_entry), do: []
+  defp selected_key(_another_entry) do
+    []
+  end
 
   @doc """
   Bang variant of `at/2` — returns the placed value or raises.
@@ -4238,7 +4662,9 @@ defmodule Tempo do
   """
   @spec on(t() | Interval.t(), t() | Interval.t()) ::
           {:ok, t() | Interval.t()} | {:error, error_reason()}
-  def on(value, other), do: at(value, other)
+  def on(value, other) do
+    at(value, other)
+  end
 
   @doc """
   Bang variant of `on/2` — returns the placed value or raises. See
@@ -4251,7 +4677,9 @@ defmodule Tempo do
 
   """
   @spec on!(t() | Interval.t(), t() | Interval.t()) :: t() | Interval.t()
-  def on!(value, other), do: at!(value, other)
+  def on!(value, other) do
+    at!(value, other)
+  end
 
   # Compose two values along the resolution axis: keep `high_source`'s
   # components strictly coarser than `low_value`'s coarsest, then graft
@@ -4270,7 +4698,9 @@ defmodule Tempo do
         graft_units(high_source, low_value)
 
       {{_units, []}, {low_units, selection}} ->
-        high_source |> graft_units(%{low_value | time: low_units}) |> with_units_after(selection)
+        high_source
+        |> graft_units(%{low_value | time: low_units})
+        |> with_units_after(selection)
 
       {{_units, _selection}, {low_units, []}} ->
         with_units_after(high_source, low_units)
@@ -4284,8 +4714,9 @@ defmodule Tempo do
     end
   end
 
-  defp graft_units(%__MODULE__{} = high_source, %__MODULE__{time: []} = low_value),
-    do: merge(high_source, low_value)
+  defp graft_units(%__MODULE__{} = high_source, %__MODULE__{time: []} = low_value) do
+    merge(high_source, low_value)
+  end
 
   defp graft_units(
          %__MODULE__{} = high_source,
@@ -4296,7 +4727,9 @@ defmodule Tempo do
     merge(%{high_source | time: trimmed}, low_value)
   end
 
-  defp split_at_selection(time), do: Enum.split_while(time, &(not match?({:selection, _}, &1)))
+  defp split_at_selection(time) do
+    Enum.split_while(time, &(not match?({:selection, _}, &1)))
+  end
 
   defp with_units_after(%__MODULE__{time: time} = tempo, units) do
     case Validation.validate(%{tempo | time: time ++ units}, tempo.calendar) do
@@ -4305,7 +4738,9 @@ defmodule Tempo do
     end
   end
 
-  defp with_units_after(error, _units), do: error
+  defp with_units_after(error, _units) do
+    error
+  end
 
   @doc """
   Write a value as an enumeration of its next finer unit, covering the
@@ -4360,17 +4795,24 @@ defmodule Tempo do
   def extend(tempo, unit \\ nil)
 
   def extend(tempo, unit) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> extend(unit) |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> extend(unit)
+    |> Calendars.outside()
   end
 
   def extend(%Tempo{time: time} = tempo, nil) when is_list(time) do
     with :ok <- has_its_dates(tempo, "extend") do
       extended =
-        if Enumeration.ends_in_group?(tempo),
-          do: extend_group(tempo),
-          else: extend_by_enumeration(tempo)
+        if Enumeration.ends_in_group?(tempo) do
+          extend_group(tempo)
+        else
+          extend_by_enumeration(tempo)
+        end
 
-      extended |> as_the_clock_shows_it(tempo) |> written_at_its_offset()
+      extended
+      |> as_the_clock_shows_it(tempo)
+      |> written_at_its_offset()
     end
   end
 
@@ -4406,7 +4848,9 @@ defmodule Tempo do
     end
   end
 
-  defp as_the_clock_shows_it(not_written, _tempo), do: not_written
+  defp as_the_clock_shows_it(not_written, _tempo) do
+    not_written
+  end
 
   defp without_what_the_clock_skips(
          %__MODULE__{time: written} = extended,
@@ -4441,8 +4885,13 @@ defmodule Tempo do
     end
   end
 
-  defp each_value_named(value) when is_integer(value), do: [value]
-  defp each_value_named(%Range{} = values), do: Enum.to_list(values)
+  defp each_value_named(value) when is_integer(value) do
+    [value]
+  end
+
+  defp each_value_named(%Range{} = values) do
+    Enum.to_list(values)
+  end
 
   defp extend_by_enumeration(tempo) do
     case Enumeration.implicit_enumeration(tempo) do
@@ -4469,16 +4918,18 @@ defmodule Tempo do
     )
   end
 
-  defp no_finer_unit(tempo, :none),
-    do: "Cannot extend #{Calendars.inspect(tempo)}: it names no unit."
+  defp no_finer_unit(tempo, :none) do
+    "Cannot extend #{Calendars.inspect(tempo)}: it names no unit."
+  end
 
   defp no_finer_unit(tempo, :microsecond) do
     "Cannot extend #{Calendars.inspect(tempo)}: a microsecond is the finest unit there is, so it has " <>
       "no finer one to be written in."
   end
 
-  defp no_finer_unit(tempo, unit),
-    do: "Cannot extend #{Calendars.inspect(tempo)}: no unit finer than its #{unit} is defined."
+  defp no_finer_unit(tempo, unit) do
+    "Cannot extend #{Calendars.inspect(tempo)}: no unit finer than its #{unit} is defined."
+  end
 
   @doc """
   Bang variant of `extend/2`: the extended value, or a raised exception.
@@ -4597,7 +5048,10 @@ defmodule Tempo do
   def from_elixir(value, options \\ [])
 
   def from_elixir(value, options) when is_outside(value) do
-    value |> Calendars.inside() |> from_elixir(options) |> Calendars.outside()
+    value
+    |> Calendars.inside()
+    |> from_elixir(options)
+    |> Calendars.outside()
   end
 
   def from_elixir(%Date{} = date, options) do
@@ -4680,11 +5134,21 @@ defmodule Tempo do
   # coarsen to hour resolution, and `to_naive_datetime/1` then
   # failed to reconstitute the second-granular value. Callers that
   # genuinely want a coarser span pass `:resolution`.
-  defp infer_time_resolution(%Time{microsecond: {_v, p}}) when p > 0, do: :microsecond
-  defp infer_time_resolution(%Time{}), do: :second
+  defp infer_time_resolution(%Time{microsecond: {_v, p}}) when p > 0 do
+    :microsecond
+  end
 
-  defp infer_datetime_resolution(%{microsecond: {_v, p}}) when p > 0, do: :microsecond
-  defp infer_datetime_resolution(%{microsecond: {_v, _p}}), do: :second
+  defp infer_time_resolution(%Time{}) do
+    :second
+  end
+
+  defp infer_datetime_resolution(%{microsecond: {_v, p}}) when p > 0 do
+    :microsecond
+  end
+
+  defp infer_datetime_resolution(%{microsecond: {_v, _p}}) do
+    :second
+  end
 
   @doc """
   Extend a Tempo's resolution by padding finer units with their
@@ -4740,7 +5204,10 @@ defmodule Tempo do
   @spec extend_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
   def extend_resolution(tempo, target_unit) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> extend_resolution(target_unit) |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> extend_resolution(target_unit)
+    |> Calendars.outside()
   end
 
   # The first value of a finer unit is one the clock of the value's zone
@@ -4757,14 +5224,18 @@ defmodule Tempo do
   def extend_resolution(%Tempo{} = tempo, target_unit) do
     with :ok <- has_its_dates(tempo, "extend"),
          %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
-         %Tempo{} = shown <- extended |> as_calendar_date() |> Zone.shown_by_the_clock(),
+         %Tempo{} = shown <-
+           extended
+           |> as_calendar_date()
+           |> Zone.shown_by_the_clock(),
          :ok <- Validation.validate_zone_existence(shown) do
       shown
     end
   end
 
-  def extend_resolution(value, _target_unit),
-    do: {:error, not_one_value("extend_resolution/2", value)}
+  def extend_resolution(value, _target_unit) do
+    {:error, not_one_value("extend_resolution/2", value)}
+  end
 
   @doc false
   # `extend_resolution/2` in the units the value is written in: a week is
@@ -4797,8 +5268,13 @@ defmodule Tempo do
     end
   end
 
-  defp apply_filled_time(tempo, {:ok, new_time}), do: %{tempo | time: new_time}
-  defp apply_filled_time(_tempo, {:error, _} = err), do: err
+  defp apply_filled_time(tempo, {:ok, new_time}) do
+    %{tempo | time: new_time}
+  end
+
+  defp apply_filled_time(_tempo, {:error, _} = err) do
+    err
+  end
 
   # Walk the standard unit-successor chain, appending one
   # `{next_unit, unit_minimum}` at each step until `target_unit` is
@@ -4819,8 +5295,9 @@ defmodule Tempo do
     {:ok, time ++ [microsecond: {0, 6}]}
   end
 
-  defp fill_to_resolution(time, current_unit, target_unit, calendar),
-    do: fill_by_unit(time, current_unit, target_unit, calendar)
+  defp fill_to_resolution(time, current_unit, target_unit, calendar) do
+    fill_by_unit(time, current_unit, target_unit, calendar)
+  end
 
   defp fill_by_unit(time, current_unit, target_unit, calendar) do
     case Unit.implicit_enumerator(current_unit, calendar) do
@@ -4840,16 +5317,26 @@ defmodule Tempo do
     end
   end
 
-  defp range_first(%Range{first: first}), do: first
+  defp range_first(%Range{first: first}) do
+    first
+  end
 
   # A unit is extended to the first value of the unit below it. A year's
   # first month and a month's first day are asked of the calendar: they are
   # the first, or in a year that begins on another day than the first of
   # its first month the month and the day of the first date the calendar
   # gives (`Tempo.UnitValues.with_first_month/2`, `with_first_day/2`).
-  defp with_first(time, :month, 1, calendar), do: UnitValues.with_first_month(time, calendar)
-  defp with_first(time, :day, 1, calendar), do: UnitValues.with_first_day(time, calendar)
-  defp with_first(time, unit, minimum, _calendar), do: time ++ [{unit, minimum}]
+  defp with_first(time, :month, 1, calendar) do
+    UnitValues.with_first_month(time, calendar)
+  end
+
+  defp with_first(time, :day, 1, calendar) do
+    UnitValues.with_first_day(time, calendar)
+  end
+
+  defp with_first(time, unit, minimum, _calendar) do
+    time ++ [{unit, minimum}]
+  end
 
   @doc """
   Return a Tempo at the specified resolution, dispatching to
@@ -4887,7 +5374,10 @@ defmodule Tempo do
   @spec at_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
   def at_resolution(tempo, target_unit) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> at_resolution(target_unit) |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> at_resolution(target_unit)
+    |> Calendars.outside()
   end
 
   def at_resolution(%Tempo{} = tempo, target_unit) do
@@ -4903,7 +5393,9 @@ defmodule Tempo do
     end
   end
 
-  def at_resolution(value, _target_unit), do: {:error, not_one_value("at_resolution/2", value)}
+  def at_resolution(value, _target_unit) do
+    {:error, not_one_value("at_resolution/2", value)}
+  end
 
   # A value an operation wrote by its week or by its day of the year, as the
   # calendar date it names in a calendar of months: what reading it gives.
@@ -4929,7 +5421,9 @@ defmodule Tempo do
     end
   end
 
-  defp day_unit(unit, _tempo), do: unit
+  defp day_unit(unit, _tempo) do
+    unit
+  end
 
   @doc """
   Convert a Tempo struct into a Date.
@@ -5009,7 +5503,10 @@ defmodule Tempo do
   end
 
   def to_date(tempo) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> to_date() |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> to_date()
+    |> Calendars.outside()
   end
 
   def to_date(value) do
@@ -5043,7 +5540,10 @@ defmodule Tempo do
   end
 
   def to_time(value) when is_outside(value) do
-    value |> Calendars.inside() |> to_time() |> Calendars.outside()
+    value
+    |> Calendars.inside()
+    |> to_time()
+    |> Calendars.outside()
   end
 
   def to_time(%Tempo{
@@ -5099,7 +5599,10 @@ defmodule Tempo do
   """
   @spec to_naive_datetime(t()) :: {:ok, NaiveDateTime.t()} | {:error, error_reason()}
   def to_naive_datetime(tempo) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> to_naive_datetime() |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> to_naive_datetime()
+    |> Calendars.outside()
   end
 
   def to_naive_datetime(
@@ -5228,7 +5731,10 @@ defmodule Tempo do
   end
 
   def to_datetime(tempo) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> to_datetime() |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> to_datetime()
+    |> Calendars.outside()
   end
 
   # A value with a UTC offset (`+10:00`; `Z` is offset zero)
@@ -5241,11 +5747,13 @@ defmodule Tempo do
   # An offset written as the value's time zone (`[-05:00]`, RFC 9557's
   # zone of a fixed offset) is its offset as one written beside the time
   # is, and comes first, as it does where values are compared.
-  def to_datetime(%Tempo{extended: %{zone_offset: minutes}} = tempo) when is_integer(minutes),
-    do: instant_at_offset(tempo, minutes * 60)
+  def to_datetime(%Tempo{extended: %{zone_offset: minutes}} = tempo) when is_integer(minutes) do
+    instant_at_offset(tempo, minutes * 60)
+  end
 
-  def to_datetime(%Tempo{shift: shift} = tempo) when is_list(shift),
-    do: instant_at_offset(tempo, Compare.offset_seconds(shift))
+  def to_datetime(%Tempo{shift: shift} = tempo) when is_list(shift) do
+    instant_at_offset(tempo, Compare.offset_seconds(shift))
+  end
 
   def to_datetime(%Tempo{} = value) do
     {:error,
@@ -5319,13 +5827,17 @@ defmodule Tempo do
   # in minutes) or its UTC offset (`shift`). Falls back to the first
   # (pre-transition, higher-offset) candidate.
   defp disambiguate_fold(first, second, %Tempo{extended: %{zone_offset: minutes}})
-       when is_integer(minutes),
-       do: fold_at_offset(first, second, minutes * 60)
+       when is_integer(minutes) do
+    fold_at_offset(first, second, minutes * 60)
+  end
 
-  defp disambiguate_fold(first, second, %Tempo{shift: shift}) when is_list(shift),
-    do: fold_at_offset(first, second, Compare.offset_seconds(shift))
+  defp disambiguate_fold(first, second, %Tempo{shift: shift}) when is_list(shift) do
+    fold_at_offset(first, second, Compare.offset_seconds(shift))
+  end
 
-  defp disambiguate_fold(first, _second, _tempo), do: first
+  defp disambiguate_fold(first, _second, _tempo) do
+    first
+  end
 
   defp fold_at_offset(first, second, offset_seconds) do
     Enum.find([first, second], first, fn dt ->
@@ -5496,8 +6008,9 @@ defmodule Tempo do
     end
   end
 
-  defp in_calendar(%Tempo{} = value, calendar),
-    do: {:error, not_a_date_error(value, calendar)}
+  defp in_calendar(%Tempo{} = value, calendar) do
+    {:error, not_a_date_error(value, calendar)}
+  end
 
   defp in_calendar(value, calendar) do
     {:error,
@@ -5520,13 +6033,17 @@ defmodule Tempo do
 
   # A unit of a time of day that is one value: a set, a range or a mask of
   # them has no one moment to keep.
-  defp plain_time_unit?({unit, value}) when unit in [:hour, :minute, :second],
-    do: is_integer(value)
+  defp plain_time_unit?({unit, value}) when unit in [:hour, :minute, :second] do
+    is_integer(value)
+  end
 
-  defp plain_time_unit?({:microsecond, {value, precision}}),
-    do: is_integer(value) and is_integer(precision)
+  defp plain_time_unit?({:microsecond, {value, precision}}) do
+    is_integer(value) and is_integer(precision)
+  end
 
-  defp plain_time_unit?(_another), do: false
+  defp plain_time_unit?(_another) do
+    false
+  end
 
   defp convert_date(value, date_in_source, calendar) do
     with {:ok, in_source} <- date_in_source,
@@ -5555,11 +6072,14 @@ defmodule Tempo do
   # A zone and tags carry across; a value with neither has nothing to carry.
   defp carried_extended(%{} = extended) do
     if is_binary(extended[:zone_id]) or is_integer(extended[:zone_offset]) or
-         map_size(extended[:tags] || %{}) > 0,
-       do: extended
+         map_size(extended[:tags] || %{}) > 0 do
+      extended
+    end
   end
 
-  defp carried_extended(_none), do: nil
+  defp carried_extended(_none) do
+    nil
+  end
 
   defp converted_qualifications(%{} = qualifications, time) do
     case Map.values(qualifications) do
@@ -5572,7 +6092,9 @@ defmodule Tempo do
     end
   end
 
-  defp converted_qualifications(_none, _time), do: nil
+  defp converted_qualifications(_none, _time) do
+    nil
+  end
 
   @doc """
   Raising version of `to_calendar/2`.
@@ -5608,9 +6130,17 @@ defmodule Tempo do
   # direction — has nothing to convert and is carried across as it is.
   # Converting only what is there is what lets an open-ended span cross
   # calendars at all.
-  defp convert_endpoint(nil, _calendar), do: {:ok, nil}
-  defp convert_endpoint(:undefined, _calendar), do: {:ok, :undefined}
-  defp convert_endpoint(%Tempo{} = endpoint, calendar), do: in_calendar(endpoint, calendar)
+  defp convert_endpoint(nil, _calendar) do
+    {:ok, nil}
+  end
+
+  defp convert_endpoint(:undefined, _calendar) do
+    {:ok, :undefined}
+  end
+
+  defp convert_endpoint(%Tempo{} = endpoint, calendar) do
+    in_calendar(endpoint, calendar)
+  end
 
   @doc """
   Convert a Tempo value to its native Elixir equivalent — the
@@ -5653,7 +6183,10 @@ defmodule Tempo do
           {:ok, Elixir.Duration.t() | Date.t() | Time.t() | NaiveDateTime.t() | DateTime.t()}
           | {:error, Tempo.ConversionError.t()}
   def to_elixir(value) when is_outside(value) do
-    value |> Calendars.inside() |> to_elixir() |> Calendars.outside()
+    value
+    |> Calendars.inside()
+    |> to_elixir()
+    |> Calendars.outside()
   end
 
   def to_elixir(%Duration{time: time} = duration) do
@@ -5764,7 +6297,10 @@ defmodule Tempo do
     # Truncate the clock's microsecond so the result honours the
     # documented second resolution. For a sub-second reading, use
     # `Tempo.from_elixir(DateTime.utc_now())`.
-    Clock.utc_now() |> DateTime.truncate(:second) |> from_datetime() |> Calendars.outside()
+    Clock.utc_now()
+    |> DateTime.truncate(:second)
+    |> from_datetime()
+    |> Calendars.outside()
   end
 
   @doc """
@@ -5806,13 +6342,20 @@ defmodule Tempo do
 
   def now(zone) when is_binary(zone) do
     # Second resolution per the contract — see `utc_now/0`.
-    Clock.utc_now() |> DateTime.truncate(:second) |> zoned_now(zone) |> Calendars.outside()
+    Clock.utc_now()
+    |> DateTime.truncate(:second)
+    |> zoned_now(zone)
+    |> Calendars.outside()
   end
 
-  def now(zone), do: {:error, UnknownZoneError.exception(zone_id: Calendars.inspect(zone))}
+  def now(zone) do
+    {:error, UnknownZoneError.exception(zone_id: Calendars.inspect(zone))}
+  end
 
   # The current UTC instant read in `zone`.
-  defp zoned_now(utc, "Etc/UTC"), do: from_datetime(utc)
+  defp zoned_now(utc, "Etc/UTC") do
+    from_datetime(utc)
+  end
 
   defp zoned_now(utc, zone) do
     case DateTime.shift_zone(utc, zone, TimeZoneDatabase.database()) do
@@ -5877,16 +6420,22 @@ defmodule Tempo do
   @spec today(String.t()) :: t() | {:error, error_reason()}
   def today(zone \\ "Etc/UTC") do
     case now(zone) do
-      %__MODULE__{} = now -> now |> trunc(:day) |> drop_zone()
-      {:error, _reason} = error -> error
+      %__MODULE__{} = now ->
+        now
+        |> trunc(:day)
+        |> drop_zone()
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
   # A zoned value's wall-clock reading with its zone and offset removed — its
   # floating form. Tags it carries stay.
   defp drop_zone(%__MODULE__{extended: %{tags: tags}} = tempo)
-       when map_size(tags) == 0,
-       do: %{tempo | shift: nil, extended: nil}
+       when map_size(tags) == 0 do
+    %{tempo | shift: nil, extended: nil}
+  end
 
   defp drop_zone(%__MODULE__{extended: %{} = extended} = tempo) do
     %{
@@ -5896,8 +6445,13 @@ defmodule Tempo do
     }
   end
 
-  defp drop_zone(%__MODULE__{} = tempo), do: %{tempo | shift: nil}
-  defp drop_zone({:error, _reason} = error), do: error
+  defp drop_zone(%__MODULE__{} = tempo) do
+    %{tempo | shift: nil}
+  end
+
+  defp drop_zone({:error, _reason} = error) do
+    error
+  end
 
   ## ---------------------------------------------------------
   ## Zone placement — place a floating Tempo in a zone
@@ -5948,7 +6502,10 @@ defmodule Tempo do
   """
   @spec in_zone(t(), String.t()) :: {:ok, t()} | {:error, error_reason()}
   def in_zone(tempo, zone) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> in_zone(zone) |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> in_zone(zone)
+    |> Calendars.outside()
   end
 
   def in_zone(%Tempo{} = tempo, zone) when is_binary(zone) do
@@ -5964,8 +6521,13 @@ defmodule Tempo do
     end
   end
 
-  def in_zone(%Tempo{}, zone), do: {:error, UnknownZoneError.exception(zone_id: zone)}
-  def in_zone(value, _zone), do: {:error, not_one_value("in_zone/2", value)}
+  def in_zone(%Tempo{}, zone) do
+    {:error, UnknownZoneError.exception(zone_id: zone)}
+  end
+
+  def in_zone(value, _zone) do
+    {:error, not_one_value("in_zone/2", value)}
+  end
 
   # A value placed in a zone is refused where the clock there skips every
   # reading it spans, as one read with the zone is.
@@ -5973,10 +6535,13 @@ defmodule Tempo do
     with :ok <- Validation.validate_zone_existence(zoned), do: {:ok, zoned}
   end
 
-  defp put_zone_id(nil, zone),
-    do: %{zone_id: zone, zone_offset: nil, zone_critical: false, tags: %{}}
+  defp put_zone_id(nil, zone) do
+    %{zone_id: zone, zone_offset: nil, zone_critical: false, tags: %{}}
+  end
 
-  defp put_zone_id(%{} = extended, zone), do: %{extended | zone_id: zone}
+  defp put_zone_id(%{} = extended, zone) do
+    %{extended | zone_id: zone}
+  end
 
   ## ---------------------------------------------------------
   ## A season in a territory
@@ -6051,7 +6616,10 @@ defmodule Tempo do
         when value: t() | Interval.t() | Tempo.Set.t()
   def in_territory(value, territory) do
     if Calendars.outside?(value) do
-      value |> Calendars.inside() |> in_territory(territory) |> Calendars.outside()
+      value
+      |> Calendars.inside()
+      |> in_territory(territory)
+      |> Calendars.outside()
     else
       do_in_territory(value, territory)
     end
@@ -6091,10 +6659,13 @@ defmodule Tempo do
 
   # A territory the equator runs through has summer in both halves of the
   # year, by where in it one stands, and a season has no one span there.
-  defp one_hemisphere(:ambiguous, territory, value),
-    do: {:error, AbstractSeasonError.exception(value: value, territory: territory)}
+  defp one_hemisphere(:ambiguous, territory, value) do
+    {:error, AbstractSeasonError.exception(value: value, territory: territory)}
+  end
 
-  defp one_hemisphere(hemisphere, _territory, _value), do: {:ok, hemisphere}
+  defp one_hemisphere(hemisphere, _territory, _value) do
+    {:ok, hemisphere}
+  end
 
   ## ---------------------------------------------------------
   ## Zone shifting — project a zoned Tempo into another zone
@@ -6174,7 +6745,10 @@ defmodule Tempo do
   @spec shift_zone(t(), String.t()) ::
           {:ok, t() | Tempo.Interval.t()} | {:error, error_reason()}
   def shift_zone(tempo, target_zone) when is_outside(tempo) do
-    tempo |> Calendars.inside() |> shift_zone(target_zone) |> Calendars.outside()
+    tempo
+    |> Calendars.inside()
+    |> shift_zone(target_zone)
+    |> Calendars.outside()
   end
 
   def shift_zone(%Tempo{} = tempo, target_zone) when is_binary(target_zone) do
@@ -6193,8 +6767,13 @@ defmodule Tempo do
     end
   end
 
-  def shift_zone(%Tempo{}, zone), do: {:error, UnknownZoneError.exception(zone_id: zone)}
-  def shift_zone(value, _zone), do: {:error, not_one_value("shift_zone/2", value)}
+  def shift_zone(%Tempo{}, zone) do
+    {:error, UnknownZoneError.exception(zone_id: zone)}
+  end
+
+  def shift_zone(value, _zone) do
+    {:error, not_one_value("shift_zone/2", value)}
+  end
 
   # A value that names several moments (a set, a mask, a group) has a wall
   # time in the other zone for each, and no one value there to return.
@@ -6249,10 +6828,21 @@ defmodule Tempo do
 
   """
   @spec floating?(t()) :: boolean()
-  def floating?(%Tempo{shift: nil, extended: nil}), do: true
-  def floating?(%Tempo{shift: nil, extended: %{zone_id: nil, zone_offset: nil}}), do: true
-  def floating?(%Tempo{}), do: false
-  def floating?(value), do: raise(not_one_value("floating?/1", value))
+  def floating?(%Tempo{shift: nil, extended: nil}) do
+    true
+  end
+
+  def floating?(%Tempo{shift: nil, extended: %{zone_id: nil, zone_offset: nil}}) do
+    true
+  end
+
+  def floating?(%Tempo{}) do
+    false
+  end
+
+  def floating?(value) do
+    raise(not_one_value("floating?/1", value))
+  end
 
   @doc """
   Return whether a `Tempo` value is *zoned* — it carries a zone or an
@@ -6281,8 +6871,13 @@ defmodule Tempo do
 
   """
   @spec zoned?(t()) :: boolean()
-  def zoned?(%Tempo{} = tempo), do: not floating?(tempo)
-  def zoned?(value), do: raise(not_one_value("zoned?/1", value))
+  def zoned?(%Tempo{} = tempo) do
+    not floating?(tempo)
+  end
+
+  def zoned?(value) do
+    raise(not_one_value("zoned?/1", value))
+  end
 
   # The same instant on `target_zone`'s wall clock, to the second and in the
   # value's own calendar. The value keeps everything else it carries — its
@@ -6294,13 +6889,16 @@ defmodule Tempo do
   # start of a unit of its own resolution and its end that unit's end, and
   # is otherwise the interval from the one to the other.
   defp do_shift_zone(%Tempo{time: time} = tempo, target_zone) do
-    if written_to_the_second?(time),
-      do: moment_in_zone(tempo, target_zone),
-      else: span_in_zone(tempo, target_zone)
+    if written_to_the_second?(time) do
+      moment_in_zone(tempo, target_zone)
+    else
+      span_in_zone(tempo, target_zone)
+    end
   end
 
-  defp written_to_the_second?(time),
-    do: List.keymember?(time, :second, 0) or List.keymember?(time, :microsecond, 0)
+  defp written_to_the_second?(time) do
+    List.keymember?(time, :second, 0) or List.keymember?(time, :microsecond, 0)
+  end
 
   defp span_in_zone(tempo, target_zone) do
     {unit, _span} = resolution(tempo)
@@ -6332,10 +6930,17 @@ defmodule Tempo do
   # the zone's wherever in the date it is asked for, and the day the clocks
   # change has two. An hour or a minute keeps the offset it is at, which says
   # which of the two it is when the clocks go back.
-  defp in_the_zone_alone(value, unit) when unit in [:hour, :minute], do: value
-  defp in_the_zone_alone(value, _unit), do: %{value | shift: nil}
+  defp in_the_zone_alone(value, unit) when unit in [:hour, :minute] do
+    value
+  end
 
-  defp same_moment?(a, b), do: Compare.to_utc_seconds(a) == Compare.to_utc_seconds(b)
+  defp in_the_zone_alone(value, _unit) do
+    %{value | shift: nil}
+  end
+
+  defp same_moment?(a, b) do
+    Compare.to_utc_seconds(a) == Compare.to_utc_seconds(b)
+  end
 
   # The interval carries the value's metadata, as the value there would.
   defp interval_there(start, finish, %Tempo{metadata: metadata}) do
@@ -6349,9 +6954,11 @@ defmodule Tempo do
   # An interval's ends are written to the minute, the finest unit two zones'
   # clocks differ by, unless either falls between minutes.
   defp to_the_minute(%Tempo{time: time} = endpoint, %Tempo{time: other}) do
-    if Keyword.get(time, :second) == 0 and Keyword.get(other, :second) == 0,
-      do: %{endpoint | time: Keyword.delete(time, :second)},
-      else: endpoint
+    if Keyword.get(time, :second) == 0 and Keyword.get(other, :second) == 0 do
+      %{endpoint | time: Keyword.delete(time, :second)}
+    else
+      endpoint
+    end
   end
 
   # The moment a value's span starts at, to the second or the fraction of
@@ -6374,10 +6981,14 @@ defmodule Tempo do
     end
   end
 
-  defp zone_offset_at("Etc/UTC", _utc_seconds), do: {:ok, 0}
+  defp zone_offset_at("Etc/UTC", _utc_seconds) do
+    {:ok, 0}
+  end
 
   # A zone written as an offset (`[+08:45]`) is at that offset always.
-  defp zone_offset_at({:offset, minutes}, _utc_seconds), do: {:ok, minutes * 60}
+  defp zone_offset_at({:offset, minutes}, _utc_seconds) do
+    {:ok, minutes * 60}
+  end
 
   defp zone_offset_at(zone, utc_seconds) do
     case TimeZoneDatabase.period_at_utc(zone, utc_seconds) do
@@ -6399,7 +7010,10 @@ defmodule Tempo do
      date_units(year, month, day, calendar) ++
        [
          hour: div(time_of_day, 3_600),
-         minute: time_of_day |> rem(3_600) |> div(60),
+         minute:
+           time_of_day
+           |> rem(3_600)
+           |> div(60),
          second: rem(time_of_day, 60)
        ]}
   end
@@ -6459,7 +7073,9 @@ defmodule Tempo do
 
   """
   @spec qualification(t()) :: qualification()
-  def qualification(%__MODULE__{} = value), do: Qualification.whole(value)
+  def qualification(%__MODULE__{} = value) do
+    Qualification.whole(value)
+  end
 
   @doc """
   The qualifier one component of a value carries.
@@ -6494,10 +7110,13 @@ defmodule Tempo do
 
   """
   @spec qualification(t(), atom()) :: qualification()
-  def qualification(%__MODULE__{qualifications: nil}, unit) when is_atom(unit), do: nil
+  def qualification(%__MODULE__{qualifications: nil}, unit) when is_atom(unit) do
+    nil
+  end
 
-  def qualification(%__MODULE__{qualifications: qualifications}, unit) when is_atom(unit),
-    do: Map.get(qualifications, unit)
+  def qualification(%__MODULE__{qualifications: qualifications}, unit) when is_atom(unit) do
+    Map.get(qualifications, unit)
+  end
 
   @doc """
   Returns a value's metadata: the caller's own data carried with it (a holiday
@@ -6538,8 +7157,9 @@ defmodule Tempo do
         ) ::
           map() | {:error, Exception.t()}
   def metadata(%module{metadata: metadata})
-      when module in [__MODULE__, Tempo.Interval, IntervalSet, Tempo.RecurrenceSet, Conditional],
-      do: metadata
+      when module in [__MODULE__, Tempo.Interval, IntervalSet, Tempo.RecurrenceSet, Conditional] do
+    metadata
+  end
 
   def metadata(value) do
     {:error,
@@ -6582,8 +7202,9 @@ defmodule Tempo do
                | Conditional.t()
   def put_metadata(%module{} = value, metadata)
       when module in [__MODULE__, Tempo.Interval, IntervalSet, Tempo.RecurrenceSet, Conditional] and
-             is_map(metadata),
-      do: %{value | metadata: metadata}
+             is_map(metadata) do
+    %{value | metadata: metadata}
+  end
 
   def put_metadata(value, metadata) do
     {:error,
@@ -6644,7 +7265,9 @@ defmodule Tempo do
     dow
   end
 
-  def day_of_week(value, _starting_on), do: raise(not_one_value("day_of_week/2", value))
+  def day_of_week(value, _starting_on) do
+    raise(not_one_value("day_of_week/2", value))
+  end
 
   @doc """
   Return the 1-based ordinal day of the year (`1..365` or `1..366`
@@ -6682,7 +7305,9 @@ defmodule Tempo do
     tempo.calendar.day_of_year(year, month, day)
   end
 
-  def day_of_year(value), do: raise(not_one_value("day_of_year/1", value))
+  def day_of_year(value) do
+    raise(not_one_value("day_of_year/1", value))
+  end
 
   @doc """
   Return the 1-based quarter of the year (`1..4`) that the value's
@@ -6724,7 +7349,9 @@ defmodule Tempo do
     tempo.calendar.quarter_of_year(year, month, day)
   end
 
-  def quarter_of_year(value), do: raise(not_one_value("quarter_of_year/1", value))
+  def quarter_of_year(value) do
+    raise(not_one_value("quarter_of_year/1", value))
+  end
 
   @doc """
   Return `true` when the Tempo's year is a leap year under its
@@ -6760,7 +7387,9 @@ defmodule Tempo do
     tempo.calendar.leap_year?(whole!(tempo, :year, "leap_year?"))
   end
 
-  def leap_year?(value), do: raise(not_one_value("leap_year?/1", value))
+  def leap_year?(value) do
+    raise(not_one_value("leap_year?/1", value))
+  end
 
   @doc """
   Return the number of days in the Tempo's month under its
@@ -6804,7 +7433,9 @@ defmodule Tempo do
     calendar.days_in_month(year, month)
   end
 
-  def days_in_month(value), do: raise(not_one_value("days_in_month/1", value))
+  def days_in_month(value) do
+    raise(not_one_value("days_in_month/1", value))
+  end
 
   # Extract {year, month, day} from a Tempo or raise a uniform
   # error. Missing month or day default to 1 (start-of-unit) so
@@ -6835,9 +7466,11 @@ defmodule Tempo do
     month = whole!(tempo, :month, function, 1)
     day = whole!(tempo, :day, function, default_day)
 
-    if List.keymember?(time, :day, 0),
-      do: {year, month, day},
-      else: first_ymd(time, {year, month, day}, tempo.calendar)
+    if List.keymember?(time, :day, 0) do
+      {year, month, day}
+    else
+      first_ymd(time, {year, month, day}, tempo.calendar)
+    end
   end
 
   defp ordinal_date_ymd(year, day_of_year, calendar) do
@@ -7189,9 +7822,11 @@ defmodule Tempo do
   # as many days long as it was. One written with a duration keeps the
   # duration, and an open end stays open.
   defp do_shift(%Interval{} = interval, shift, options) when is_list(options) do
-    if skipping?(shift, options),
-      do: {:error, skipping_an_interval(interval)},
-      else: shift_interval(interval, shift, options, months_and_years_apart(shift))
+    if skipping?(shift, options) do
+      {:error, skipping_an_interval(interval)}
+    else
+      shift_interval(interval, shift, options, months_and_years_apart(shift))
+    end
   end
 
   defp do_shift(tempo, shift, _options) do
@@ -7217,12 +7852,16 @@ defmodule Tempo do
   # The months and years a shift counts, apart from what else it counts: a
   # date can land on a shorter month than it left only by them, so they are
   # counted first, as a value's shift counts them, and the days made up.
-  defp months_and_years_apart(%Duration{time: time}), do: months_and_years_apart(time)
+  defp months_and_years_apart(%Duration{time: time}) do
+    months_and_years_apart(time)
+  end
 
   defp months_and_years_apart(units) when is_list(units) do
-    if Keyword.keyword?(units) and Enum.all?(units, fn {_unit, amount} -> is_number(amount) end),
-      do: Enum.split_with(units, fn {unit, _amount} -> unit in [:year, :month] end),
-      else: :as_given
+    if Keyword.keyword?(units) and Enum.all?(units, fn {_unit, amount} -> is_number(amount) end) do
+      Enum.split_with(units, fn {unit, _amount} -> unit in [:year, :month] end)
+    else
+      :as_given
+    end
   end
 
   defp months_and_years_apart(text) when is_binary(text) do
@@ -7232,16 +7871,20 @@ defmodule Tempo do
     end
   end
 
-  defp months_and_years_apart(_other), do: :as_given
+  defp months_and_years_apart(_other) do
+    :as_given
+  end
 
   # A shift of no months or years, and one that is no duration, which each
   # end refuses in its own words.
   defp shift_interval(interval, shift, options, apart)
-       when apart == :as_given or elem(apart, 0) == [],
-       do: shift_ends(interval, &shift(&1, shift, options), :as_they_land)
+       when apart == :as_given or elem(apart, 0) == [] do
+    shift_ends(interval, &shift(&1, shift, options), :as_they_land)
+  end
 
-  defp shift_interval(interval, _shift, _options, {months_and_years, []}),
-    do: shift_ends(interval, &shift(&1, Duration.build(months_and_years)), :as_many_days_on)
+  defp shift_interval(interval, _shift, _options, {months_and_years, []}) do
+    shift_ends(interval, &shift(&1, Duration.build(months_and_years)), :as_many_days_on)
+  end
 
   defp shift_interval(interval, _shift, _options, {months_and_years, rest}) do
     with %Interval{} = by_the_calendar <-
@@ -7289,7 +7932,9 @@ defmodule Tempo do
     end
   end
 
-  defp as_many_days_on(shifted_to, _shifted_from, _interval), do: {:ok, shifted_to}
+  defp as_many_days_on(shifted_to, _shifted_from, _interval) do
+    {:ok, shifted_to}
+  end
 
   defp days_between(%__MODULE__{} = from, %__MODULE__{} = to) do
     with {:ok, %Date{} = first} <- date_of(from),
@@ -7303,9 +7948,13 @@ defmodule Tempo do
   # The date an end is on, where it is written to the day or finer.
   defp date_of(%__MODULE__{time: time} = endpoint) do
     if Keyword.has_key?(time, :day) or Keyword.has_key?(time, :day_of_week) or
-         Keyword.has_key?(time, :day_of_year),
-       do: endpoint |> trunc(:day) |> to_date(),
-       else: :error
+         Keyword.has_key?(time, :day_of_year) do
+      endpoint
+      |> trunc(:day)
+      |> to_date()
+    else
+      :error
+    end
   end
 
   # The units a value is shifted by are a duration's: a number of each, and a
@@ -7321,13 +7970,21 @@ defmodule Tempo do
     end
   end
 
-  defp shift_unit?({:skipping, _busy}), do: true
-  defp shift_unit?({unit, value}) when unit in @shift_units, do: is_number(value)
+  defp shift_unit?({:skipping, _busy}) do
+    true
+  end
 
-  defp shift_unit?({:microsecond, {value, digits}}),
-    do: is_integer(value) and digits in 0..6
+  defp shift_unit?({unit, value}) when unit in @shift_units do
+    is_number(value)
+  end
 
-  defp shift_unit?(_other), do: false
+  defp shift_unit?({:microsecond, {value, digits}}) do
+    is_integer(value) and digits in 0..6
+  end
+
+  defp shift_unit?(_other) do
+    false
+  end
 
   defp shift_unit_error(other) do
     ArgumentError.exception(
@@ -7832,9 +8489,11 @@ defmodule Tempo do
   end
 
   defp do_to_interval(value, opts) do
-    if Group.abstract_season?(value) or Group.abstract_season?(Keyword.get(opts, :within)),
-      do: season_to_interval(value, opts),
-      else: value_to_interval(value, opts)
+    if Group.abstract_season?(value) or Group.abstract_season?(Keyword.get(opts, :within)) do
+      season_to_interval(value, opts)
+    else
+      value_to_interval(value, opts)
+    end
   end
 
   # A season of 21 to 24 is given its dates where it is converted, and so
@@ -7849,8 +8508,13 @@ defmodule Tempo do
     end
   end
 
-  defp window_with_dates(opts, nil), do: opts
-  defp window_with_dates(opts, within), do: Keyword.put(opts, :within, within)
+  defp window_with_dates(opts, nil) do
+    opts
+  end
+
+  defp window_with_dates(opts, within) do
+    Keyword.put(opts, :within, within)
+  end
 
   defp value_to_interval(value, opts) do
     with :ok <- check_bound_option(opts, "Tempo.to_interval/2"),
@@ -7864,9 +8528,16 @@ defmodule Tempo do
          :ok <- counted_in_steps(value),
          :ok <- walkable(value) do
       case open_window_start(Keyword.get(opts, :within)) do
-        {:ok, window_from} -> occurrences_from(value, window_from, opts)
-        {:error, _reason} = error -> error
-        :bounded -> value |> materialise(opts) |> spans_between_points(value)
+        {:ok, window_from} ->
+          occurrences_from(value, window_from, opts)
+
+        {:error, _reason} = error ->
+          error
+
+        :bounded ->
+          value
+          |> materialise(opts)
+          |> spans_between_points(value)
       end
     end
   end
@@ -7891,15 +8562,24 @@ defmodule Tempo do
          %Interval{recurrence: recurrence, duration: %Tempo.Duration{time: time}} = interval
        )
        when recurrence not in [0, 1] do
-    if Enum.all?(time, &no_amount?/1),
-      do: {:error, steps_by_nothing_error(interval)},
-      else: :ok
+    if Enum.all?(time, &no_amount?/1) do
+      {:error, steps_by_nothing_error(interval)}
+    else
+      :ok
+    end
   end
 
-  defp counted_in_steps(_value), do: :ok
+  defp counted_in_steps(_value) do
+    :ok
+  end
 
-  defp no_amount?({_unit, {amount, _precision}}), do: amount == 0
-  defp no_amount?({_unit, amount}), do: amount == 0
+  defp no_amount?({_unit, {amount, _precision}}) do
+    amount == 0
+  end
+
+  defp no_amount?({_unit, amount}) do
+    amount == 0
+  end
 
   defp steps_by_nothing_error(%Interval{duration: cadence} = interval) do
     ConversionError.exception(
@@ -7920,12 +8600,16 @@ defmodule Tempo do
          repeat_rule: %__MODULE__{time: [{:selection, selection} | _units]}
        })
        when is_list(time) do
-    if Keyword.has_key?(time, :year) or not Selection.needs_a_date?(selection),
-      do: :ok,
-      else: {:error, UnanchoredError.exception(value: from)}
+    if Keyword.has_key?(time, :year) or not Selection.needs_a_date?(selection) do
+      :ok
+    else
+      {:error, UnanchoredError.exception(value: from)}
+    end
   end
 
-  defp rule_has_a_date(_value), do: :ok
+  defp rule_has_a_date(_value) do
+    :ok
+  end
 
   # A group of a set at an end of an interval (`R3/2026Y{1,2}G3MU15D/P1D`) names
   # a span in each of its groups, which nothing expands, so the interval has
@@ -7937,10 +8621,17 @@ defmodule Tempo do
     end
   end
 
-  defp ends_expand(_value), do: :ok
+  defp ends_expand(_value) do
+    :ok
+  end
 
-  defp group_of_set_end?(%__MODULE__{time: time}) when is_list(time), do: group_of_set?(time)
-  defp group_of_set_end?(_absent), do: false
+  defp group_of_set_end?(%__MODULE__{time: time}) when is_list(time) do
+    group_of_set?(time)
+  end
+
+  defp group_of_set_end?(_absent) do
+    false
+  end
 
   # A duration is counted from a point. A start or an end that names a span
   # (a mask, a group) is read as the point the span starts at before the
@@ -7948,10 +8639,16 @@ defmodule Tempo do
   # `2026YXXO/P1M` runs a month from 1 January. One that names several spans
   # is left to be walked, or refused, as it is written.
   defp counted_from_points(%Interval{duration: %Duration{}} = interval) do
-    if Interval.points?(interval), do: interval, else: points_or_as_written(interval)
+    if Interval.points?(interval) do
+      interval
+    else
+      points_or_as_written(interval)
+    end
   end
 
-  defp counted_from_points(value), do: value
+  defp counted_from_points(value) do
+    value
+  end
 
   defp points_or_as_written(interval) do
     case Interval.endpoints_as_points(interval) do
@@ -7979,15 +8676,27 @@ defmodule Tempo do
          %Interval{recurrence: recurrence, duration: duration} = written
        )
        when recurrence != 1 or not is_nil(duration) do
-    if Interval.points?(written), do: {:ok, converted}, else: between_points(converted)
+    if Interval.points?(written) do
+      {:ok, converted}
+    else
+      between_points(converted)
+    end
   end
 
-  defp spans_between_points(result, _written), do: result
+  defp spans_between_points(result, _written) do
+    result
+  end
 
-  defp between_points(%Interval{} = span), do: Interval.endpoints_as_points(span)
+  defp between_points(%Interval{} = span) do
+    Interval.endpoints_as_points(span)
+  end
 
   defp between_points(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set), do: members_between_points(set), else: {:ok, set}
+    if IntervalSet.bounded?(set) do
+      members_between_points(set)
+    else
+      {:ok, set}
+    end
   end
 
   defp members_between_points(set) do
@@ -8034,7 +8743,9 @@ defmodule Tempo do
     end
   end
 
-  defp placed_on_window(value, _within), do: {:ok, value}
+  defp placed_on_window(value, _within) do
+    {:ok, value}
+  end
 
   # A day of the week starts on the first such day on or after the window's
   # start, in its week when the window is a calendar of weeks.
@@ -8058,19 +8769,44 @@ defmodule Tempo do
   defp weekday_on_or_after(window_from, weekday, finer) do
     with %__MODULE__{} = day <- at_resolution(window_from, :day),
          {:ok, date} <- to_date(day) do
-      first = date |> Kday.kday_on_or_after(weekday) |> from_date()
-      if finer == [], do: {:ok, first}, else: place_on(first, %{first | time: finer})
+      first =
+        date
+        |> Kday.kday_on_or_after(weekday)
+        |> from_date()
+
+      if finer == [] do
+        {:ok, first}
+      else
+        place_on(first, %{first | time: finer})
+      end
     end
   end
 
   # The unit a start with no year is placed below: the window's day for a
   # time of day, its year for a month, and so on.
-  defp placement_unit(:hour), do: :day
-  defp placement_unit(:minute), do: :hour
-  defp placement_unit(:second), do: :minute
-  defp placement_unit(:day), do: :month
-  defp placement_unit(:day_of_week), do: :week
-  defp placement_unit(_unit), do: :year
+  defp placement_unit(:hour) do
+    :day
+  end
+
+  defp placement_unit(:minute) do
+    :hour
+  end
+
+  defp placement_unit(:second) do
+    :minute
+  end
+
+  defp placement_unit(:day) do
+    :month
+  end
+
+  defp placement_unit(:day_of_week) do
+    :week
+  end
+
+  defp placement_unit(_unit) do
+    :year
+  end
 
   # A recurrence from a start that holds a set or a range
   # (`R3/2026Y6M{1,15}D/P1M`, from the 1st and the 15th of June) is a
@@ -8131,7 +8867,9 @@ defmodule Tempo do
     end
   end
 
-  defp recurrence_from_each_value(_value, _opts), do: :one_start
+  defp recurrence_from_each_value(_value, _opts) do
+    :one_start
+  end
 
   # The span between each value of an end that holds a set and the other
   # end. Each is the interval its two ends make, held to the order an
@@ -8187,11 +8925,13 @@ defmodule Tempo do
   # The occurrences from each start, gathered with their count: no more than
   # `@spans_at_once` are given, as from one start.
   defp occurrences_from_each(_starts, interval, _opts, {_occurrences, count})
-       when count > @spans_at_once,
-       do: {:error, too_many_spans_error(interval)}
+       when count > @spans_at_once do
+    {:error, too_many_spans_error(interval)}
+  end
 
-  defp occurrences_from_each([], _interval, opts, {occurrences, _count}),
-    do: IntervalSet.new(occurrences, coalesce: coalesce_opt(opts))
+  defp occurrences_from_each([], _interval, opts, {occurrences, _count}) do
+    IntervalSet.new(occurrences, coalesce: coalesce_opt(opts))
+  end
 
   defp occurrences_from_each([from_one | from_others], interval, opts, {occurrences, count}) do
     case to_interval(from_one, opts) do
@@ -8257,8 +8997,9 @@ defmodule Tempo do
     end
   end
 
-  defp walkable(%Tempo.Interval{repeat_rule: %Tempo{} = rule} = interval),
-    do: selectable(rule, interval)
+  defp walkable(%Tempo.Interval{repeat_rule: %Tempo{} = rule} = interval) do
+    selectable(rule, interval)
+  end
 
   # A value holding a selection (ISO 8601-2 §12.11) selects as a rule does.
   defp walkable(%Tempo{time: time} = value) when is_list(time) do
@@ -8268,7 +9009,9 @@ defmodule Tempo do
     end
   end
 
-  defp walkable(_value), do: :ok
+  defp walkable(_value) do
+    :ok
+  end
 
   # Whether a value is placed on the time line by a year of its own, where one
   # with no year lies on an axis that comes round again.
@@ -8292,19 +9035,33 @@ defmodule Tempo do
 
   # The stepper names what it cannot step by an atom where it has no value to
   # name; the start is in scope here.
-  defp step_error(_from, reason) when is_exception(reason), do: reason
-  defp step_error(from, :unanchored), do: UnanchoredError.exception(value: from)
-  defp step_error(from, reason), do: materialisation_error(from, reason)
+  defp step_error(_from, reason) when is_exception(reason) do
+    reason
+  end
+
+  defp step_error(from, :unanchored) do
+    UnanchoredError.exception(value: from)
+  end
+
+  defp step_error(from, reason) do
+    materialisation_error(from, reason)
+  end
 
   # The span a value and a duration give: the stepper's error when the
   # duration cannot be counted from the value (a day past 28 February of no
   # year), never an interval holding it. A value that holds unspecified
   # digits steps to a set of candidates, which is no one end either.
-  defp derived_span({:error, reason}, value, _span), do: {:error, step_error(value, reason)}
-  defp derived_span(%Tempo{} = derived, _value, span), do: {:ok, span.(derived)}
+  defp derived_span({:error, reason}, value, _span) do
+    {:error, step_error(value, reason)}
+  end
 
-  defp derived_span(_several, value, _span),
-    do: {:error, step_error(value, :grouped_component)}
+  defp derived_span(%Tempo{} = derived, _value, span) do
+    {:ok, span.(derived)}
+  end
+
+  defp derived_span(_several, value, _span) do
+    {:error, step_error(value, :grouped_component)}
+  end
 
   defp selectable(%Tempo{time: time} = rule, interval) do
     if selects_by_month?(time) and week_based_calendar?(rule.calendar) do
@@ -8320,23 +9077,33 @@ defmodule Tempo do
     end
   end
 
-  defp selectable(_no_rule, _interval), do: :ok
+  defp selectable(_no_rule, _interval) do
+    :ok
+  end
 
   # Whether a selection, or a window within it, selects by a month, by a day
   # of one or by a day of the year: the units a date written for a calendar of
   # weeks is read in the Gregorian calendar by.
-  defp selects_by_month?(units) when is_list(units), do: Enum.any?(units, &selects_by_month?/1)
+  defp selects_by_month?(units) when is_list(units) do
+    Enum.any?(units, &selects_by_month?/1)
+  end
 
   defp selects_by_month?({unit, _value})
-       when unit in [:month, :traditional_month, :day, :day_of_year],
-       do: true
+       when unit in [:month, :traditional_month, :day, :day_of_year] do
+    true
+  end
 
-  defp selects_by_month?({:selection, selection}), do: selects_by_month?(selection)
+  defp selects_by_month?({:selection, selection}) do
+    selects_by_month?(selection)
+  end
 
-  defp selects_by_month?({:interval, %Tempo.Interval{from: %Tempo{time: time}}}),
-    do: selects_by_month?(time)
+  defp selects_by_month?({:interval, %Tempo.Interval{from: %Tempo{time: time}}}) do
+    selects_by_month?(time)
+  end
 
-  defp selects_by_month?(_other_unit), do: false
+  defp selects_by_month?(_other_unit) do
+    false
+  end
 
   @doc false
   # 1.x called the window `:bound`. A leftover `:bound` is an error naming
@@ -8416,7 +9183,9 @@ defmodule Tempo do
      )}
   end
 
-  defp open_window_start(_within), do: :bounded
+  defp open_window_start(_within) do
+    :bounded
+  end
 
   # With an open-ended window, a value with no end of its own walks its
   # occurrences lazily from the window's start; any other value materialises as
@@ -8433,36 +9202,59 @@ defmodule Tempo do
   # with an open start, one over an open domain, a selection made in every
   # year, or a recurrence set holding one — a conditional member counting when
   # the set it reads its condition from has no end.
-  defp unending?(%Tempo.Interval{from: %Tempo.Set{} = domain}), do: open_domain?(domain)
+  defp unending?(%Tempo.Interval{from: %Tempo.Set{} = domain}) do
+    open_domain?(domain)
+  end
 
   # A rule with no start and a count has as many occurrences from the
   # window's start as it counts, and ends. It was walked as one with no end,
   # stretch by stretch, and counted afresh in each: `FREQ=DAILY;COUNT=2`
   # from 2026 on was two days of each stretch the walk took.
   defp unending?(%Tempo.Interval{from: from, to: to, recurrence: :infinity})
-       when from in [nil, :undefined] and to in [nil, :undefined],
-       do: true
+       when from in [nil, :undefined] and to in [nil, :undefined] do
+    true
+  end
 
   defp unending?(%Tempo.Interval{from: %Tempo{}, to: to, recurrence: :infinity})
-       when to in [nil, :undefined],
-       do: true
+       when to in [nil, :undefined] do
+    true
+  end
 
-  defp unending?(%Tempo.RecurrenceSet{members: members}), do: Enum.any?(members, &unending?/1)
+  defp unending?(%Tempo.RecurrenceSet{members: members}) do
+    Enum.any?(members, &unending?/1)
+  end
 
-  defp unending?(%Conditional{member: member, falls_on: falls_on}),
-    do: unending?(member) or unending?(falls_on)
+  defp unending?(%Conditional{member: member, falls_on: falls_on}) do
+    unending?(member) or unending?(falls_on)
+  end
 
-  defp unending?(%Tempo{time: time}), do: every_year_selection?(time)
-  defp unending?(_value), do: false
+  defp unending?(%Tempo{time: time}) do
+    every_year_selection?(time)
+  end
 
-  defp open_domain?(%Tempo.Set{set: [_ | _] = members}),
-    do: Enum.any?(members, &open_ended_range?/1)
+  defp unending?(_value) do
+    false
+  end
 
-  defp open_domain?(%Tempo.Set{set: [], except: [], filter: nil}), do: false
-  defp open_domain?(%Tempo.Set{set: []}), do: true
+  defp open_domain?(%Tempo.Set{set: [_ | _] = members}) do
+    Enum.any?(members, &open_ended_range?/1)
+  end
 
-  defp open_ended_range?(%Tempo.Range{last: :undefined}), do: true
-  defp open_ended_range?(_member), do: false
+  defp open_domain?(%Tempo.Set{set: [], except: [], filter: nil}) do
+    false
+  end
+
+  defp open_domain?(%Tempo.Set{set: []}) do
+    true
+  end
+
+  defp open_ended_range?(%Tempo.Range{last: :undefined}) do
+    true
+  end
+
+  defp open_ended_range?(_member) do
+    false
+  end
 
   defp every_year_selection?(time) do
     case Enum.split_while(time, &(not match?({:selection, _}, &1))) do
@@ -8491,7 +9283,11 @@ defmodule Tempo do
   # returned, and a computed event with no date in a later one is raised when
   # the walk reaches it (`walked/5`).
   defp lazy_occurrences(value, window_from, opts) do
-    base = value |> cadence_unit() |> walk_base()
+    base =
+      value
+      |> cadence_unit()
+      |> walk_base()
+
     walk_opts = Keyword.delete(opts, :coalesce)
 
     with %Tempo{} = first_to <- walk_end(window_from, base, 0),
@@ -8509,8 +9305,9 @@ defmodule Tempo do
   end
 
   defp walk_next({_window_from, _step, horizon}, _value, _base, _opts)
-       when not is_struct(horizon, Tempo),
-       do: nil
+       when not is_struct(horizon, Tempo) do
+    nil
+  end
 
   defp walk_next({window_from, step, horizon}, value, base, opts) do
     with :earlier <- Compare.compare_endpoints(window_from, horizon),
@@ -8530,17 +9327,25 @@ defmodule Tempo do
   # every occurrence before the year the event is not computed for, and there
   # it raises the event's error, as `Enum` raises for a walk it cannot make.
   defp walked({:ok, set}, window_from, window_to, step, horizon) do
-    found = set |> IntervalSet.members() |> Enum.filter(&starts_from?(&1, window_from))
+    found =
+      set
+      |> IntervalSet.members()
+      |> Enum.filter(&starts_from?(&1, window_from))
+
     {found, {window_to, step + 1, horizon_after(horizon, found)}}
   end
 
-  defp walked({:error, %EventError{}}, window_from, _window_to, step, horizon) when step > 0,
-    do: {[], {window_from, 0, horizon}}
+  defp walked({:error, %EventError{}}, window_from, _window_to, step, horizon) when step > 0 do
+    {[], {window_from, 0, horizon}}
+  end
 
-  defp walked({:error, %EventError{} = no_date}, _window_from, _window_to, _step, _horizon),
-    do: raise(no_date)
+  defp walked({:error, %EventError{} = no_date}, _window_from, _window_to, _step, _horizon) do
+    raise(no_date)
+  end
 
-  defp walked({:error, _reason}, _window_from, _window_to, _step, _horizon), do: nil
+  defp walked({:error, _reason}, _window_from, _window_to, _step, _horizon) do
+    nil
+  end
 
   defp walk_window(value, window_from, window_to, opts) do
     window = %Tempo.Interval{from: window_from, to: window_to}
@@ -8558,36 +9363,79 @@ defmodule Tempo do
     Math.add(window_from, %Tempo.Duration{time: [{unit, count * Integer.pow(2, min(step, 6))}]})
   end
 
-  defp starts_from?(%Tempo.Interval{from: %Tempo{} = from}, window_from),
-    do: at_or_after_bound?(from, window_from)
+  defp starts_from?(%Tempo.Interval{from: %Tempo{} = from}, window_from) do
+    at_or_after_bound?(from, window_from)
+  end
 
-  defp starts_from?(_occurrence, _window_from), do: false
+  defp starts_from?(_occurrence, _window_from) do
+    false
+  end
 
   # The walk ends a horizon after the last occurrence it found.
-  defp horizon_after(horizon, []), do: horizon
-  defp horizon_after(_horizon, found), do: horizon_from(List.last(found))
+  defp horizon_after(horizon, []) do
+    horizon
+  end
 
-  defp horizon_from(%Tempo.Interval{from: %Tempo{} = from}),
-    do: Math.add(from, @occurrence_horizon)
+  defp horizon_after(_horizon, found) do
+    horizon_from(List.last(found))
+  end
+
+  defp horizon_from(%Tempo.Interval{from: %Tempo{} = from}) do
+    Math.add(from, @occurrence_horizon)
+  end
 
   # The finest unit a value recurs by, which sizes the walk's windows.
-  defp cadence_unit(%Tempo.Interval{duration: %Tempo.Duration{time: [_ | _] = time}}),
-    do: time |> List.last() |> elem(0)
+  defp cadence_unit(%Tempo.Interval{duration: %Tempo.Duration{time: [_ | _] = time}}) do
+    time
+    |> List.last()
+    |> elem(0)
+  end
 
-  defp cadence_unit(%Tempo.RecurrenceSet{members: [_ | _] = members}),
-    do: members |> Enum.map(&cadence_unit/1) |> Enum.reduce(&finer_unit/2)
+  defp cadence_unit(%Tempo.RecurrenceSet{members: [_ | _] = members}) do
+    members
+    |> Enum.map(&cadence_unit/1)
+    |> Enum.reduce(&finer_unit/2)
+  end
 
-  defp cadence_unit(%Conditional{member: member}), do: cadence_unit(member)
-  defp cadence_unit(_value), do: :year
+  defp cadence_unit(%Conditional{member: member}) do
+    cadence_unit(member)
+  end
 
-  defp finer_unit(unit, other), do: if(coarser_unit?(unit, other), do: other, else: unit)
+  defp cadence_unit(_value) do
+    :year
+  end
 
-  defp walk_base(unit) when unit in [:year, :month], do: {:year, 1}
-  defp walk_base(unit) when unit in [:week, :day], do: {:month, 1}
-  defp walk_base(:hour), do: {:day, 1}
-  defp walk_base(:minute), do: {:hour, 1}
-  defp walk_base(:second), do: {:minute, 1}
-  defp walk_base(_unit), do: {:year, 1}
+  defp finer_unit(unit, other) do
+    if coarser_unit?(unit, other) do
+      other
+    else
+      unit
+    end
+  end
+
+  defp walk_base(unit) when unit in [:year, :month] do
+    {:year, 1}
+  end
+
+  defp walk_base(unit) when unit in [:week, :day] do
+    {:month, 1}
+  end
+
+  defp walk_base(:hour) do
+    {:day, 1}
+  end
+
+  defp walk_base(:minute) do
+    {:hour, 1}
+  end
+
+  defp walk_base(:second) do
+    {:minute, 1}
+  end
+
+  defp walk_base(_unit) do
+    {:year, 1}
+  end
 
   @doc false
   # A window with each of its ends that has no zone placed in UTC: how
@@ -8604,16 +9452,21 @@ defmodule Tempo do
     end
   end
 
-  def read_in_utc(%Interval{from: from, to: to} = interval),
-    do: %{interval | from: read_in_utc(from), to: read_in_utc(to)}
-
-  def read_in_utc(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set),
-      do: IntervalSet.with_intervals(set, Enum.map(IntervalSet.members(set), &read_in_utc/1)),
-      else: set
+  def read_in_utc(%Interval{from: from, to: to} = interval) do
+    %{interval | from: read_in_utc(from), to: read_in_utc(to)}
   end
 
-  def read_in_utc(other), do: other
+  def read_in_utc(%IntervalSet{} = set) do
+    if IntervalSet.bounded?(set) do
+      IntervalSet.with_intervals(set, Enum.map(IntervalSet.members(set), &read_in_utc/1))
+    else
+      set
+    end
+  end
+
+  def read_in_utc(other) do
+    other
+  end
 
   @doc false
   # The occurrences a `:within` window keeps — those that overlap it — for the
@@ -8622,10 +9475,14 @@ defmodule Tempo do
   # No window keeps them all.
   @spec occurrences_within([Tempo.Interval.t()], keyword()) ::
           {:ok, [Tempo.Interval.t()]} | {:error, error_reason()}
-  def occurrences_within(occurrences, options), do: keep_within(occurrences, options)
+  def occurrences_within(occurrences, options) do
+    keep_within(occurrences, options)
+  end
 
   # A recurrence of no occurrences (`R0/2026-06-15/P1D`) is an empty set.
-  defp materialise(%Tempo.Interval{recurrence: 0}, _opts), do: IntervalSet.new([])
+  defp materialise(%Tempo.Interval{recurrence: 0}, _opts) do
+    IntervalSet.new([])
+  end
 
   # A bounded recurrence (`R3/1985-01/P1M`) expands to N disjoint
   # intervals. Each occurrence starts at `from + i*duration` and
@@ -8646,7 +9503,13 @@ defmodule Tempo do
        )
        when is_integer(n) and n > 1 do
     {from, floor, interval} = selection_start(from, interval)
-    step = if direction == -1, do: Duration.negate(duration), else: duration
+
+    step =
+      if direction == -1 do
+        Duration.negate(duration)
+      else
+        duration
+      end
 
     walk =
       iterate_recurrence(
@@ -8745,7 +9608,13 @@ defmodule Tempo do
        )
        when to in [nil, :undefined] do
     {from, floor, interval} = selection_start(from, interval)
-    step = if direction == -1, do: Duration.negate(duration), else: duration
+
+    step =
+      if direction == -1 do
+        Duration.negate(duration)
+      else
+        duration
+      end
 
     case iterate_recurrence(
            {from, counted_from(floor, opts), 0},
@@ -8849,9 +9718,11 @@ defmodule Tempo do
          } = interval,
          opts
        ) do
-    if List.keymember?(selection, :interval, 0),
-      do: {:error, NotBuilt.rule_to_an_end(interval)},
-      else: selected_back_from(interval, opts)
+    if List.keymember?(selection, :interval, 0) do
+      {:error, NotBuilt.rule_to_an_end(interval)}
+    else
+      selected_back_from(interval, opts)
+    end
   end
 
   # A rule with a count, no start and an end it runs until is neither a rule
@@ -9108,8 +9979,9 @@ defmodule Tempo do
   #
   # A set of durations names lengths of time and no time, so it has no span,
   # as one duration has none.
-  defp materialise(%Tempo.Set{set: [%Duration{} | _durations]} = set, _opts),
-    do: {:error, ConversionError.exception(value: set, reason: :bare_duration)}
+  defp materialise(%Tempo.Set{set: [%Duration{} | _durations]} = set, _opts) do
+    {:error, ConversionError.exception(value: set, reason: :bare_duration)}
+  end
 
   defp materialise(%Tempo.Set{type: :all, set: members, except: [_ | _] = except} = set, opts) do
     with {:ok, included} <- members_to_interval_set(members, set),
@@ -9192,17 +10064,21 @@ defmodule Tempo do
   # the window is in one of its own.
   defp in_rule_zone(%__MODULE__{extended: nil} = start, %Interval{
          repeat_rule: %__MODULE__{extended: %{} = extended}
-       }),
-       do: %{start | extended: extended}
+       }) do
+    %{start | extended: extended}
+  end
 
-  defp in_rule_zone(start, _interval), do: start
+  defp in_rule_zone(start, _interval) do
+    start
+  end
 
   # A recurrence with no end is ended by the caller's `:within` window; with
   # none it cannot be materialised. A window running back from each anchor
   # carries occurrences into the window from periods after it, so the walk goes
   # on to the last of those.
-  defp materialise_unending(interval, nil, _opts),
-    do: {:error, UnboundedRecurrenceError.exception(interval: interval)}
+  defp materialise_unending(interval, nil, _opts) do
+    {:error, UnboundedRecurrenceError.exception(interval: interval)}
+  end
 
   defp materialise_unending(
          %Tempo.Interval{from: from, duration: duration} = interval,
@@ -9242,7 +10118,9 @@ defmodule Tempo do
   # back, and each start is one step of the calendar's arithmetic from the
   # recurrence's own (`nth_start/3`), so a start at a month's end never
   # drifts.
-  defp first_period_reaching(_walk, _interval, nil), do: 0
+  defp first_period_reaching(_walk, _interval, nil) do
+    0
+  end
 
   defp first_period_reaching(walk, interval, within) do
     case bound_lower(within) do
@@ -9251,7 +10129,11 @@ defmodule Tempo do
         reach = Enum.uniq(forward ++ spanned_durations(interval.metadata))
         over? = &over_before?(&1, walk, reach, window_from)
 
-        if over?.(0), do: first_not(over?, 0, 1), else: 0
+        if over?.(0) do
+          first_not(over?, 0, 1)
+        else
+          0
+        end
 
       _no_lower_edge ->
         0
@@ -9273,10 +10155,13 @@ defmodule Tempo do
   # gives, or the start of the next period where the occurrences are
   # contiguous.
   defp occurrence_ended(occurrence_end, start, period, _next_start)
-       when is_function(occurrence_end, 2),
-       do: occurrence_end.(start, period)
+       when is_function(occurrence_end, 2) do
+    occurrence_end.(start, period)
+  end
 
-  defp occurrence_ended(_contiguous, _start, _period, next_start), do: next_start
+  defp occurrence_ended(_contiguous, _start, _period, next_start) do
+    next_start
+  end
 
   # No recurrence is passed over for more periods than this without being
   # walked: the seconds of thirty-four thousand years.
@@ -9332,7 +10217,9 @@ defmodule Tempo do
     end
   end
 
-  defp start_in_repeat_calendar(%Tempo{} = start, _interval), do: start
+  defp start_in_repeat_calendar(%Tempo{} = start, _interval) do
+    start
+  end
 
   # The start of the cadence period a value sits in, at the value's own
   # resolution: 1 April 2026 for a month, 30 March 2026 (its week's Monday) for
@@ -9362,7 +10249,9 @@ defmodule Tempo do
     end
   end
 
-  defp filter_to_bound_window(result, _interval, _within), do: result
+  defp filter_to_bound_window(result, _interval, _within) do
+    result
+  end
 
   # Materialise a recurrence with an open start from its window's start. A
   # §12.10 window can move an occurrence off the period whose selection produced
@@ -9404,9 +10293,11 @@ defmodule Tempo do
   defp at_start_resolution(carried_from, start, %Tempo.Interval{duration: cadence}) do
     {unit, _span} = resolution(start)
 
-    if coarser_unit?(unit, freq_of(cadence)),
-      do: carried_from,
-      else: at_resolution(carried_from, unit)
+    if coarser_unit?(unit, freq_of(cadence)) do
+      carried_from
+    else
+      at_resolution(carried_from, unit)
+    end
   end
 
   # How far an occurrence can reach outside the period that selects it, as the
@@ -9427,10 +10318,17 @@ defmodule Tempo do
      reaching(durations, &(&1 < 0)) ++ backward_weeks}
   end
 
-  defp window_reach(_interval), do: {[], []}
+  defp window_reach(_interval) do
+    {[], []}
+  end
 
-  defp spanned_durations(%{occurrence_duration: %Tempo.Duration{} = span}), do: [span]
-  defp spanned_durations(_metadata), do: []
+  defp spanned_durations(%{occurrence_duration: %Tempo.Duration{} = span}) do
+    [span]
+  end
+
+  defp spanned_durations(_metadata) do
+    []
+  end
 
   # The parts of each duration that run one way, as a duration of that way's
   # length: a window of `P-3D` reaches three days back.
@@ -9451,9 +10349,17 @@ defmodule Tempo do
     end)
   end
 
-  defp window_inner_selection(%Tempo{time: [selection: selection]}), do: selection
-  defp window_inner_selection(%Tempo{time: time}) when is_list(time), do: time
-  defp window_inner_selection(_inner), do: []
+  defp window_inner_selection(%Tempo{time: [selection: selection]}) do
+    selection
+  end
+
+  defp window_inner_selection(%Tempo{time: time}) when is_list(time) do
+    time
+  end
+
+  defp window_inner_selection(_inner) do
+    []
+  end
 
   # A week reaches past the period it is selected in: a week a year numbers
   # (`W`, or the calendar's own `w`) can hold days of the year either side,
@@ -9495,7 +10401,9 @@ defmodule Tempo do
   # window's start. Periods and reach are both stepped with the recurrence
   # calendar's own arithmetic, so a month is that calendar's month and a year
   # that calendar's year.
-  defp reach_start(window_from, _interval, []), do: {:ok, window_from}
+  defp reach_start(window_from, _interval, []) do
+    {:ok, window_from}
+  end
 
   defp reach_start(%Tempo{} = window_from, %Tempo.Interval{duration: cadence} = interval, forward) do
     with {:ok, first} <- period_holding(window_from, interval) do
@@ -9507,13 +10415,17 @@ defmodule Tempo do
     end
   end
 
-  defp reach_start(window_from, _interval, _forward), do: {:ok, window_from}
+  defp reach_start(window_from, _interval, _forward) do
+    {:ok, window_from}
+  end
 
   # Where a walk that must meet every occurrence reaching back into a window
   # closing at `window_to` can stop: the start of the first period, on from the
   # one holding the window's end, whose occurrences cannot. A period's start,
   # carried back by the reach, falls at or after the window's end.
-  defp reach_end(window_to, _interval, []), do: {:ok, window_to}
+  defp reach_end(window_to, _interval, []) do
+    {:ok, window_to}
+  end
 
   defp reach_end(%Tempo{} = window_to, %Tempo.Interval{duration: cadence} = interval, backward) do
     with {:ok, last} <- period_holding(window_to, interval) do
@@ -9521,7 +10433,9 @@ defmodule Tempo do
     end
   end
 
-  defp reach_end(window_to, _interval, _backward), do: {:ok, window_to}
+  defp reach_end(window_to, _interval, _backward) do
+    {:ok, window_to}
+  end
 
   # The period `count` steps from `period` for the least `count` at which
   # `reaching?` no longer holds. The count doubles until it fails, then halves
@@ -9529,7 +10443,13 @@ defmodule Tempo do
   # Each period is `period + count × step`, so a month-end start never drifts.
   defp period_not_reaching(period, step, reaching?) do
     reached? = fn count -> reaching?.(add_n_durations(period, step, count)) end
-    count = if reached?.(0), do: first_unreached(reached?, 0, 1), else: 0
+
+    count =
+      if reached?.(0) do
+        first_unreached(reached?, 0, 1)
+      else
+        0
+      end
 
     case add_n_durations(period, step, count) do
       %Tempo{} = unreached -> {:ok, unreached}
@@ -9549,15 +10469,18 @@ defmodule Tempo do
     end
   end
 
-  defp narrow_unreached(_reached?, reached, unreached) when unreached - reached <= 1,
-    do: unreached
+  defp narrow_unreached(_reached?, reached, unreached) when unreached - reached <= 1 do
+    unreached
+  end
 
   defp narrow_unreached(reached?, reached, unreached) do
     middle = div(reached + unreached, 2)
 
-    if reached?.(middle),
-      do: narrow_unreached(reached?, middle, unreached),
-      else: narrow_unreached(reached?, reached, middle)
+    if reached?.(middle) do
+      narrow_unreached(reached?, middle, unreached)
+    else
+      narrow_unreached(reached?, reached, middle)
+    end
   end
 
   # Whether the period ending at `period_end` has occurrences that can run past
@@ -9591,10 +10514,17 @@ defmodule Tempo do
     end)
   end
 
-  defp carried(error, _durations, _direction), do: error
+  defp carried(error, _durations, _direction) do
+    error
+  end
 
-  defp oriented(duration, :on), do: duration
-  defp oriented(duration, :back), do: Duration.negate(duration)
+  defp oriented(duration, :on) do
+    duration
+  end
+
+  defp oriented(duration, :back) do
+    Duration.negate(duration)
+  end
 
   # The start of the cadence period `edge` falls in, at the grain the
   # recurrence starts at and in the calendar it selects in.
@@ -9620,7 +10550,9 @@ defmodule Tempo do
   #
   # Matches the RFC intent: "DTSTART + i × INTERVAL" addresses a
   # specific point relative to DTSTART, not a walk.
-  defp add_n_durations(tempo, _duration, 0), do: tempo
+  defp add_n_durations(tempo, _duration, 0) do
+    tempo
+  end
 
   defp add_n_durations(tempo, %Tempo.Duration{time: time}, n) when n > 0 do
     scaled = Enum.map(time, &scaled_amount(&1, n))
@@ -9628,10 +10560,13 @@ defmodule Tempo do
   end
 
   # A fractional second's microseconds are a `{value, precision}` pair.
-  defp scaled_amount({:microsecond, {value, precision}}, n),
-    do: {:microsecond, {value * n, precision}}
+  defp scaled_amount({:microsecond, {value, precision}}, n) do
+    {:microsecond, {value * n, precision}}
+  end
 
-  defp scaled_amount({unit, amount}, n), do: {unit, amount * n}
+  defp scaled_amount({unit, amount}, n) do
+    {unit, amount * n}
+  end
 
   ## ---------------------------------------------------------
   ## Recurrence-expansion helpers
@@ -9708,8 +10643,13 @@ defmodule Tempo do
 
   # The occurrences a walk is asked for: a count of them, or every one it
   # has before its end, which are no more than `@recurrence_safety_cap`.
-  defp as_many_as(occurrences, count) when is_integer(count), do: Stream.take(occurrences, count)
-  defp as_many_as(occurrences, :every), do: no_more_than_the_cap(occurrences, :occurrences)
+  defp as_many_as(occurrences, count) when is_integer(count) do
+    Stream.take(occurrences, count)
+  end
+
+  defp as_many_as(occurrences, :every) do
+    no_more_than_the_cap(occurrences, :occurrences)
+  end
 
   # A walk takes at most `@recurrence_safety_cap` periods of its cadence, and
   # gives at most that many occurrences where it has no count. Past either
@@ -9823,7 +10763,9 @@ defmodule Tempo do
          names_no_date_of_any_year?(interval, cadence, periods))
   end
 
-  defp has_no_occurrence?(_interval, _cadence, _periods), do: false
+  defp has_no_occurrence?(_interval, _cadence, _periods) do
+    false
+  end
 
   # A position among what a period selects (RFC 5545's `BYSETPOS`) that no
   # period has. A rule whose parts only keep or drop its period has one
@@ -9903,7 +10845,9 @@ defmodule Tempo do
       not stops_where_named?(places, moved, amount)
   end
 
-  defp steps_past_its_parts?(_interval, _cadence), do: false
+  defp steps_past_its_parts?(_interval, _cadence) do
+    false
+  end
 
   # Whether a zone can move a stop of the walk off the place it steps to. A
   # value in no zone is never moved. In a zone a rule of days from a date is
@@ -9922,16 +10866,21 @@ defmodule Tempo do
   # the walk can cover (`shifted_by_its_clock/3`).
   defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}, time: time}, :day, _amount)
        when is_binary(zone) do
-    if not Keyword.has_key?(time, :hour) and Tempo.TimeZoneDatabase.days_left_out(zone) == [],
-      do: :never,
-      else: :a_day_on
+    if not Keyword.has_key?(time, :hour) and Tempo.TimeZoneDatabase.days_left_out(zone) == [] do
+      :never
+    else
+      :a_day_on
+    end
   end
 
   defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}} = from, unit, amount)
-       when is_binary(zone),
-       do: shifted_by_its_clock(from, unit, amount)
+       when is_binary(zone) do
+    shifted_by_its_clock(from, unit, amount)
+  end
 
-  defp moved_by_its_zone(%Tempo{}, _unit, _amount), do: :never
+  defp moved_by_its_zone(%Tempo{}, _unit, _amount) do
+    :never
+  end
 
   @seconds_in %{hour: 3_600, minute: 60, second: 1}
 
@@ -9979,11 +10928,17 @@ defmodule Tempo do
 
   # How far a start is into the unit its walk steps by, in seconds: 10:45
   # is 2,700 into its hour.
-  defp seconds_into(%Tempo{time: time}, :hour),
-    do: whole_of(time, :minute) * 60 + whole_of(time, :second)
+  defp seconds_into(%Tempo{time: time}, :hour) do
+    whole_of(time, :minute) * 60 + whole_of(time, :second)
+  end
 
-  defp seconds_into(%Tempo{time: time}, :minute), do: whole_of(time, :second)
-  defp seconds_into(%Tempo{}, :second), do: 0
+  defp seconds_into(%Tempo{time: time}, :minute) do
+    whole_of(time, :second)
+  end
+
+  defp seconds_into(%Tempo{}, :second) do
+    0
+  end
 
   defp whole_of(time, unit) do
     case List.keyfind(time, unit, 0) do
@@ -9993,7 +10948,9 @@ defmodule Tempo do
   end
 
   defp utc_seconds_of(%Tempo{} = from) do
-    if anchored?(from) and Compare.point?(from.time), do: Compare.to_utc_seconds(from)
+    if anchored?(from) and Compare.point?(from.time) do
+      Compare.to_utc_seconds(from)
+    end
   end
 
   # Each offset a zone's clock is at between two moments, as its distance
@@ -10012,18 +10969,23 @@ defmodule Tempo do
 
   # Whether a walk stops at a place its parts name, wherever its zone moves
   # its stops to.
-  defp stops_where_named?(places, {:by, shifts}, amount),
-    do: Enum.any?(shifts, &stops_at_one?(places, amount, &1))
+  defp stops_where_named?(places, {:by, shifts}, amount) do
+    Enum.any?(shifts, &stops_at_one?(places, amount, &1))
+  end
 
-  defp stops_where_named?(places, moved, amount),
-    do: stops_at_one?(named_where_stopped(places, moved), amount, 0)
+  defp stops_where_named?(places, moved, amount) do
+    stops_at_one?(named_where_stopped(places, moved), amount, 0)
+  end
 
   # The places the parts name, as places the walk stops at: a day of the
   # week a stop can be moved onto is named where the day before it is.
-  defp named_where_stopped(places, :never), do: places
+  defp named_where_stopped(places, :never) do
+    places
+  end
 
-  defp named_where_stopped([{days, began, named}], :a_day_on),
-    do: [{days, began, Enum.uniq(named ++ Enum.map(named, &Integer.mod(&1 - 1, days)))}]
+  defp named_where_stopped([{days, began, named}], :a_day_on) do
+    [{days, began, Enum.uniq(named ++ Enum.map(named, &Integer.mod(&1 - 1, days)))}]
+  end
 
   # One unit of a place in the week: how many values it takes, the one the
   # walk starts from and those the rule's part names, each counted from the
@@ -10035,7 +10997,11 @@ defmodule Tempo do
   defp place_named(part, selection, %Tempo{} = from, calendar) do
     with {:ok, %Range{first: first} = values} <- UnitValues.in_period(part, [], calendar),
          {:ok, start} <- value_stepped_from(from, part) do
-      named = selection |> named_by(part, values) |> Enum.map(&as_stepped(&1, part, calendar))
+      named =
+        selection
+        |> named_by(part, values)
+        |> Enum.map(&as_stepped(&1, part, calendar))
+
       {Range.size(values), start - first, Enum.map(named, &(&1 - first))}
     else
       _no_one_value -> nil
@@ -10049,12 +11015,17 @@ defmodule Tempo do
     end
   end
 
-  defp as_stepped(day, :day_of_week, calendar),
-    do: UnitValues.iso_weekday_from_day_of_week(day, calendar)
+  defp as_stepped(day, :day_of_week, calendar) do
+    UnitValues.iso_weekday_from_day_of_week(day, calendar)
+  end
 
-  defp as_stepped(value, _unit_of_the_clock, _calendar), do: value
+  defp as_stepped(value, _unit_of_the_clock, _calendar) do
+    value
+  end
 
-  defp value_stepped_from(%Tempo{} = from, :day_of_week), do: iso_day_of_week(from, :to_interval)
+  defp value_stepped_from(%Tempo{} = from, :day_of_week) do
+    iso_day_of_week(from, :to_interval)
+  end
 
   # A unit of the clock a start is not written to is at its first value.
   defp value_stepped_from(%Tempo{time: time}, unit) do
@@ -10079,7 +11050,9 @@ defmodule Tempo do
     stops_at_one?(places, start + shift, Integer.gcd(amount, count), 1, 0)
   end
 
-  defp stops_at_one?([], _start, _apart, _weight, _place), do: true
+  defp stops_at_one?([], _start, _apart, _weight, _place) do
+    true
+  end
 
   defp stops_at_one?([{size, _began, named} | coarser], start, apart, weight, place) do
     held_to = Integer.gcd(apart, weight * size)
@@ -10104,7 +11077,9 @@ defmodule Tempo do
     end
   end
 
-  defp come_round?(_cadence, _periods, _calendar), do: false
+  defp come_round?(_cadence, _periods, _calendar) do
+    false
+  end
 
   # The periods of years or of months a calendar's years come round in: the
   # years of its cycle, and the months of them where every year has as
@@ -10139,7 +11114,9 @@ defmodule Tempo do
     end
   end
 
-  defp asked_at(_interval, _cadence), do: [@periods_before_asking]
+  defp asked_at(_interval, _cadence) do
+    [@periods_before_asking]
+  end
 
   defp selects_no_date?(
          %Tempo.Interval{
@@ -10161,16 +11138,20 @@ defmodule Tempo do
 
   # Every period of a year: each of the rule's own, or each day where its
   # periods are shorter than a day.
-  defp each(unit) when unit in [:year, :month, :week, :day],
-    do: %Tempo.Duration{time: [{unit, 1}]}
+  defp each(unit) when unit in [:year, :month, :week, :day] do
+    %Tempo.Duration{time: [{unit, 1}]}
+  end
 
-  defp each(_shorter_than_a_day), do: %Tempo.Duration{time: [day: 1]}
+  defp each(_shorter_than_a_day) do
+    %Tempo.Duration{time: [day: 1]}
+  end
 
   # One year of each kind a calendar has, from `year` on: the kinds are
   # those of the years of one cycle, since the years after them are those
   # again.
-  defp one_year_of_each_kind(year, calendar, years_in_cycle),
-    do: Enum.uniq_by(year..(year + years_in_cycle - 1)//1, &kind_of_year(&1, calendar))
+  defp one_year_of_each_kind(year, calendar, years_in_cycle) do
+    Enum.uniq_by(year..(year + years_in_cycle - 1)//1, &kind_of_year(&1, calendar))
+  end
 
   # A year's kind: the days and the months it has, and the day of the week
   # it begins on, each as the calendar answers it.
@@ -10211,8 +11192,9 @@ defmodule Tempo do
     end
   end
 
-  defp day_of_calendar(%Date{year: year, month: month, day: day}, calendar),
-    do: %Tempo{time: date_units(year, month, day, calendar), calendar: calendar}
+  defp day_of_calendar(%Date{year: year, month: month, day: day}, calendar) do
+    %Tempo{time: date_units(year, month, day, calendar), calendar: calendar}
+  end
 
   # The occurrences a walk gave. A step its cadence could not take ends the
   # walk as its last element, and is the walk's error: the second month after
@@ -10254,8 +11236,9 @@ defmodule Tempo do
   # How far back a walk goes: for a count until it has that many, and with
   # no count to the start of its `:within` window, without which it has no
   # first occurrence.
-  defp as_far_back(count, _interval, _opts) when is_integer(count),
-    do: {:ok, fn _period, found -> Enum.count_until(found, count) < count end}
+  defp as_far_back(count, _interval, _opts) when is_integer(count) do
+    {:ok, fn _period, found -> Enum.count_until(found, count) < count end}
+  end
 
   defp as_far_back(:infinity, interval, opts) do
     case bound_lower(Keyword.get(opts, :within)) do
@@ -10276,8 +11259,9 @@ defmodule Tempo do
     end
   end
 
-  defp selected_back(_ends, _asked, _more?, _k, _found),
-    do: {:error, walk_too_long_error(:periods)}
+  defp selected_back(_ends, _asked, _more?, _k, _found) do
+    {:error, walk_too_long_error(:periods)}
+  end
 
   # The period `k` cadences back from the end, which starts there: the first
   # is the one that starts at the end, whose occurrences are over by it only
@@ -10285,7 +11269,13 @@ defmodule Tempo do
   # one before starts.
   defp period_back(anchor, duration, k, metadata) do
     back = Duration.negate(duration)
-    stop = if k == 0, do: Math.add(anchor, duration), else: add_n_durations(anchor, back, k - 1)
+
+    stop =
+      if k == 0 do
+        Math.add(anchor, duration)
+      else
+        add_n_durations(anchor, back, k - 1)
+      end
 
     case {add_n_durations(anchor, back, k), stop} do
       {%Tempo{} = start, %Tempo{} = stop} ->
@@ -10316,17 +11306,27 @@ defmodule Tempo do
     end
   end
 
-  defp one_of_each_start(occurrences, true), do: Enum.uniq_by(occurrences, & &1.from)
-  defp one_of_each_start(occurrences, false), do: occurrences
+  defp one_of_each_start(occurrences, true) do
+    Enum.uniq_by(occurrences, & &1.from)
+  end
 
-  defp nearest_the_end(occurrences, count) when is_integer(count),
-    do: Enum.take(occurrences, -count)
+  defp one_of_each_start(occurrences, false) do
+    occurrences
+  end
 
-  defp nearest_the_end(occurrences, :infinity), do: occurrences
+  defp nearest_the_end(occurrences, count) when is_integer(count) do
+    Enum.take(occurrences, -count)
+  end
+
+  defp nearest_the_end(occurrences, :infinity) do
+    occurrences
+  end
 
   # One occurrence is the interval it is, as that of a rule from a start is,
   # and more are a set. A `:within` window keeps those that overlap it.
-  defp counted_back([%Tempo.Interval{} = one], 1, opts), do: one_occurrence_within(one, opts)
+  defp counted_back([%Tempo.Interval{} = one], 1, opts) do
+    one_occurrence_within(one, opts)
+  end
 
   defp counted_back(occurrences, _recurrence, opts) do
     with {:ok, kept} <- keep_within(occurrences, opts) do
@@ -10348,7 +11348,9 @@ defmodule Tempo do
     end
   end
 
-  defp occurrences_back_within(_to, _back, nil, _metadata), do: {:error, empty_bound_error()}
+  defp occurrences_back_within(_to, _back, nil, _metadata) do
+    {:error, empty_bound_error()}
+  end
 
   defp occurrences_back_within(to, back, %Tempo{} = window_from, metadata) do
     ends_in_window? = fn _k, %Tempo.Interval{to: stop} ->
@@ -10365,17 +11367,20 @@ defmodule Tempo do
        when k < @recurrence_safety_cap do
     case occurrence_back(to, back, k, metadata) do
       {:ok, occurrence} ->
-        if more?.(k, occurrence),
-          do: occurrences_back_to(to, back, metadata, k + 1, more?, [occurrence | occurrences]),
-          else: {:ok, occurrences}
+        if more?.(k, occurrence) do
+          occurrences_back_to(to, back, metadata, k + 1, more?, [occurrence | occurrences])
+        else
+          {:ok, occurrences}
+        end
 
       {:error, _reason} = error ->
         error
     end
   end
 
-  defp occurrences_back_to(_to, _back, _metadata, _k, _more?, _occurrences),
-    do: {:error, walk_too_long_error(:occurrences)}
+  defp occurrences_back_to(_to, _back, _metadata, _k, _more?, _occurrences) do
+    {:error, walk_too_long_error(:occurrences)}
+  end
 
   # The occurrence `k` cadences back from the end: it ends `k` durations before
   # the end and starts one duration earlier.
@@ -10421,7 +11426,11 @@ defmodule Tempo do
       |> selected_within_the_cap(select, nothing?)
       |> until_failure()
 
-    if once?, do: Stream.uniq_by(occurrences, &start_of/1), else: occurrences
+    if once? do
+      Stream.uniq_by(occurrences, &start_of/1)
+    else
+      occurrences
+    end
   end
 
   # What a selection is made of (`selection_fn/2`): the resolver, and what a
@@ -10429,24 +11438,30 @@ defmodule Tempo do
   # start once; one with a part that limits by a unit coarser than its
   # frequency is walked past the periods that part drops; and a rule may
   # be asked whether it selects any date at all.
-  defp selection_parts(select) when is_function(select, 1),
-    do: %{select: select, rules_out: nil, once?: false, nothing?: nil}
+  defp selection_parts(select) when is_function(select, 1) do
+    %{select: select, rules_out: nil, once?: false, nothing?: nil}
+  end
 
-  defp selection_parts({:each_start_once, selection}),
-    do: %{selection_parts(selection) | once?: true}
+  defp selection_parts({:each_start_once, selection}) do
+    %{selection_parts(selection) | once?: true}
+  end
 
-  defp selection_parts({:passing_over, rules_out, selection}),
-    do: %{selection_parts(selection) | rules_out: rules_out}
+  defp selection_parts({:passing_over, rules_out, selection}) do
+    %{selection_parts(selection) | rules_out: rules_out}
+  end
 
-  defp selection_parts({:nothing_where, nothing?, selection}),
-    do: %{selection_parts(selection) | nothing?: nothing?}
+  defp selection_parts({:nothing_where, nothing?, selection}) do
+    %{selection_parts(selection) | nothing?: nothing?}
+  end
 
   defp candidates(from, cadence, occurrence_end, metadata, first, {_select, rules_out} = asked)
-       when is_function(rules_out, 1) and is_function(occurrence_end, 2),
-       do: candidates_passing_over(from, cadence, occurrence_end, metadata, first, asked)
+       when is_function(rules_out, 1) and is_function(occurrence_end, 2) do
+    candidates_passing_over(from, cadence, occurrence_end, metadata, first, asked)
+  end
 
-  defp candidates(from, cadence, occurrence_end, metadata, first, _asked),
-    do: recurrence_candidates(from, cadence, occurrence_end, metadata, first)
+  defp candidates(from, cadence, occurrence_end, metadata, first, _asked) do
+    recurrence_candidates(from, cadence, occurrence_end, metadata, first)
+  end
 
   # What each period selects, for at most `@recurrence_safety_cap` periods
   # (`no_more_than_the_cap/2`). A walk that has found nothing in its first
@@ -10462,9 +11477,11 @@ defmodule Tempo do
         {[{:error, walk_too_long_error(:periods)}], :past}
 
       period, {count, false} = made ->
-        if nothing_at?(nothing?, count),
-          do: {:halt, :past},
-          else: selected_in(period, select, made)
+        if nothing_at?(nothing?, count) do
+          {:halt, :past}
+        else
+          selected_in(period, select, made)
+        end
 
       period, made ->
         selected_in(period, select, made)
@@ -10473,18 +11490,26 @@ defmodule Tempo do
 
   # Whether a walk that has found nothing in `count` periods is at one of
   # the counts its rule is asked at, and the rule has no occurrence.
-  defp nothing_at?({asked_at, nothing?}, count) when is_function(nothing?, 1),
-    do: count in asked_at and nothing?.(count)
+  defp nothing_at?({asked_at, nothing?}, count) when is_function(nothing?, 1) do
+    count in asked_at and nothing?.(count)
+  end
 
-  defp nothing_at?(_no_question, _count), do: false
+  defp nothing_at?(_no_question, _count) do
+    false
+  end
 
   defp selected_in(period, select, {count, found?}) do
     occurrences = selected(period, select)
     {occurrences, {count + 1, found? or occurrences != []}}
   end
 
-  defp start_of(%Tempo.Interval{from: from}), do: from
-  defp start_of(failure), do: failure
+  defp start_of(%Tempo.Interval{from: from}) do
+    from
+  end
+
+  defp start_of(failure) do
+    failure
+  end
 
   # A walk ends with its first failure: a step the cadence could not take, or
   # a selection that has no answer for a candidate (a computed event with no
@@ -10500,13 +11525,29 @@ defmodule Tempo do
 
   # A step the cadence could not take is the walk's last candidate, kept so
   # the walk can return it (`walked/2`).
-  defp walking?({:error, _reason}, _start_predicate), do: true
-  defp walking?({start, _candidate}, start_predicate), do: start_predicate.(start)
+  defp walking?({:error, _reason}, _start_predicate) do
+    true
+  end
 
-  defp selected({:error, _reason} = failure, _selection_fn), do: [failure]
-  defp selected({_start, :passed_over}, _selection_fn), do: []
-  defp selected({_start, {:selected, occurrences}}, _selection_fn), do: occurrences
-  defp selected({_start, candidate}, selection_fn), do: selection_fn.(candidate)
+  defp walking?({start, _candidate}, start_predicate) do
+    start_predicate.(start)
+  end
+
+  defp selected({:error, _reason} = failure, _selection_fn) do
+    [failure]
+  end
+
+  defp selected({_start, :passed_over}, _selection_fn) do
+    []
+  end
+
+  defp selected({_start, {:selected, occurrences}}, _selection_fn) do
+    occurrences
+  end
+
+  defp selected({_start, candidate}, selection_fn) do
+    selection_fn.(candidate)
+  end
 
   # Contiguous fast path: walk the starts once and pair each with the
   # next, so occurrence i's `to` is occurrence i+1's `from`. One
@@ -10557,19 +11598,36 @@ defmodule Tempo do
   # too. The two are one occurrence, and the later is the one that is kept:
   # it is the step that lands there, and its end is counted from where it is.
   defp each_start_once(candidates, %Tempo{extended: %{zone_id: zone}}) when is_binary(zone) do
-    if TimeZoneDatabase.days_left_out(zone) == [],
-      do: candidates,
-      else: candidates |> Stream.concat([:walked]) |> Stream.transform(nil, &held_for_the_next/2)
+    if TimeZoneDatabase.days_left_out(zone) == [] do
+      candidates
+    else
+      candidates
+      |> Stream.concat([:walked])
+      |> Stream.transform(nil, &held_for_the_next/2)
+    end
   end
 
-  defp each_start_once(candidates, _from), do: candidates
+  defp each_start_once(candidates, _from) do
+    candidates
+  end
 
   # Each candidate is held until the one after it is known, and dropped
   # where that one has its start.
-  defp held_for_the_next(:walked, held), do: {List.wrap(held), nil}
-  defp held_for_the_next(candidate, nil), do: {[], candidate}
-  defp held_for_the_next({start, _span} = candidate, {start, _held}), do: {[], candidate}
-  defp held_for_the_next(candidate, held), do: {[held], candidate}
+  defp held_for_the_next(:walked, held) do
+    {List.wrap(held), nil}
+  end
+
+  defp held_for_the_next(candidate, nil) do
+    {[], candidate}
+  end
+
+  defp held_for_the_next({start, _span} = candidate, {start, _held}) do
+    {[], candidate}
+  end
+
+  defp held_for_the_next(candidate, held) do
+    {[held], candidate}
+  end
 
   # The candidates of a rule one of whose parts limits by a unit coarser than
   # its frequency, or by the unit it steps by: `FREQ=MINUTELY;BYHOUR=9` keeps
@@ -10603,7 +11661,9 @@ defmodule Tempo do
     |> each_start_once(from)
   end
 
-  defp candidate_or_passed_over(:stopped, _walk, _asked), do: nil
+  defp candidate_or_passed_over(:stopped, _walk, _asked) do
+    nil
+  end
 
   defp candidate_or_passed_over(
          {step, run, run_before_asking},
@@ -10644,10 +11704,13 @@ defmodule Tempo do
   # The run of periods that select nothing before the walk asks again: the
   # next such period where the answer took it further than its next step,
   # and a longer run where it did not.
-  defp run_after(next, next, run_before_asking),
-    do: min(run_before_asking + 1, @longest_run_before_asking)
+  defp run_after(next, next, run_before_asking) do
+    min(run_before_asking + 1, @longest_run_before_asking)
+  end
 
-  defp run_after(_further, _next, _run_before_asking), do: 1
+  defp run_after(_further, _next, _run_before_asking) do
+    1
+  end
 
   @seconds_in %{second: 1, minute: 60, hour: 3_600, day: 86_400}
 
@@ -10657,23 +11720,38 @@ defmodule Tempo do
   # to each by its steps. A month and a year are always further.
   @periods_worth_passing_over 3
 
-  defp going_on(nil, _start, next, _walk), do: next
-
-  defp going_on(goes_on, start, next, {_from, cadence, _end, _metadata} = walk) do
-    if anchored?(start) and worth_passing_over?(seconds_on(goes_on, start), cadence),
-      do: step_going_on(goes_on, start, next, walk),
-      else: next
+  defp going_on(nil, _start, next, _walk) do
+    next
   end
 
-  defp worth_passing_over?(:longer, _cadence), do: true
+  defp going_on(goes_on, start, next, {_from, cadence, _end, _metadata} = walk) do
+    if anchored?(start) and worth_passing_over?(seconds_on(goes_on, start), cadence) do
+      step_going_on(goes_on, start, next, walk)
+    else
+      next
+    end
+  end
 
-  defp worth_passing_over?(seconds, %Tempo.Duration{time: [{unit, amount}]}),
-    do: seconds > @periods_worth_passing_over * amount * Map.fetch!(@seconds_in, unit)
+  defp worth_passing_over?(:longer, _cadence) do
+    true
+  end
+
+  defp worth_passing_over?(seconds, %Tempo.Duration{time: [{unit, amount}]}) do
+    seconds > @periods_worth_passing_over * amount * Map.fetch!(@seconds_in, unit)
+  end
 
   # How far on the walk would go, where that is a count of seconds.
-  defp seconds_on({:in_days, days}, _start), do: days * Map.fetch!(@seconds_in, :day)
-  defp seconds_on({:next, unit}, _start), do: Map.get(@seconds_in, unit, :longer)
-  defp seconds_on({:on_day, _month, _day}, _start), do: :longer
+  defp seconds_on({:in_days, days}, _start) do
+    days * Map.fetch!(@seconds_in, :day)
+  end
+
+  defp seconds_on({:next, unit}, _start) do
+    Map.get(@seconds_in, unit, :longer)
+  end
+
+  defp seconds_on({:on_day, _month, _day}, _start) do
+    :longer
+  end
 
   defp seconds_on({:on, unit, value}, %Tempo{time: time}) do
     case {Map.get(@seconds_in, unit), Keyword.get(time, unit)} do
@@ -10691,13 +11769,17 @@ defmodule Tempo do
   # so many days on, or the start of the next `unit`. A reading the clock of
   # its zone skips is no reading to go on from, and the walk goes on from
   # the next `unit` there.
-  defp step_going_on({:next, unit}, start, next, walk), do: step_past(unit, start, next, walk)
+  defp step_going_on({:next, unit}, start, next, walk) do
+    step_past(unit, start, next, walk)
+  end
 
-  defp step_going_on({:on, unit, value}, start, next, walk),
-    do: step_onto(start, unit, [{unit, value}], next, walk)
+  defp step_going_on({:on, unit, value}, start, next, walk) do
+    step_onto(start, unit, [{unit, value}], next, walk)
+  end
 
-  defp step_going_on({:on_day, month, day}, start, next, walk),
-    do: step_onto(start, :day, [month: month, day: day], next, walk)
+  defp step_going_on({:on_day, month, day}, start, next, walk) do
+    step_onto(start, :day, [month: month, day: day], next, walk)
+  end
 
   defp step_going_on({:in_days, days}, start, next, {from, cadence, _end, _metadata} = walk) do
     with %Tempo{} = day <- trunc(start, :day),
@@ -10723,10 +11805,13 @@ defmodule Tempo do
   # A reading made from another's units is at its zone's offset and not at
   # the other's, and at the earlier of two where the clock shows it twice:
   # no period that starts on it is passed over.
-  defp earliest_showing(%Tempo{extended: %{zone_id: zone}} = named) when is_binary(zone),
-    do: %{named | shift: nil}
+  defp earliest_showing(%Tempo{extended: %{zone_id: zone}} = named) when is_binary(zone) do
+    %{named | shift: nil}
+  end
 
-  defp earliest_showing(named), do: named
+  defp earliest_showing(named) do
+    named
+  end
 
   # The first step whose period starts no earlier than the end of the
   # `unit` that `start` is in: the next minute, hour, day, month or year.
@@ -10770,39 +11855,58 @@ defmodule Tempo do
     end
   end
 
-  defp first_step_reaching(_limit, _start, next, _from, _cadence), do: next
+  defp first_step_reaching(_limit, _start, next, _from, _cadence) do
+    next
+  end
 
-  defp seconds_between(from, to),
-    do: Kernel.trunc(Compare.to_utc_seconds(to)) - Kernel.trunc(Compare.to_utc_seconds(from))
+  defp seconds_between(from, to) do
+    Kernel.trunc(Compare.to_utc_seconds(to)) - Kernel.trunc(Compare.to_utc_seconds(from))
+  end
 
-  defp period_starts_before?(%Tempo{} = start, limit),
-    do: Compare.compare_endpoints(start, limit) == :earlier
+  defp period_starts_before?(%Tempo{} = start, limit) do
+    Compare.compare_endpoints(start, limit) == :earlier
+  end
 
-  defp period_starts_before?(_no_start, _limit), do: false
+  defp period_starts_before?(_no_start, _limit) do
+    false
+  end
 
   # The estimate, or the step before it, and so on, down to the first whose
   # predecessor starts before the limit.
-  defp back_to_the_first(count, next, _before?, _tries) when count <= next, do: {:ok, next}
-  defp back_to_the_first(_count, _next, _before?, 0), do: :not_found
-
-  defp back_to_the_first(count, next, before?, tries) do
-    if before?.(count - 1),
-      do: {:ok, count},
-      else: back_to_the_first(count - 1, next, before?, tries - 1)
+  defp back_to_the_first(count, next, _before?, _tries) when count <= next do
+    {:ok, next}
   end
 
-  defp on_to_the_first(_count, _before?, 0), do: :not_found
+  defp back_to_the_first(_count, _next, _before?, 0) do
+    :not_found
+  end
+
+  defp back_to_the_first(count, next, before?, tries) do
+    if before?.(count - 1) do
+      {:ok, count}
+    else
+      back_to_the_first(count - 1, next, before?, tries - 1)
+    end
+  end
+
+  defp on_to_the_first(_count, _before?, 0) do
+    :not_found
+  end
 
   defp on_to_the_first(count, before?, tries) do
-    if before?.(count),
-      do: on_to_the_first(count + 1, before?, tries - 1),
-      else: {:ok, count}
+    if before?.(count) do
+      on_to_the_first(count + 1, before?, tries - 1)
+    else
+      {:ok, count}
+    end
   end
 
   # The candidate that starts at `start` and the start of the one after it,
   # which is where it ends. A step the cadence cannot take is the walk's last
   # candidate.
-  defp contiguous_candidate(:stopped, _cadence, _metadata), do: nil
+  defp contiguous_candidate(:stopped, _cadence, _metadata) do
+    nil
+  end
 
   defp contiguous_candidate(%Tempo{} = start, cadence, metadata) do
     case Math.add(start, cadence) do
@@ -10814,10 +11918,13 @@ defmodule Tempo do
     end
   end
 
-  defp contiguous_candidate(no_first_start, _cadence, _metadata),
-    do: {step_failure(no_first_start), :stopped}
+  defp contiguous_candidate(no_first_start, _cadence, _metadata) do
+    {step_failure(no_first_start), :stopped}
+  end
 
-  defp candidate_from_the_start(:stopped, _from, _cadence, _metadata), do: nil
+  defp candidate_from_the_start(:stopped, _from, _cadence, _metadata) do
+    nil
+  end
 
   defp candidate_from_the_start({step, %Tempo{} = start}, from, cadence, metadata) do
     case start_after(step, start, from, cadence) do
@@ -10830,8 +11937,9 @@ defmodule Tempo do
     end
   end
 
-  defp candidate_from_the_start({_step, no_first_start}, _from, _cadence, _metadata),
-    do: {step_failure(no_first_start), :stopped}
+  defp candidate_from_the_start({_step, no_first_start}, _from, _cadence, _metadata) do
+    {step_failure(no_first_start), :stopped}
+  end
 
   # The start after `start`, and the step that reaches it. A step onto a day
   # the zone leaves out is moved to the day after, where the step after it
@@ -10845,7 +11953,9 @@ defmodule Tempo do
     end
   end
 
-  defp stepped_candidate(:stopped, _from, _cadence, _occurrence_end_fn, _metadata), do: nil
+  defp stepped_candidate(:stopped, _from, _cadence, _occurrence_end_fn, _metadata) do
+    nil
+  end
 
   defp stepped_candidate(step, from, cadence, occurrence_end_fn, metadata) do
     with %Tempo{} = start <- nth_start(from, cadence, step),
@@ -10856,8 +11966,13 @@ defmodule Tempo do
     end
   end
 
-  defp nth_start(from, _cadence, 0), do: as_the_clock_shows(from)
-  defp nth_start(from, cadence, step), do: add_n_durations(from, cadence, step)
+  defp nth_start(from, _cadence, 0) do
+    as_the_clock_shows(from)
+  end
+
+  defp nth_start(from, cadence, step) do
+    add_n_durations(from, cadence, step)
+  end
 
   # A start with no year, placed on a window, can be a reading the clock
   # skips there: 02:30 on the night clocks go forward, or the day a zone
@@ -10868,16 +11983,27 @@ defmodule Tempo do
   @no_step %Tempo.Duration{time: [day: 0]}
 
   defp as_the_clock_shows(%Tempo{extended: %{zone_id: zone}} = start) when is_binary(zone) do
-    if Zone.zone_status(start) == :gap, do: Math.add(start, @no_step), else: start
+    if Zone.zone_status(start) == :gap do
+      Math.add(start, @no_step)
+    else
+      start
+    end
   end
 
-  defp as_the_clock_shows(start), do: start
+  defp as_the_clock_shows(start) do
+    start
+  end
 
   # A start or an end the cadence could not be stepped to, as the candidate
   # that ends the walk. A value that holds unspecified digits steps to a set
   # of candidates, which is no one start either.
-  defp step_failure({:error, _reason} = failure), do: failure
-  defp step_failure(_several), do: {:error, :grouped_component}
+  defp step_failure({:error, _reason} = failure) do
+    failure
+  end
+
+  defp step_failure(_several) do
+    {:error, :grouped_component}
+  end
 
   # `occurrence_duration` / `occurrence_base_to` are *directives* to
   # this materialiser — they say how to span each occurrence. Once the
@@ -10888,7 +12014,9 @@ defmodule Tempo do
     Map.drop(metadata, [:occurrence_duration, :occurrence_base_to])
   end
 
-  defp strip_span_directives(metadata), do: metadata
+  defp strip_span_directives(metadata) do
+    metadata
+  end
 
   # DTSTART floor — per RFC 5545, DTSTART is always the first occurrence.
   # BY-rule EXPAND can legitimately produce dates earlier in the
@@ -10899,9 +12027,11 @@ defmodule Tempo do
   # (`R3/T22H/PT1H` reaches 00:00): only those before the first occurrence
   # at or after the start are dropped.
   defp from_the_start(occurrences, %Tempo{time: time} = from) do
-    if on_the_time_line?(time),
-      do: Stream.reject(occurrences, &before_dtstart?(&1, from)),
-      else: Stream.drop_while(occurrences, &before_dtstart?(&1, from))
+    if on_the_time_line?(time) do
+      Stream.reject(occurrences, &before_dtstart?(&1, from))
+    else
+      Stream.drop_while(occurrences, &before_dtstart?(&1, from))
+    end
   end
 
   # A rule with no start begins where its window does, and its count is of
@@ -10917,11 +12047,14 @@ defmodule Tempo do
     |> Stream.reject(&over_before?(&1, window_from))
   end
 
-  defp over_before?(%Tempo.Interval{to: %Tempo{} = to}, window_from),
-    do: not ends_after?(to, window_from)
+  defp over_before?(%Tempo.Interval{to: %Tempo{} = to}, window_from) do
+    not ends_after?(to, window_from)
+  end
 
   # The step that ended a walk is not an occurrence to drop.
-  defp over_before?(_failure, _window_from), do: false
+  defp over_before?(_failure, _window_from) do
+    false
+  end
 
   # The floor of a walk that is counted from a window's start, which the
   # conversion of a rule with no start says in the option `:counted_from`:
@@ -10954,7 +12087,9 @@ defmodule Tempo do
   end
 
   # The step that ended a walk is not an occurrence to drop.
-  defp before_dtstart?(_failure, _dtstart), do: false
+  defp before_dtstart?(_failure, _dtstart) do
+    false
+  end
 
   # Build the per-candidate selection filter/expand function. When
   # `repeat_rule` is nil, returns a passthrough (identity). When
@@ -10999,7 +12134,12 @@ defmodule Tempo do
     end
 
     select = passing_over(select, rule, freq, cadence)
-    if moves_days?(rule), do: {:each_start_once, select}, else: select
+
+    if moves_days?(rule) do
+      {:each_start_once, select}
+    else
+      select
+    end
   end
 
   # A rule of days, hours, minutes or seconds, a whole number of them apart
@@ -11007,22 +12147,29 @@ defmodule Tempo do
   # walked past the periods that part drops.
   defp passing_over(select, rule, freq, %Tempo.Duration{time: [{unit, amount}]})
        when unit in [:day, :hour, :minute, :second] and is_integer(amount) and amount > 0 do
-    if Selection.passes_over?(rule, freq),
-      do: {:passing_over, &Selection.rules_out(&1, rule, freq), select},
-      else: select
+    if Selection.passes_over?(rule, freq) do
+      {:passing_over, &Selection.rules_out(&1, rule, freq), select}
+    else
+      select
+    end
   end
 
-  defp passing_over(select, _rule, _freq, _cadence), do: select
+  defp passing_over(select, _rule, _freq, _cadence) do
+    select
+  end
 
   # A rule that moves a day its month lacks (RFC 7529's `SKIP`) can move it
   # onto a day the period after selects too: the 31st of February moved
   # forward is 1 March, which a rule for the 1st and the 31st selects in
   # March as well. The two are one occurrence (RFC 8984 §4.3.3.1: "eliminate
   # any date-times that have already been produced by previous iterations").
-  defp moves_days?(%Tempo{time: [{:selection, selection} | _units]}),
-    do: List.keymember?(selection, :skip, 0)
+  defp moves_days?(%Tempo{time: [{:selection, selection} | _units]}) do
+    List.keymember?(selection, :skip, 0)
+  end
 
-  defp moves_days?(_rule), do: false
+  defp moves_days?(_rule) do
+    false
+  end
 
   # The day the recurrence started on — DTSTART's day-of-month —
   # which cadence stepping may have clamped away on individual
@@ -11034,7 +12181,9 @@ defmodule Tempo do
     end
   end
 
-  defp origin_day_of(_interval), do: nil
+  defp origin_day_of(_interval) do
+    nil
+  end
 
   # A selection that expands picks *points* at their own resolution —
   # "the 15th" is the day the 15th, not the month it sits in. The
@@ -11060,7 +12209,9 @@ defmodule Tempo do
     %{occurrence | metadata: Map.delete(metadata, :windowed)}
   end
 
-  defp drop_windowed_marker(occurrence), do: occurrence
+  defp drop_windowed_marker(occurrence) do
+    occurrence
+  end
 
   # A §12.10 window occurrence already carries its own span, so it is kept as
   # is; the internal marker that protected it from resizing is dropped here.
@@ -11074,7 +12225,9 @@ defmodule Tempo do
     %{occurrence | to: where_the_point_ends(from, unit, stepped)}
   end
 
-  defp resize_to_resolution(occurrence), do: occurrence
+  defp resize_to_resolution(occurrence) do
+    occurrence
+  end
 
   # A point ends a unit of its resolution on. Where the clock of its zone
   # skips its start a step is counted from the reading the clock comes out
@@ -11088,12 +12241,16 @@ defmodule Tempo do
   # is where it was stepped to, and its own end is not asked for.
   defp where_the_point_ends(%Tempo{extended: %{zone_id: zone}} = from, unit, %Tempo{} = stepped)
        when is_binary(zone) and unit in [:hour, :minute] do
-    if Zone.clear_of_changes?(from, Map.fetch!(@seconds_in, unit)),
-      do: stepped,
-      else: its_own_end_or(from, stepped)
+    if Zone.clear_of_changes?(from, Map.fetch!(@seconds_in, unit)) do
+      stepped
+    else
+      its_own_end_or(from, stepped)
+    end
   end
 
-  defp where_the_point_ends(_from, _unit, stepped), do: stepped
+  defp where_the_point_ends(_from, _unit, stepped) do
+    stepped
+  end
 
   defp its_own_end_or(from, stepped) do
     with {:ok, {_lower, %Tempo{} = own_end}, _unit} <- Interval.next_unit_boundary(from),
@@ -11111,7 +12268,9 @@ defmodule Tempo do
 
   # The FREQ of a recurrence is the primary unit of its cadence —
   # e.g. `%Duration{time: [week: 1]}` → `:week`.
-  defp freq_of(%Tempo.Duration{time: [{unit, _amount} | _]}), do: unit
+  defp freq_of(%Tempo.Duration{time: [{unit, _amount} | _]}) do
+    unit
+  end
 
   # Resolve a "given this iteration's start, what's the
   # occurrence's `to`?" function from the interval's metadata or
@@ -11147,9 +12306,11 @@ defmodule Tempo do
         fn start, _i -> Math.add(start, span) end
 
       contiguous_occurrences?(cadence, interval) ->
-        if settled_by_the_clock?(from, cadence),
-          do: :contiguous_from_the_start,
-          else: :contiguous
+        if settled_by_the_clock?(from, cadence) do
+          :contiguous_from_the_start
+        else
+          :contiguous
+        end
 
       consecutive_occurrences?(cadence, interval) ->
         fn _start, i -> add_n_durations(from, cadence, i + 1) end
@@ -11167,10 +12328,13 @@ defmodule Tempo do
          repeat_rule: nil,
          direction: direction,
          duration: cadence
-       }),
-       do: direction != -1
+       }) do
+    direction != -1
+  end
 
-  defp consecutive_occurrences?(_cadence, _interval), do: false
+  defp consecutive_occurrences?(_cadence, _interval) do
+    false
+  end
 
   # A plain frequency recurrence (no BY-rules) whose cadence is a
   # fixed-length unit and that runs forward has *contiguous*
@@ -11189,7 +12353,9 @@ defmodule Tempo do
       unit in [:week, :day, :hour, :minute, :second]
   end
 
-  defp contiguous_occurrences?(_cadence, _interval), do: false
+  defp contiguous_occurrences?(_cadence, _interval) do
+    false
+  end
 
   # A step of days or weeks from a time of day in a zone keeps the reading
   # of the clock, and is moved where the clock skips it; from a date it is
@@ -11200,10 +12366,13 @@ defmodule Tempo do
          %Tempo{extended: %{zone_id: zone}, time: time},
          %Tempo.Duration{time: [{unit, _amount} | _]}
        )
-       when is_binary(zone) and unit in [:week, :day],
-       do: List.keymember?(time, :hour, 0) or TimeZoneDatabase.days_left_out(zone) != []
+       when is_binary(zone) and unit in [:week, :day] do
+    List.keymember?(time, :hour, 0) or TimeZoneDatabase.days_left_out(zone) != []
+  end
 
-  defp settled_by_the_clock?(_from, _cadence), do: false
+  defp settled_by_the_clock?(_from, _cadence) do
+    false
+  end
 
   # Termination predicates for the recurrence loop.
   defp under_until?(%Tempo{} = from, %Tempo{} = until) do
@@ -11214,10 +12383,13 @@ defmodule Tempo do
     Compare.compare_endpoints(from, bound_to) == :earlier
   end
 
-  defp starts_under_until?(%Tempo.Interval{from: %Tempo{} = from}, until),
-    do: under_until?(from, until)
+  defp starts_under_until?(%Tempo.Interval{from: %Tempo{} = from}, until) do
+    under_until?(from, until)
+  end
 
-  defp starts_under_until?(_occurrence, _until), do: true
+  defp starts_under_until?(_occurrence, _until) do
+    true
+  end
 
   defp at_or_after_bound?(%Tempo{} = from, %Tempo{} = bound_from) do
     Compare.compare_endpoints(from, bound_from) in [:same, :later]
@@ -11329,7 +12501,9 @@ defmodule Tempo do
     end
   end
 
-  defp start_floor(_from, _interval, start), do: start
+  defp start_floor(_from, _interval, start) do
+    start
+  end
 
   defp week_year_floor(%Tempo{time: [year: year], calendar: calendar} = from, start)
        when is_integer(year) do
@@ -11342,7 +12516,9 @@ defmodule Tempo do
     end
   end
 
-  defp week_year_floor(_from, start), do: start
+  defp week_year_floor(_from, start) do
+    start
+  end
 
   defp first_week_of_month_floor(
          %Tempo{calendar: calendar} = from,
@@ -11358,7 +12534,9 @@ defmodule Tempo do
     end
   end
 
-  defp first_week_of_month_floor(_from, start), do: start
+  defp first_week_of_month_floor(_from, start) do
+    start
+  end
 
   # A written start coarser than the grain its selection names —
   # `R/2020Y/P4Y/FL11M3DN`, a year starting a day selection — is filled down to
@@ -11381,7 +12559,9 @@ defmodule Tempo do
     end
   end
 
-  defp fill_selection_start(from, interval), do: {from, interval}
+  defp fill_selection_start(from, interval) do
+    {from, interval}
+  end
 
   defp coarser_unit?(unit_1, unit_2) do
     case {Unit.fetch_sort_key(unit_1), Unit.fetch_sort_key(unit_2)} do
@@ -11432,7 +12612,9 @@ defmodule Tempo do
     # Read it straight from the AST rather than through `resolution/1`, whose
     # declared `time_unit()` return elides the selection-only keys (`:byday`,
     # `:day_of_week`) this must normalise.
-    case selection |> Enum.reject(&context?/1) |> List.last() do
+    case selection
+         |> Enum.reject(&context?/1)
+         |> List.last() do
       {finest_unit, _value} ->
         finest_unit
         |> calendar_start_unit(stepped_by(interval))
@@ -11444,13 +12626,18 @@ defmodule Tempo do
     end
   end
 
-  defp start_unit(%Tempo.Interval{}), do: :day
+  defp start_unit(%Tempo.Interval{}) do
+    :day
+  end
 
   # The unit a recurrence steps by, where it is written with a cadence.
-  defp stepped_by(%Tempo.Interval{duration: %Tempo.Duration{time: [{unit, _amount} | _finer]}}),
-    do: unit
+  defp stepped_by(%Tempo.Interval{duration: %Tempo.Duration{time: [{unit, _amount} | _finer]}}) do
+    unit
+  end
 
-  defp stepped_by(_no_cadence), do: nil
+  defp stepped_by(_no_cadence) do
+    nil
+  end
 
   # A calendar of weeks holds a week where a calendar of months holds a
   # month, and the resolver reads its weeks as its months, so a week
@@ -11459,13 +12646,21 @@ defmodule Tempo do
   # week had no unit to be put in and the year was selected whole.
   defp week_in_a_calendar_of_weeks(start_unit, finest_unit, %Tempo{} = rule)
        when finest_unit in [:week, :calendar_week] do
-    if week_based_calendar?(rule.calendar), do: :week, else: start_unit
+    if week_based_calendar?(rule.calendar) do
+      :week
+    else
+      start_unit
+    end
   end
 
-  defp week_in_a_calendar_of_weeks(start_unit, _finest_unit, _rule), do: start_unit
+  defp week_in_a_calendar_of_weeks(start_unit, _finest_unit, _rule) do
+    start_unit
+  end
 
   # The week start (`q`) and a rule's skip are context, and name no unit.
-  defp context?({part, _value}), do: part in [:wkst, :skip]
+  defp context?({part, _value}) do
+    part in [:wkst, :skip]
+  end
 
   # A §12.10 window runs from a day, whatever is selected within it. A week
   # or a month selected there keeps the days of the window that are in it,
@@ -11474,9 +12669,11 @@ defmodule Tempo do
   # (`LLL1K1IN/P7DN45WN`) selected nothing. A time of day selected within a
   # window starts as finely as the time.
   defp in_a_window(unit, selection) do
-    if List.keymember?(selection, :interval, 0) and coarser_unit?(unit, :day),
-      do: :day,
-      else: unit
+    if List.keymember?(selection, :interval, 0) and coarser_unit?(unit, :day) do
+      :day
+    else
+      unit
+    end
   end
 
   # A week-of-year selection starts from its enclosing year (a dayless
@@ -11489,15 +12686,22 @@ defmodule Tempo do
   # A week of a month, which the calendar numbers, starts from its month as
   # a week of the year does from its year
   # (`Tempo.RRule.Selection.read_in_its_period/1` says which a week is).
-  defp calendar_start_unit(:week_of_month, _stepped_by), do: :month
+  defp calendar_start_unit(:week_of_month, _stepped_by) do
+    :month
+  end
 
-  defp calendar_start_unit(week, _stepped_by) when week in [:week, :calendar_week], do: :year
+  defp calendar_start_unit(week, _stepped_by) when week in [:week, :calendar_week] do
+    :year
+  end
 
   defp calendar_start_unit(unit, _stepped_by)
-       when unit in [:byday, :day_of_week, :day_of_year, :instance, :event, :interval],
-       do: :day
+       when unit in [:byday, :day_of_week, :day_of_year, :instance, :event, :interval] do
+    :day
+  end
 
-  defp calendar_start_unit(unit, _stepped_by), do: unit
+  defp calendar_start_unit(unit, _stepped_by) do
+    unit
+  end
 
   defp empty_bound_error do
     UnboundedRecurrenceError.exception(
@@ -11506,11 +12710,19 @@ defmodule Tempo do
   end
 
   defp later_endpoint(a, b) do
-    if Compare.compare_endpoints(a, b) == :later, do: a, else: b
+    if Compare.compare_endpoints(a, b) == :later do
+      a
+    else
+      b
+    end
   end
 
   defp earlier_endpoint(a, b) do
-    if Compare.compare_endpoints(a, b) == :earlier, do: a, else: b
+    if Compare.compare_endpoints(a, b) == :earlier do
+      a
+    else
+      b
+    end
   end
 
   # A mask narrows to the values its digits allow (`Mask.valid_values/4`, which
@@ -11526,11 +12738,23 @@ defmodule Tempo do
   # span its digits allow (`202X`, the 2020s).
   defp expand_non_contiguous_mask(%Tempo{time: time, calendar: calendar} = tempo) do
     case find_non_contiguous_mask(time, [], calendar) do
-      nil -> {:ok, tempo}
-      {new_time} -> {:ok, %{tempo | time: new_time}}
-      {:span, first, last} -> {:span, first_shown(%{tempo | time: first}), %{tempo | time: last}}
-      {:members, times} -> {:members, times |> Enum.map(&%{tempo | time: &1}) |> shown()}
-      {:error, reason} -> {:error, Mask.error(tempo, reason)}
+      nil ->
+        {:ok, tempo}
+
+      {new_time} ->
+        {:ok, %{tempo | time: new_time}}
+
+      {:span, first, last} ->
+        {:span, first_shown(%{tempo | time: first}), %{tempo | time: last}}
+
+      {:members, times} ->
+        {:members,
+         times
+         |> Enum.map(&%{tempo | time: &1})
+         |> shown()}
+
+      {:error, reason} ->
+        {:error, Mask.error(tempo, reason)}
     end
   end
 
@@ -11538,57 +12762,77 @@ defmodule Tempo do
   # thirties of December 2011 in Samoa are the 31st alone, the zone having
   # left the 30th out. A run of them starts on the first the clock shows,
   # and one of a list that it skips the whole of is no member.
-  defp first_shown(%__MODULE__{} = first), do: Zone.shown_by_the_clock(first)
+  defp first_shown(%__MODULE__{} = first) do
+    Zone.shown_by_the_clock(first)
+  end
 
-  defp shown(members), do: Enum.filter(members, &Zone.shown?/1)
+  defp shown(members) do
+    Enum.filter(members, &Zone.shown?/1)
+  end
 
-  defp find_non_contiguous_mask([], _previous, _calendar), do: nil
+  defp find_non_contiguous_mask([], _previous, _calendar) do
+    nil
+  end
 
-  defp find_non_contiguous_mask([{unit, {:mask, mask}} = entry | rest], previous, calendar),
-    do: narrowed_mask(entry, unit, mask, Enum.reverse(previous), rest, calendar)
+  defp find_non_contiguous_mask([{unit, {:mask, mask}} = entry | rest], previous, calendar) do
+    narrowed_mask(entry, unit, mask, Enum.reverse(previous), rest, calendar)
+  end
 
   # An unspecified unit other than the year (`X*D`, any day) is every value
   # the unit takes, as one with every digit masked is (`XXD`).
   defp find_non_contiguous_mask([{unit, :any} = entry | rest], previous, calendar)
-       when unit != :year,
-       do: narrowed_mask(entry, unit, :any, Enum.reverse(previous), rest, calendar)
+       when unit != :year do
+    narrowed_mask(entry, unit, :any, Enum.reverse(previous), rest, calendar)
+  end
 
   defp find_non_contiguous_mask([entry | rest], previous, calendar) do
     find_non_contiguous_mask(rest, [entry | previous], calendar)
   end
 
   defp narrowed_mask(entry, unit, mask, prefix, rest, calendar) do
-    if tail_narrows?(rest, prefix ++ [entry]) or every_week_follows?(rest, calendar),
-      do: mask_before_narrower(unit, mask, prefix, rest, calendar),
-      else: mask_alone(unit, mask, prefix, calendar)
+    if tail_narrows?(rest, prefix ++ [entry]) or every_week_follows?(rest, calendar) do
+      mask_before_narrower(unit, mask, prefix, rest, calendar)
+    else
+      mask_alone(unit, mask, prefix, calendar)
+    end
   end
 
   # Every week of a year is not the year (`spans_its_values?/4`), so a mask
   # of all the weeks after a masked year (`202XYXXW`) narrows it: the weeks
   # of each year, where any other unit masked whole widens to the years.
-  defp every_week_follows?([{:week, week} | _rest], calendar) when week == :any or is_tuple(week),
-    do: not week_based_calendar?(calendar)
+  defp every_week_follows?([{:week, week} | _rest], calendar)
+       when week == :any or is_tuple(week) do
+    not week_based_calendar?(calendar)
+  end
 
-  defp every_week_follows?(_rest, _calendar), do: false
+  defp every_week_follows?(_rest, _calendar) do
+    false
+  end
 
   # A mask with something after it that narrows: its candidates are values of
   # their own when a later mask narrows within each, and otherwise replace it.
   defp mask_before_narrower(unit, mask, prefix, rest, calendar) do
-    if tail_masked?(rest),
-      do: mask_members(unit, mask, prefix, rest, calendar),
-      else: substitute_mask(unit, mask, prefix, rest, calendar)
+    if tail_masked?(rest) do
+      mask_members(unit, mask, prefix, rest, calendar)
+    else
+      substitute_mask(unit, mask, prefix, rest, calendar)
+    end
   end
 
   # A mask with nothing after it that narrows is the span of its values when
   # they are fewer than the unit's, and otherwise is left to widen to the
   # units before it.
   defp mask_alone(unit, mask, prefix, calendar) do
-    if spans_its_values?(unit, mask, prefix, calendar),
-      do: narrow_mask(unit, mask, prefix, calendar),
-      else: nil
+    if spans_its_values?(unit, mask, prefix, calendar) do
+      narrow_mask(unit, mask, prefix, calendar)
+    else
+      nil
+    end
   end
 
-  defp spans_its_values?(:year, _mask, _prefix, _calendar), do: false
+  defp spans_its_values?(:year, _mask, _prefix, _calendar) do
+    false
+  end
 
   # Every week of a year is not the year: ISO 8601's weeks of 2026 run from
   # 29 December 2025 to 3 January 2027. So a mask of all of them is the span
@@ -11599,7 +12843,9 @@ defmodule Tempo do
       (prefix != [] and not week_based_calendar?(calendar))
   end
 
-  defp spans_its_values?(unit, mask, prefix, _calendar), do: narrowing_mask?(unit, mask, prefix)
+  defp spans_its_values?(unit, mask, prefix, _calendar) do
+    narrowing_mask?(unit, mask, prefix)
+  end
 
   # The values a masked unit takes after the units before it: those the walk
   # of the value yields (`Tempo.Mask.candidates/4`), so a conversion and a
@@ -11611,25 +12857,47 @@ defmodule Tempo do
     end
   end
 
-  defp masked_values(unit, mask, prefix, calendar),
-    do: Mask.candidates(unit, mask, prefix, calendar)
+  defp masked_values(unit, mask, prefix, calendar) do
+    Mask.candidates(unit, mask, prefix, calendar)
+  end
 
   # Whether a mask allows fewer values than its unit takes: some digit of it
   # is given (`1X`), it counts from the end (`-X`, the last nine), or it has
   # fewer digits than the unit's values do (`XM` is months 1 to 9). One that
   # allows them all is the span of the units before it.
-  defp narrowing_mask?(_unit, :any, _before), do: false
-  defp narrowing_mask?(_unit, [:negative | _digits], _before), do: true
+  defp narrowing_mask?(_unit, :any, _before) do
+    false
+  end
 
-  defp narrowing_mask?(unit, mask, before),
-    do: partial_mask?(mask) or length(mask) < unit_digits(unit, before)
+  defp narrowing_mask?(_unit, [:negative | _digits], _before) do
+    true
+  end
+
+  defp narrowing_mask?(unit, mask, before) do
+    partial_mask?(mask) or length(mask) < unit_digits(unit, before)
+  end
 
   # The digits of the greatest value a unit takes, in any calendar: a day of
   # the year, or a day written straight after its year, has three.
-  defp unit_digits(:day_of_week, _before), do: 1
-  defp unit_digits(:day_of_year, _before), do: 3
-  defp unit_digits(:day, before), do: if(List.keymember?(before, :month, 0), do: 2, else: 3)
-  defp unit_digits(_unit, _before), do: 2
+  defp unit_digits(:day_of_week, _before) do
+    1
+  end
+
+  defp unit_digits(:day_of_year, _before) do
+    3
+  end
+
+  defp unit_digits(:day, before) do
+    if List.keymember?(before, :month, 0) do
+      2
+    else
+      3
+    end
+  end
+
+  defp unit_digits(_unit, _before) do
+    2
+  end
 
   # Use a scalar when exactly one candidate survives the calendar
   # constraint; otherwise a list, which the multi path expands via
@@ -11654,13 +12922,23 @@ defmodule Tempo do
     end
   end
 
-  defp tail_masked?(rest), do: Enum.any?(rest, &masked?/1)
+  defp tail_masked?(rest) do
+    Enum.any?(rest, &masked?/1)
+  end
 
   # A unit some or all of whose digits are masked, which an unspecified unit
   # other than the year is.
-  defp masked?({_unit, {:mask, _mask}}), do: true
-  defp masked?({unit, :any}), do: unit != :year
-  defp masked?(_component), do: false
+  defp masked?({_unit, {:mask, _mask}}) do
+    true
+  end
+
+  defp masked?({unit, :any}) do
+    unit != :year
+  end
+
+  defp masked?(_component) do
+    false
+  end
 
   # A partly masked unit with nothing that narrows after it. Anything after it
   # is fully masked and widens, so it is dropped.
@@ -11683,29 +12961,48 @@ defmodule Tempo do
   defp consecutive_or_scattered(unit, first, values, prefix) do
     last = List.last(values)
 
-    if last - first + 1 == length(values),
-      do: {:span, prefix ++ [{unit, first}], prefix ++ [{unit, last}]},
-      else: {prefix ++ [{unit, values}]}
+    if last - first + 1 == length(values) do
+      {:span, prefix ++ [{unit, first}], prefix ++ [{unit, last}]}
+    else
+      {prefix ++ [{unit, values}]}
+    end
   end
 
   # A mask some of whose digits are given (`1X`, `X5`, `XXX{0,2,4,6,8}`).
-  defp partial_mask?(mask), do: Enum.any?(mask, &(is_integer(&1) or is_list(&1)))
+  defp partial_mask?(mask) do
+    Enum.any?(mask, &(is_integer(&1) or is_list(&1)))
+  end
 
   # Whether anything after a mask narrows its span further. `before` is the
   # units before the one looked at, which say how many digits a day has.
-  defp tail_narrows?([], _before), do: false
-  defp tail_narrows?([{_unit, value} | _rest], _before) when is_integer(value), do: true
-  defp tail_narrows?([{_unit, values} | _rest], _before) when is_list(values), do: true
-  defp tail_narrows?([{_unit, {:group, _range}} | _rest], _before), do: true
+  defp tail_narrows?([], _before) do
+    false
+  end
+
+  defp tail_narrows?([{_unit, value} | _rest], _before) when is_integer(value) do
+    true
+  end
+
+  defp tail_narrows?([{_unit, values} | _rest], _before) when is_list(values) do
+    true
+  end
+
+  defp tail_narrows?([{_unit, {:group, _range}} | _rest], _before) do
+    true
+  end
 
   defp tail_narrows?([{_unit, {value, meta}} | _rest], _before)
-       when is_integer(value) and is_list(meta),
-       do: true
+       when is_integer(value) and is_list(meta) do
+    true
+  end
 
-  defp tail_narrows?([{unit, {:mask, mask}} = entry | rest], before),
-    do: narrowing_mask?(unit, mask, before) or tail_narrows?(rest, before ++ [entry])
+  defp tail_narrows?([{unit, {:mask, mask}} = entry | rest], before) do
+    narrowing_mask?(unit, mask, before) or tail_narrows?(rest, before ++ [entry])
+  end
 
-  defp tail_narrows?([entry | rest], before), do: tail_narrows?(rest, before ++ [entry])
+  defp tail_narrows?([entry | rest], before) do
+    tail_narrows?(rest, before ++ [entry])
+  end
 
   # A Tempo is "multi" if any of its time slots holds a list of
   # more than one candidate value. The existing Enumerable
@@ -11715,10 +13012,21 @@ defmodule Tempo do
     Enum.any?(time, &multi_slot?/1)
   end
 
-  defp multi_slot?({_unit, value}) when is_integer(value), do: false
-  defp multi_slot?({_unit, {:mask, _}}), do: false
-  defp multi_slot?({_unit, :any}), do: false
-  defp multi_slot?({_unit, {_value, meta}}) when is_list(meta), do: false
+  defp multi_slot?({_unit, value}) when is_integer(value) do
+    false
+  end
+
+  defp multi_slot?({_unit, {:mask, _}}) do
+    false
+  end
+
+  defp multi_slot?({_unit, :any}) do
+    false
+  end
+
+  defp multi_slot?({_unit, {_value, meta}}) when is_list(meta) do
+    false
+  end
 
   defp multi_slot?({_unit, values}) when is_list(values) do
     case values do
@@ -11746,7 +13054,9 @@ defmodule Tempo do
     end
   end
 
-  defp multi_slot?(_), do: false
+  defp multi_slot?(_) do
+    false
+  end
 
   defp materialise_multi(%Tempo{} = tempo) do
     # The existing Enumerable.Tempo yields one concrete Tempo per
@@ -11806,38 +13116,63 @@ defmodule Tempo do
   end
 
   defp gather_one({:error, %InvalidDateError{}} = lacks, {spans, count, first}, _value, lacking)
-       when lacking != :an_error,
-       do: {:cont, {spans, count, first || lacks}}
+       when lacking != :an_error do
+    {:cont, {spans, count, first || lacks}}
+  end
 
-  defp gather_one({:error, _reason} = error, _gathered, _value, _lacking), do: {:halt, error}
+  defp gather_one({:error, _reason} = error, _gathered, _value, _lacking) do
+    {:halt, error}
+  end
 
   defp gather_one({:ok, _converted} = result, {spans, count, first}, value, _lacking) do
     own = member_intervals(result)
     count = count + Enum.count(own)
 
-    if count > @spans_at_once,
-      do: {:halt, {:error, too_many_spans_error(value)}},
-      else: {:cont, {[own | spans], count, first}}
+    if count > @spans_at_once do
+      {:halt, {:error, too_many_spans_error(value)}}
+    else
+      {:cont, {[own | spans], count, first}}
+    end
   end
 
-  defp gathered({:error, _reason} = error, _lacking), do: error
-  defp gathered({[], _count, {:error, _invalid} = lacks}, :the_answer_if_alone), do: lacks
+  defp gathered({:error, _reason} = error, _lacking) do
+    error
+  end
 
-  defp gathered({spans, _count, _first}, _lacking),
-    do: spans |> Enum.reverse() |> Enum.concat() |> IntervalSet.new()
+  defp gathered({[], _count, {:error, _invalid} = lacks}, :the_answer_if_alone) do
+    lacks
+  end
 
-  defp member_intervals({:ok, %IntervalSet{} = set}), do: IntervalSet.members(set)
-  defp member_intervals({:ok, %Tempo.Interval{} = interval}), do: [interval]
-  defp member_intervals({:ok, spans}) when is_list(spans), do: spans
+  defp gathered({spans, _count, _first}, _lacking) do
+    spans
+    |> Enum.reverse()
+    |> Enum.concat()
+    |> IntervalSet.new()
+  end
 
-  defp too_many_spans_error(value),
-    do: ConversionError.exception(value: value, reason: :too_many_values)
+  defp member_intervals({:ok, %IntervalSet{} = set}) do
+    IntervalSet.members(set)
+  end
+
+  defp member_intervals({:ok, %Tempo.Interval{} = interval}) do
+    [interval]
+  end
+
+  defp member_intervals({:ok, spans}) when is_list(spans) do
+    spans
+  end
+
+  defp too_many_spans_error(value) do
+    ConversionError.exception(value: value, reason: :too_many_values)
+  end
 
   # The members are the values the walk of `Tempo.Enumeration` names: each
   # component resolves against its already-concrete coarser units, so nested
   # open ranges (`{2000..2010}Y{1..-1}M{1..-1}D`) terminate, and a value that
   # cannot be walked is an error here rather than a raise.
-  defp expand_members(%Tempo{} = tempo), do: Enumeration.members(tempo)
+  defp expand_members(%Tempo{} = tempo) do
+    Enumeration.members(tempo)
+  end
 
   # An expanded member is a raw combination of component values, in
   # whatever axis the source value used. The parser normalises such a
@@ -11925,7 +13260,10 @@ defmodule Tempo do
 
     case to_interval(open_start, Keyword.put(opts, :within, run)) do
       {:ok, %Tempo.IntervalSet{} = set} ->
-        {:ok, set |> IntervalSet.members() |> Enum.filter(&starts_in_run?(&1, run_from, run_to))}
+        {:ok,
+         set
+         |> IntervalSet.members()
+         |> Enum.filter(&starts_in_run?(&1, run_from, run_to))}
 
       {:error, _reason} = error ->
         error
@@ -11933,39 +13271,54 @@ defmodule Tempo do
   end
 
   # Whether an occurrence starts in the half-open run `[run_from, run_to)`.
-  defp starts_in_run?(%Tempo.Interval{from: %Tempo{} = from}, run_from, run_to),
-    do: at_or_after_bound?(from, run_from) and under_bound?(from, run_to)
+  defp starts_in_run?(%Tempo.Interval{from: %Tempo{} = from}, run_from, run_to) do
+    at_or_after_bound?(from, run_from) and under_bound?(from, run_to)
+  end
 
-  defp starts_in_run?(_occurrence, _run_from, _run_to), do: true
+  defp starts_in_run?(_occurrence, _run_from, _run_to) do
+    true
+  end
 
   # A counted recurrence (`R3/{…}/…`) counts its occurrences from the
   # domain's first period, so it walks them all; any other walks the periods
   # whose occurrences can reach the window.
   defp domain_periods_to_walk(periods, %Tempo.Interval{recurrence: count}, _reach)
-       when is_integer(count),
-       do: periods
+       when is_integer(count) do
+    periods
+  end
 
-  defp domain_periods_to_walk(periods, _interval, reach),
-    do: Enum.filter(periods, &domain_period_in_window?(&1, reach))
+  defp domain_periods_to_walk(periods, _interval, reach) do
+    Enum.filter(periods, &domain_period_in_window?(&1, reach))
+  end
 
   # A counted recurrence keeps its domain's first occurrences, as one from a
   # start keeps its first.
   defp first_occurrences({:ok, %Tempo.IntervalSet{} = set}, %Tempo.Interval{recurrence: count})
-       when is_integer(count),
-       do: set |> IntervalSet.members() |> Enum.take(count) |> IntervalSet.new()
+       when is_integer(count) do
+    set
+    |> IntervalSet.members()
+    |> Enum.take(count)
+    |> IntervalSet.new()
+  end
 
-  defp first_occurrences(result, _interval), do: result
+  defp first_occurrences(result, _interval) do
+    result
+  end
 
   # The runs of periods each starting where the one before ends, as
   # `{first_period, last_period}` pairs in order.
-  defp adjacent_periods([]), do: []
+  defp adjacent_periods([]) do
+    []
+  end
 
   defp adjacent_periods([first | rest]) do
     {runs, run} =
       Enum.reduce(rest, {[], {first, first}}, fn period, {runs, {run_first, run_last}} ->
-        if adjacent_period?(run_last, period),
-          do: {runs, {run_first, period}},
-          else: {[{run_first, run_last} | runs], {period, period}}
+        if adjacent_period?(run_last, period) do
+          {runs, {run_first, period}}
+        else
+          {[{run_first, run_last} | runs], {period, period}}
+        end
       end)
 
     Enum.reverse([run | runs])
@@ -11977,7 +13330,9 @@ defmodule Tempo do
     Compare.compare_endpoints(previous_to, next_from) == :same
   end
 
-  defp adjacent_period?(_previous, _next), do: false
+  defp adjacent_period?(_previous, _next) do
+    false
+  end
 
   # A caller's `:within` as a half-open `{window_from, window_to}` start window,
   # or `:none` when no window is given (a domain, a count or an UNTIL then
@@ -12015,7 +13370,9 @@ defmodule Tempo do
     end
   end
 
-  defp occurrences_in_window(occurrences, :none), do: occurrences
+  defp occurrences_in_window(occurrences, :none) do
+    occurrences
+  end
 
   defp occurrences_in_window(occurrences, {window_from, window_to}) do
     Enum.filter(occurrences, &overlaps_window?(&1, window_from, window_to))
@@ -12025,12 +13382,17 @@ defmodule Tempo do
   # the window: the periods the window overlaps, and those either side whose
   # occurrences can reach it (a December–January break yielded by 2025
   # overlaps a window in January 2026). The rest are skipped.
-  defp domain_period_in_window?(_period, :none), do: true
+  defp domain_period_in_window?(_period, :none) do
+    true
+  end
 
-  defp domain_period_in_window?(%Tempo.Interval{} = period, {window_from, window_to}),
-    do: overlaps_window?(period, window_from, window_to)
+  defp domain_period_in_window?(%Tempo.Interval{} = period, {window_from, window_to}) do
+    overlaps_window?(period, window_from, window_to)
+  end
 
-  defp domain_reach_window(:none, _interval), do: {:ok, :none}
+  defp domain_reach_window(:none, _interval) do
+    {:ok, :none}
+  end
 
   defp domain_reach_window({window_from, window_to}, %Tempo.Interval{} = interval) do
     {forward, backward} = window_reach(interval)
@@ -12040,7 +13402,9 @@ defmodule Tempo do
          do: {:ok, {reach_from, reach_to}}
   end
 
-  defp keep_occurrences_in_window(result, :none), do: result
+  defp keep_occurrences_in_window(result, :none) do
+    result
+  end
 
   defp keep_occurrences_in_window({:ok, %Tempo.IntervalSet{} = set}, window) do
     set
@@ -12049,7 +13413,9 @@ defmodule Tempo do
     |> IntervalSet.new()
   end
 
-  defp keep_occurrences_in_window({:error, _} = error, _window), do: error
+  defp keep_occurrences_in_window({:error, _} = error, _window) do
+    error
+  end
 
   # An occurrence overlaps the window `[window_from, window_to)` when it starts
   # before the window's end and ends after its start — so one that only touches
@@ -12059,23 +13425,38 @@ defmodule Tempo do
          %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to},
          window_from,
          window_to
-       ),
-       do: starts_before?(from, window_to) and ends_after?(to, window_from)
+       ) do
+    starts_before?(from, window_to) and ends_after?(to, window_from)
+  end
 
-  defp overlaps_window?(_occurrence, _window_from, _window_to), do: true
+  defp overlaps_window?(_occurrence, _window_from, _window_to) do
+    true
+  end
 
-  defp starts_before?(_from, nil), do: true
-  defp starts_before?(from, window_to), do: under_bound?(from, window_to)
+  defp starts_before?(_from, nil) do
+    true
+  end
 
-  defp ends_after?(_to, nil), do: true
-  defp ends_after?(to, window_from), do: under_bound?(window_from, to)
+  defp starts_before?(from, window_to) do
+    under_bound?(from, window_to)
+  end
+
+  defp ends_after?(_to, nil) do
+    true
+  end
+
+  defp ends_after?(to, window_from) do
+    under_bound?(window_from, to)
+  end
 
   # Close an open-ended domain range against the bound's window: a missing upper
   # end becomes the bound's end and a missing lower end the bound's start, each
   # truncated to the range's own resolution (the window filter then drops any
   # period the bound only touches). With no bound an open range stays open, and
   # materialising it reports the open range.
-  defp close_domain_ranges(domain, :none), do: {:ok, domain}
+  defp close_domain_ranges(domain, :none) do
+    {:ok, domain}
+  end
 
   defp close_domain_ranges(%Tempo.Set{set: members} = domain, {bound_from, bound_to}) do
     members
@@ -12111,7 +13492,9 @@ defmodule Tempo do
     end
   end
 
-  defp close_domain_range(member, _bound_from, _bound_to), do: {:ok, member}
+  defp close_domain_range(member, _bound_from, _bound_to) do
+    {:ok, member}
+  end
 
   defp trunc_to_resolution_of(value, like) do
     {unit, _level} = resolution(like)
@@ -12123,7 +13506,9 @@ defmodule Tempo do
   # stated value, as RRULE's INTERVAL steps from DTSTART. The cadence unit must be
   # the periods' own (years stepping years, months stepping months); a
   # one-period cadence keeps every period.
-  defp step_domain_periods([], _domain, _duration), do: []
+  defp step_domain_periods([], _domain, _duration) do
+    []
+  end
 
   defp step_domain_periods(
          [first_period | _rest] = periods,
@@ -12143,7 +13528,9 @@ defmodule Tempo do
     end
   end
 
-  defp step_domain_periods(periods, _domain, _duration), do: periods
+  defp step_domain_periods(periods, _domain, _duration) do
+    periods
+  end
 
   # The domain's earliest stated value — the origin its cadence counts from.
   defp domain_phase(%Tempo.Set{set: members}) do
@@ -12155,19 +13542,37 @@ defmodule Tempo do
     end)
   end
 
-  defp stated_domain_values(%Tempo{} = value), do: [value]
-  defp stated_domain_values(%Tempo.Range{first: %Tempo{} = first}), do: [first]
-  defp stated_domain_values(%Tempo.Range{last: %Tempo{} = last}), do: [last]
-  defp stated_domain_values(_member), do: []
+  defp stated_domain_values(%Tempo{} = value) do
+    [value]
+  end
 
-  defp cadence_index(%Tempo{} = value, :year), do: year(value)
-  defp cadence_index(%Tempo{} = value, :month), do: year(value) * 12 + month(value)
+  defp stated_domain_values(%Tempo.Range{first: %Tempo{} = first}) do
+    [first]
+  end
+
+  defp stated_domain_values(%Tempo.Range{last: %Tempo{} = last}) do
+    [last]
+  end
+
+  defp stated_domain_values(_member) do
+    []
+  end
+
+  defp cadence_index(%Tempo{} = value, :year) do
+    year(value)
+  end
+
+  defp cadence_index(%Tempo{} = value, :month) do
+    year(value) * 12 + month(value)
+  end
 
   # Keep only the domain years matching a `:even` / `:odd` / `:leap` / `:common`
   # filter (`{2000Y..2020Y}e`). Parity is arithmetic on the year number; leap and
   # common delegate to each year's calendar `leap_year?/1` (Calendrical), so the
   # Gregorian century rule applies — 2100, divisible by 4 but not 400, is common.
-  defp filter_domain_years(year_intervals, nil), do: year_intervals
+  defp filter_domain_years(year_intervals, nil) do
+    year_intervals
+  end
 
   defp filter_domain_years(year_intervals, filter) do
     Enum.filter(year_intervals, fn year_interval ->
@@ -12176,10 +13581,21 @@ defmodule Tempo do
     end)
   end
 
-  defp year_filter_matches?(:even, year, _calendar), do: Integer.mod(year, 2) == 0
-  defp year_filter_matches?(:odd, year, _calendar), do: Integer.mod(year, 2) == 1
-  defp year_filter_matches?(:leap, year, calendar), do: calendar.leap_year?(year)
-  defp year_filter_matches?(:common, year, calendar), do: not calendar.leap_year?(year)
+  defp year_filter_matches?(:even, year, _calendar) do
+    Integer.mod(year, 2) == 0
+  end
+
+  defp year_filter_matches?(:odd, year, _calendar) do
+    Integer.mod(year, 2) == 1
+  end
+
+  defp year_filter_matches?(:leap, year, calendar) do
+    calendar.leap_year?(year)
+  end
+
+  defp year_filter_matches?(:common, year, calendar) do
+    not calendar.leap_year?(year)
+  end
 
   # A recurrence set's occurrences, member by member. A set holding a conditional
   # member (`Tempo.RecurrenceSet.keep_when/2`, `move_when/2`) resolves in two
@@ -12201,8 +13617,14 @@ defmodule Tempo do
       end
     end)
     |> case do
-      {:ok, occurrences} -> {:ok, occurrences |> Enum.reverse() |> Enum.concat()}
-      {:error, _} = error -> error
+      {:ok, occurrences} ->
+        {:ok,
+         occurrences
+         |> Enum.reverse()
+         |> Enum.concat()}
+
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -12244,8 +13666,9 @@ defmodule Tempo do
   # of what a set of sixteen yearly rules and a bridge took. A condition
   # that moves an occurrence can move one into the window from before it,
   # so a set that holds one is read over the widened window, as it was.
-  defp first_pass(members, _conditionals, :none, opts),
-    do: read_over(members, opts)
+  defp first_pass(members, _conditionals, :none, opts) do
+    read_over(members, opts)
+  end
 
   defp first_pass(members, conditionals, window, opts) do
     with true <- Enum.all?(conditionals, &match?(%Conditional{to_next: nil}, &1)),
@@ -12268,7 +13691,11 @@ defmodule Tempo do
   # window, and the last whether any reads after it.
   defp reaches_past?(first_pass, {window_from, window_to, _widened}) do
     lower = Compare.to_utc_seconds(window_from)
-    upper = if window_to, do: Compare.to_utc_seconds(window_to)
+
+    upper =
+      if window_to do
+        Compare.to_utc_seconds(window_to)
+      end
 
     Enum.any?(first_pass, fn
       {_index, %Conditional{at: offsets}, [first | _] = occurrences} ->
@@ -12319,15 +13746,23 @@ defmodule Tempo do
       end
     end)
     |> case do
-      {:ok, occurrences} -> {:ok, occurrences |> Enum.reverse() |> Enum.concat()}
-      {:error, _} = error -> error
+      {:ok, occurrences} ->
+        {:ok,
+         occurrences
+         |> Enum.reverse()
+         |> Enum.concat()}
+
+      {:error, _} = error ->
+        error
     end
   end
 
   defp in_the_window(member, occurrences, opts) do
-    if same_in_any_window?(member),
-      do: {:ok, occurrences},
-      else: recurrence_set_member(member, opts)
+    if same_in_any_window?(member) do
+      {:ok, occurrences}
+    else
+      recurrence_set_member(member, opts)
+    end
   end
 
   # Whether a member's occurrences in a window are those of a wider window
@@ -12336,9 +13771,13 @@ defmodule Tempo do
   # periods of the calendar wherever its window starts. A rule with no start
   # and a count is counted from its window's start, and a start with no year
   # is placed on it.
-  defp same_in_any_window?(%__MODULE__{} = value), do: anchored?(value)
+  defp same_in_any_window?(%__MODULE__{} = value) do
+    anchored?(value)
+  end
 
-  defp same_in_any_window?(%Tempo.Interval{from: %__MODULE__{} = from}), do: anchored?(from)
+  defp same_in_any_window?(%Tempo.Interval{from: %__MODULE__{} = from}) do
+    anchored?(from)
+  end
 
   defp same_in_any_window?(%Tempo.Interval{
          from: from,
@@ -12346,13 +13785,17 @@ defmodule Tempo do
          recurrence: :infinity,
          duration: %Tempo.Duration{}
        })
-       when from in [nil, :undefined] and to in [nil, :undefined],
-       do: true
+       when from in [nil, :undefined] and to in [nil, :undefined] do
+    true
+  end
 
-  defp same_in_any_window?(%Tempo.RecurrenceSet{members: members}),
-    do: Enum.all?(members, &same_in_any_window?/1)
+  defp same_in_any_window?(%Tempo.RecurrenceSet{members: members}) do
+    Enum.all?(members, &same_in_any_window?/1)
+  end
 
-  defp same_in_any_window?(_another_member), do: false
+  defp same_in_any_window?(_another_member) do
+    false
+  end
 
   # A conditional names what it falls on and either the offsets it keeps `:at`
   # or the selector it moves `:to_next`, never both.
@@ -12421,8 +13864,13 @@ defmodule Tempo do
     end
   end
 
-  defp widened_window(:none, _reach), do: {:ok, :none}
-  defp widened_window({nil, _window_to}, _reach), do: {:ok, :none}
+  defp widened_window(:none, _reach) do
+    {:ok, :none}
+  end
+
+  defp widened_window({nil, _window_to}, _reach) do
+    {:ok, :none}
+  end
 
   defp widened_window({%Tempo{} = window_from, window_to}, {lower_reach, upper_reach}) do
     widened_from =
@@ -12433,10 +13881,13 @@ defmodule Tempo do
   end
 
   # An open-ended window stays open.
-  defp widened_upper(nil, _upper_reach), do: :undefined
+  defp widened_upper(nil, _upper_reach) do
+    :undefined
+  end
 
-  defp widened_upper(window_to, upper_reach),
-    do: Enum.reduce(upper_reach, window_to, &later_endpoint(Math.add(window_to, &1), &2))
+  defp widened_upper(window_to, upper_reach) do
+    Enum.reduce(upper_reach, window_to, &later_endpoint(Math.add(window_to, &1), &2))
+  end
 
   defp conditional_reach(conditionals) do
     Enum.reduce(conditionals, {[], []}, fn
@@ -12448,13 +13899,17 @@ defmodule Tempo do
     end)
   end
 
-  defp widened_opts(opts, {_bound_from, _bound_to, widened}),
-    do: Keyword.put(opts, :within, widened)
+  defp widened_opts(opts, {_bound_from, _bound_to, widened}) do
+    Keyword.put(opts, :within, widened)
+  end
 
-  defp in_conditional_window?(_occurrence, :none), do: true
+  defp in_conditional_window?(_occurrence, :none) do
+    true
+  end
 
-  defp in_conditional_window?(occurrence, {window_from, window_to, _widened}),
-    do: overlaps_window?(occurrence, window_from, window_to)
+  defp in_conditional_window?(occurrence, {window_from, window_to, _widened}) do
+    overlaps_window?(occurrence, window_from, window_to)
+  end
 
   # Every member's occurrences, a conditional's being its member's, tagged with
   # the conditional's metadata as a nested set's are.
@@ -12473,10 +13928,13 @@ defmodule Tempo do
     end
   end
 
-  defp first_pass_member(%Conditional{member: member, metadata: metadata}),
-    do: %Tempo.RecurrenceSet{members: [member], metadata: metadata}
+  defp first_pass_member(%Conditional{member: member, metadata: metadata}) do
+    %Tempo.RecurrenceSet{members: [member], metadata: metadata}
+  end
 
-  defp first_pass_member(member), do: member
+  defp first_pass_member(member) do
+    member
+  end
 
   # Each first-pass occurrence as `{member_index, from, to, metadata}`, its extent
   # in UTC seconds so a condition compares spans without materialising again.
@@ -12491,19 +13949,24 @@ defmodule Tempo do
   # condition's spans; move one that falls on such a span to the next span its
   # selector gives.
   defp resolve_conditional_occurrence(occurrence, %Conditional{to_next: nil, at: offsets}, spans) do
-    if Enum.all?(offsets, &falls_on?(offset_span(occurrence, &1), spans)),
-      do: [occurrence],
-      else: []
+    if Enum.all?(offsets, &falls_on?(offset_span(occurrence, &1), spans)) do
+      [occurrence]
+    else
+      []
+    end
   end
 
   defp resolve_conditional_occurrence(occurrence, %Conditional{to_next: selector}, spans) do
-    if falls_on?(occurrence_span(occurrence), spans),
-      do: [next_selected(occurrence, selector)],
-      else: [occurrence]
+    if falls_on?(occurrence_span(occurrence), spans) do
+      [next_selected(occurrence, selector)]
+    else
+      [occurrence]
+    end
   end
 
-  defp occurrence_span(%Tempo.Interval{from: from, to: to}),
-    do: {Compare.to_utc_seconds(from), Compare.to_utc_seconds(to)}
+  defp occurrence_span(%Tempo.Interval{from: from, to: to}) do
+    {Compare.to_utc_seconds(from), Compare.to_utc_seconds(to)}
+  end
 
   # The span of the value `offset` from an occurrence's start, at the start's
   # resolution (a day for a day's occurrence).
@@ -12520,7 +13983,9 @@ defmodule Tempo do
     end)
   end
 
-  defp falls_on?(:none, _spans), do: false
+  defp falls_on?(:none, _spans) do
+    false
+  end
 
   defp metadata_includes?(metadata, pattern) do
     Enum.all?(pattern, fn {key, value} -> Map.fetch(metadata, key) == {:ok, value} end)
@@ -12545,8 +14010,13 @@ defmodule Tempo do
     end
   end
 
-  defp selection_search_span(%Tempo{time: [day_of_week: _]}), do: %Tempo.Duration{time: [week: 1]}
-  defp selection_search_span(_selector), do: %Tempo.Duration{time: [year: 1]}
+  defp selection_search_span(%Tempo{time: [day_of_week: _]}) do
+    %Tempo.Duration{time: [week: 1]}
+  end
+
+  defp selection_search_span(_selector) do
+    %Tempo.Duration{time: [year: 1]}
+  end
 
   # One recurrence-set member's occurrences: an interval member (a recurrence, or
   # a concrete interval) carries its metadata onto each occurrence; a plain
@@ -12576,12 +14046,18 @@ defmodule Tempo do
     {:error, ConversionError.exception(value: member, reason: :recurrence_set_member)}
   end
 
-  defp recurrence_set_occurrences(%Tempo.Interval{} = interval), do: [interval]
-  defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set), do: IntervalSet.members(set)
+  defp recurrence_set_occurrences(%Tempo.Interval{} = interval) do
+    [interval]
+  end
+
+  defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set) do
+    IntervalSet.members(set)
+  end
 
   # A value's metadata onto the interval, or each interval, it materialised to.
-  defp with_value_metadata(%Tempo.Interval{} = interval, metadata),
-    do: merge_member_metadata(interval, metadata)
+  defp with_value_metadata(%Tempo.Interval{} = interval, metadata) do
+    merge_member_metadata(interval, metadata)
+  end
 
   defp with_value_metadata(%IntervalSet{} = set, metadata) do
     labelled = IntervalSet.map(set, &merge_member_metadata(&1, metadata))
@@ -12596,7 +14072,9 @@ defmodule Tempo do
   # occurrence it produces; an occurrence's own metadata wins any conflict. The
   # member's span directives have already shaped each occurrence's extent, so —
   # as when a recurrence emits its occurrences — they are not copied onto them.
-  defp merge_member_metadata(interval, metadata) when map_size(metadata) == 0, do: interval
+  defp merge_member_metadata(interval, metadata) when map_size(metadata) == 0 do
+    interval
+  end
 
   defp merge_member_metadata(%Tempo.Interval{metadata: existing} = interval, metadata) do
     %{interval | metadata: Map.merge(strip_span_directives(metadata), existing)}
@@ -12796,8 +14274,9 @@ defmodule Tempo do
 
   # An unspecified year on its own (`X*Y`) is a year no one has named, with
   # no place on the time line and no cycle to lie on.
-  defp materialise_value(%Tempo{time: [{:year, :any}]} = tempo),
-    do: {:error, UnanchoredError.exception(value: tempo)}
+  defp materialise_value(%Tempo{time: [{:year, :any}]} = tempo) do
+    {:error, UnanchoredError.exception(value: tempo)}
+  end
 
   defp materialise_value(%Tempo{} = tempo) do
     # `X*Y2M28D` is "28 February of an unspecified year", and whether the
@@ -12896,12 +14375,17 @@ defmodule Tempo do
   # How a point a selection makes is given: as the span a unit of its
   # resolution long, as an occurrence of a recurrence is, or as the value
   # it is, which `Tempo.select/2` asks for (`selected_in/1`).
-  defp points_as(opts), do: Keyword.get(opts, :points_as, :spans)
+  defp points_as(opts) do
+    Keyword.get(opts, :points_as, :spans)
+  end
 
-  defp sized(occurrences, true, :values), do: Enum.map(occurrences, &point_as_its_value/1)
+  defp sized(occurrences, true, :values) do
+    Enum.map(occurrences, &point_as_its_value/1)
+  end
 
-  defp sized(occurrences, expands?, _points_as),
-    do: resize_selected_occurrences(occurrences, expands?)
+  defp sized(occurrences, expands?, _points_as) do
+    resize_selected_occurrences(occurrences, expands?)
+  end
 
   # A point as the value it is: the span from its start to that value's own
   # end, with the unit `to_interval/1` has the value walked by. It is where
@@ -12910,8 +14394,9 @@ defmodule Tempo do
   # from the reading the clock comes out on, and the value still ends where
   # it does. The hour 02:00 on the night Lord Howe's clocks go from 02:00 to
   # 02:30 ends at 03:00, the half of it the clock shows.
-  defp point_as_its_value(%Tempo.Interval{metadata: %{windowed: true} = metadata} = occurrence),
-    do: %{occurrence | metadata: Map.delete(metadata, :windowed)}
+  defp point_as_its_value(%Tempo.Interval{metadata: %{windowed: true} = metadata} = occurrence) do
+    %{occurrence | metadata: Map.delete(metadata, :windowed)}
+  end
 
   defp point_as_its_value(%Tempo.Interval{from: %Tempo{} = from} = occurrence) do
     case Interval.next_unit_boundary(from) do
@@ -12920,7 +14405,9 @@ defmodule Tempo do
     end
   end
 
-  defp point_as_its_value(occurrence), do: occurrence
+  defp point_as_its_value(occurrence) do
+    occurrence
+  end
 
   @doc false
   # What a value selects with the selection written after its units
@@ -12929,7 +14416,9 @@ defmodule Tempo do
   # walked by its hours. `Tempo.select/2` selects by it, so that a day it
   # selects by a constraint and by a selection is the same value.
   @spec selected_in(t()) :: {:ok, Tempo.IntervalSet.t() | Tempo.Interval.t()} | {:error, term()}
-  def selected_in(%Tempo{} = value), do: to_interval(value, points_as: :values)
+  def selected_in(%Tempo{} = value) do
+    to_interval(value, points_as: :values)
+  end
 
   # The years a context names — a year, a list of years and ranges, a mask
   # (`202XY`, `XXX{0,2,4,6,8}Y`) standing for the years it matches — narrowed
@@ -12943,7 +14432,9 @@ defmodule Tempo do
      )}
   end
 
-  defp selection_years(%Tempo{} = tempo, year, :none), do: context_years(tempo, year)
+  defp selection_years(%Tempo{} = tempo, year, :none) do
+    context_years(tempo, year)
+  end
 
   # An open-ended window keeps the named years from its start on.
   defp selection_years(%Tempo{calendar: calendar} = tempo, year, {%Tempo{} = window_from, nil})
@@ -12960,7 +14451,9 @@ defmodule Tempo do
     end
   end
 
-  defp context_years(_tempo, year) when is_integer(year), do: {:ok, [year]}
+  defp context_years(_tempo, year) when is_integer(year) do
+    {:ok, [year]}
+  end
 
   # A mask that stands for more years than are listed at once is refused,
   # as the value is.
@@ -12971,15 +14464,29 @@ defmodule Tempo do
 
   # The years of a set are taken as they are asked for: a range of them is
   # not listed, since no more than `@spans_at_once` are read.
-  defp context_years(_tempo, years) when is_list(years),
-    do: {:ok, Stream.flat_map(years, &years_of/1)}
+  defp context_years(_tempo, years) when is_list(years) do
+    {:ok, Stream.flat_map(years, &years_of/1)}
+  end
 
-  defp years_of(%Range{} = range), do: range
-  defp years_of(years) when is_list(years), do: Stream.flat_map(years, &years_of/1)
-  defp years_of(year), do: [year]
+  defp years_of(%Range{} = range) do
+    range
+  end
 
-  defp year_named?(_year, year) when year in [nil, :any], do: true
-  defp year_named?(year, named), do: Selection.year_selected?(year, named)
+  defp years_of(years) when is_list(years) do
+    Stream.flat_map(years, &years_of/1)
+  end
+
+  defp years_of(year) do
+    [year]
+  end
+
+  defp year_named?(_year, year) when year in [nil, :any] do
+    true
+  end
+
+  defp year_named?(year, named) do
+    Selection.year_selected?(year, named)
+  end
 
   # The years of `calendar` a bound's window meets: from the year its start
   # falls in to the year its end does.
@@ -12990,7 +14497,9 @@ defmodule Tempo do
     end
   end
 
-  defp window_years(_window, _calendar), do: {:error, empty_bound_error()}
+  defp window_years(_window, _calendar) do
+    {:error, empty_bound_error()}
+  end
 
   defp year_in_calendar(%Tempo{calendar: calendar, time: time}, calendar) do
     case Keyword.get(time, :year) do
@@ -13023,7 +14532,9 @@ defmodule Tempo do
 
   # The recurrence steps by the context's finest unit, so each period is one
   # member of the context.
-  defp selection_cadence_unit([]), do: :year
+  defp selection_cadence_unit([]) do
+    :year
+  end
 
   defp selection_cadence_unit(context) do
     case List.last(context) do
@@ -13050,7 +14561,9 @@ defmodule Tempo do
 
   # The units after a selection apply to every date it selects (ISO 8601-2
   # §12.11.2): `2018YL{1,2,5}KNT10H0M0S` is each of those days at 10:00:00.
-  defp with_trailing_units(result, [], _value), do: result
+  defp with_trailing_units(result, [], _value) do
+    result
+  end
 
   # A date the units do not make (`2026YL{1,2}MN30D` has no 30 February) is
   # passed over, as a selection passes over a value its period lacks.
@@ -13058,17 +14571,24 @@ defmodule Tempo do
     set
     |> IntervalSet.members()
     |> Stream.map(fn %Tempo.Interval{from: %Tempo{} = from} ->
-      from |> selected_with_units(trailing) |> as_selected_spans()
+      from
+      |> selected_with_units(trailing)
+      |> as_selected_spans()
     end)
     |> gathered_at_once(value, :dropped)
   end
 
-  defp with_trailing_units({:error, _reason} = error, _trailing, _value), do: error
+  defp with_trailing_units({:error, _reason} = error, _trailing, _value) do
+    error
+  end
 
-  defp as_selected_spans({:error, _reason} = error), do: error
+  defp as_selected_spans({:error, _reason} = error) do
+    error
+  end
 
-  defp as_selected_spans(converted),
-    do: {:ok, Enum.map(member_intervals(converted), &selected_span/1)}
+  defp as_selected_spans(converted) do
+    {:ok, Enum.map(member_intervals(converted), &selected_span/1)}
+  end
 
   # A date the selection picked with the units after it, read as the same
   # text is: a unit counted from the end (`2026YL6MN-1D`) is counted in the
@@ -13085,13 +14605,19 @@ defmodule Tempo do
   # A span a selection picks is walked as the span it is, as the dates it
   # picks are: the unit a value's own span is walked by, which
   # `to_interval/1` gave it, is not the selection's.
-  defp selected_span(%Tempo.Interval{} = interval), do: %{interval | unit: nil}
+  defp selected_span(%Tempo.Interval{} = interval) do
+    %{interval | unit: nil}
+  end
 
   # A value of whole numbers alone names its own one span, and nothing a
   # shape is read by applies to it, so it is converted at once: most values
   # converted are such, each member of a set among them.
   defp do_to_interval(%Tempo{time: time} = tempo) do
-    if whole_numbers?(time), do: single_span(tempo), else: shaped_interval(tempo)
+    if whole_numbers?(time) do
+      single_span(tempo)
+    else
+      shaped_interval(tempo)
+    end
   end
 
   # A group with a unit after it (`2026Y2G4WU3K`, the Wednesday of each of
@@ -13149,18 +14675,30 @@ defmodule Tempo do
 
   # Whether every unit is one whole number: a year of either sign, and a
   # unit after it that is not counted from the end.
-  defp whole_numbers?([{:year, year} | rest]) when is_integer(year), do: whole_after_year?(rest)
-  defp whole_numbers?(time), do: whole_after_year?(time)
+  defp whole_numbers?([{:year, year} | rest]) when is_integer(year) do
+    whole_after_year?(rest)
+  end
 
-  defp whole_after_year?([{_unit, value} | rest]) when is_integer(value) and value >= 0,
-    do: whole_after_year?(rest)
+  defp whole_numbers?(time) do
+    whole_after_year?(time)
+  end
+
+  defp whole_after_year?([{_unit, value} | rest]) when is_integer(value) and value >= 0 do
+    whole_after_year?(rest)
+  end
 
   defp whole_after_year?([{:microsecond, {value, precision}}])
-       when is_integer(value) and is_integer(precision),
-       do: true
+       when is_integer(value) and is_integer(precision) do
+    true
+  end
 
-  defp whole_after_year?([]), do: true
-  defp whole_after_year?(_shaped), do: false
+  defp whole_after_year?([]) do
+    true
+  end
+
+  defp whole_after_year?(_shaped) do
+    false
+  end
 
   # A value is converted as the walk yields it. A margin of error is dropped
   # (`2026±2Y` spans 2026), and what could not be read beside it when the
@@ -13170,7 +14708,9 @@ defmodule Tempo do
   # read in each year of the block and not once for the block, and they are
   # the value itself where every digit is significant (`1950S4` is 1950).
   defp crisp_reading(%Tempo{time: time, calendar: calendar} = tempo) do
-    case time |> Compare.drop_margin_of_error() |> Interval.significant_digits_as_mask() do
+    case time
+         |> Compare.drop_margin_of_error()
+         |> Interval.significant_digits_as_mask() do
       ^time -> {:ok, tempo}
       crisp -> Validation.validate(%{tempo | time: crisp}, calendar)
     end
@@ -13179,8 +14719,9 @@ defmodule Tempo do
   # A group of a set (`2026Y{1,2}G3MU15D`) names a span in each of its
   # groups. It is taken apart into its groups before anything reads the
   # units around it, which a mask after it would (`{1,2}G3MUXD`).
-  defp group_of_set?(time),
-    do: Enum.any?(time, &match?({_unit, {:group, _members}, _size}, &1))
+  defp group_of_set?(time) do
+    Enum.any?(time, &match?({_unit, {:group, _members}, _size}, &1))
+  end
 
   defp ungrouped_interval(%Tempo{} = tempo) do
     case mask_context_members(tempo) do
@@ -13190,9 +14731,17 @@ defmodule Tempo do
     end
   end
 
-  defp group_before_unit?([{_unit, {:group, %Range{}}}, _finer | _rest]), do: true
-  defp group_before_unit?([_component | rest]), do: group_before_unit?(rest)
-  defp group_before_unit?([]), do: false
+  defp group_before_unit?([{_unit, {:group, %Range{}}}, _finer | _rest]) do
+    true
+  end
+
+  defp group_before_unit?([_component | rest]) do
+    group_before_unit?(rest)
+  end
+
+  defp group_before_unit?([]) do
+    false
+  end
 
   # A set before a value's first mask (`2026-{6,7}-1X`): each member of the set
   # is a context of its own, in which the mask narrows.
@@ -13210,7 +14759,9 @@ defmodule Tempo do
     end
   end
 
-  defp context_members(_split, _tempo), do: :none
+  defp context_members(_split, _tempo) do
+    :none
+  end
 
   defp narrowed_interval(%Tempo{} = tempo) do
     # Step 1: narrow any mask to the values it allows (see
@@ -13259,17 +14810,31 @@ defmodule Tempo do
   # a set (`2026Y{1,2}G3MU15D`, the first and the second groups of three
   # months) names a span in each of its groups, and nothing expands it to
   # them, so it is no one span.
-  defp span_shape([], shape), do: shape
-  defp span_shape([{_unit, {:group, _members}, _size} | _rest], _shape), do: :group_of_set
+  defp span_shape([], shape) do
+    shape
+  end
+
+  defp span_shape([{_unit, {:group, _members}, _size} | _rest], _shape) do
+    :group_of_set
+  end
 
   # Significant digits with a unit after them (`1950S2Y6M`, the June of each
   # year of the 1900s) name a span in each value of the block, as the walk
   # yields them. With nothing after them they are the one span of the block.
-  defp span_shape([{_unit, {_value, [significant_digits: _digits]}}, _finer | rest], _shape),
-    do: span_shape(rest, :multi)
+  defp span_shape([{_unit, {_value, [significant_digits: _digits]}}, _finer | rest], _shape) do
+    span_shape(rest, :multi)
+  end
 
-  defp span_shape([slot | rest], shape),
-    do: span_shape(rest, if(multi_slot?(slot), do: :multi, else: shape))
+  defp span_shape([slot | rest], shape) do
+    span_shape(
+      rest,
+      if multi_slot?(slot) do
+        :multi
+      else
+        shape
+      end
+    )
+  end
 
   # The bounds keep the value's own resolution; the iteration granularity of
   # the implicit span travels on `:unit` (see
@@ -14071,18 +15636,27 @@ defmodule Tempo do
     duration(Calendars.inside(value))
   end
 
-  def duration(%IntervalSet{} = set), do: IntervalSet.duration(set)
+  def duration(%IntervalSet{} = set) do
+    IntervalSet.duration(set)
+  end
 
   # A value with no year is measured where its span has a length on any
   # day: an hour, or a day of the week (`Tempo.Interval.Cycle`).
   def duration(%__MODULE__{} = value) do
     case to_interval(value) do
-      {:ok, span} -> span |> duration() |> unmeasured(value, anchored?(value))
-      {:error, _reason} = error -> unmeasured(error, value, anchored?(value))
+      {:ok, span} ->
+        span
+        |> duration()
+        |> unmeasured(value, anchored?(value))
+
+      {:error, _reason} = error ->
+        unmeasured(error, value, anchored?(value))
     end
   end
 
-  def duration(%Interval{} = interval), do: Interval.duration(interval)
+  def duration(%Interval{} = interval) do
+    Interval.duration(interval)
+  end
 
   # A set written as its members (`{2026Y,2028Y}`) is measured as the same
   # set written in one value is (`{2026,2028}Y`): by the spans it converts to.
@@ -14100,10 +15674,13 @@ defmodule Tempo do
   # A value with no year that has no length (a month, whose days are its
   # year's) is refused for having no year, which is what there is to be done
   # about it.
-  defp unmeasured({:error, _reason}, value, false),
-    do: {:error, UnanchoredError.exception(operation: :duration, value: value)}
+  defp unmeasured({:error, _reason}, value, false) do
+    {:error, UnanchoredError.exception(operation: :duration, value: value)}
+  end
 
-  defp unmeasured(measured, _value, _anchored?), do: measured
+  defp unmeasured(measured, _value, _anchored?) do
+    measured
+  end
 
   @doc """
   Return the duration between two endpoints as a `%Tempo.Duration{}`.
@@ -14169,7 +15746,13 @@ defmodule Tempo do
         {:error, UnanchoredError.exception(operation: :duration, value: to)}
 
       floating?(from) != floating?(to) ->
-        floating = if floating?(from), do: from, else: to
+        floating =
+          if floating?(from) do
+            from
+          else
+            to
+          end
+
         {:error, FloatingTempoError.exception(operation: :measure, value: floating)}
 
       true ->
@@ -14177,8 +15760,13 @@ defmodule Tempo do
     end
   end
 
-  def duration(%__MODULE__{}, to), do: {:error, not_one_value("duration/2", to)}
-  def duration(from, _to), do: {:error, not_one_value("duration/2", from)}
+  def duration(%__MODULE__{}, to) do
+    {:error, not_one_value("duration/2", to)}
+  end
+
+  def duration(from, _to) do
+    {:error, not_one_value("duration/2", from)}
+  end
 
   # The interval from `from` to `to`, measured as `Interval.duration/2`
   # measures it.
@@ -14257,8 +15845,9 @@ defmodule Tempo do
     end
   end
 
-  defp do_at_least?(value, duration),
-    do: length_holds?(value, duration, &Interval.at_least?/2, [:gt, :eq])
+  defp do_at_least?(value, duration) do
+    length_holds?(value, duration, &Interval.at_least?/2, [:gt, :eq])
+  end
 
   @doc """
   `true` when a value is at most as long as the given duration,
@@ -14294,8 +15883,9 @@ defmodule Tempo do
     end
   end
 
-  defp do_at_most?(value, duration),
-    do: length_holds?(value, duration, &Interval.at_most?/2, [:lt, :eq])
+  defp do_at_most?(value, duration) do
+    length_holds?(value, duration, &Interval.at_most?/2, [:lt, :eq])
+  end
 
   @doc """
   `true` when a value's length equals the given duration, measured as
@@ -14334,8 +15924,9 @@ defmodule Tempo do
     end
   end
 
-  defp do_exactly?(value, duration),
-    do: length_holds?(value, duration, &Interval.exactly?/2, [:eq])
+  defp do_exactly?(value, duration) do
+    length_holds?(value, duration, &Interval.exactly?/2, [:eq])
+  end
 
   @doc """
   `true` when a value is strictly longer than the given duration,
@@ -14371,8 +15962,9 @@ defmodule Tempo do
     end
   end
 
-  defp do_longer_than?(value, duration),
-    do: length_holds?(value, duration, &Interval.longer_than?/2, [:gt])
+  defp do_longer_than?(value, duration) do
+    length_holds?(value, duration, &Interval.longer_than?/2, [:gt])
+  end
 
   @doc """
   `true` when a value is strictly shorter than the given duration,
@@ -14414,30 +16006,38 @@ defmodule Tempo do
     end
   end
 
-  defp do_shorter_than?(value, duration),
-    do: length_holds?(value, duration, &Interval.shorter_than?/2, [:lt])
+  defp do_shorter_than?(value, duration) do
+    length_holds?(value, duration, &Interval.shorter_than?/2, [:lt])
+  end
 
   # Whether a value's length stands in one of `orders` to `duration`. An
   # interval set's length is the time it covers, compared from its first
   # instant; an unbounded set is longer than any duration and an empty one
   # has none. A value's length is that of the span it names, and an
   # interval's is measured between its endpoints by `interval_predicate`.
-  defp length_holds?(%IntervalSet{} = set, duration, _interval_predicate, orders),
-    do: set_length_order(set, duration) in orders
-
-  defp length_holds?(%Interval{} = interval, duration, interval_predicate, _orders),
-    do: interval_predicate.(interval, duration)
-
-  defp length_holds?(value, duration, interval_predicate, orders),
-    do: length_holds?(span!(value), duration, interval_predicate, orders)
-
-  defp set_length_order(set, duration) do
-    if IntervalSet.bounded?(set),
-      do: covered_length_order(IntervalSet.first(set), set, duration),
-      else: :gt
+  defp length_holds?(%IntervalSet{} = set, duration, _interval_predicate, orders) do
+    set_length_order(set, duration) in orders
   end
 
-  defp covered_length_order(nil, _set, duration), do: zero_length_order(duration)
+  defp length_holds?(%Interval{} = interval, duration, interval_predicate, _orders) do
+    interval_predicate.(interval, duration)
+  end
+
+  defp length_holds?(value, duration, interval_predicate, orders) do
+    length_holds?(span!(value), duration, interval_predicate, orders)
+  end
+
+  defp set_length_order(set, duration) do
+    if IntervalSet.bounded?(set) do
+      covered_length_order(IntervalSet.first(set), set, duration)
+    else
+      :gt
+    end
+  end
+
+  defp covered_length_order(nil, _set, duration) do
+    zero_length_order(duration)
+  end
 
   defp covered_length_order(%Interval{} = first, set, duration) do
     case IntervalSet.duration(set) do
@@ -14452,7 +16052,10 @@ defmodule Tempo do
   # Nothing against `duration`: the signs of its components decide, as they
   # agree in a duration as it is written.
   defp zero_length_order(%Duration{time: time} = duration) do
-    case time |> Enum.map(&component_sign/1) |> Enum.uniq() |> List.delete(0) do
+    case time
+         |> Enum.map(&component_sign/1)
+         |> Enum.uniq()
+         |> List.delete(0) do
       [] -> :eq
       [1] -> :lt
       [-1] -> :gt
@@ -14460,12 +16063,25 @@ defmodule Tempo do
     end
   end
 
-  defp component_sign({_unit, {value, _precision}}), do: amount_sign(value)
-  defp component_sign({_unit, value}), do: amount_sign(value)
+  defp component_sign({_unit, {value, _precision}}) do
+    amount_sign(value)
+  end
 
-  defp amount_sign(value) when value > 0, do: 1
-  defp amount_sign(value) when value < 0, do: -1
-  defp amount_sign(_zero), do: 0
+  defp component_sign({_unit, value}) do
+    amount_sign(value)
+  end
+
+  defp amount_sign(value) when value > 0 do
+    1
+  end
+
+  defp amount_sign(value) when value < 0 do
+    -1
+  end
+
+  defp amount_sign(_zero) do
+    0
+  end
 
   @doc """
   `true` when a value has both a start and an end: neither end of the interval, of the span a value names or of a set is open.
@@ -14493,9 +16109,19 @@ defmodule Tempo do
     bounded?(Calendars.inside(value))
   end
 
-  def bounded?(%Interval{} = interval), do: Interval.bounded?(interval)
-  def bounded?(%IntervalSet{} = set), do: IntervalSet.bounded?(set)
-  def bounded?(value), do: value |> span!() |> bounded?()
+  def bounded?(%Interval{} = interval) do
+    Interval.bounded?(interval)
+  end
+
+  def bounded?(%IntervalSet{} = set) do
+    IntervalSet.bounded?(set)
+  end
+
+  def bounded?(value) do
+    value
+    |> span!()
+    |> bounded?()
+  end
 
   # The interval or the interval set a value spans, for a predicate, which
   # has only true and false to give: a value with no span raises its error.
@@ -14520,9 +16146,19 @@ defmodule Tempo do
     empty?(Calendars.inside(value))
   end
 
-  def empty?(%Interval{} = interval), do: Interval.empty?(interval)
-  def empty?(%IntervalSet{} = set), do: IntervalSet.empty?(set)
-  def empty?(value), do: value |> span!() |> empty?()
+  def empty?(%Interval{} = interval) do
+    Interval.empty?(interval)
+  end
+
+  def empty?(%IntervalSet{} = set) do
+    IntervalSet.empty?(set)
+  end
+
+  def empty?(value) do
+    value
+    |> span!()
+    |> empty?()
+  end
 
   @doc """
   `true` when `a` ends at or before `b` starts: the two share no instant and `a` is earlier.
@@ -15214,16 +16850,22 @@ defmodule Tempo do
           t() | Tempo.Workdays.t() | {:error, error_reason()}
   def workdays(territory \\ nil, options \\ [])
 
-  def workdays(options, []) when is_list(options), do: workdays(nil, options)
+  def workdays(options, []) when is_list(options) do
+    workdays(nil, options)
+  end
 
   def workdays(territory, options) do
     with {:ok, resolved} <- Territory.resolve(territory),
          {:ok, except} <- workdays_except(Calendars.inside(options)) do
-      resolved |> workdays_of(except) |> Calendars.outside()
+      resolved
+      |> workdays_of(except)
+      |> Calendars.outside()
     end
   end
 
-  defp workdays_of(resolved, nil), do: day_of_week_tempo(Localize.Calendar.weekdays(resolved))
+  defp workdays_of(resolved, nil) do
+    day_of_week_tempo(Localize.Calendar.weekdays(resolved))
+  end
 
   defp workdays_of(resolved, except) do
     %Tempo.Workdays{
@@ -15249,13 +16891,18 @@ defmodule Tempo do
     end
   end
 
-  defp holiday_set?(nil), do: true
+  defp holiday_set?(nil) do
+    true
+  end
 
   defp holiday_set?(%struct{})
-       when struct in [__MODULE__, Interval, IntervalSet, Tempo.RecurrenceSet],
-       do: true
+       when struct in [__MODULE__, Interval, IntervalSet, Tempo.RecurrenceSet] do
+    true
+  end
 
-  defp holiday_set?(_other), do: false
+  defp holiday_set?(_other) do
+    false
+  end
 
   @doc """
   Return a selector for the weekends of a territory.
@@ -15303,7 +16950,10 @@ defmodule Tempo do
   @spec weekends(Tempo.Territory.input()) :: t() | {:error, error_reason()}
   def weekends(territory \\ nil) do
     with {:ok, resolved} <- Territory.resolve(territory) do
-      resolved |> Localize.Calendar.weekend() |> day_of_week_tempo() |> Calendars.outside()
+      resolved
+      |> Localize.Calendar.weekend()
+      |> day_of_week_tempo()
+      |> Calendars.outside()
     end
   end
 
@@ -15369,8 +17019,13 @@ defmodule Tempo do
     end
   end
 
-  defp do_weekend?(%Tempo{} = tempo, territory), do: on_weekend?(tempo, territory, :weekend?)
-  defp do_weekend?(value, _territory), do: raise(not_one_value("weekend?/2", value))
+  defp do_weekend?(%Tempo{} = tempo, territory) do
+    on_weekend?(tempo, territory, :weekend?)
+  end
+
+  defp do_weekend?(value, _territory) do
+    raise(not_one_value("weekend?/2", value))
+  end
 
   @doc """
   Return `true` when `tempo` falls on a workday — a day that is *not*
@@ -15417,7 +17072,9 @@ defmodule Tempo do
     not predicate_answer!(answer)
   end
 
-  defp do_workday?(value, _territory), do: raise(not_one_value("workday?/2", value))
+  defp do_workday?(value, _territory) do
+    raise(not_one_value("workday?/2", value))
+  end
 
   # Whether `tempo` falls on the territory's weekend.
   defp on_weekend?(tempo, territory, function) do
@@ -15430,9 +17087,17 @@ defmodule Tempo do
 
   # A predicate has only true and false to give, so a question with no
   # answer raises.
-  defp predicate_answer!({:ok, answer}), do: answer
-  defp predicate_answer!({:error, exception}) when is_exception(exception), do: raise(exception)
-  defp predicate_answer!({:error, reason}), do: raise(ArgumentError, Calendars.inspect(reason))
+  defp predicate_answer!({:ok, answer}) do
+    answer
+  end
+
+  defp predicate_answer!({:error, exception}) when is_exception(exception) do
+    raise(exception)
+  end
+
+  defp predicate_answer!({:error, reason}) do
+    raise(ArgumentError, Calendars.inspect(reason))
+  end
 
   @doc """
   Shift `tempo` by `count` workdays, stepping over the territory's
@@ -15629,11 +17294,17 @@ defmodule Tempo do
     with :ok <- one_value(tempo),
          {:ok, days_off} <- days_off(territory),
          {:ok, off?} <- day_off?(tempo, days_off, :nearest_workday) do
-      if off?, do: nearest_workday_from(tempo, days_off, 1), else: tempo
+      if off? do
+        nearest_workday_from(tempo, days_off, 1)
+      else
+        tempo
+      end
     end
   end
 
-  defp do_nearest_workday(value, _territory), do: {:error, not_a_day(value, :nearest_workday)}
+  defp do_nearest_workday(value, _territory) do
+    {:error, not_a_day(value, :nearest_workday)}
+  end
 
   @doc """
   Roll `tempo` to a workday of the territory: `tempo` itself when it is a workday, otherwise the workday the `:roll` convention names.
@@ -15704,8 +17375,9 @@ defmodule Tempo do
     end
   end
 
-  defp do_roll_to_workday(tempo, options, []) when is_list(options),
-    do: roll_to_workday(tempo, nil, options)
+  defp do_roll_to_workday(tempo, options, []) when is_list(options) do
+    roll_to_workday(tempo, nil, options)
+  end
 
   defp do_roll_to_workday(%Tempo{} = tempo, territory, options) do
     with {:ok, roll} <- roll_convention(options),
@@ -15713,12 +17385,17 @@ defmodule Tempo do
          {:ok, days_off} <- days_off(territory),
          {:ok, off?} <- day_off?(tempo, days_off, :roll_to_workday),
          :ok <- a_month_to_stay_in(tempo, roll) do
-      if off?, do: rolled(tempo, roll, days_off), else: tempo
+      if off? do
+        rolled(tempo, roll, days_off)
+      else
+        tempo
+      end
     end
   end
 
-  defp do_roll_to_workday(value, _territory, _options),
-    do: {:error, not_a_day(value, :roll_to_workday)}
+  defp do_roll_to_workday(value, _territory, _options) do
+    {:error, not_a_day(value, :roll_to_workday)}
+  end
 
   @rolls [:following, :preceding, :modified_following, :modified_preceding]
 
@@ -15740,21 +17417,37 @@ defmodule Tempo do
   # The workday a day off rolls to: the first after it or the first before
   # it, and by a modified convention the first the other way where the one
   # it rolls to is in another month.
-  defp rolled(tempo, :following, days_off), do: first_workday(tempo, 1, days_off)
-  defp rolled(tempo, :preceding, days_off), do: first_workday(tempo, -1, days_off)
-  defp rolled(tempo, :modified_following, days_off), do: rolled_in_its_month(tempo, 1, days_off)
-  defp rolled(tempo, :modified_preceding, days_off), do: rolled_in_its_month(tempo, -1, days_off)
+  defp rolled(tempo, :following, days_off) do
+    first_workday(tempo, 1, days_off)
+  end
+
+  defp rolled(tempo, :preceding, days_off) do
+    first_workday(tempo, -1, days_off)
+  end
+
+  defp rolled(tempo, :modified_following, days_off) do
+    rolled_in_its_month(tempo, 1, days_off)
+  end
+
+  defp rolled(tempo, :modified_preceding, days_off) do
+    rolled_in_its_month(tempo, -1, days_off)
+  end
 
   defp rolled_in_its_month(tempo, step, days_off) do
     with %Tempo{} = workday <- first_workday(tempo, step, days_off),
          {:ok, month} <- month_of(tempo),
          {:ok, month_rolled_to} <- month_of(workday) do
-      if month_rolled_to == month, do: workday, else: first_workday(tempo, -step, days_off)
+      if month_rolled_to == month do
+        workday
+      else
+        first_workday(tempo, -step, days_off)
+      end
     end
   end
 
-  defp first_workday(tempo, step, days_off),
-    do: workday_after(tempo, step, days_off, :roll_to_workday, 1)
+  defp first_workday(tempo, step, days_off) do
+    workday_after(tempo, step, days_off, :roll_to_workday, 1)
+  end
 
   # A modified convention keeps a day in its month, so it takes only a day
   # that has one, whether or not that day is a workday.
@@ -15762,7 +17455,9 @@ defmodule Tempo do
     with {:ok, _month} <- month_of(tempo), do: :ok
   end
 
-  defp a_month_to_stay_in(_tempo, _roll), do: :ok
+  defp a_month_to_stay_in(_tempo, _roll) do
+    :ok
+  end
 
   # The month a day is of: the one its calendar counts it in, as `trunc/2`
   # gives it. A calendar of weeks has no months.
@@ -15775,7 +17470,10 @@ defmodule Tempo do
         {:error,
          ResolutionError.exception(
            operation: :roll_to_workday,
-           current: day |> resolution() |> elem(0),
+           current:
+             day
+             |> resolution()
+             |> elem(0),
            target: :month,
            calendar: day.calendar,
            reason:
@@ -15832,7 +17530,10 @@ defmodule Tempo do
 
   defp do_count_workdays(value, territory) do
     with {:ok, selector} <- workday_selector(territory),
-         {:ok, %IntervalSet{} = selected} <- value |> whole_days() |> select(selector) do
+         {:ok, %IntervalSet{} = selected} <-
+           value
+           |> whole_days()
+           |> select(selector) do
       count_selected(selected)
     end
   end
@@ -15843,7 +17544,11 @@ defmodule Tempo do
   # selects the hours of such a span that are on it (`Tempo.select/2`), and
   # they are no count of days.
   defp whole_days(%__MODULE__{} = value) do
-    if time_of_day?(value), do: no_days(), else: value
+    if time_of_day?(value) do
+      no_days()
+    else
+      value
+    end
   end
 
   # An interval written with a duration, and a recurrence, are the span or
@@ -15858,17 +17563,26 @@ defmodule Tempo do
   end
 
   defp whole_days(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set),
-      do: set |> IntervalSet.members() |> Enum.flat_map(&days_of_member/1) |> IntervalSet.new!(),
-      else: set
+    if IntervalSet.bounded?(set) do
+      set
+      |> IntervalSet.members()
+      |> Enum.flat_map(&days_of_member/1)
+      |> IntervalSet.new!()
+    else
+      set
+    end
   end
 
-  defp whole_days(other), do: other
+  defp whole_days(other) do
+    other
+  end
 
   defp whole_days_of_span(%Interval{from: from, to: to} = span) do
-    if time_of_day?(from) or time_of_day?(to),
-      do: days_started(trunc(from, :day), trunc(to, :day)),
-      else: span
+    if time_of_day?(from) or time_of_day?(to) do
+      days_started(trunc(from, :day), trunc(to, :day))
+    else
+      span
+    end
   end
 
   defp days_of_member(%Interval{} = member) do
@@ -15887,14 +17601,21 @@ defmodule Tempo do
     end
   end
 
-  defp days_started(_first, _ends_on), do: no_days()
+  defp days_started(_first, _ends_on) do
+    no_days()
+  end
 
-  defp no_days, do: IntervalSet.new!([])
+  defp no_days do
+    IntervalSet.new!([])
+  end
 
-  defp time_of_day?(%__MODULE__{time: time}) when is_list(time),
-    do: Enum.any?(time, &time_of_day_unit?/1)
+  defp time_of_day?(%__MODULE__{time: time}) when is_list(time) do
+    Enum.any?(time, &time_of_day_unit?/1)
+  end
 
-  defp workday_selector(%Tempo.Workdays{} = workdays), do: {:ok, workdays}
+  defp workday_selector(%Tempo.Workdays{} = workdays) do
+    {:ok, workdays}
+  end
 
   # The territory's working days of the week, as `workdays/2` answers a
   # caller with them.
@@ -15912,8 +17633,13 @@ defmodule Tempo do
     end
   end
 
-  defp time_of_day_unit?({unit, _value}), do: unit in [:hour, :minute, :second, :microsecond]
-  defp time_of_day_unit?(_group_or_selection), do: false
+  defp time_of_day_unit?({unit, _value}) do
+    unit in [:hour, :minute, :second, :microsecond]
+  end
+
+  defp time_of_day_unit?(_group_or_selection) do
+    false
+  end
 
   defp workdays_from(%Tempo{} = tempo, count, territory, function) when is_integer(count) do
     with {:ok, days_off} <- days_off(territory),
@@ -15929,14 +17655,22 @@ defmodule Tempo do
      )}
   end
 
-  defp workdays_from(value, _count, _territory, function),
-    do: {:error, not_a_day(value, function)}
+  defp workdays_from(value, _count, _territory, function) do
+    {:error, not_a_day(value, function)}
+  end
 
   # Step `count` workdays from `tempo`, one day at a time.
-  defp step_workdays(tempo, 0, _days_off, _function), do: tempo
+  defp step_workdays(tempo, 0, _days_off, _function) do
+    tempo
+  end
 
   defp step_workdays(tempo, count, days_off, function) do
-    step = if count < 0, do: -1, else: 1
+    step =
+      if count < 0 do
+        -1
+      else
+        1
+      end
 
     Enum.reduce_while(1..abs(count), tempo, fn _workday, day ->
       case workday_after(day, step, days_off, function, 1) do
@@ -15963,7 +17697,11 @@ defmodule Tempo do
     next = shift(tempo, day: step)
 
     with {:ok, off?} <- day_off?(next, days_off, function) do
-      if off?, do: workday_after(next, step, days_off, function, run + 1), else: next
+      if off? do
+        workday_after(next, step, days_off, function, run + 1)
+      else
+        next
+      end
     end
   end
 
@@ -16002,7 +17740,9 @@ defmodule Tempo do
 
   # The days a territory, or a `Tempo.Workdays`, has off: its weekend and
   # any holidays.
-  defp days_off(%Tempo.Workdays{weekend: weekend, except: except}), do: {:ok, {weekend, except}}
+  defp days_off(%Tempo.Workdays{weekend: weekend, except: except}) do
+    {:ok, {weekend, except}}
+  end
 
   defp days_off(territory) do
     with {:ok, resolved} <- Territory.resolve(territory),
@@ -16012,11 +17752,17 @@ defmodule Tempo do
   # Whether a day is off: on the weekend or on a holiday.
   defp day_off?(day, {weekend, except}, function) do
     with {:ok, day_of_week} <- iso_day_of_week(day, function) do
-      if day_of_week in weekend, do: {:ok, true}, else: on_holiday?(day, except)
+      if day_of_week in weekend do
+        {:ok, true}
+      else
+        on_holiday?(day, except)
+      end
     end
   end
 
-  defp on_holiday?(_day, nil), do: {:ok, false}
+  defp on_holiday?(_day, nil) do
+    {:ok, false}
+  end
 
   # The holidays converted around the day, as a recurrence needs a window;
   # a concrete holiday is what it is, so the day asks which overlap it.
@@ -16039,8 +17785,13 @@ defmodule Tempo do
     end
   end
 
-  defp iso_day_of_week({:error, _reason} = error, _function), do: error
-  defp iso_day_of_week(value, function), do: {:error, not_a_day(value, function)}
+  defp iso_day_of_week({:error, _reason} = error, _function) do
+    error
+  end
+
+  defp iso_day_of_week(value, function) do
+    {:error, not_a_day(value, function)}
+  end
 
   defp day_date(%Tempo{time: time} = tempo) do
     case {whole_unit(time, :year), whole_unit(time, :month), whole_unit(time, :day)} do
@@ -16050,7 +17801,9 @@ defmodule Tempo do
       # A day of the year or of a week, with or without a time of day: a
       # calendar of weeks keeps its week and day beside a time.
       _ordinal_or_week_date ->
-        tempo |> trunc(:day) |> to_date()
+        tempo
+        |> trunc(:day)
+        |> to_date()
     end
   end
 
@@ -16068,7 +17821,10 @@ defmodule Tempo do
     if anchored?(tempo) do
       ResolutionError.exception(
         operation: function,
-        current: tempo |> resolution() |> elem(0),
+        current:
+          tempo
+          |> resolution()
+          |> elem(0),
         target: :day,
         reason:
           "`#{function}` needs a value that denotes a day, such as a date or a datetime; " <>
@@ -16114,7 +17870,9 @@ defmodule Tempo do
   """
   @spec explain(term()) :: String.t()
   def explain(value) do
-    value |> Explain.explain() |> Explain.to_string()
+    value
+    |> Explain.explain()
+    |> Explain.to_string()
   end
 
   @valid_units Unit.units()

@@ -21,7 +21,9 @@ defmodule Tempo.Matrix.Test do
     cells = Census.run()
     Logger.configure(level: level)
 
-    if System.get_env("MATRIX_BASELINE") == "write", do: Baseline.write(Census.failures(cells))
+    if System.get_env("MATRIX_BASELINE") == "write" do
+      Baseline.write(Census.failures(cells))
+    end
 
     %{cells: cells}
   end
@@ -31,14 +33,22 @@ defmodule Tempo.Matrix.Test do
   end
 
   test "every operation on every value returns a value or a named error", %{cells: cells} do
-    failures = cells |> Enum.reject(&(&1.group == :consistent)) |> Census.failures()
+    failures =
+      cells
+      |> Enum.reject(&(&1.group == :consistent))
+      |> Census.failures()
+
     listed = Enum.reject(Baseline.read(), &check?/1)
 
     assert %{new: [], fixed: []} = Baseline.compare(failures, listed), report(failures, listed)
   end
 
   test "every operation agrees with what to_interval/2 covers", %{cells: cells} do
-    failures = cells |> Enum.filter(&(&1.group == :consistent)) |> Census.failures()
+    failures =
+      cells
+      |> Enum.filter(&(&1.group == :consistent))
+      |> Census.failures()
+
     listed = Enum.filter(Baseline.read(), &check?/1)
 
     assert %{new: [], fixed: []} = Baseline.compare(failures, listed), report(failures, listed)
@@ -61,7 +71,10 @@ defmodule Tempo.Matrix.Test do
           uniq: true,
           do: {cell.level, cell.class}
 
-    classes = Corpus.written() |> Enum.map(&{&1.level, &1.class}) |> Enum.uniq()
+    classes =
+      Corpus.written()
+      |> Enum.map(&{&1.level, &1.class})
+      |> Enum.uniq()
 
     assert for({:extended, class} <- refused, do: class) == []
     assert for({:open, class} = open <- classes, open not in refused, do: class) == []
@@ -76,8 +89,9 @@ defmodule Tempo.Matrix.Test do
   test "the published table is what the matrix gives", %{cells: cells} do
     table = Table.render(cells)
 
-    if System.get_env("MATRIX_GUIDE") == "write",
-      do: File.write!(@guide, Table.replace(File.read!(@guide), table))
+    if System.get_env("MATRIX_GUIDE") == "write" do
+      File.write!(@guide, Table.replace(File.read!(@guide), table))
+    end
 
     assert Table.published(File.read!(@guide)) == table,
            "#{@guide} is not what the matrix gives. Rewrite it with " <>

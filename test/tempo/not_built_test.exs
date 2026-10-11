@@ -25,31 +25,50 @@ defmodule Tempo.NotBuiltTest do
   # The calendars of one rule whose year does not begin with its first month.
   @turning [March25, March1, Sept1, Dec25]
 
-  defp read(text, calendar), do: Tempo.from_iso8601!(text, calendar)
+  defp read(text, calendar) do
+    Tempo.from_iso8601!(text, calendar)
+  end
 
-  defp not_built(target, calendar),
-    do: %ConversionError{reason: :not_built, target: target, calendar: calendar}
+  defp not_built(target, calendar) do
+    %ConversionError{reason: :not_built, target: target, calendar: calendar}
+  end
 
-  defp refused?({:error, %ConversionError{} = error}, target, calendar),
-    do: %{error | value: nil} == not_built(target, calendar)
+  defp refused?({:error, %ConversionError{} = error}, target, calendar) do
+    %{error | value: nil} == not_built(target, calendar)
+  end
 
-  defp refused?(_answer, _target, _calendar), do: false
+  defp refused?(_answer, _target, _calendar) do
+    false
+  end
 
   # The first day of each span of a set, as dates of the set's calendar.
-  defp first_days({:ok, %IntervalSet{} = set}, calendar),
-    do: for(interval <- IntervalSet.members(set), do: first_day(interval, calendar))
+  defp first_days({:ok, %IntervalSet{} = set}, calendar) do
+    for(interval <- IntervalSet.members(set), do: first_day(interval, calendar))
+  end
 
-  defp first_day(interval, calendar),
-    do: interval |> Interval.from() |> day(calendar)
+  defp first_day(interval, calendar) do
+    interval
+    |> Interval.from()
+    |> day(calendar)
+  end
 
   defp day(%Tempo{} = value, calendar) do
-    {:ok, date} = value |> Tempo.extend_resolution(:day) |> Tempo.trunc(:day) |> Tempo.to_date()
+    {:ok, date} =
+      value
+      |> Tempo.extend_resolution(:day)
+      |> Tempo.trunc(:day)
+      |> Tempo.to_date()
+
     Date.convert!(date, calendar)
   end
 
-  defp days(%Date.Range{} = range), do: Enum.to_list(range)
+  defp days(%Date.Range{} = range) do
+    Enum.to_list(range)
+  end
 
-  defp mondays(dates), do: Enum.filter(dates, &(Date.day_of_week(&1) == 1))
+  defp mondays(dates) do
+    Enum.filter(dates, &(Date.day_of_week(&1) == 1))
+  end
 
   # Refused until Calendrical counted these calendars' months from the day
   # the year begins (2026-10-10): the resolver counted a month's days as
@@ -92,7 +111,9 @@ defmodule Tempo.NotBuiltTest do
         # A count is of occurrences: the first three Mondays of the months
         # from the first.
         first_three =
-          1..3 |> Enum.flat_map(&mondays(days(calendar.month(1750, &1)))) |> Enum.take(3)
+          1..3
+          |> Enum.flat_map(&mondays(days(calendar.month(1750, &1))))
+          |> Enum.take(3)
 
         for {text, expected} <- [
               {"R4/1750Y11M/P1M/FL1DN", Enum.map(stepped, &hd/1)},
@@ -127,7 +148,12 @@ defmodule Tempo.NotBuiltTest do
         assert first_days(
                  Tempo.select(read("1750Y", calendar), read("L1K1IN", calendar)),
                  calendar
-               ) == [calendar.year(1750) |> days() |> mondays() |> hd()]
+               ) == [
+                 calendar.year(1750)
+                 |> days()
+                 |> mondays()
+                 |> hd()
+               ]
       end
     end
 
@@ -166,7 +192,10 @@ defmodule Tempo.NotBuiltTest do
 
     test "a day of the year is counted from the day the year begins" do
       for calendar <- @turning, day <- [1, 100, 365] do
-        date = calendar.year(1750) |> days() |> Enum.at(day - 1)
+        date =
+          calendar.year(1750)
+          |> days()
+          |> Enum.at(day - 1)
 
         assert first_days(Tempo.to_interval(read("1750YL#{day}ON", calendar)), calendar) == [date]
 
@@ -181,8 +210,16 @@ defmodule Tempo.NotBuiltTest do
     test "a day with no month, selected in a year, is a day of the year" do
       # It was refused while it was read as a day of the year's first month.
       for calendar <- @turning, {day, index} <- [{1, 0}, {15, 14}, {100, 99}, {-1, -1}] do
-        date = calendar.year(1750) |> days() |> Enum.at(index)
-        next = calendar.year(1751) |> days() |> Enum.at(index)
+        date =
+          calendar.year(1750)
+          |> days()
+          |> Enum.at(index)
+
+        next =
+          calendar.year(1751)
+          |> days()
+          |> Enum.at(index)
+
         year = read("1750Y", calendar)
 
         assert first_days(Tempo.to_interval(read("1750YL#{day}DN", calendar)), calendar) == [date]
@@ -196,14 +233,22 @@ defmodule Tempo.NotBuiltTest do
 
     test "a weekday given to select/2 is selected among the days of the month or the year" do
       for calendar <- @turning, month <- [1, 2, 12] do
-        expected = calendar.month(1750, month) |> days() |> mondays()
+        expected =
+          calendar.month(1750, month)
+          |> days()
+          |> mondays()
+
         selected = Tempo.select(read("1750Y#{month}M", calendar), read("1K", calendar))
 
         assert first_days(selected, calendar) == expected
       end
 
       for calendar <- @turning do
-        expected = calendar.year(1750) |> days() |> mondays()
+        expected =
+          calendar.year(1750)
+          |> days()
+          |> mondays()
+
         selected = Tempo.select(read("1750Y", calendar), read("1K", calendar))
 
         assert first_days(selected, calendar) == expected
@@ -227,7 +272,12 @@ defmodule Tempo.NotBuiltTest do
                [Date.new!(1750, 12, 31, Julian)]
 
       assert first_days(Tempo.to_interval(read("1750YL1K1IN", Julian)), Julian) ==
-               [Julian.year(1750) |> days() |> mondays() |> hd()]
+               [
+                 Julian.year(1750)
+                 |> days()
+                 |> mondays()
+                 |> hd()
+               ]
     end
   end
 
@@ -250,7 +300,13 @@ defmodule Tempo.NotBuiltTest do
             Date.compare(start, first) != :lt and Date.compare(start, last) != :gt,
             do: {year, start}
 
-      ends_year = if to_month < from_month, do: year + 1, else: year
+      ends_year =
+        if to_month < from_month do
+          year + 1
+        else
+          year
+        end
+
       {starts, Date.convert!(Date.new!(ends_year, to_month, 1), calendar)}
     end
 
@@ -265,7 +321,11 @@ defmodule Tempo.NotBuiltTest do
             Tempo.from_iso8601("1750Y#{code}M", calendar: calendar, territory: :GB)
 
           assert {code, first_day(season, calendar)} == {code, starts}
-          assert {code, season |> Interval.to() |> day(calendar)} == {code, ends}
+
+          assert {code,
+                  season
+                  |> Interval.to()
+                  |> day(calendar)} == {code, ends}
         end
 
         # A season of a hemisphere, by the sun, is a span within a year of it.
@@ -279,7 +339,10 @@ defmodule Tempo.NotBuiltTest do
         {:ok, interval} = Tempo.to_interval(read("1750Y#{32 + quarter}M", calendar))
 
         assert first_day(interval, calendar) == first
-        assert interval |> Interval.to() |> day(calendar) == Date.add(last, 1)
+
+        assert interval
+               |> Interval.to()
+               |> day(calendar) == Date.add(last, 1)
       end
     end
 
@@ -294,14 +357,28 @@ defmodule Tempo.NotBuiltTest do
   # units hold, where the days of such a year are not in the order of their
   # numbers.
   describe "a step from a value that holds several months or years" do
-    defp held([value]), do: "#{value}"
-    defp held(values), do: "{#{Enum.join(values, ",")}}"
+    defp held([value]) do
+      "#{value}"
+    end
 
-    defp in_order(dates), do: dates |> Enum.uniq() |> Enum.sort_by(&Date.to_gregorian_days/1)
+    defp held(values) do
+      "{#{Enum.join(values, ",")}}"
+    end
+
+    defp in_order(dates) do
+      dates
+      |> Enum.uniq()
+      |> Enum.sort_by(&Date.to_gregorian_days/1)
+    end
 
     # The first day of each span an answer names.
-    defp landed(%IntervalSet{} = set, calendar), do: first_days({:ok, set}, calendar)
-    defp landed(value, calendar), do: first_days(Tempo.to_interval_set(value), calendar)
+    defp landed(%IntervalSet{} = set, calendar) do
+      first_days({:ok, set}, calendar)
+    end
+
+    defp landed(value, calendar) do
+      first_days(Tempo.to_interval_set(value), calendar)
+    end
 
     for calendar <- @turning do
       test "is each of its dates stepped by the calendar, in #{inspect(calendar)}" do
@@ -340,8 +417,19 @@ defmodule Tempo.NotBuiltTest do
       test "is each of its months and years from its first day, in #{inspect(calendar)}" do
         calendar = unquote(calendar)
 
-        months = for month <- [3, 4], do: 1750 |> calendar.month(month) |> Enum.at(1)
-        years = for year <- [1750, 1751], do: year |> calendar.year() |> Enum.at(1)
+        months =
+          for month <- [3, 4] do
+            1750
+            |> calendar.month(month)
+            |> Enum.at(1)
+          end
+
+        years =
+          for year <- [1750, 1751] do
+            year
+            |> calendar.year()
+            |> Enum.at(1)
+          end
 
         assert landed(Tempo.shift(read("1750Y{3,4}M", calendar), day: 1), calendar) == months
         assert landed(Tempo.shift(read("{1750,1751}Y", calendar), day: 1), calendar) == years
@@ -392,7 +480,9 @@ defmodule Tempo.NotBuiltTest do
       {:ok, first} = Tempo.to_date(first)
       {:ok, last} = Tempo.to_date(last)
 
-      first |> Stream.iterate(&Date.add(&1, 1)) |> Enum.take(Date.diff(last, first) + 1)
+      first
+      |> Stream.iterate(&Date.add(&1, 1))
+      |> Enum.take(Date.diff(last, first) + 1)
     end
 
     defp days_named(value) do
@@ -401,21 +491,40 @@ defmodule Tempo.NotBuiltTest do
     end
 
     defp days_between(member) do
-      {:ok, first} = member |> Interval.from() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
-      {:ok, last} = member |> Interval.to() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
+      {:ok, first} =
+        member
+        |> Interval.from()
+        |> Tempo.extend_resolution(:day)
+        |> Tempo.to_date()
 
-      first |> Stream.iterate(&Date.add(&1, 1)) |> Enum.take(Date.diff(last, first))
+      {:ok, last} =
+        member
+        |> Interval.to()
+        |> Tempo.extend_resolution(:day)
+        |> Tempo.to_date()
+
+      first
+      |> Stream.iterate(&Date.add(&1, 1))
+      |> Enum.take(Date.diff(last, first))
     end
 
     test "is each hour a mask stands for, a day on" do
       # Each hour of the 15th of the third and of the fourth month of 1750,
       # a day on: the two days after them, in the order of the year.
       {:ok, shifted} =
-        "1750Y{3,4}M15DTXXH" |> read(March25) |> Tempo.shift(day: 1) |> Tempo.to_interval_set()
+        "1750Y{3,4}M15DTXXH"
+        |> read(March25)
+        |> Tempo.shift(day: 1)
+        |> Tempo.to_interval_set()
 
       days =
         for member <- IntervalSet.members(shifted) do
-          {:ok, date} = member |> Interval.from() |> Tempo.trunc(:day) |> Tempo.to_date()
+          {:ok, date} =
+            member
+            |> Interval.from()
+            |> Tempo.trunc(:day)
+            |> Tempo.to_date()
+
           date
         end
 
@@ -480,7 +589,14 @@ defmodule Tempo.NotBuiltTest do
     test "several days of the year are stepped date by date, by the calendar" do
       for calendar <- @turning do
         shifted = Tempo.shift(read("{1750,1751}Y100O", calendar), day: 1)
-        expected = for year <- [1750, 1751], do: year |> calendar.year() |> days() |> Enum.at(100)
+
+        expected =
+          for year <- [1750, 1751] do
+            year
+            |> calendar.year()
+            |> days()
+            |> Enum.at(100)
+          end
 
         assert Enum.map(shifted, &day(&1, calendar)) == expected
       end
@@ -509,7 +625,10 @@ defmodule Tempo.NotBuiltTest do
         {:ok, span} = Tempo.to_interval(read("#{year}Y#{month}M", England))
 
         assert {year, month, first_day(span, England)} == {year, month, first}
-        assert span |> Interval.to() |> day(England) == Date.add(last, 1)
+
+        assert span
+               |> Interval.to()
+               |> day(England) == Date.add(last, 1)
       end
 
       assert Tempo.new(year: 1750, month: 3, calendar: England) == {:ok, read("1750Y3M", England)}
@@ -621,7 +740,9 @@ defmodule Tempo.NotBuiltTest do
     end
 
     test "writes its end as the Gregorian date it is" do
-      until = Date.new!(5786, 6, 10, Hebrew) |> Date.convert!(Calendar.ISO)
+      until =
+        Date.new!(5786, 6, 10, Hebrew)
+        |> Date.convert!(Calendar.ISO)
 
       daily = %Interval{
         recurrence: :infinity,

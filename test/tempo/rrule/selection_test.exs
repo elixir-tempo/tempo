@@ -972,9 +972,13 @@ defmodule Tempo.RRule.SelectionTest do
       Date.add(first, Integer.mod(1 - Date.day_of_week(first), 7))
     end
 
-    defp first_monday_of_november(year), do: first_monday(year, 11)
+    defp first_monday_of_november(year) do
+      first_monday(year, 11)
+    end
 
-    defp days_from(date, count), do: for(day <- 0..(count - 1), do: Date.add(date, day))
+    defp days_from(date, count) do
+      for(day <- 0..(count - 1), do: Date.add(date, day))
+    end
 
     defp iso_week(date) do
       {_week_year, week} = :calendar.iso_week_number(Date.to_erl(date))
@@ -999,7 +1003,11 @@ defmodule Tempo.RRule.SelectionTest do
 
     defp starts({:ok, %IntervalSet{} = set}) do
       for member <- IntervalSet.members(set) do
-        {:ok, date} = member |> Interval.from() |> Tempo.to_date()
+        {:ok, date} =
+          member
+          |> Interval.from()
+          |> Tempo.to_date()
+
         Date.to_iso8601(date)
       end
     end
@@ -1029,7 +1037,11 @@ defmodule Tempo.RRule.SelectionTest do
           for member <- IntervalSet.members(set),
               from = Interval.from(member),
               Tempo.year(from) == year do
-            {:ok, date} = from |> Tempo.trunc(:day) |> Tempo.to_date()
+            {:ok, date} =
+              from
+              |> Tempo.trunc(:day)
+              |> Tempo.to_date()
+
             {date, Tempo.hour(from)}
           end
 
@@ -1183,7 +1195,11 @@ defmodule Tempo.RRule.SelectionTest do
     set
     |> IntervalSet.members()
     |> Enum.map(fn interval ->
-      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      {:ok, date} =
+        interval
+        |> Interval.from()
+        |> Tempo.to_date()
+
       Date.to_iso8601(date)
     end)
   end
@@ -1196,8 +1212,14 @@ defmodule Tempo.RRule.SelectionTest do
     set
     |> IntervalSet.members()
     |> Enum.map(fn interval ->
-      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
-      date |> Date.convert!(Calendar.ISO) |> Date.to_iso8601()
+      {:ok, date} =
+        interval
+        |> Interval.from()
+        |> Tempo.to_date()
+
+      date
+      |> Date.convert!(Calendar.ISO)
+      |> Date.to_iso8601()
     end)
   end
 
@@ -1261,7 +1283,10 @@ defmodule Tempo.RRule.SelectionTest do
 
       for occurrence <- IntervalSet.members(set) do
         {:ok, date} =
-          occurrence |> Interval.from() |> Tempo.extend_resolution(:day) |> Tempo.to_date()
+          occurrence
+          |> Interval.from()
+          |> Tempo.extend_resolution(:day)
+          |> Tempo.to_date()
 
         date
       end
@@ -1429,23 +1454,36 @@ defmodule Tempo.RRule.SelectionTest do
 
   # Materialise a value holding a selection and list the ISO dates it yields.
   defp selection_dates(iso, options \\ []) do
-    {:ok, set} = iso |> Tempo.from_iso8601!() |> Tempo.to_interval(options)
+    {:ok, set} =
+      iso
+      |> Tempo.from_iso8601!()
+      |> Tempo.to_interval(options)
 
     set
     |> IntervalSet.members()
     |> Enum.map(fn interval ->
-      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      {:ok, date} =
+        interval
+        |> Interval.from()
+        |> Tempo.to_date()
+
       Date.to_iso8601(date)
     end)
   end
 
   # Materialise a recurrence within `within` and list its occurrences.
-  defp occurrence_spans(iso, within),
-    do: iso |> Tempo.from_iso8601!() |> occurrence_spans_of(within)
+  defp occurrence_spans(iso, within) do
+    iso
+    |> Tempo.from_iso8601!()
+    |> occurrence_spans_of(within)
+  end
 
   defp occurrence_spans_of(recurrence, within) do
     {:ok, set} = Tempo.to_interval(recurrence, within: within)
-    set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&Tempo.to_iso8601!/1)
   end
 
   # Parse one iCalendar event recurring by `rule` and list its occurrences.
@@ -1465,7 +1503,9 @@ defmodule Tempo.RRule.SelectionTest do
       END:VCALENDAR
       """)
 
-    set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&Tempo.to_iso8601!/1)
   end
 
   # Expand an RRULE from `dtstart` and list the ISO dates of its occurrences.
@@ -1473,7 +1513,11 @@ defmodule Tempo.RRule.SelectionTest do
     {:ok, occurrences} = Expander.expand(rule, dtstart)
 
     Enum.map(occurrences, fn interval ->
-      {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
+      {:ok, date} =
+        interval
+        |> Interval.from()
+        |> Tempo.to_date()
+
       Date.to_iso8601(date)
     end)
   end

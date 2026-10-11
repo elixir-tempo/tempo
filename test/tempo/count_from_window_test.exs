@@ -36,12 +36,29 @@ defmodule Tempo.CountFromWindowTest do
 
   ## The measure
 
-  defp named?(:new_year, date), do: date.month == 1 and date.day == 1
-  defp named?(:last_of_june, date), do: date.month == 6 and date.day == 30
-  defp named?(:fifteenth, date), do: date.day == 15
-  defp named?(:first_monday, date), do: Date.day_of_week(date) == 1 and date.day <= 7
-  defp named?(:monday, date), do: Date.day_of_week(date) == 1
-  defp named?(:weekend, date), do: Date.day_of_week(date) in [6, 7]
+  defp named?(:new_year, date) do
+    date.month == 1 and date.day == 1
+  end
+
+  defp named?(:last_of_june, date) do
+    date.month == 6 and date.day == 30
+  end
+
+  defp named?(:fifteenth, date) do
+    date.day == 15
+  end
+
+  defp named?(:first_monday, date) do
+    Date.day_of_week(date) == 1 and date.day <= 7
+  end
+
+  defp named?(:monday, date) do
+    Date.day_of_week(date) == 1
+  end
+
+  defp named?(:weekend, date) do
+    Date.day_of_week(date) in [6, 7]
+  end
 
   # The first `count` days of the window a rule names.
   defp first_named(name, count, from \\ @window_from) do
@@ -53,15 +70,22 @@ defmodule Tempo.CountFromWindowTest do
 
   # The days a conversion gave: one interval for a rule of one occurrence,
   # and a set of them for a longer one.
-  defp days_of({:ok, %Interval{} = one}), do: [day_of(one)]
-  defp days_of({:ok, %IntervalSet{} = set}), do: Enum.map(IntervalSet.members(set), &day_of/1)
+  defp days_of({:ok, %Interval{} = one}) do
+    [day_of(one)]
+  end
+
+  defp days_of({:ok, %IntervalSet{} = set}) do
+    Enum.map(IntervalSet.members(set), &day_of/1)
+  end
 
   defp day_of(%Interval{} = occurrence) do
     {:ok, date} = Tempo.to_date(Interval.from(occurrence))
     Date.convert!(date, Calendar.ISO)
   end
 
-  defp window, do: Tempo.from_iso8601!("#{@window_from}/#{@window_to}")
+  defp window do
+    Tempo.from_iso8601!("#{@window_from}/#{@window_to}")
+  end
 
   describe "a rule with a count and no start, in a window" do
     test "has the first of its occurrences from the window's start, as many as it counts" do

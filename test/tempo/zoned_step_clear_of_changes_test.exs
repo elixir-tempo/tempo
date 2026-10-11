@@ -32,7 +32,9 @@ defmodule Tempo.ZonedStepClearOfChangesTest do
     [year: lands.year, month: lands.month, day: lands.day, hour: lands.hour, minute: lands.minute]
   end
 
-  defp shown_once?(date, time, zone), do: match?({:ok, _reading}, DateTime.new(date, time, zone))
+  defp shown_once?(date, time, zone) do
+    match?({:ok, _reading}, DateTime.new(date, time, zone))
+  end
 
   # The reading a time of day is on a date in a zone: itself, or where the
   # clock skips it the reading as long after the skip begins as it is
@@ -66,19 +68,29 @@ defmodule Tempo.ZonedStepClearOfChangesTest do
     TimeZoneDatabase.changes(zone, from, to)
   end
 
-  defp gregorian_seconds(date, time),
-    do: :calendar.datetime_to_gregorian_seconds({Date.to_erl(date), Time.to_erl(time)})
+  defp gregorian_seconds(date, time) do
+    :calendar.datetime_to_gregorian_seconds({Date.to_erl(date), Time.to_erl(time)})
+  end
 
-  defp at(date, time, zone, :hour),
-    do: Tempo.from_iso8601!("#{date}T#{pad(time.hour)}[#{zone}]")
+  defp at(date, time, zone, :hour) do
+    Tempo.from_iso8601!("#{date}T#{pad(time.hour)}[#{zone}]")
+  end
 
-  defp at(date, time, zone, :minute),
-    do: Tempo.from_iso8601!("#{date}T#{pad(time.hour)}:#{pad(time.minute)}[#{zone}]")
+  defp at(date, time, zone, :minute) do
+    Tempo.from_iso8601!("#{date}T#{pad(time.hour)}:#{pad(time.minute)}[#{zone}]")
+  end
 
-  defp pad(number), do: String.pad_leading(Integer.to_string(number), 2, "0")
+  defp pad(number) do
+    String.pad_leading(Integer.to_string(number), 2, "0")
+  end
 
-  defp units(reading, :hour), do: Keyword.delete(reading, :minute)
-  defp units(reading, :minute), do: reading
+  defp units(reading, :hour) do
+    Keyword.delete(reading, :minute)
+  end
+
+  defp units(reading, :minute) do
+    reading
+  end
 
   describe "the changes found for a zone" do
     test "show a moment clear of them, or not, once they are found" do
@@ -210,6 +222,11 @@ defmodule Tempo.ZonedStepClearOfChangesTest do
     Date.range(Date.add(on, -3), Date.add(on, 3))
   end
 
-  defp resolution(%Tempo{time: time}),
-    do: if(Keyword.has_key?(time, :minute), do: :minute, else: :hour)
+  defp resolution(%Tempo{time: time}) do
+    if Keyword.has_key?(time, :minute) do
+      :minute
+    else
+      :hour
+    end
+  end
 end

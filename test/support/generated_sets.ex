@@ -112,10 +112,10 @@ defmodule Tempo.GeneratedSets do
   @doc false
   # Every generated text, as `%{text:, family:, expect:, …}`.
   @spec texts() :: [map()]
-  def texts,
-    do:
-      value_sets() ++
-        zoned_sets() ++ mixed_sets() ++ unit_sets() ++ composed_sets() ++ nested_sets()
+  def texts do
+    value_sets() ++
+      zoned_sets() ++ mixed_sets() ++ unit_sets() ++ composed_sets() ++ nested_sets()
+  end
 
   @doc false
   # What each text is found to break, as `{property, text, detail}`: none
@@ -154,25 +154,40 @@ defmodule Tempo.GeneratedSets do
     ]
   end
 
-  defp entry_text({:member, text}), do: text
-  defp entry_text({:range, first, last}), do: first <> ".." <> last
-  defp entry_text({:to, last}), do: ".." <> last
-  defp entry_text({:from, first}), do: first <> ".."
+  defp entry_text({:member, text}) do
+    text
+  end
 
-  defp generated({:refused, error}, text, family),
-    do: %{text: text, family: family, expect: {:refused, error}}
+  defp entry_text({:range, first, last}) do
+    first <> ".." <> last
+  end
 
-  defp generated({:read, entries}, text, family),
-    do: %{text: text, family: family, expect: :read, entries: entries}
+  defp entry_text({:to, last}) do
+    ".." <> last
+  end
+
+  defp entry_text({:from, first}) do
+    first <> ".."
+  end
+
+  defp generated({:refused, error}, text, family) do
+    %{text: text, family: family, expect: {:refused, error}}
+  end
+
+  defp generated({:read, entries}, text, family) do
+    %{text: text, family: family, expect: :read, entries: entries}
+  end
 
   # What a set's entries are read as. A range of intervals is refused: a
   # range runs from one date or time to another. A range from one division
   # of a year to another is each division between them where they are a run
   # in time, and refused where they are none or the range is open at an end.
   defp as_they_are_read(entries, :interval) do
-    if Enum.all?(entries, &match?({:member, _text}, &1)),
-      do: {:read, entries},
-      else: {:refused, Tempo.ParseError}
+    if Enum.all?(entries, &match?({:member, _text}, &1)) do
+      {:read, entries}
+    else
+      {:refused, Tempo.ParseError}
+    end
   end
 
   defp as_they_are_read(entries, family)
@@ -185,29 +200,44 @@ defmodule Tempo.GeneratedSets do
     end)
   end
 
-  defp as_they_are_read(entries, _family), do: {:read, entries}
+  defp as_they_are_read(entries, _family) do
+    {:read, entries}
+  end
 
-  defp divisions({:member, text}), do: [{:member, text}]
+  defp divisions({:member, text}) do
+    [{:member, text}]
+  end
 
   defp divisions({:range, first, last}) do
     codes = division(first)..division(last)
 
-    if run_in_time?(codes),
-      do: for(code <- codes, do: {:member, "2026-#{code}"}),
-      else: :no_run
+    if run_in_time?(codes) do
+      for(code <- codes, do: {:member, "2026-#{code}"})
+    else
+      :no_run
+    end
   end
 
-  defp divisions(_open_at_an_end), do: :no_run
+  defp divisions(_open_at_an_end) do
+    :no_run
+  end
 
-  defp division("2026-" <> code), do: String.to_integer(code)
+  defp division("2026-" <> code) do
+    String.to_integer(code)
+  end
 
   # The seasons of a year numbered 21 to 24 run on from one another, a
   # winter being of the year it starts in, and its quarters do. Its southern
   # seasons (29 to 32) do not: the summer numbered 30 runs into the year
   # after, and the autumn numbered 31 is the one that ended six months
   # before that summer began.
-  defp run_in_time?(first..last//_) when first in 29..30 and last in 31..32, do: false
-  defp run_in_time?(_seasons_or_quarters), do: true
+  defp run_in_time?(first..last//_) when first in 29..30 and last in 31..32 do
+    false
+  end
+
+  defp run_in_time?(_seasons_or_quarters) do
+    true
+  end
 
   # A set of whole values with a zone after it, which each member takes.
   defp zoned_sets do
@@ -324,14 +354,17 @@ defmodule Tempo.GeneratedSets do
     end
   end
 
-  defp unit_set(text, family, type, members),
-    do: %{text: text, family: family, expect: :read, type: type, members: members}
+  defp unit_set(text, family, type, members) do
+    %{text: text, family: family, expect: :read, type: type, members: members}
+  end
 
   # One of several values in a unit is written with a designator after it.
   defp brackets(family) do
-    if String.starts_with?(Atom.to_string(family), "explicit"),
-      do: [{"{", "}", :all}, {"[", "]", :one}],
-      else: [{"{", "}", :all}]
+    if String.starts_with?(Atom.to_string(family), "explicit") do
+      [{"{", "}", :all}, {"[", "]", :one}]
+    else
+      [{"{", "}", :all}]
+    end
   end
 
   # What is written in the braces, and the values it names. A range is each
@@ -353,7 +386,12 @@ defmodule Tempo.GeneratedSets do
 
     for value <- String.to_integer(first)..String.to_integer(last) do
       text = Integer.to_string(value)
-      if padded?, do: String.pad_leading(text, width, "0"), else: text
+
+      if padded? do
+        String.pad_leading(text, width, "0")
+      else
+        text
+      end
     end
   end
 

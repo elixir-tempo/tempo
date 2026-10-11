@@ -23,18 +23,25 @@ defmodule Tempo.TimeZoneDatabaseChangesTest do
 
   ## The measure
 
-  defp seconds(date, time \\ ~T[00:00:00]),
-    do: :calendar.datetime_to_gregorian_seconds({Date.to_erl(date), Time.to_erl(time)})
+  defp seconds(date, time \\ ~T[00:00:00]) do
+    :calendar.datetime_to_gregorian_seconds({Date.to_erl(date), Time.to_erl(time)})
+  end
 
   defp offset_at(zone, moment) do
-    at = moment |> DateTime.from_gregorian_seconds() |> DateTime.shift_zone!(zone)
+    at =
+      moment
+      |> DateTime.from_gregorian_seconds()
+      |> DateTime.shift_zone!(zone)
+
     at.utc_offset + at.std_offset
   end
 
   # Each change of a zone's offset after `from` and no later than `to`:
   # the span is asked an hour at a time, an hour its offset changes in a
   # minute at a time, and such a minute a second at a time.
-  defp measured(zone, from, to), do: measured(zone, from, to, [@hour, 60, 1])
+  defp measured(zone, from, to) do
+    measured(zone, from, to, [@hour, 60, 1])
+  end
 
   defp measured(zone, from, to, [1]) do
     for moment <- (from + 1)..to//1,
@@ -51,9 +58,11 @@ defmodule Tempo.TimeZoneDatabaseChangesTest do
     |> Enum.flat_map(fn starts ->
       ends = min(starts + step, to)
 
-      if offset_at(zone, starts) == offset_at(zone, ends),
-        do: [],
-        else: measured(zone, starts, ends, finer)
+      if offset_at(zone, starts) == offset_at(zone, ends) do
+        []
+      else
+        measured(zone, starts, ends, finer)
+      end
     end)
   end
 
@@ -71,8 +80,13 @@ defmodule Tempo.TimeZoneDatabaseChangesTest do
     {"Asia/Kolkata", 2048, 0}
   ]
 
-  defp spring(year), do: {seconds(Date.new!(year, 3, 1)), seconds(Date.new!(year, 4, 12))}
-  defp autumn(year), do: {seconds(Date.new!(year, 9, 20)), seconds(Date.new!(year, 11, 12))}
+  defp spring(year) do
+    {seconds(Date.new!(year, 3, 1)), seconds(Date.new!(year, 4, 12))}
+  end
+
+  defp autumn(year) do
+    {seconds(Date.new!(year, 9, 20)), seconds(Date.new!(year, 11, 12))}
+  end
 
   describe "the changes of a span of half a year or less" do
     test "are those Elixir's DateTime has, each at its second, asked before and after the year is found" do
@@ -80,7 +94,10 @@ defmodule Tempo.TimeZoneDatabaseChangesTest do
         spans = [spring(year), autumn(year)]
         expected = Enum.map(spans, fn {from, to} -> measured(zone, from, to) end)
 
-        assert {zone, year, expected |> List.flatten() |> Enum.count()} == {zone, year, count}
+        assert {zone, year,
+                expected
+                |> List.flatten()
+                |> Enum.count()} == {zone, year, count}
 
         asked = Enum.map(spans, fn {from, to} -> TimeZoneDatabase.changes(zone, from, to) end)
         assert {zone, year, asked} == {zone, year, expected}

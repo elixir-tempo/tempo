@@ -31,13 +31,17 @@ defmodule Tempo.SelectByARecurrenceTest do
   @week Date.range(~D[2026-06-15], ~D[2026-06-21])
   @june Date.range(~D[2026-06-01], ~D[2026-06-30])
 
-  defp microseconds(%NaiveDateTime{} = moment),
-    do: NaiveDateTime.diff(moment, @epoch, :microsecond)
+  defp microseconds(%NaiveDateTime{} = moment) do
+    NaiveDateTime.diff(moment, @epoch, :microsecond)
+  end
 
-  defp at(%Date{} = date, %Time{} = time), do: NaiveDateTime.new!(date, time)
+  defp at(%Date{} = date, %Time{} = time) do
+    NaiveDateTime.new!(date, time)
+  end
 
-  defp span(%NaiveDateTime{} = from, %NaiveDateTime{} = to),
-    do: {microseconds(from), microseconds(to)}
+  defp span(%NaiveDateTime{} = from, %NaiveDateTime{} = to) do
+    {microseconds(from), microseconds(to)}
+  end
 
   defp selected(base, selector) do
     {:ok, set} = Tempo.select(base, selector)
@@ -82,7 +86,10 @@ defmodule Tempo.SelectByARecurrenceTest do
     test "goes on without end from a base that has none" do
       {:ok, set} = Tempo.select(~o"2026-06-15/..", ~o"T9H/..")
 
-      assert set |> IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.to_iso8601!/1) ==
+      assert set
+             |> IntervalSet.walk()
+             |> Enum.take(2)
+             |> Enum.map(&Tempo.to_iso8601!/1) ==
                ["2026Y6M15DT9H/16DT0H", "2026Y6M16DT9H/17DT0H"]
     end
   end
@@ -143,7 +150,9 @@ defmodule Tempo.SelectByARecurrenceTest do
   end
 
   describe "a recurrence of another calendar than the span's" do
-    defp hebrew(text), do: Tempo.from_iso8601!(text, Calendrical.Hebrew)
+    defp hebrew(text) do
+      Tempo.from_iso8601!(text, Calendrical.Hebrew)
+    end
 
     test "is refused, as a selection of another calendar is" do
       # A rule is counted in its calendar, and its occurrences are that

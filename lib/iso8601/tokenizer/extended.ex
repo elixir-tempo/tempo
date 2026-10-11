@@ -52,7 +52,11 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
 
   defp extended_segment do
     ignore(ascii_char([?[]))
-    |> optional(ascii_char([?!]) |> replace(true) |> unwrap_and_tag(:critical))
+    |> optional(
+      ascii_char([?!])
+      |> replace(true)
+      |> unwrap_and_tag(:critical)
+    )
     |> choice([
       tagged_suffix(),
       numeric_offset(),
@@ -83,7 +87,10 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
 
     values =
       value_part
-      |> repeat(ignore(ascii_char([?-])) |> concat(value_part))
+      |> repeat(
+        ignore(ascii_char([?-]))
+        |> concat(value_part)
+      )
       |> wrap()
       |> unwrap_and_tag(:values)
 
@@ -100,13 +107,22 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   # hour (RFC 3339 §5.6, `time-minute`): `+01:60` was read as `+02:00`.
   defp numeric_offset do
     sign_char = ascii_char([?+, ?-])
-    minutes = ascii_char([?0..?5]) |> concat(digit())
+
+    minutes =
+      ascii_char([?0..?5])
+      |> concat(digit())
 
     sign_char
     |> choice([
-      digit() |> times(2) |> ignore(colon()) |> concat(minutes),
-      digit() |> times(2) |> concat(minutes),
-      digit() |> times(2)
+      digit()
+      |> times(2)
+      |> ignore(colon())
+      |> concat(minutes),
+      digit()
+      |> times(2)
+      |> concat(minutes),
+      digit()
+      |> times(2)
     ])
     |> reduce({__MODULE__, :to_offset, []})
     |> unwrap_and_tag(:offset)
@@ -188,7 +204,9 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
     end
   end
 
-  defp pop_trailing_extended(_popped, tokens), do: {:ok, {tokens, nil}}
+  defp pop_trailing_extended(_popped, tokens) do
+    {:ok, {tokens, nil}}
+  end
 
   # Interval endpoints produced by `qualified_endpoint` may carry
   # per-endpoint `{:extended, raw_segments}` entries embedded in
@@ -225,8 +243,9 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   # A member of a set that is a date or a time carries its own suffix as an
   # end of an interval does, and so does each end of a range.
   defp validate_token({tag, inner} = member)
-       when tag in [:date, :datetime, :time_of_day] and is_list(inner),
-       do: validate_interval_part(member)
+       when tag in [:date, :datetime, :time_of_day] and is_list(inner) do
+    validate_interval_part(member)
+  end
 
   defp validate_token({:range, ends}) when is_list(ends) do
     with {:ok, ends} <- reduce_while_ok(ends, &validate_range_end/1) do
@@ -244,7 +263,9 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
     with {:ok, {:date, units}} <- validate_interval_part({:date, units}), do: {:ok, units}
   end
 
-  defp validate_range_end(tagged_or_open), do: validate_token(tagged_or_open)
+  defp validate_range_end(tagged_or_open) do
+    validate_token(tagged_or_open)
+  end
 
   # A recurrence's domain is a set, read as one.
   defp validate_interval_part({:domain_set, members}) when is_list(members) do
@@ -304,12 +325,16 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   # critical (`apply_payload/4`), the value having the zone it was given
   # first.
   defp zone_written_first([first | later]) do
-    if zone_segment?(first),
-      do: :ok,
-      else: Enum.find_value(later, :ok, &zone_after_a_tag/1)
+    if zone_segment?(first) do
+      :ok
+    else
+      Enum.find_value(later, :ok, &zone_after_a_tag/1)
+    end
   end
 
-  defp zone_written_first([]), do: :ok
+  defp zone_written_first([]) do
+    :ok
+  end
 
   defp zone_after_a_tag(segment) do
     if zone_segment?(segment) do
@@ -351,7 +376,9 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   # the one read, critical or not. `keys` holds each key met, with its
   # values and whether it was critical.
 
-  defp build_extended([], acc, _index, _keys), do: {:ok, acc}
+  defp build_extended([], acc, _index, _keys) do
+    {:ok, acc}
+  end
 
   defp build_extended([segment | rest], acc, index, keys) do
     {critical, payload} = split_critical(segment)
@@ -374,14 +401,29 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   # The key of a suffix that has one, and its values: a tag (`[key=value]`),
   # and a calendar in the hyphen form (`[u-ca-hebrew]`), whose key is the
   # tag's `u-ca`.
-  defp keyed({:tag, [key: key, values: values]}), do: {key, values}
-  defp keyed({:zone, "u-ca-" <> calendar}), do: {"u-ca", String.split(calendar, "-")}
-  defp keyed(_zone_or_offset), do: nil
+  defp keyed({:tag, [key: key, values: values]}) do
+    {key, values}
+  end
 
-  defp met(keys, nil, _critical), do: keys
-  defp met(keys, {key, values}, critical), do: Map.put(keys, key, {values, critical})
+  defp keyed({:zone, "u-ca-" <> calendar}) do
+    {"u-ca", String.split(calendar, "-")}
+  end
 
-  defp written_before(nil, _critical, _keys), do: :first
+  defp keyed(_zone_or_offset) do
+    nil
+  end
+
+  defp met(keys, nil, _critical) do
+    keys
+  end
+
+  defp met(keys, {key, values}, critical) do
+    Map.put(keys, key, {values, critical})
+  end
+
+  defp written_before(nil, _critical, _keys) do
+    :first
+  end
 
   defp written_before({key, values}, critical, keys) do
     case Map.get(keys, key) do
@@ -415,9 +457,17 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
     {false, unwrap_payload(rest)}
   end
 
-  defp unwrap_payload([{:tag, fields}]), do: {:tag, fields}
-  defp unwrap_payload([{:zone, zone}]), do: {:zone, zone}
-  defp unwrap_payload([{:offset, offset}]), do: {:offset, offset}
+  defp unwrap_payload([{:tag, fields}]) do
+    {:tag, fields}
+  end
+
+  defp unwrap_payload([{:zone, zone}]) do
+    {:zone, zone}
+  end
+
+  defp unwrap_payload([{:offset, offset}]) do
+    {:offset, offset}
+  end
 
   # A `u-…` BCP 47 Unicode extension in the hyphen form (no `=`) — e.g.
   # `[u-ca-hebrew]`. It has no `=`, so it tokenises as a bare "zone"; route
@@ -563,8 +613,11 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   # `:islamic_civil`.
   defp additional_calendar_identifier(raw) do
     Enum.find_value(Calendrical.additional_calendars(), :error, fn {identifier, _module} ->
-      if identifier |> Atom.to_string() |> String.replace("_", "-") == raw,
-        do: {:ok, identifier}
+      if identifier
+         |> Atom.to_string()
+         |> String.replace("_", "-") == raw do
+        {:ok, identifier}
+      end
     end)
   end
 

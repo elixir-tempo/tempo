@@ -47,7 +47,9 @@ defmodule Tempo.SplitTest do
              do: {calendar, date, zone}
            )
 
-  defp read(text, calendar), do: Tempo.from_iso8601!(text, calendar)
+  defp read(text, calendar) do
+    Tempo.from_iso8601!(text, calendar)
+  end
 
   describe "split/1" do
     test "gives the date written before the T and the time of day written from it" do

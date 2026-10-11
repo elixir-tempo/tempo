@@ -123,8 +123,13 @@ defmodule Tempo.Reference.Test do
   end
 
   # A microsecond has no finer unit to walk by.
-  defp walkable?(%{fraction: {_value, 6}}), do: false
-  defp walkable?(_point), do: true
+  defp walkable?(%{fraction: {_value, 6}}) do
+    false
+  end
+
+  defp walkable?(_point) do
+    true
+  end
 
   # The first spelling of a point, read.
   defp reading(point) do
@@ -155,13 +160,21 @@ defmodule Tempo.Reference.Test do
     end
   end
 
-  defp fraction(%{fraction: nil}), do: []
+  defp fraction(%{fraction: nil}) do
+    []
+  end
 
-  defp fraction(%{fraction: {value, digits}}),
-    do: [microsecond: {value * Integer.pow(10, 6 - digits), digits}]
+  defp fraction(%{fraction: {value, digits}}) do
+    [microsecond: {value * Integer.pow(10, 6 - digits), digits}]
+  end
 
-  defp options(%{zone: {:zone, name}}), do: [zone: name]
-  defp options(%{calendar: calendar}), do: [calendar: calendar]
+  defp options(%{zone: {:zone, name}}) do
+    [zone: name]
+  end
+
+  defp options(%{calendar: calendar}) do
+    [calendar: calendar]
+  end
 
   describe "the accessors" do
     property "read a day's units as Date gives them" do
@@ -203,7 +216,13 @@ defmodule Tempo.Reference.Test do
     property "resolution/1 is the last unit written" do
       check all(point <- map(Generators.dated(), &%{&1 | fraction: nil})) do
         {unit, _value} = List.last(point.date ++ point.time)
-        expected = if unit in [:day_of_week, :day_of_year], do: :day, else: unit
+
+        expected =
+          if unit in [:day_of_week, :day_of_year] do
+            :day
+          else
+            unit
+          end
 
         assert Tempo.resolution(reading(point)) == {expected, 1}
       end
@@ -504,7 +523,13 @@ defmodule Tempo.Reference.Test do
         if unit in written and month_axis?(point) and unit != List.last(written) do
           {:ok, %{spans: [{from, to}]}} = Reference.span(truncated(point, unit))
           {:ok, _line, at} = Reference.start(point)
-          expected = if 2 * (at - from) >= to - from, do: to, else: from
+
+          expected =
+            if 2 * (at - from) >= to - from do
+              to
+            else
+              from
+            end
 
           {:ok, %{spans: [{rounded, _end}]}} = covered(Tempo.round(value, unit))
 
@@ -514,8 +539,13 @@ defmodule Tempo.Reference.Test do
     end
   end
 
-  defp month_axis?(%{date: [year: _, month: _, day: _]}), do: true
-  defp month_axis?(_point), do: false
+  defp month_axis?(%{date: [year: _, month: _, day: _]}) do
+    true
+  end
+
+  defp month_axis?(_point) do
+    false
+  end
 
   # A point with the units after `unit` left out.
   defp truncated(point, unit) do
@@ -578,14 +608,18 @@ defmodule Tempo.Reference.Test do
   end
 
   # The day a point is on, its time of day left out.
-  defp day_of(point), do: %{point | time: [], fraction: nil}
+  defp day_of(point) do
+    %{point | time: [], fraction: nil}
+  end
 
   # The reference places no day that starts or ends at a midnight its zone's
   # clock skips or shows twice: 31 August 1942 in Asia/Kolkata ends where the
   # clocks went from midnight to 01:00. A time on such a day is generated,
   # the reference placing the time, and the day is then asked of it. Those
   # days are measured, minute by minute, in `Tempo.ChangeOfTheClock`.
-  defp placed?(point), do: Reference.span(point) != :none
+  defp placed?(point) do
+    Reference.span(point) != :none
+  end
 
   describe "an interval" do
     property "is one value in every spelling, and covers from its start to its end" do
@@ -615,7 +649,13 @@ defmodule Tempo.Reference.Test do
       check all({from, to, count} <- Generators.interval()) do
         interval = read!(Spellings.text(from, :explicit) <> "/" <> Spellings.text(to, :explicit))
         {unit, _value} = List.last(from.date ++ from.time)
-        unit = if unit in [:day_of_week, :day_of_year], do: :day, else: unit
+
+        unit =
+          if unit in [:day_of_week, :day_of_year] do
+            :day
+          else
+            unit
+          end
 
         assert Tempo.duration(interval) == read!(Spellings.duration([{unit, count}]))
       end
@@ -669,11 +709,17 @@ defmodule Tempo.Reference.Test do
           "R#{count}/#{Spellings.text(point, :extended)}/" <> Spellings.duration([{unit, amount}])
 
         edges = for k <- 0..count, do: gregorian(Date.shift(date, [{unit, amount * k}]))
-        expected = edges |> Enum.chunk_every(2, 1, :discard) |> Enum.map(&List.to_tuple/1)
+
+        expected =
+          edges
+          |> Enum.chunk_every(2, 1, :discard)
+          |> Enum.map(&List.to_tuple/1)
 
         {:ok, occurrences} = Tempo.to_interval(read!(text))
 
-        assert occurrences |> IntervalSet.members() |> Enum.map(&one_span/1) == expected
+        assert occurrences
+               |> IntervalSet.members()
+               |> Enum.map(&one_span/1) == expected
       end
     end
 
@@ -699,15 +745,23 @@ defmodule Tempo.Reference.Test do
             seconds * 1_000_000
           end
 
-        expected = edges |> Enum.chunk_every(2, 1, :discard) |> Enum.map(&List.to_tuple/1)
+        expected =
+          edges
+          |> Enum.chunk_every(2, 1, :discard)
+          |> Enum.map(&List.to_tuple/1)
+
         {:ok, occurrences} = Tempo.to_interval(read!(text))
 
-        assert occurrences |> IntervalSet.members() |> Enum.map(&one_span/1) == expected
+        assert occurrences
+               |> IntervalSet.members()
+               |> Enum.map(&one_span/1) == expected
       end
     end
   end
 
-  defp gregorian(%Date{} = date), do: Date.to_gregorian_days(date) * 86_400 * 1_000_000
+  defp gregorian(%Date{} = date) do
+    Date.to_gregorian_days(date) * 86_400 * 1_000_000
+  end
 
   defp one_span(interval) do
     {:ok, %{spans: [span]}} = Extent.of(interval)
@@ -729,7 +783,10 @@ defmodule Tempo.Reference.Test do
 
         {:ok, spans} = Tempo.to_interval(read!(text))
 
-        assert spans |> members() |> Enum.map(&one_span/1) |> Enum.sort() == expected
+        assert spans
+               |> members()
+               |> Enum.map(&one_span/1)
+               |> Enum.sort() == expected
       end
     end
 
@@ -745,13 +802,20 @@ defmodule Tempo.Reference.Test do
 
         {:ok, spans} = Tempo.to_interval(read!(text))
 
-        assert spans |> members() |> Enum.map(&one_span/1) == expected
+        assert spans
+               |> members()
+               |> Enum.map(&one_span/1) == expected
       end
     end
   end
 
-  defp members(%Tempo.Interval{} = interval), do: [interval]
-  defp members(%IntervalSet{} = set), do: IntervalSet.members(set)
+  defp members(%Tempo.Interval{} = interval) do
+    [interval]
+  end
+
+  defp members(%IntervalSet{} = set) do
+    IntervalSet.members(set)
+  end
 
   describe "a calendar" do
     property "to_calendar/2 is the day Date.convert/2 gives" do
@@ -869,7 +933,13 @@ defmodule Tempo.Reference.Test do
       check all({year, week, day} <- week_date(), hour <- integer(0..23)) do
         value = week_value([year, "Y", week, "W", day, "K", "T", hour, "H"])
         today = Date.new!(year, week, day, ISOWeek)
-        nearest = if hour < 12, do: today, else: add_days(today, 1)
+
+        nearest =
+          if hour < 12 do
+            today
+          else
+            add_days(today, 1)
+          end
 
         assert Tempo.trunc(value, :day) == week_value([year, "Y", week, "W", day, "K"])
 
@@ -885,12 +955,17 @@ defmodule Tempo.Reference.Test do
     end
   end
 
-  defp week_value(parts), do: Tempo.from_iso8601!(Enum.join(parts), ISOWeek)
+  defp week_value(parts) do
+    Tempo.from_iso8601!(Enum.join(parts), ISOWeek)
+  end
 
   # A day of a calendar of weeks a count of days on: counted on the
   # Gregorian date it is.
   defp add_days(%Date{} = date, days) do
-    date |> Date.convert!(Calendar.ISO) |> Date.add(days) |> Date.convert!(ISOWeek)
+    date
+    |> Date.convert!(Calendar.ISO)
+    |> Date.add(days)
+    |> Date.convert!(ISOWeek)
   end
 
   describe "the text an interval is shown as" do
@@ -902,9 +977,11 @@ defmodule Tempo.Reference.Test do
         interval = read!("#{Date.to_iso8601(first)}/#{Date.to_iso8601(Date.add(last, 1))}")
 
         expected =
-          if first == last,
-            do: Localize.Date.to_string(first),
-            else: Localize.Interval.to_string(first, last)
+          if first == last do
+            Localize.Date.to_string(first)
+          else
+            Localize.Interval.to_string(first, last)
+          end
 
         assert Tempo.to_string(interval) == expected
       end
@@ -942,15 +1019,37 @@ defmodule Tempo.Reference.Test do
   end
 
   # Where the unit a day and an hour lie in starts.
-  defp unit_start(date, _hour, :year), do: NaiveDateTime.new!(date.year, 1, 1, 0, 0, 0)
-  defp unit_start(date, _hour, :month), do: NaiveDateTime.new!(date.year, date.month, 1, 0, 0, 0)
-  defp unit_start(date, _hour, :day), do: NaiveDateTime.new!(date, ~T[00:00:00])
-  defp unit_start(date, hour, :hour), do: NaiveDateTime.new!(date, Time.new!(hour, 0, 0))
+  defp unit_start(date, _hour, :year) do
+    NaiveDateTime.new!(date.year, 1, 1, 0, 0, 0)
+  end
 
-  defp written(moment, :year), do: Calendar.strftime(moment, "%Y")
-  defp written(moment, :month), do: Calendar.strftime(moment, "%Y-%m")
-  defp written(moment, :day), do: Calendar.strftime(moment, "%Y-%m-%d")
-  defp written(moment, :hour), do: Calendar.strftime(moment, "%Y-%m-%dT%H")
+  defp unit_start(date, _hour, :month) do
+    NaiveDateTime.new!(date.year, date.month, 1, 0, 0, 0)
+  end
+
+  defp unit_start(date, _hour, :day) do
+    NaiveDateTime.new!(date, ~T[00:00:00])
+  end
+
+  defp unit_start(date, hour, :hour) do
+    NaiveDateTime.new!(date, Time.new!(hour, 0, 0))
+  end
+
+  defp written(moment, :year) do
+    Calendar.strftime(moment, "%Y")
+  end
+
+  defp written(moment, :month) do
+    Calendar.strftime(moment, "%Y-%m")
+  end
+
+  defp written(moment, :day) do
+    Calendar.strftime(moment, "%Y-%m-%d")
+  end
+
+  defp written(moment, :hour) do
+    Calendar.strftime(moment, "%Y-%m-%dT%H")
+  end
 
   describe "an IntervalSet of one value" do
     property "to_interval_set/1 gives the one span" do

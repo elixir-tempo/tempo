@@ -45,10 +45,15 @@ defmodule Tempo.BesideAGapTest do
 
   # The moment a value starts at, and the moment Elixir places a reading of
   # the wall clock at, each as seconds since 1970.
-  defp moment(%Tempo{} = value), do: Compare.to_utc_seconds(value) - @unix_epoch
+  defp moment(%Tempo{} = value) do
+    Compare.to_utc_seconds(value) - @unix_epoch
+  end
 
-  defp moment(%NaiveDateTime{} = reading, zone),
-    do: reading |> DateTime.from_naive!(zone) |> DateTime.to_unix()
+  defp moment(%NaiveDateTime{} = reading, zone) do
+    reading
+    |> DateTime.from_naive!(zone)
+    |> DateTime.to_unix()
+  end
 
   # The reading the clock shows at the moment it skips one.
   defp shown_instead(%NaiveDateTime{} = skipped, zone) do
@@ -58,12 +63,19 @@ defmodule Tempo.BesideAGapTest do
 
   defp spans(value) do
     case Tempo.to_interval(value) do
-      {:ok, %Interval{} = span} -> [bounds(span)]
-      {:ok, %IntervalSet{} = set} -> set |> IntervalSet.members() |> Enum.map(&bounds/1)
+      {:ok, %Interval{} = span} ->
+        [bounds(span)]
+
+      {:ok, %IntervalSet{} = set} ->
+        set
+        |> IntervalSet.members()
+        |> Enum.map(&bounds/1)
     end
   end
 
-  defp bounds(%Interval{} = span), do: {moment(Interval.from(span)), moment(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {moment(Interval.from(span)), moment(Interval.to(span))}
+  end
 
   # A set in a unit names each value it holds, and one that names a reading
   # the clock skips is refused as that value alone is (decided 2026-10-07,
@@ -178,7 +190,9 @@ defmodule Tempo.BesideAGapTest do
       zone = "America/New_York"
 
       landed =
-        ~N[2024-03-01 00:00:00] |> DateTime.from_naive!(zone) |> DateTime.add(218, :hour)
+        ~N[2024-03-01 00:00:00]
+        |> DateTime.from_naive!(zone)
+        |> DateTime.add(218, :hour)
 
       assert {landed.day, landed.hour} == {10, 3}
 
@@ -211,7 +225,10 @@ defmodule Tempo.BesideAGapTest do
     test "has no occurrence on the day its zone leaves out" do
       {:ok, occurrences} = Tempo.to_interval(~o"R6/2011Y52W[Pacific/Apia]/P1D")
 
-      starts = occurrences |> IntervalSet.members() |> Enum.map(&Interval.from/1)
+      starts =
+        occurrences
+        |> IntervalSet.members()
+        |> Enum.map(&Interval.from/1)
 
       assert starts == [
                ~o"2011Y52W[Pacific/Apia]",
@@ -233,7 +250,12 @@ defmodule Tempo.BesideAGapTest do
 
       assert moment(first) == moment(shown, zone)
       assert Enum.at(day, 0) == first
-      assert Enum.at(day, 0) == day |> Enum.to_list() |> List.first()
+
+      assert Enum.at(day, 0) ==
+               day
+               |> Enum.to_list()
+               |> List.first()
+
       assert Enum.slice(day, 0, 2) == [first, ~o"2023Y4M28DT2H[Africa/Cairo]"]
       assert Enum.member?(day, first)
 
@@ -478,13 +500,19 @@ defmodule Tempo.BesideAGapTest do
   # The spans a selection gives, each as the moments it runs between.
   defp selected(base, selector) do
     {:ok, %IntervalSet{} = set} = Tempo.select(base, selector)
-    set |> IntervalSet.members() |> Enum.map(&bounds/1)
+
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&bounds/1)
   end
 
   defp occurrence_starts(rule, from) do
     {:ok, recurrence} = RRule.parse(rule, from: from)
     {:ok, %IntervalSet{} = occurrences} = Tempo.to_interval(recurrence)
-    occurrences |> IntervalSet.members() |> Enum.map(&moment(Interval.from(&1)))
+
+    occurrences
+    |> IntervalSet.members()
+    |> Enum.map(&moment(Interval.from(&1)))
   end
 
   # The part of the wall clock from one reading up to another that a zone's
@@ -505,9 +533,17 @@ defmodule Tempo.BesideAGapTest do
     end
   end
 
-  defp placed({:ok, moment}), do: [moment]
-  defp placed({:ambiguous, first, _second}), do: [first]
-  defp placed({:gap, _just_before, _comes_out}), do: []
+  defp placed({:ok, moment}) do
+    [moment]
+  end
+
+  defp placed({:ambiguous, first, _second}) do
+    [first]
+  end
+
+  defp placed({:gap, _just_before, _comes_out}) do
+    []
+  end
 
   # The moment of a reading, or of the reading the clock comes out of the
   # gap on where it skips the reading.
@@ -551,7 +587,11 @@ defmodule Tempo.BesideAGapTest do
 
       for {calendar, date} <- written_in_each_calendar(~D[2011-12-29]) do
         day = Tempo.from_iso8601!(date <> "[Pacific/Apia][u-ca=" <> calendar <> "]")
-        {:ok, next} = day |> Tempo.shift(day: 1) |> Tempo.to_date()
+
+        {:ok, next} =
+          day
+          |> Tempo.shift(day: 1)
+          |> Tempo.to_date()
 
         assert {calendar, Date.convert(next, Calendar.ISO)} == {calendar, {:ok, ~D[2011-12-31]}}
       end
@@ -604,7 +644,11 @@ defmodule Tempo.BesideAGapTest do
     end
 
     test "is given what its Gregorian twin is, by every operation", %{harvest: harvest} do
-      calendars = BesideAGap.twins() |> Enum.map(&elem(&1, 2)) |> Enum.uniq() |> Enum.sort()
+      calendars =
+        BesideAGap.twins()
+        |> Enum.map(&elem(&1, 2))
+        |> Enum.uniq()
+        |> Enum.sort()
 
       assert calendars == ["buddhist", "hebrew", "iso-week"]
       assert found(harvest, :not_as_its_twin) == []
@@ -624,7 +668,9 @@ defmodule Tempo.BesideAGapTest do
       placed.utc_offset + placed.std_offset
     end
 
-    defp offset_of(%Tempo{shift: shift}), do: Compare.offset_seconds(shift)
+    defp offset_of(%Tempo{shift: shift}) do
+      Compare.offset_seconds(shift)
+    end
 
     test "is at the offset its zone is at on its own reading" do
       zone = "America/New_York"
@@ -681,7 +727,9 @@ defmodule Tempo.BesideAGapTest do
 
       {:ok, occurrences} = Tempo.to_interval(rule)
 
-      assert occurrences |> IntervalSet.members() |> Enum.map(&offset_of(Interval.from(&1))) ==
+      assert occurrences
+             |> IntervalSet.members()
+             |> Enum.map(&offset_of(Interval.from(&1))) ==
                [
                  offset_at(~N[2024-03-30 00:00:00], zone),
                  offset_at(~N[2024-04-30 00:00:00], zone)
@@ -724,7 +772,11 @@ defmodule Tempo.BesideAGapTest do
     ]
   end
 
-  defp two(number), do: number |> Integer.to_string() |> String.pad_leading(2, "0")
+  defp two(number) do
+    number
+    |> Integer.to_string()
+    |> String.pad_leading(2, "0")
+  end
 
   describe "every operation, given a value beside a gap" do
     test "the cells are of every operation and gap", %{harvest: harvest} do

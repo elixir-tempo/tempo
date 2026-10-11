@@ -247,13 +247,18 @@ defmodule Tempo.CalendarWeekdayTest do
     test "a calendar of weeks walks its week by its own days" do
       week = Tempo.from_iso8601!("2026Y40W", Calendrical.ISOWeek)
 
-      assert week |> Enum.take(2) |> Enum.map(& &1.time) == [
+      assert week
+             |> Enum.take(2)
+             |> Enum.map(& &1.time) == [
                [year: 2026, week: 40, day_of_week: 1],
                [year: 2026, week: 40, day_of_week: 2]
              ]
 
       {:ok, interval} = Tempo.to_interval(week)
-      assert interval |> Enum.at(3) |> Map.fetch!(:time) == [year: 2026, week: 40, day_of_week: 4]
+
+      assert interval
+             |> Enum.at(3)
+             |> Map.fetch!(:time) == [year: 2026, week: 40, day_of_week: 4]
     end
 
     test "a week with no year is walked by its days of the week" do
@@ -262,7 +267,9 @@ defmodule Tempo.CalendarWeekdayTest do
 
     test "a zoned week's day steps its hours on the time line" do
       # New York springs forward in the early hours of Sunday 8 March 2026.
-      saturday = Tempo.from_iso8601!("2026-W10[America/New_York]") |> Enum.at(5)
+      saturday =
+        Tempo.from_iso8601!("2026-W10[America/New_York]")
+        |> Enum.at(5)
 
       assert saturday.time == [year: 2026, month: 3, day: 7]
       assert Tempo.shift(saturday, hour: 28).time == [year: 2026, month: 3, day: 8, hour: 5]
@@ -287,7 +294,9 @@ defmodule Tempo.CalendarWeekdayTest do
     test "each occurrence a day apart from a week is a day" do
       {:ok, occurrences} = Tempo.to_interval(~o"R3/2026-W40/P1D")
 
-      assert occurrences |> IntervalSet.members() |> Enum.map(&Interval.to/1) ==
+      assert occurrences
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.to/1) ==
                [~o"2026-09-29", ~o"2026-09-30", ~o"2026-10-01"]
     end
   end
@@ -310,12 +319,16 @@ defmodule Tempo.CalendarWeekdayTest do
     test "a week cut below its days is written in dates" do
       {:ok, rest} = Tempo.difference(~o"2026-W40", ~o"2026-W40/P3D")
 
-      assert rest |> IntervalSet.members() |> Enum.map(&Interval.endpoints/1) ==
+      assert rest
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.endpoints/1) ==
                [{~o"2026-10-01", ~o"2026-10-05"}]
 
       {:ok, shared} = Tempo.intersection(~o"2026-W40/P3D", ~o"2026-W40")
 
-      assert shared |> IntervalSet.members() |> Enum.map(&Interval.endpoints/1) ==
+      assert shared
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.endpoints/1) ==
                [{~o"2026-09-28", ~o"2026-10-01"}]
     end
 
@@ -329,7 +342,9 @@ defmodule Tempo.CalendarWeekdayTest do
     test "whole weeks stay weeks" do
       {:ok, shared} = Tempo.intersection(~o"2026-W40", ~o"2026-W39/2026-W42")
 
-      assert shared |> IntervalSet.members() |> Enum.map(&Interval.endpoints/1) ==
+      assert shared
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.endpoints/1) ==
                [{~o"2026Y40W", ~o"2026Y41W"}]
     end
   end

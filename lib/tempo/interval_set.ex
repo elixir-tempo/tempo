@@ -166,7 +166,10 @@ defmodule Tempo.IntervalSet do
   @spec new([Interval.t()], keyword()) :: {:ok, t()} | {:error, term()}
   def new(intervals, opts \\ []) when is_list(intervals) do
     if Calendars.outside?(intervals) do
-      intervals |> Calendars.inside() |> new(opts) |> Calendars.outside()
+      intervals
+      |> Calendars.inside()
+      |> new(opts)
+      |> Calendars.outside()
     else
       built(intervals, opts)
     end
@@ -188,7 +191,14 @@ defmodule Tempo.IntervalSet do
       coalesce? = Keyword.get(opts, :coalesce, false)
 
       sorted = Enum.sort(intervals, &compare_from/2)
-      final = if coalesce?, do: coalesce_intervals(sorted), else: sorted
+
+      final =
+        if coalesce? do
+          coalesce_intervals(sorted)
+        else
+          sorted
+        end
+
       metadata = Keyword.get(opts, :metadata, %{})
 
       {:ok,
@@ -215,21 +225,36 @@ defmodule Tempo.IntervalSet do
     end)
   end
 
-  defp validate_one_order(_intervals), do: :ok
+  defp validate_one_order(_intervals) do
+    :ok
+  end
 
   # A backend that cannot hold a member says so before its state is built,
   # so the member is the constructor's error and not a raise from the
   # backend. One that does not say holds any members.
   defp held_by_backend(backend, intervals) do
-    if Code.ensure_loaded?(backend) and function_exported?(backend, :accepts, 1),
-      do: backend.accepts(intervals),
-      else: :ok
+    if Code.ensure_loaded?(backend) and function_exported?(backend, :accepts, 1) do
+      backend.accepts(intervals)
+    else
+      :ok
+    end
   end
 
-  defp resolve_backend(:list), do: Backend.List
-  defp resolve_backend(:tree), do: Backend.Tree
-  defp resolve_backend(:lazy), do: Backend.Lazy
-  defp resolve_backend(module) when is_atom(module), do: module
+  defp resolve_backend(:list) do
+    Backend.List
+  end
+
+  defp resolve_backend(:tree) do
+    Backend.Tree
+  end
+
+  defp resolve_backend(:lazy) do
+    Backend.Lazy
+  end
+
+  defp resolve_backend(module) when is_atom(module) do
+    module
+  end
 
   @doc """
   Construct a lazy, potentially unbounded set from an ordered
@@ -377,7 +402,9 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec walk(t()) :: Enumerable.t()
-  def walk(%__MODULE__{backend: backend, intervals: state}), do: backend.walk(state)
+  def walk(%__MODULE__{backend: backend, intervals: state}) do
+    backend.walk(state)
+  end
 
   @doc """
   Return the number of member intervals in the set.
@@ -421,7 +448,9 @@ defmodule Tempo.IntervalSet do
   #
   # * `true` when the set is empty, otherwise `false`.
   @spec empty?(t()) :: boolean()
-  def empty?(%__MODULE__{backend: backend, intervals: state}), do: backend.empty?(state)
+  def empty?(%__MODULE__{backend: backend, intervals: state}) do
+    backend.empty?(state)
+  end
 
   @doc """
   The earliest member interval of the set, or `nil` when the set
@@ -455,7 +484,9 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec first(t()) :: Interval.t() | nil
-  def first(%__MODULE__{backend: backend, intervals: state}), do: backend.first(state)
+  def first(%__MODULE__{backend: backend, intervals: state}) do
+    backend.first(state)
+  end
 
   @doc """
   The latest member interval of the set, or `nil` when the set
@@ -499,7 +530,10 @@ defmodule Tempo.IntervalSet do
   @spec last(t()) :: Interval.t() | nil
   def last(%__MODULE__{backend: backend, intervals: state} = set) do
     ensure_bounded!(set, "Tempo.IntervalSet.last/1")
-    state |> backend.to_list() |> List.last()
+
+    state
+    |> backend.to_list()
+    |> List.last()
   end
 
   @doc false
@@ -519,7 +553,9 @@ defmodule Tempo.IntervalSet do
   # * `true` when the set is finite and every member can be listed,
   #   otherwise `false`.
   @spec bounded?(t()) :: boolean()
-  def bounded?(%__MODULE__{backend: backend, intervals: state}), do: backend.bounded?(state)
+  def bounded?(%__MODULE__{backend: backend, intervals: state}) do
+    backend.bounded?(state)
+  end
 
   @doc """
   Returns the set's own metadata.
@@ -544,7 +580,9 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec metadata(t()) :: map()
-  def metadata(%__MODULE__{metadata: metadata}), do: metadata
+  def metadata(%__MODULE__{metadata: metadata}) do
+    metadata
+  end
 
   # The refusal gate for aggregate operations: raising (not an error
   # tuple) because these functions have no error shape and a silent
@@ -613,11 +651,20 @@ defmodule Tempo.IntervalSet do
   @spec duration(t()) :: Duration.t() | {:error, Exception.t()}
   def duration(%__MODULE__{} = set) do
     if Calendars.outside?(set) do
-      set |> Calendars.inside() |> duration()
+      set
+      |> Calendars.inside()
+      |> duration()
     else
-      case set |> coalesce() |> members() do
-        [] -> %Duration{time: [second: 0]}
-        members -> members |> Enum.map(&Interval.duration/1) |> summed()
+      case set
+           |> coalesce()
+           |> members() do
+        [] ->
+          %Duration{time: [second: 0]}
+
+        members ->
+          members
+          |> Enum.map(&Interval.duration/1)
+          |> summed()
       end
     end
   end
@@ -690,7 +737,10 @@ defmodule Tempo.IntervalSet do
 
   def slots(%__MODULE__{} = set, %Tempo.Duration{} = duration, options) do
     if Calendars.outside?(set) do
-      set |> Calendars.inside() |> slots(duration, options) |> Calendars.outside()
+      set
+      |> Calendars.inside()
+      |> slots(duration, options)
+      |> Calendars.outside()
     else
       every = Keyword.get(options, :every, duration)
 
@@ -759,7 +809,9 @@ defmodule Tempo.IntervalSet do
   """
   @spec map(t(), (Interval.t() -> any())) :: [any()]
   def map(%__MODULE__{} = set, fun) when is_function(fun, 1) do
-    set |> members() |> Enum.map(fun)
+    set
+    |> members()
+    |> Enum.map(fun)
   end
 
   @doc """
@@ -798,7 +850,12 @@ defmodule Tempo.IntervalSet do
       |> filter(fn member -> fun.(Calendars.outside(member)) end)
       |> Calendars.outside()
     else
-      with_intervals(set, set |> members() |> Enum.filter(fun))
+      with_intervals(
+        set,
+        set
+        |> members()
+        |> Enum.filter(fun)
+      )
     end
   end
 
@@ -873,9 +930,17 @@ defmodule Tempo.IntervalSet do
     end
   end
 
-  defp coerce(%__MODULE__{} = set), do: {:ok, set}
-  defp coerce(%Interval{} = iv), do: new([iv], coalesce: false)
-  defp coerce(%Tempo{} = point), do: Tempo.to_interval_set(point)
+  defp coerce(%__MODULE__{} = set) do
+    {:ok, set}
+  end
+
+  defp coerce(%Interval{} = iv) do
+    new([iv], coalesce: false)
+  end
+
+  defp coerce(%Tempo{} = point) do
+    Tempo.to_interval_set(point)
+  end
 
   defp coerce(other) do
     {:error, ConversionError.exception(value: other, target: Tempo.IntervalSet)}
@@ -911,7 +976,9 @@ defmodule Tempo.IntervalSet do
      )}
   end
 
-  defp validate_member(%Interval{}), do: :ok
+  defp validate_member(%Interval{}) do
+    :ok
+  end
 
   defp validate_member(other) do
     {:error,
@@ -999,7 +1066,10 @@ defmodule Tempo.IntervalSet do
   @spec coalesce(t()) :: t()
   def coalesce(%__MODULE__{} = set) do
     if Calendars.outside?(set) do
-      set |> Calendars.inside() |> coalesce() |> Calendars.outside()
+      set
+      |> Calendars.inside()
+      |> coalesce()
+      |> Calendars.outside()
     else
       with_intervals(set, coalesce_intervals(members(set)))
     end
@@ -1174,7 +1244,10 @@ defmodule Tempo.IntervalSet do
 
   def covered(%__MODULE__{} = set, options) do
     if Calendars.outside?(set) do
-      set |> Calendars.inside() |> covered(options) |> Calendars.outside()
+      set
+      |> Calendars.inside()
+      |> covered(options)
+      |> Calendars.outside()
     else
       with {:ok, threshold} <- at_least_option(options),
            :ok <- sweepable(set),
@@ -1222,14 +1295,19 @@ defmodule Tempo.IntervalSet do
   defp regions_covered([%Interval{} = first | _rest] = intervals, threshold) do
     if Cycle.cyclic?(first) do
       with {:ok, parts} <- cycle_parts(intervals) do
-        {:ok, parts |> sweep_regions(threshold) |> Cycle.joined()}
+        {:ok,
+         parts
+         |> sweep_regions(threshold)
+         |> Cycle.joined()}
       end
     else
       {:ok, sweep_regions(intervals, threshold)}
     end
   end
 
-  defp regions_covered([], _threshold), do: {:ok, []}
+  defp regions_covered([], _threshold) do
+    {:ok, []}
+  end
 
   defp sweep_regions(intervals, threshold) do
     intervals
@@ -1252,7 +1330,9 @@ defmodule Tempo.IntervalSet do
     end)
   end
 
-  defp sweep_depth([], _threshold, _depth, _opened_at, acc), do: acc
+  defp sweep_depth([], _threshold, _depth, _opened_at, acc) do
+    acc
+  end
 
   defp sweep_depth([{at, delta} | rest], threshold, depth, opened_at, acc) do
     deeper = depth + delta
@@ -1287,7 +1367,9 @@ defmodule Tempo.IntervalSet do
     end
   end
 
-  defp add_region(from, to, []), do: [%Interval{from: from, to: to}]
+  defp add_region(from, to, []) do
+    [%Interval{from: from, to: to}]
+  end
 
   # Single forward pass. At each step, decide whether the next
   # interval should merge with the current "accumulator" interval
@@ -1304,17 +1386,24 @@ defmodule Tempo.IntervalSet do
   # the end and the part that starts the cycle are written back as the one
   # span they are.
   defp coalesce_intervals([%Interval{} = first | _rest] = intervals) do
-    if Cycle.cyclic?(first),
-      do: coalesce_on_cycle(intervals),
-      else: merge_in_order(intervals)
+    if Cycle.cyclic?(first) do
+      coalesce_on_cycle(intervals)
+    else
+      merge_in_order(intervals)
+    end
   end
 
-  defp coalesce_intervals(intervals), do: merge_in_order(intervals)
+  defp coalesce_intervals(intervals) do
+    merge_in_order(intervals)
+  end
 
   defp coalesce_on_cycle(intervals) do
     case cycle_parts(intervals) do
       {:ok, parts} ->
-        parts |> Enum.sort(&compare_from/2) |> merge_in_order() |> Cycle.joined()
+        parts
+        |> Enum.sort(&compare_from/2)
+        |> merge_in_order()
+        |> Cycle.joined()
 
       # Spans with no cycle to cut them at are merged as they are written.
       {:error, _exception} ->
@@ -1331,13 +1420,17 @@ defmodule Tempo.IntervalSet do
     end)
   end
 
-  defp merge_in_order([]), do: []
+  defp merge_in_order([]) do
+    []
+  end
 
   defp merge_in_order([interval | rest]) do
     coalesce_step(rest, [interval])
   end
 
-  defp coalesce_step([], acc), do: Enum.reverse(acc)
+  defp coalesce_step([], acc) do
+    Enum.reverse(acc)
+  end
 
   defp coalesce_step([next | rest], [current | tail] = acc) do
     case merge_if_touching(current, next) do

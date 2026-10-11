@@ -30,27 +30,42 @@ defmodule Tempo.YearStartTest do
   # year 4 is the first leap year of the era.
   @years [1750, 1751, 1752, 4]
 
-  defp value(text, calendar), do: Tempo.from_iso8601!(text, calendar)
+  defp value(text, calendar) do
+    Tempo.from_iso8601!(text, calendar)
+  end
 
-  defp year(year, calendar), do: value("#{year}Y", calendar)
+  defp year(year, calendar) do
+    value("#{year}Y", calendar)
+  end
 
-  defp month(year, month, calendar), do: value("#{year}Y#{month}M", calendar)
+  defp month(year, month, calendar) do
+    value("#{year}Y#{month}M", calendar)
+  end
 
-  defp day(%Date{} = date), do: Tempo.from_elixir(date)
+  defp day(%Date{} = date) do
+    Tempo.from_elixir(date)
+  end
 
-  defp days(%Date.Range{} = range), do: Enum.map(range, &day/1)
+  defp days(%Date.Range{} = range) do
+    Enum.map(range, &day/1)
+  end
 
-  defp span({:ok, %Interval{} = interval}), do: span(interval)
+  defp span({:ok, %Interval{} = interval}) do
+    span(interval)
+  end
 
   defp span(%Interval{} = interval) do
     {from, to} = Interval.endpoints(interval)
     {Tempo.extend_resolution(from, :day), Tempo.extend_resolution(to, :day)}
   end
 
-  defp expected_span(%Date.Range{first: first, last: last}),
-    do: {day(first), day(Date.add(last, 1))}
+  defp expected_span(%Date.Range{first: first, last: last}) do
+    {day(first), day(Date.add(last, 1))}
+  end
 
-  defp cases, do: for(calendar <- @calendars, year <- @years, do: {calendar, year})
+  defp cases do
+    for(calendar <- @calendars, year <- @years, do: {calendar, year})
+  end
 
   describe "the calendars" do
     test "count their months from the day their year begins, which is not 1 January" do
@@ -362,7 +377,11 @@ defmodule Tempo.YearStartTest do
         months = for month <- 1..calendar.months_in_year(year), do: month(year, month, calendar)
         {:ok, joined} = Tempo.union(hd(months), tl(months))
 
-        assert [whole] = joined |> IntervalSet.coalesce() |> IntervalSet.members()
+        assert [whole] =
+                 joined
+                 |> IntervalSet.coalesce()
+                 |> IntervalSet.members()
+
         assert span(whole) == expected_span(calendar.year(year))
         assert Tempo.equal?(joined, year(year, calendar))
       end
@@ -451,7 +470,11 @@ defmodule Tempo.YearStartTest do
     # unspecified and masked days are the days it has, one after another.
     defp covered(result) do
       {:ok, set} = Tempo.to_interval_set(result)
-      set |> IntervalSet.coalesce() |> IntervalSet.members() |> Enum.map(&span/1)
+
+      set
+      |> IntervalSet.coalesce()
+      |> IntervalSet.members()
+      |> Enum.map(&span/1)
     end
 
     defp runs_of(dates) do
@@ -464,7 +487,11 @@ defmodule Tempo.YearStartTest do
             {:cont, [date]}
 
           date, [last | _] = run ->
-            if Date.diff(date, last) == 1, do: {:cont, [date | run]}, else: {:cont, run, [date]}
+            if Date.diff(date, last) == 1 do
+              {:cont, [date | run]}
+            else
+              {:cont, run, [date]}
+            end
         end,
         fn run -> {:cont, run, []} end
       )
@@ -537,7 +564,9 @@ defmodule Tempo.YearStartTest do
 
         {:ok, selected} = Tempo.select(month(year, month, calendar), ~o"1K")
 
-        assert selected |> IntervalSet.members() |> Enum.map(&Interval.from/1) ==
+        assert selected
+               |> IntervalSet.members()
+               |> Enum.map(&Interval.from/1) ==
                  Enum.map(mondays, &day/1)
       end
     end
@@ -633,7 +662,13 @@ defmodule Tempo.YearStartTest do
   describe "a calendar whose year begins with its first month" do
     test "is read as it was" do
       for calendar <- [Calendrical.Gregorian, Calendrical.Julian, Calendrical.Hebrew] do
-        year = if calendar == Calendrical.Hebrew, do: 5786, else: 2026
+        year =
+          if calendar == Calendrical.Hebrew do
+            5786
+          else
+            2026
+          end
+
         month = month(year, 3, calendar)
 
         assert Tempo.extend_resolution(month, :day).time == [year: year, month: 3, day: 1]

@@ -207,10 +207,16 @@ defmodule Tempo.TimeZoneDatabase do
   # With no database configured nothing is known of a zone, and nothing is
   # kept, so that one configured later is asked. Nor is anything kept for a
   # name the database does not know.
-  defp found_days_left_out(_key, _zone, Calendar.UTCOnlyTimeZoneDatabase), do: []
+  defp found_days_left_out(_key, _zone, Calendar.UTCOnlyTimeZoneDatabase) do
+    []
+  end
 
   defp found_days_left_out(key, zone, _database) do
-    if zone_exists?(zone), do: kept_days_left_out(key, zone), else: []
+    if zone_exists?(zone) do
+      kept_days_left_out(key, zone)
+    else
+      []
+    end
   end
 
   defp kept_days_left_out(key, zone) do
@@ -237,8 +243,9 @@ defmodule Tempo.TimeZoneDatabase do
         do: day
   end
 
-  defp moved_a_day_ahead?(zone, from_year, to_year),
-    do: offset_at_start(zone, to_year) - offset_at_start(zone, from_year) >= @half_a_day
+  defp moved_a_day_ahead?(zone, from_year, to_year) do
+    offset_at_start(zone, to_year) - offset_at_start(zone, from_year) >= @half_a_day
+  end
 
   defp offset_at_start(zone, year) do
     case period_at_utc(zone, :calendar.datetime_to_gregorian_seconds({{year, 1, 1}, {0, 0, 0}})) do
@@ -342,11 +349,17 @@ defmodule Tempo.TimeZoneDatabase do
     |> Enum.flat_map(&changes_between(zone, &1))
   end
 
-  defp days_from(from, to) when from >= to, do: []
-  defp days_from(from, to), do: Enum.to_list(from..(to - 1)//@seconds_per_day) ++ [to]
+  defp days_from(from, to) when from >= to do
+    []
+  end
 
-  defp kept?(zone, blocks),
-    do: Enum.all?(blocks, &(:persistent_term.get({__MODULE__, :changes, zone, &1}, nil) != nil))
+  defp days_from(from, to) do
+    Enum.to_list(from..(to - 1)//@seconds_per_day) ++ [to]
+  end
+
+  defp kept?(zone, blocks) do
+    Enum.all?(blocks, &(:persistent_term.get({__MODULE__, :changes, zone, &1}, nil) != nil))
+  end
 
   # Whether a year has now been asked of as often as finding its changes
   # takes, `questions` more being asked of each of `blocks`. The count is
@@ -375,7 +388,9 @@ defmodule Tempo.TimeZoneDatabase do
     end
   end
 
-  defp new_counter(_key, _zone, Calendar.UTCOnlyTimeZoneDatabase), do: nil
+  defp new_counter(_key, _zone, Calendar.UTCOnlyTimeZoneDatabase) do
+    nil
+  end
 
   defp new_counter(key, zone, _database) do
     if zone_exists?(zone) do
@@ -473,7 +488,9 @@ defmodule Tempo.TimeZoneDatabase do
     kept?(zone, first..last//1) and clear_in_blocks?(zone, first, last, moment, margin)
   end
 
-  defp clear_in_blocks?(_zone, block, last, _moment, _margin) when block > last, do: true
+  defp clear_in_blocks?(_zone, block, last, _moment, _margin) when block > last do
+    true
+  end
 
   defp clear_in_blocks?(zone, block, last, moment, margin) do
     case :persistent_term.get({__MODULE__, :changes, zone, block}, nil) do
@@ -490,7 +507,9 @@ defmodule Tempo.TimeZoneDatabase do
   @days_in_a_block 366
   @seconds_in_a_block @days_in_a_block * @seconds_per_day
 
-  defp block_of(moment), do: Integer.floor_div(moment, @seconds_in_a_block)
+  defp block_of(moment) do
+    Integer.floor_div(moment, @seconds_in_a_block)
+  end
 
   defp changes_in(zone, block) do
     key = {__MODULE__, :changes, zone, block}
@@ -503,10 +522,16 @@ defmodule Tempo.TimeZoneDatabase do
 
   # As for the days a zone leaves out: nothing is known with no database,
   # and nothing is kept, nor for a name the database does not know.
-  defp found_changes(_key, _zone, _block, Calendar.UTCOnlyTimeZoneDatabase), do: []
+  defp found_changes(_key, _zone, _block, Calendar.UTCOnlyTimeZoneDatabase) do
+    []
+  end
 
   defp found_changes(key, zone, block, _database) do
-    if zone_exists?(zone), do: kept_changes(key, zone, block), else: []
+    if zone_exists?(zone) do
+      kept_changes(key, zone, block)
+    else
+      []
+    end
   end
 
   defp kept_changes(key, zone, block) do
@@ -524,14 +549,17 @@ defmodule Tempo.TimeZoneDatabase do
 
   # Before the common era the adapter answers with one period, and asks
   # nothing of the database.
-  defp moments_asked(first) when first + @seconds_in_a_block <= @gregorian_seconds_year_1,
-    do: []
+  defp moments_asked(first) when first + @seconds_in_a_block <= @gregorian_seconds_year_1 do
+    []
+  end
 
-  defp moments_asked(first) when first + @seconds_in_a_block <= @first_year_of_changes,
-    do: [max(first, @gregorian_seconds_year_1), first + @seconds_in_a_block]
+  defp moments_asked(first) when first + @seconds_in_a_block <= @first_year_of_changes do
+    [max(first, @gregorian_seconds_year_1), first + @seconds_in_a_block]
+  end
 
-  defp moments_asked(first),
-    do: Enum.map(0..@days_in_a_block, &(first + &1 * @seconds_per_day))
+  defp moments_asked(first) do
+    Enum.map(0..@days_in_a_block, &(first + &1 * @seconds_per_day))
+  end
 
   defp periods_at(zone, moments) do
     for moment <- moments, {:ok, period} <- [period_at_utc(zone, moment)], do: {moment, period}
@@ -540,7 +568,9 @@ defmodule Tempo.TimeZoneDatabase do
   # The changes between two moments asked. One period at both is no change
   # between them. Otherwise the first moment of another period is found,
   # and the search goes on from it until the later period is reached.
-  defp changes_between(_zone, [{_from, period}, {_to, period}]), do: []
+  defp changes_between(_zone, [{_from, period}, {_to, period}]) do
+    []
+  end
 
   defp changes_between(zone, [{from, before}, {to, _later} = last]) do
     moment = first_moment_of_another(zone, from, to, before)
@@ -559,7 +589,9 @@ defmodule Tempo.TimeZoneDatabase do
 
   # `from` is in the period and `to` is not, and the first moment that is
   # not is halved in on.
-  defp first_moment_of_another(_zone, from, to, _period) when to - from == 1, do: to
+  defp first_moment_of_another(_zone, from, to, _period) when to - from == 1 do
+    to
+  end
 
   defp first_moment_of_another(zone, from, to, period) do
     middle = div(from + to, 2)

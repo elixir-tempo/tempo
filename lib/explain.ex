@@ -88,7 +88,11 @@ defmodule Tempo.Explain do
   """
   @spec explain(term()) :: Explanation.t()
   def explain(value) do
-    value = value |> Calendars.inside() |> as_resolved()
+    value =
+      value
+      |> Calendars.inside()
+      |> as_resolved()
+
     %Explanation{kind: classify(value), parts: explain_parts(value)}
   end
 
@@ -110,8 +114,13 @@ defmodule Tempo.Explain do
   # What is said of the end of a span, which is no part of it.
   @half_open "exclusive — half-open `[from, to)`"
 
-  defp as_resolved(%Tempo{time: [{:selection, _selection} | _units]} = selection), do: selection
-  defp as_resolved(value), do: Selection.read_in_its_period(value)
+  defp as_resolved(%Tempo{time: [{:selection, _selection} | _units]} = selection) do
+    selection
+  end
+
+  defp as_resolved(value) do
+    Selection.read_in_its_period(value)
+  end
 
   @doc """
   Render an explanation as plain multi-line text.
@@ -147,17 +156,49 @@ defmodule Tempo.Explain do
     |> IO.iodata_to_binary()
   end
 
-  defp ansi_for({:headline, text}), do: [:bright, text, :reset]
-  defp ansi_for({:span, text}), do: [:cyan, text, :reset]
-  defp ansi_for({:margin, text}), do: [:yellow, text, :reset]
-  defp ansi_for({:qualification, text}), do: [:yellow, text, :reset]
-  defp ansi_for({:extended, text}), do: [:yellow, text, :reset]
-  defp ansi_for({:calendar, text}), do: [:magenta, text, :reset]
-  defp ansi_for({:enumeration, text}), do: [:green, text, :reset]
-  defp ansi_for({:hint, text}), do: [:faint, text, :reset]
-  defp ansi_for({:metadata, text}), do: [:yellow, text, :reset]
-  defp ansi_for({:member, text}), do: [:cyan, text, :reset]
-  defp ansi_for({_tag, text}), do: [text]
+  defp ansi_for({:headline, text}) do
+    [:bright, text, :reset]
+  end
+
+  defp ansi_for({:span, text}) do
+    [:cyan, text, :reset]
+  end
+
+  defp ansi_for({:margin, text}) do
+    [:yellow, text, :reset]
+  end
+
+  defp ansi_for({:qualification, text}) do
+    [:yellow, text, :reset]
+  end
+
+  defp ansi_for({:extended, text}) do
+    [:yellow, text, :reset]
+  end
+
+  defp ansi_for({:calendar, text}) do
+    [:magenta, text, :reset]
+  end
+
+  defp ansi_for({:enumeration, text}) do
+    [:green, text, :reset]
+  end
+
+  defp ansi_for({:hint, text}) do
+    [:faint, text, :reset]
+  end
+
+  defp ansi_for({:metadata, text}) do
+    [:yellow, text, :reset]
+  end
+
+  defp ansi_for({:member, text}) do
+    [:cyan, text, :reset]
+  end
+
+  defp ansi_for({_tag, text}) do
+    [text]
+  end
 
   @doc """
   Render as tagged iodata `[{tag, text}, ...]`, ready for an HTML
@@ -167,7 +208,9 @@ defmodule Tempo.Explain do
   Callers decide how to separate parts (newlines, `<div>`s, etc.).
   """
   @spec to_iodata(Explanation.t()) :: [{atom(), String.t()}]
-  def to_iodata(%Explanation{parts: parts}), do: parts
+  def to_iodata(%Explanation{parts: parts}) do
+    parts
+  end
 
   ## ------------------------------------------------------------
   ## Classification
@@ -182,7 +225,9 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp classify(%Tempo.Interval{from: :undefined, to: :undefined}), do: :fully_open_interval
+  defp classify(%Tempo.Interval{from: :undefined, to: :undefined}) do
+    :fully_open_interval
+  end
 
   # A duration and an end imply the start, so such an interval is not open.
   defp classify(%Tempo.Interval{
@@ -192,43 +237,94 @@ defmodule Tempo.Explain do
          recurrence: recurrence,
          repeat_rule: rule
        })
-       when recurs(recurrence, rule),
-       do: :recurring_interval
-
-  defp classify(%Tempo.Interval{from: :undefined, to: %Tempo{}, duration: %Tempo.Duration{}}),
-    do: :closed_interval
-
-  defp classify(%Tempo.Interval{from: :undefined}), do: :open_lower_interval
-  defp classify(%Tempo.Interval{to: :undefined}), do: :open_upper_interval
-
-  defp classify(%Tempo.Interval{recurrence: recurrence, repeat_rule: rule})
-       when recurs(recurrence, rule),
-       do: :recurring_interval
-
-  defp classify(%Tempo.Interval{}), do: :closed_interval
-
-  defp classify(%Tempo.IntervalSet{} = set) do
-    if IntervalSet.empty?(set), do: :empty_interval_set, else: :interval_set
+       when recurs(recurrence, rule) do
+    :recurring_interval
   end
 
-  defp classify(%Tempo.Set{type: :all}), do: :all_of_set
-  defp classify(%Tempo.Set{type: :one}), do: :one_of_set
-  defp classify(%RecurrenceSet{}), do: :recurrence_set
-  defp classify(%Conditional{}), do: :conditional_member
-  defp classify(%Tempo.Duration{}), do: :duration
-  defp classify(_), do: :unknown
+  defp classify(%Tempo.Interval{from: :undefined, to: %Tempo{}, duration: %Tempo.Duration{}}) do
+    :closed_interval
+  end
+
+  defp classify(%Tempo.Interval{from: :undefined}) do
+    :open_lower_interval
+  end
+
+  defp classify(%Tempo.Interval{to: :undefined}) do
+    :open_upper_interval
+  end
+
+  defp classify(%Tempo.Interval{recurrence: recurrence, repeat_rule: rule})
+       when recurs(recurrence, rule) do
+    :recurring_interval
+  end
+
+  defp classify(%Tempo.Interval{}) do
+    :closed_interval
+  end
+
+  defp classify(%Tempo.IntervalSet{} = set) do
+    if IntervalSet.empty?(set) do
+      :empty_interval_set
+    else
+      :interval_set
+    end
+  end
+
+  defp classify(%Tempo.Set{type: :all}) do
+    :all_of_set
+  end
+
+  defp classify(%Tempo.Set{type: :one}) do
+    :one_of_set
+  end
+
+  defp classify(%RecurrenceSet{}) do
+    :recurrence_set
+  end
+
+  defp classify(%Conditional{}) do
+    :conditional_member
+  end
+
+  defp classify(%Tempo.Duration{}) do
+    :duration
+  end
+
+  defp classify(_) do
+    :unknown
+  end
 
   ## ------------------------------------------------------------
   ## explain_parts — one clause per input shape
   ## ------------------------------------------------------------
 
-  defp explain_parts(%Tempo{} = tempo), do: scalar_parts(tempo)
-  defp explain_parts(%Tempo.Interval{} = iv), do: interval_parts(iv)
-  defp explain_parts(%Tempo.IntervalSet{} = set), do: interval_set_parts(set)
-  defp explain_parts(%Tempo.Set{} = set), do: set_parts(set)
-  defp explain_parts(%Tempo.Duration{} = d), do: duration_parts(d)
-  defp explain_parts(%RecurrenceSet{} = set), do: recurrence_set_parts(set)
-  defp explain_parts(%Conditional{} = conditional), do: conditional_parts(conditional)
+  defp explain_parts(%Tempo{} = tempo) do
+    scalar_parts(tempo)
+  end
+
+  defp explain_parts(%Tempo.Interval{} = iv) do
+    interval_parts(iv)
+  end
+
+  defp explain_parts(%Tempo.IntervalSet{} = set) do
+    interval_set_parts(set)
+  end
+
+  defp explain_parts(%Tempo.Set{} = set) do
+    set_parts(set)
+  end
+
+  defp explain_parts(%Tempo.Duration{} = d) do
+    duration_parts(d)
+  end
+
+  defp explain_parts(%RecurrenceSet{} = set) do
+    recurrence_set_parts(set)
+  end
+
+  defp explain_parts(%Conditional{} = conditional) do
+    conditional_parts(conditional)
+  end
 
   defp explain_parts(other) do
     [{:headline, "A value Tempo doesn't know how to describe: #{Calendars.inspect(other)}."}]
@@ -324,13 +420,21 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp unit_in?({unit, _value}, units), do: unit in units
-  defp unit_in?(_group_of_a_set, _units), do: false
+  defp unit_in?({unit, _value}, units) do
+    unit in units
+  end
+
+  defp unit_in?(_group_of_a_set, _units) do
+    false
+  end
 
   # A headline as a phrase: with no full stop, no aside in brackets, and no
   # capital on a first word that is not a name.
   defp within_a_sentence(headline) do
-    phrase = headline |> String.trim_trailing(".") |> String.replace(~r/ \([^)]*\)/, "")
+    phrase =
+      headline
+      |> String.trim_trailing(".")
+      |> String.replace(~r/ \([^)]*\)/, "")
 
     case String.split(phrase, " ", parts: 2) do
       [first, rest] when first in ~w(The Week Weeks Day Days Month Months) ->
@@ -394,30 +498,53 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp plain?(time), do: Enum.all?(time, &plain_unit?/1)
+  defp plain?(time) do
+    Enum.all?(time, &plain_unit?/1)
+  end
 
-  defp plain_unit?({unit, value}) when unit in @headline_units, do: is_integer(value)
-  defp plain_unit?({_other_unit, _value}), do: true
-  defp plain_unit?(_group_of_groups), do: false
+  defp plain_unit?({unit, value}) when unit in @headline_units do
+    is_integer(value)
+  end
 
-  defp precision_headline(:datetime, %Tempo{time: time} = tempo),
-    do: capitalised("#{date_phrase(tempo)} at #{clock_phrase(time)}.")
+  defp plain_unit?({_other_unit, _value}) do
+    true
+  end
 
-  defp precision_headline(:date, %Tempo{} = tempo), do: capitalised("#{date_phrase(tempo)}.")
+  defp plain_unit?(_group_of_groups) do
+    false
+  end
 
-  defp precision_headline(:month, %Tempo{} = tempo), do: capitalised("#{month_phrase(tempo)}.")
+  defp precision_headline(:datetime, %Tempo{time: time} = tempo) do
+    capitalised("#{date_phrase(tempo)} at #{clock_phrase(time)}.")
+  end
 
-  defp precision_headline(:year, %Tempo{time: time}), do: "The year #{find_unit(time, :year)}."
+  defp precision_headline(:date, %Tempo{} = tempo) do
+    capitalised("#{date_phrase(tempo)}.")
+  end
 
-  defp precision_headline(:week_datetime, %Tempo{time: time} = tempo),
-    do: "#{week_date_phrase(tempo)} at #{clock_phrase(time)}."
+  defp precision_headline(:month, %Tempo{} = tempo) do
+    capitalised("#{month_phrase(tempo)}.")
+  end
 
-  defp precision_headline(:week_date, %Tempo{} = tempo), do: "#{week_date_phrase(tempo)}."
+  defp precision_headline(:year, %Tempo{time: time}) do
+    "The year #{find_unit(time, :year)}."
+  end
 
-  defp precision_headline(:week, %Tempo{time: time}),
-    do: "Week #{find_unit(time, :week)} of #{find_unit(time, :year)}."
+  defp precision_headline(:week_datetime, %Tempo{time: time} = tempo) do
+    "#{week_date_phrase(tempo)} at #{clock_phrase(time)}."
+  end
 
-  defp precision_headline(yearless, %Tempo{} = tempo), do: yearless_headline(yearless, tempo)
+  defp precision_headline(:week_date, %Tempo{} = tempo) do
+    "#{week_date_phrase(tempo)}."
+  end
+
+  defp precision_headline(:week, %Tempo{time: time}) do
+    "Week #{find_unit(time, :week)} of #{find_unit(time, :year)}."
+  end
+
+  defp precision_headline(yearless, %Tempo{} = tempo) do
+    yearless_headline(yearless, tempo)
+  end
 
   # "June 15, 2026", or "day 15 of month 6 of 5786" where the month has no name.
   #
@@ -437,10 +564,13 @@ defmodule Tempo.Explain do
   end
 
   defp named_day(year, month, day, calendar)
-       when is_integer(year) and is_integer(month) and is_integer(day),
-       do: UnitValues.named_day(year, month, day, calendar)
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    UnitValues.named_day(year, month, day, calendar)
+  end
 
-  defp named_day(_year, _month, day, _calendar), do: day
+  defp named_day(_year, _month, day, _calendar) do
+    day
+  end
 
   # A month is named, where its calendar names the months of a year as it
   # counts them. In a year that does not begin with its first month the
@@ -457,10 +587,13 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp named_once?(year, month, calendar) when is_integer(year) and is_integer(month),
-    do: UnitValues.month_named_once?(year, month, calendar)
+  defp named_once?(year, month, calendar) when is_integer(year) and is_integer(month) do
+    UnitValues.month_named_once?(year, month, calendar)
+  end
 
-  defp named_once?(_no_one_year, _month, _calendar), do: true
+  defp named_once?(_no_one_year, _month, _calendar) do
+    true
+  end
 
   # A clock time as far as it is written, and no further: the hour and the
   # minute, the second where the value is written to one, and the fraction
@@ -472,9 +605,11 @@ defmodule Tempo.Explain do
     hour = find_unit(time, :hour)
     minute = find_unit(time, :minute)
 
-    if is_integer(hour) and is_integer(minute),
-      do: "#{two_digit(hour)}:#{two_digit(minute)}#{seconds_text(time)}",
-      else: units_named(time)
+    if is_integer(hour) and is_integer(minute) do
+      "#{two_digit(hour)}:#{two_digit(minute)}#{seconds_text(time)}"
+    else
+      units_named(time)
+    end
   end
 
   # Each unit of the clock a value is written to, by its name: "hour 10",
@@ -514,15 +649,22 @@ defmodule Tempo.Explain do
   # digits it was written to.
   defp fraction_text({microseconds, digits})
        when is_integer(microseconds) and is_integer(digits) and digits > 0 do
-    written = microseconds |> Integer.to_string() |> String.pad_leading(6, "0")
+    written =
+      microseconds
+      |> Integer.to_string()
+      |> String.pad_leading(6, "0")
+
     "." <> String.slice(written, 0, digits)
   end
 
-  defp fraction_text(_no_fraction), do: ""
+  defp fraction_text(_no_fraction) do
+    ""
+  end
 
   # The name of a value's month, in its calendar and, when it has one, its year.
-  defp named_month(%Tempo{time: time} = tempo),
-    do: fetch_month_name(find_unit(time, :month), naming(tempo))
+  defp named_month(%Tempo{time: time} = tempo) do
+    fetch_month_name(find_unit(time, :month), naming(tempo))
+  end
 
   # What names a month: its calendar and, when the value states one, its year.
   defp naming(%Tempo{time: time} = tempo) do
@@ -620,17 +762,22 @@ defmodule Tempo.Explain do
   # none. A date with no year was headlined without its time: "June 15, in
   # any year" for ten o'clock on it.
   defp at_clock(time) do
-    if Enum.any?([:hour, :minute, :second], &is_integer(find_unit(time, &1))),
-      do: " at #{clock_phrase(time)}",
-      else: ""
+    if Enum.any?([:hour, :minute, :second], &is_integer(find_unit(time, &1))) do
+      " at #{clock_phrase(time)}"
+    else
+      ""
+    end
   end
 
   # A unit by its number, or by its place from the end where it is counted
   # from there: "day 15", "the last day", "the 2nd-to-last month".
-  defp placed(noun, value) when is_integer(value) and value < 0,
-    do: "the #{ordinal(value)} #{noun}"
+  defp placed(noun, value) when is_integer(value) and value < 0 do
+    "the #{ordinal(value)} #{noun}"
+  end
 
-  defp placed(noun, value), do: "#{noun} #{value}"
+  defp placed(noun, value) do
+    "#{noun} #{value}"
+  end
 
   # Without a year there is no date to ask for its weekday. ISO 8601 numbers a
   # month-based calendar's days of the week from Monday; a calendar of weeks'
@@ -638,9 +785,11 @@ defmodule Tempo.Explain do
   defp yearless_weekday(%Tempo{time: time} = tempo) do
     day = find_unit(time, :day_of_week)
 
-    if Tempo.week_based_calendar?(tempo.calendar),
-      do: "Day #{day}",
-      else: weekday_name(day)
+    if Tempo.week_based_calendar?(tempo.calendar) do
+      "Day #{day}"
+    else
+      weekday_name(day)
+    end
   end
 
   # The precision a value states, the first whose units it has. Those with no
@@ -670,17 +819,18 @@ defmodule Tempo.Explain do
     end)
   end
 
-  defp all_present?(time, keys), do: Enum.all?(keys, &is_integer(find_unit(time, &1)))
+  defp all_present?(time, keys) do
+    Enum.all?(keys, &is_integer(find_unit(time, &1)))
+  end
 
   defp time_of_day_headline(time) do
     period = comes_round_in(time)
 
-    if is_integer(find_unit(time, :hour)) and is_integer(find_unit(time, :minute)),
-      do: "The time-of-day #{clock_phrase(time)} (unanchored — recurs every #{period}).",
-      else:
-        capitalised(
-          "#{clock_phrase(time)} of the #{period} (unanchored — recurs every #{period})."
-        )
+    if is_integer(find_unit(time, :hour)) and is_integer(find_unit(time, :minute)) do
+      "The time-of-day #{clock_phrase(time)} (unanchored — recurs every #{period})."
+    else
+      capitalised("#{clock_phrase(time)} of the #{period} (unanchored — recurs every #{period}).")
+    end
   end
 
   # A value holding a set or a group names several values, or a span of them,
@@ -698,31 +848,64 @@ defmodule Tempo.Explain do
 
   # An hour or a minute is written as a clock time, which a group, a span of
   # them, is not.
-  defp writable_unit?({unit, value}) when unit in [:hour, :minute],
-    do: is_integer(value) or values?(unit, value)
+  defp writable_unit?({unit, value}) when unit in [:hour, :minute] do
+    is_integer(value) or values?(unit, value)
+  end
 
-  defp writable_unit?({unit, value}) when unit in @headline_units, do: writable?(unit, value)
-  defp writable_unit?({_other_unit, _value}), do: true
-  defp writable_unit?(_group_of_groups), do: false
+  defp writable_unit?({unit, value}) when unit in @headline_units do
+    writable?(unit, value)
+  end
 
-  defp writable?(_unit, value) when is_integer(value), do: true
-  defp writable?(_unit, {:group, %Range{}}), do: true
-  defp writable?(unit, value), do: values?(unit, value)
+  defp writable_unit?({_other_unit, _value}) do
+    true
+  end
+
+  defp writable_unit?(_group_of_groups) do
+    false
+  end
+
+  defp writable?(_unit, value) when is_integer(value) do
+    true
+  end
+
+  defp writable?(_unit, {:group, %Range{}}) do
+    true
+  end
+
+  defp writable?(unit, value) do
+    values?(unit, value)
+  end
 
   # A set whose every member is a value to name. A member counted from the
   # end of a span the value does not fix (`{1..-1}M`, the months of no year
   # in particular; `-1D`) is not one: only a year is written below zero.
-  defp values?(unit, [_ | _] = set), do: Enum.all?(set, &named_value?(unit, &1))
-  defp values?(_unit, _margin_or_other), do: false
+  defp values?(unit, [_ | _] = set) do
+    Enum.all?(set, &named_value?(unit, &1))
+  end
 
-  defp named_value?(:year, value) when is_integer(value), do: true
-  defp named_value?(:year, %Range{} = range), do: Range.size(range) > 0
-  defp named_value?(_unit, value) when is_integer(value), do: value >= 0
+  defp values?(_unit, _margin_or_other) do
+    false
+  end
 
-  defp named_value?(_unit, %Range{first: first, last: last} = range),
-    do: first >= 0 and last >= 0 and Range.size(range) > 0
+  defp named_value?(:year, value) when is_integer(value) do
+    true
+  end
 
-  defp named_value?(_unit, _other), do: false
+  defp named_value?(:year, %Range{} = range) do
+    Range.size(range) > 0
+  end
+
+  defp named_value?(_unit, value) when is_integer(value) do
+    value >= 0
+  end
+
+  defp named_value?(_unit, %Range{first: first, last: last} = range) do
+    first >= 0 and last >= 0 and Range.size(range) > 0
+  end
+
+  defp named_value?(_unit, _other) do
+    false
+  end
 
   defp date_shape(time) do
     for {unit, _value} <- time, unit in @headline_date_units, do: unit
@@ -731,29 +914,38 @@ defmodule Tempo.Explain do
   # A headline by the date units a value holds, each written as the values it
   # names. A day's clock times follow it; a value with no date at all is its
   # times of day.
-  defp shape_phrase([], %Tempo{time: time}), do: {:ok, times_of_day_phrase(clock_times(time))}
+  defp shape_phrase([], %Tempo{time: time}) do
+    {:ok, times_of_day_phrase(clock_times(time))}
+  end
 
   defp shape_phrase([:year], %Tempo{time: time}) do
     year = find_unit(time, :year)
     {:ok, "the #{noun("year", year)} #{years_phrase(year)}"}
   end
 
-  defp shape_phrase([:year, :month], %Tempo{} = tempo), do: {:ok, months_of_years(tempo)}
+  defp shape_phrase([:year, :month], %Tempo{} = tempo) do
+    {:ok, months_of_years(tempo)}
+  end
 
-  defp shape_phrase([:year, :month, :day], %Tempo{time: time} = tempo),
-    do: {:ok, days_of_months(tempo) <> at_times(time)}
+  defp shape_phrase([:year, :month, :day], %Tempo{time: time} = tempo) do
+    {:ok, days_of_months(tempo) <> at_times(time)}
+  end
 
-  defp shape_phrase([:year, :week], %Tempo{time: time}),
-    do: {:ok, "#{weeks_phrase(find_unit(time, :week))} of #{years_of(time)}"}
+  defp shape_phrase([:year, :week], %Tempo{time: time}) do
+    {:ok, "#{weeks_phrase(find_unit(time, :week))} of #{years_of(time)}"}
+  end
 
-  defp shape_phrase([:year, :week, :day_of_week], %Tempo{time: time} = tempo),
-    do: {:ok, days_of_weeks(tempo) <> at_times(time)}
+  defp shape_phrase([:year, :week, :day_of_week], %Tempo{time: time} = tempo) do
+    {:ok, days_of_weeks(tempo) <> at_times(time)}
+  end
 
-  defp shape_phrase([:year, :day_of_year], %Tempo{time: time}),
-    do: {:ok, "#{numbered("day", find_unit(time, :day_of_year))} of #{years_of(time)}"}
+  defp shape_phrase([:year, :day_of_year], %Tempo{time: time}) do
+    {:ok, "#{numbered("day", find_unit(time, :day_of_year))} of #{years_of(time)}"}
+  end
 
-  defp shape_phrase([:month], %Tempo{} = tempo),
-    do: {:ok, "#{months_phrase(tempo)}, in any year (no year — it recurs)"}
+  defp shape_phrase([:month], %Tempo{} = tempo) do
+    {:ok, "#{months_phrase(tempo)}, in any year (no year — it recurs)"}
+  end
 
   defp shape_phrase([:month, :day], %Tempo{time: time} = tempo) do
     {:ok,
@@ -779,8 +971,9 @@ defmodule Tempo.Explain do
        "(no year — it recurs)"}
   end
 
-  defp shape_phrase([:week], %Tempo{time: time}),
-    do: {:ok, "#{weeks_phrase(find_unit(time, :week))} of any year (no year — it recurs)"}
+  defp shape_phrase([:week], %Tempo{time: time}) do
+    {:ok, "#{weeks_phrase(find_unit(time, :week))} of any year (no year — it recurs)"}
+  end
 
   defp shape_phrase([:week, :day_of_week], %Tempo{time: time} = tempo) do
     {:ok,
@@ -792,7 +985,9 @@ defmodule Tempo.Explain do
     {:ok, "#{weekdays_phrase(tempo)} of any week#{at_times(time)} (no year or week — it recurs)"}
   end
 
-  defp shape_phrase(_another_shape, _tempo), do: :error
+  defp shape_phrase(_another_shape, _tempo) do
+    :error
+  end
 
   # "June and July 2026", or "June of 2021 and 2022" when the years are several.
   defp months_of_years(%Tempo{time: time} = tempo) do
@@ -806,9 +1001,11 @@ defmodule Tempo.Explain do
   # several, and otherwise the days of its months: "the 1st and 15th of June
   # 2026".
   defp days_of_months(%Tempo{time: time} = tempo) do
-    if all_present?(time, [:year, :month, :day]),
-      do: date_phrase(tempo),
-      else: "#{days_phrase(find_unit(time, :day))} of #{months_of_years(tempo)}"
+    if all_present?(time, [:year, :month, :day]) do
+      date_phrase(tempo)
+    else
+      "#{days_phrase(find_unit(time, :day))} of #{months_of_years(tempo)}"
+    end
   end
 
   defp days_of_weeks(%Tempo{time: time} = tempo) do
@@ -819,48 +1016,73 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp years_of(time), do: years_phrase(find_unit(time, :year))
+  defp years_of(time) do
+    years_phrase(find_unit(time, :year))
+  end
 
-  defp years_phrase(years), do: component_phrase(years, &Integer.to_string/1)
+  defp years_phrase(years) do
+    component_phrase(years, &Integer.to_string/1)
+  end
 
-  defp months_phrase(%Tempo{time: time} = tempo),
-    do: component_phrase(find_unit(time, :month), &month_name(&1, naming(tempo)))
+  defp months_phrase(%Tempo{time: time} = tempo) do
+    component_phrase(find_unit(time, :month), &month_name(&1, naming(tempo)))
+  end
 
-  defp days_phrase(days), do: "the " <> component_phrase(days, &ordinal/1)
+  defp days_phrase(days) do
+    "the " <> component_phrase(days, &ordinal/1)
+  end
 
-  defp weeks_phrase(weeks), do: numbered("week", weeks)
+  defp weeks_phrase(weeks) do
+    numbered("week", weeks)
+  end
 
   # ISO 8601 numbers a month-based calendar's days of the week from Monday; a
   # calendar of weeks' days are given by their numbers.
   defp weekdays_phrase(%Tempo{time: time} = tempo) do
     days = find_unit(time, :day_of_week)
 
-    if Tempo.week_based_calendar?(tempo.calendar),
-      do: numbered("day", days),
-      else: component_phrase(days, &weekday_name/1)
+    if Tempo.week_based_calendar?(tempo.calendar) do
+      numbered("day", days)
+    else
+      component_phrase(days, &weekday_name/1)
+    end
   end
 
-  defp numbered(word, values),
-    do: "#{noun(word, values)} #{component_phrase(values, &Integer.to_string/1)}"
+  defp numbered(word, values) do
+    "#{noun(word, values)} #{component_phrase(values, &Integer.to_string/1)}"
+  end
 
-  defp noun(word, values), do: if(match?([_one], values_of(values)), do: word, else: word <> "s")
+  defp noun(word, values) do
+    if match?([_one], values_of(values)) do
+      word
+    else
+      word <> "s"
+    end
+  end
 
   # A unit's values by name: one alone, a run of more than two as its ends,
   # and otherwise each, joined with "and". A group is one span, from its first
   # value to its last.
-  defp component_phrase(value, name) when is_integer(value), do: name.(value)
+  defp component_phrase(value, name) when is_integer(value) do
+    name.(value)
+  end
 
-  defp component_phrase({:group, %Range{first: only, last: only}}, name), do: name.(only)
+  defp component_phrase({:group, %Range{first: only, last: only}}, name) do
+    name.(only)
+  end
 
-  defp component_phrase({:group, %Range{first: first, last: last}}, name),
-    do: "#{name.(first)} to #{name.(last)}"
+  defp component_phrase({:group, %Range{first: first, last: last}}, name) do
+    "#{name.(first)} to #{name.(last)}"
+  end
 
   defp component_phrase(set, name) do
     values = values_of(set)
 
-    if run?(values),
-      do: "#{name.(hd(values))}–#{name.(List.last(values))}",
-      else: and_join(Enum.map(values, name))
+    if run?(values) do
+      "#{name.(hd(values))}–#{name.(List.last(values))}"
+    else
+      and_join(Enum.map(values, name))
+    end
   end
 
   defp run?([first | _] = values) do
@@ -868,9 +1090,20 @@ defmodule Tempo.Explain do
     count > 2 and List.last(values) - first + 1 == count
   end
 
-  defp values_of(value) when is_integer(value), do: [value]
-  defp values_of({:group, %Range{} = range}), do: Enum.to_list(range)
-  defp values_of(set), do: set |> Enum.flat_map(&expand_int/1) |> Enum.sort() |> Enum.dedup()
+  defp values_of(value) when is_integer(value) do
+    [value]
+  end
+
+  defp values_of({:group, %Range{} = range}) do
+    Enum.to_list(range)
+  end
+
+  defp values_of(set) do
+    set
+    |> Enum.flat_map(&expand_int/1)
+    |> Enum.sort()
+    |> Enum.dedup()
+  end
 
   # Each hour with each minute, as a clock time: "10:00" and "10:30", and
   # with each second where the value is written to one: "10:30:15" and
@@ -891,47 +1124,76 @@ defmodule Tempo.Explain do
 
   # One phrase for the hours a value names: "hour 10", "hours 10 and 14",
   # and more than a handful counted, "24 hours from 0 to 23".
-  defp hours_named([hour]), do: ["hour #{hour}"]
-
-  defp hours_named(hours) when length(hours) > @times_named,
-    do: ["#{length(hours)} hours from #{hd(hours)} to #{List.last(hours)}"]
-
-  defp hours_named(hours), do: ["hours " <> and_join(Enum.map(hours, &Integer.to_string/1))]
-
-  defp seconds_written(second) when is_integer(second), do: [":" <> two_digit(second)]
-
-  defp seconds_written([_ | _] = seconds) do
-    if values?(:second, seconds),
-      do: for(second <- values_of(seconds), do: ":" <> two_digit(second)),
-      else: [""]
+  defp hours_named([hour]) do
+    ["hour #{hour}"]
   end
 
-  defp seconds_written(_none_or_no_plain_seconds), do: [""]
+  defp hours_named(hours) when length(hours) > @times_named do
+    ["#{length(hours)} hours from #{hd(hours)} to #{List.last(hours)}"]
+  end
+
+  defp hours_named(hours) do
+    ["hours " <> and_join(Enum.map(hours, &Integer.to_string/1))]
+  end
+
+  defp seconds_written(second) when is_integer(second) do
+    [":" <> two_digit(second)]
+  end
+
+  defp seconds_written([_ | _] = seconds) do
+    if values?(:second, seconds) do
+      for(second <- values_of(seconds), do: ":" <> two_digit(second))
+    else
+      [""]
+    end
+  end
+
+  defp seconds_written(_none_or_no_plain_seconds) do
+    [""]
+  end
 
   defp at_times(time) do
-    if find_unit(time, :hour), do: " at " <> times_listed(clock_times(time)), else: ""
+    if find_unit(time, :hour) do
+      " at " <> times_listed(clock_times(time))
+    else
+      ""
+    end
   end
 
   # A handful of times are each named, and more are counted: every minute
   # of a day was written out, 1,440 of them.
-  defp times_listed(times) when length(times) > @times_named,
-    do: "#{length(times)} times of day from #{hd(times)} to #{List.last(times)}"
+  defp times_listed(times) when length(times) > @times_named do
+    "#{length(times)} times of day from #{hd(times)} to #{List.last(times)}"
+  end
 
-  defp times_listed(times), do: and_join(times)
+  defp times_listed(times) do
+    and_join(times)
+  end
 
-  defp times_of_day_phrase(["hour" <> _ = hours]),
-    do: "#{hours} of the day (unanchored — they recur every day)"
+  defp times_of_day_phrase(["hour" <> _ = hours]) do
+    "#{hours} of the day (unanchored — they recur every day)"
+  end
 
-  defp times_of_day_phrase([one]), do: "the time-of-day #{one} (unanchored — recurs every day)"
+  defp times_of_day_phrase([one]) do
+    "the time-of-day #{one} (unanchored — recurs every day)"
+  end
 
-  defp times_of_day_phrase(times),
-    do: "the times of day #{times_listed(times)} (unanchored — they recur every day)"
+  defp times_of_day_phrase(times) do
+    "the times of day #{times_listed(times)} (unanchored — they recur every day)"
+  end
 
   defp mask_headline(%Tempo{time: time}) do
     case find_first_mask(time) do
       {:year, mask} ->
         {min, max} = mask_range(mask)
-        sign_note = if :negative in mask, do: " BCE", else: ""
+
+        sign_note =
+          if :negative in mask do
+            " BCE"
+          else
+            ""
+          end
+
         "A masked year spanning #{decade_label(min, max)}#{sign_note}."
 
       {unit, _mask} ->
@@ -942,11 +1204,25 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp decade_label(min, max) when max - min == 9, do: "the #{min}s"
-  defp decade_label(min, max) when max - min == 99, do: "the #{div(min, 100)}00s (century)"
-  defp decade_label(min, max) when max - min == 999, do: "the #{div(min, 1000)}000s (millennium)"
-  defp decade_label(min, max) when max - min == 9999, do: "all 4-digit years (#{min}–#{max})"
-  defp decade_label(min, max), do: "#{min} through #{max} (#{max - min + 1} years)"
+  defp decade_label(min, max) when max - min == 9 do
+    "the #{min}s"
+  end
+
+  defp decade_label(min, max) when max - min == 99 do
+    "the #{div(min, 100)}00s (century)"
+  end
+
+  defp decade_label(min, max) when max - min == 999 do
+    "the #{div(min, 1000)}000s (millennium)"
+  end
+
+  defp decade_label(min, max) when max - min == 9999 do
+    "all 4-digit years (#{min}–#{max})"
+  end
+
+  defp decade_label(min, max) do
+    "#{min} through #{max} (#{max - min + 1} years)"
+  end
 
   defp scalar_span(%Tempo{} = tempo) do
     case Tempo.to_interval(tempo) do
@@ -1000,7 +1276,9 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp describe_margins(entries, _tempo), do: margin_list_text(entries)
+  defp describe_margins(entries, _tempo) do
+    margin_list_text(entries)
+  end
 
   defp margin_list_text(entries) do
     rendered =
@@ -1027,13 +1305,20 @@ defmodule Tempo.Explain do
     %{tempo | time: stripped}
   end
 
-  defp unit_word(unit, 1), do: "#{unit}"
-  defp unit_word(unit, _margin), do: "#{unit}s"
+  defp unit_word(unit, 1) do
+    "#{unit}"
+  end
+
+  defp unit_word(unit, _margin) do
+    "#{unit}s"
+  end
 
   # A qualifier every component carries is the whole value's, which is how it
   # is written (ISO 8601-2 §8.2.1); otherwise each qualified component is
   # named.
-  defp qualification_text(%Tempo{qualifications: nil}), do: nil
+  defp qualification_text(%Tempo{qualifications: nil}) do
+    nil
+  end
 
   defp qualification_text(%Tempo{qualifications: qualifications} = tempo) do
     case Qualification.whole(tempo) do
@@ -1062,19 +1347,29 @@ defmodule Tempo.Explain do
     end)
   end
 
-  defp unit_words(unit), do: unit |> Atom.to_string() |> String.replace("_", " ")
+  defp unit_words(unit) do
+    unit
+    |> Atom.to_string()
+    |> String.replace("_", " ")
+  end
 
   # A time shift is how far the value's clock is from UTC (ISO 8601-1
   # §3.1.1.25), and with it the value names a moment. It was not said.
-  defp time_shift_text(%Tempo{shift: [hour: 0]}),
-    do: "Time shift: none, the time is in UTC (`Z`)."
+  defp time_shift_text(%Tempo{shift: [hour: 0]}) do
+    "Time shift: none, the time is in UTC (`Z`)."
+  end
 
-  defp time_shift_text(%Tempo{shift: [_ | _] = shift}),
-    do: "Time shift: #{shift_text(shift)} from UTC."
+  defp time_shift_text(%Tempo{shift: [_ | _] = shift}) do
+    "Time shift: #{shift_text(shift)} from UTC."
+  end
 
-  defp time_shift_text(_no_shift), do: nil
+  defp time_shift_text(_no_shift) do
+    nil
+  end
 
-  defp extended_text(%Tempo{extended: nil}), do: nil
+  defp extended_text(%Tempo{extended: nil}) do
+    nil
+  end
 
   defp extended_text(%Tempo{extended: extended}) do
     parts =
@@ -1090,12 +1385,19 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp calendar_text(%Tempo{calendar: calendar}) when is_notation(calendar), do: nil
-  defp calendar_text(%Tempo{calendar: cal}), do: "Calendar: #{Calendars.inspect(cal)}."
+  defp calendar_text(%Tempo{calendar: calendar}) when is_notation(calendar) do
+    nil
+  end
+
+  defp calendar_text(%Tempo{calendar: cal}) do
+    "Calendar: #{Calendars.inspect(cal)}."
+  end
 
   # A value with no components has no resolution to report — `resolution/1`
   # takes the last unit and there is none.
-  defp enumeration_text(%Tempo{time: []}), do: nil
+  defp enumeration_text(%Tempo{time: []}) do
+    nil
+  end
 
   defp enumeration_text(%Tempo{} = tempo) do
     {unit, _count} = Tempo.resolution(tempo)
@@ -1113,13 +1415,15 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp describe_enumerator(nil, _calendar),
-    do: "At finest supported resolution — cannot be enumerated further."
+  defp describe_enumerator(nil, _calendar) do
+    "At finest supported resolution — cannot be enumerated further."
+  end
 
   # The unit is the one the value's interval says it is walked by: a week
   # of a calendar of months by days, the dates its walk yields.
-  defp describe_enumerator({next_unit, _range}, calendar),
-    do: "Iterates at #{Calendars.inspect(Unit.walked_by(next_unit, calendar))} granularity."
+  defp describe_enumerator({next_unit, _range}, calendar) do
+    "Iterates at #{Calendars.inspect(Unit.walked_by(next_unit, calendar))} granularity."
+  end
 
   ## ------------------------------------------------------------
   ## Tempo.Interval
@@ -1356,13 +1660,18 @@ defmodule Tempo.Explain do
   end
 
   defp each_value_hint(from, to) do
-    if names_each_value?(from) != names_each_value?(to),
-      do: {:hint, "List the spans with `Tempo.to_interval/1`."}
+    if names_each_value?(from) != names_each_value?(to) do
+      {:hint, "List the spans with `Tempo.to_interval/1`."}
+    end
   end
 
-  defp names_each_value?(%Tempo{} = endpoint), do: Enumeration.names_each_value?(endpoint)
+  defp names_each_value?(%Tempo{} = endpoint) do
+    Enumeration.names_each_value?(endpoint)
+  end
 
-  defp metadata_part(m) when m == %{} or is_nil(m), do: nil
+  defp metadata_part(m) when m == %{} or is_nil(m) do
+    nil
+  end
 
   defp metadata_part(m) do
     text =
@@ -1372,7 +1681,12 @@ defmodule Tempo.Explain do
 
         s ->
           loc = m[:location]
-          if is_binary(loc), do: "Event: #{s} @ #{loc}.", else: "Event: #{s}."
+
+          if is_binary(loc) do
+            "Event: #{s} @ #{loc}."
+          else
+            "Event: #{s}."
+          end
       end
 
     {:metadata, text}
@@ -1407,24 +1721,41 @@ defmodule Tempo.Explain do
       end)
 
     more =
-      if count > 3, do: [{:member, "… and #{count - 3} more."}], else: []
+      if count > 3 do
+        [{:member, "… and #{count - 3} more."}]
+      else
+        []
+      end
 
     [
-      {:headline, "An IntervalSet with #{count} interval#{if count == 1, do: "", else: "s"}."}
+      {:headline,
+       "An IntervalSet with #{count} interval#{if count == 1 do
+         ""
+       else
+         "s"
+       end}."}
     ] ++ preview_parts ++ more ++ List.wrap(set_metadata_part(metadata))
   end
 
-  defp set_metadata_part(nil), do: nil
-  defp set_metadata_part(m) when m == %{}, do: nil
+  defp set_metadata_part(nil) do
+    nil
+  end
 
-  defp set_metadata_part(%{name: name}) when is_binary(name),
-    do: {:metadata, "Calendar name: #{name}."}
+  defp set_metadata_part(m) when m == %{} do
+    nil
+  end
 
-  defp set_metadata_part(%{prodid: prodid}) when is_binary(prodid),
-    do: {:metadata, "Producer: #{prodid}."}
+  defp set_metadata_part(%{name: name}) when is_binary(name) do
+    {:metadata, "Calendar name: #{name}."}
+  end
 
-  defp set_metadata_part(m),
-    do: {:metadata, "Set-level metadata: #{map_size(m)} key(s)."}
+  defp set_metadata_part(%{prodid: prodid}) when is_binary(prodid) do
+    {:metadata, "Producer: #{prodid}."}
+  end
+
+  defp set_metadata_part(m) do
+    {:metadata, "Set-level metadata: #{map_size(m)} key(s)."}
+  end
 
   ## ------------------------------------------------------------
   ## Tempo.Set
@@ -1433,7 +1764,11 @@ defmodule Tempo.Explain do
   # A set of durations (ISO 8601-2 §6.5) names lengths of time, and no time.
   defp set_parts(%Tempo.Set{type: type, set: [%Tempo.Duration{} | _durations] = members}) do
     held =
-      if type == :all, do: "each of these lengths of time", else: "one of these lengths of time"
+      if type == :all do
+        "each of these lengths of time"
+      else
+        "one of these lengths of time"
+      end
 
     [
       {:headline, "A set of durations: #{held}, and no time on the time line."},
@@ -1470,23 +1805,47 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp exclusion_phrase([]), do: []
-  defp exclusion_phrase(except), do: ["excluding #{members_phrase(except)}"]
+  defp exclusion_phrase([]) do
+    []
+  end
 
-  defp members_phrase(members), do: Enum.map_join(members, ", ", &member_phrase/1)
+  defp exclusion_phrase(except) do
+    ["excluding #{members_phrase(except)}"]
+  end
+
+  defp members_phrase(members) do
+    Enum.map_join(members, ", ", &member_phrase/1)
+  end
 
   # A set/domain member as prose. A range renders `first..last`; anything else
   # falls back to `inspect/1` (the `~o"…"` sigil form).
-  defp member_phrase(%Tempo.Range{first: first, last: last}),
-    do: "#{Calendars.inspect(first)}..#{Calendars.inspect(last)}"
+  defp member_phrase(%Tempo.Range{first: first, last: last}) do
+    "#{Calendars.inspect(first)}..#{Calendars.inspect(last)}"
+  end
 
-  defp member_phrase(other), do: Calendars.inspect(other)
+  defp member_phrase(other) do
+    Calendars.inspect(other)
+  end
 
-  defp filter_phrase(:even), do: ["even years only"]
-  defp filter_phrase(:odd), do: ["odd years only"]
-  defp filter_phrase(:leap), do: ["leap years only"]
-  defp filter_phrase(:common), do: ["common (non-leap) years only"]
-  defp filter_phrase(_none), do: []
+  defp filter_phrase(:even) do
+    ["even years only"]
+  end
+
+  defp filter_phrase(:odd) do
+    ["odd years only"]
+  end
+
+  defp filter_phrase(:leap) do
+    ["leap years only"]
+  end
+
+  defp filter_phrase(:common) do
+    ["common (non-leap) years only"]
+  end
+
+  defp filter_phrase(_none) do
+    []
+  end
 
   # A recurrence domain as an English phrase. An exclusions-only domain reads as
   # a subtraction from "every period"; a plain-member domain lists its members
@@ -1501,20 +1860,22 @@ defmodule Tempo.Explain do
 
   # A plain-member domain is its own window; one that is only a filter or
   # only exclusions needs a `:within` window.
-  defp domain_hint(%Tempo.Set{set: [], except: [], filter: filter}) when not is_nil(filter),
-    do: "A filter only — supply a `:within` window; the periods of it the filter keeps are kept."
+  defp domain_hint(%Tempo.Set{set: [], except: [], filter: filter}) when not is_nil(filter) do
+    "A filter only — supply a `:within` window; the periods of it the filter keeps are kept."
+  end
 
-  defp domain_hint(%Tempo.Set{set: [], filter: nil}),
-    do: "Exclusions only — supply a `:within` window; the excluded periods are removed from it."
+  defp domain_hint(%Tempo.Set{set: [], filter: nil}) do
+    "Exclusions only — supply a `:within` window; the excluded periods are removed from it."
+  end
 
   defp domain_hint(%Tempo.Set{set: []}) do
     "A filter and exclusions only — supply a `:within` window; the periods of it the filter " <>
       "keeps are kept, less those excluded."
   end
 
-  defp domain_hint(%Tempo.Set{}),
-    do:
-      "The domain's members are the window, so `Tempo.to_interval/1` lists its occurrences with no `:within` window."
+  defp domain_hint(%Tempo.Set{}) do
+    "The domain's members are the window, so `Tempo.to_interval/1` lists its occurrences with no `:within` window."
+  end
 
   ## ------------------------------------------------------------
   ## Tempo.RecurrenceSet
@@ -1536,9 +1897,21 @@ defmodule Tempo.Explain do
       |> Enum.with_index(1)
       |> Enum.map(fn {member, index} -> {:member, "#{index}. #{member_rule_phrase(member)}."} end)
 
-    more = if count > 3, do: [{:member, "… and #{count - 3} more."}], else: []
+    more =
+      if count > 3 do
+        [{:member, "… and #{count - 3} more."}]
+      else
+        []
+      end
 
-    [{:headline, "A recurrence set of #{count} member#{if count == 1, do: "", else: "s"}."}] ++
+    [
+      {:headline,
+       "A recurrence set of #{count} member#{if count == 1 do
+         ""
+       else
+         "s"
+       end}."}
+    ] ++
       previews ++
       more ++
       List.wrap(set_metadata_part(metadata)) ++
@@ -1556,23 +1929,47 @@ defmodule Tempo.Explain do
 
   defp member_rule_phrase(member) do
     case member_name(member) do
-      nil -> member |> rule_phrase() |> capitalised()
-      name -> "#{name}: #{rule_phrase(member)}"
+      nil ->
+        member
+        |> rule_phrase()
+        |> capitalised()
+
+      name ->
+        "#{name}: #{rule_phrase(member)}"
     end
   end
 
-  defp capitalised(<<first::utf8, rest::binary>>), do: String.upcase(<<first::utf8>>) <> rest
-  defp capitalised(text), do: text
+  defp capitalised(<<first::utf8, rest::binary>>) do
+    String.upcase(<<first::utf8>>) <> rest
+  end
 
-  defp member_name(%Conditional{metadata: metadata, member: member}),
-    do: name_in(metadata) || member_name(member)
+  defp capitalised(text) do
+    text
+  end
 
-  defp member_name(%{metadata: metadata}), do: name_in(metadata)
-  defp member_name(_member), do: nil
+  defp member_name(%Conditional{metadata: metadata, member: member}) do
+    name_in(metadata) || member_name(member)
+  end
 
-  defp name_in(%{name: name}) when is_binary(name), do: name
-  defp name_in(%{summary: summary}) when is_binary(summary), do: summary
-  defp name_in(_metadata), do: nil
+  defp member_name(%{metadata: metadata}) do
+    name_in(metadata)
+  end
+
+  defp member_name(_member) do
+    nil
+  end
+
+  defp name_in(%{name: name}) when is_binary(name) do
+    name
+  end
+
+  defp name_in(%{summary: summary}) when is_binary(summary) do
+    summary
+  end
+
+  defp name_in(_metadata) do
+    nil
+  end
 
   # A recurrence written with a start and an end: its first occurrence, and the
   # rest back to back.
@@ -1631,43 +2028,81 @@ defmodule Tempo.Explain do
     |> Kernel.<>(times_phrase(recurrence))
   end
 
-  defp rule_phrase(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}),
-    do: "#{render_endpoint(from)} to #{render_endpoint(to)}"
+  defp rule_phrase(%Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to}) do
+    "#{render_endpoint(from)} to #{render_endpoint(to)}"
+  end
 
-  defp rule_phrase(%Tempo.Interval{} = interval),
-    do: interval |> interval_parts() |> headline_phrase()
+  defp rule_phrase(%Tempo.Interval{} = interval) do
+    interval
+    |> interval_parts()
+    |> headline_phrase()
+  end
 
-  defp rule_phrase(%Tempo{} = value), do: render_endpoint(value)
+  defp rule_phrase(%Tempo{} = value) do
+    render_endpoint(value)
+  end
 
   defp rule_phrase(%RecurrenceSet{members: members}) do
     count = length(members)
-    "a recurrence set of #{count} member#{if count == 1, do: "", else: "s"}"
+
+    "a recurrence set of #{count} member#{if count == 1 do
+      ""
+    else
+      "s"
+    end}"
   end
 
-  defp rule_phrase(%Conditional{member: member, to_next: %Tempo{}}),
-    do: "#{rule_phrase(member)}, moved when it falls on another member's occurrence"
+  defp rule_phrase(%Conditional{member: member, to_next: %Tempo{}}) do
+    "#{rule_phrase(member)}, moved when it falls on another member's occurrence"
+  end
 
-  defp rule_phrase(%Conditional{member: member}),
-    do:
-      "#{rule_phrase(member)}, kept only when the days around it fall on other members' occurrences"
+  defp rule_phrase(%Conditional{member: member}) do
+    "#{rule_phrase(member)}, kept only when the days around it fall on other members' occurrences"
+  end
 
-  defp rule_phrase(other), do: Calendars.inspect(other)
+  defp rule_phrase(other) do
+    Calendars.inspect(other)
+  end
 
-  defp cadence_phrase([{unit, 1}]), do: "every #{unit}"
-  defp cadence_phrase(cadence), do: "every #{duration_prose(cadence)}"
+  defp cadence_phrase([{unit, 1}]) do
+    "every #{unit}"
+  end
 
-  defp start_phrase(%Tempo{} = from), do: "from #{render_endpoint(from)}"
-  defp start_phrase(%Tempo.Set{} = domain), do: "in #{domain_prose(domain)}"
-  defp start_phrase(_open), do: nil
+  defp cadence_phrase(cadence) do
+    "every #{duration_prose(cadence)}"
+  end
 
-  defp until_phrase(%Tempo.Interval{recurrence: :infinity, to: %Tempo{} = until}),
-    do: "until #{render_endpoint(until)}"
+  defp start_phrase(%Tempo{} = from) do
+    "from #{render_endpoint(from)}"
+  end
 
-  defp until_phrase(_interval), do: nil
+  defp start_phrase(%Tempo.Set{} = domain) do
+    "in #{domain_prose(domain)}"
+  end
 
-  defp times_phrase(1), do: ", once"
-  defp times_phrase(count) when is_integer(count), do: ", #{count} times"
-  defp times_phrase(_unbounded), do: ""
+  defp start_phrase(_open) do
+    nil
+  end
+
+  defp until_phrase(%Tempo.Interval{recurrence: :infinity, to: %Tempo{} = until}) do
+    "until #{render_endpoint(until)}"
+  end
+
+  defp until_phrase(_interval) do
+    nil
+  end
+
+  defp times_phrase(1) do
+    ", once"
+  end
+
+  defp times_phrase(count) when is_integer(count) do
+    ", #{count} times"
+  end
+
+  defp times_phrase(_unbounded) do
+    ""
+  end
 
   # An interval's own headline, as a phrase within a sentence.
   defp headline_phrase(parts) do
@@ -1721,15 +2156,37 @@ defmodule Tempo.Explain do
     |> Mask.mask_bounds()
   end
 
-  defp qualification_word(:uncertain), do: "uncertain"
-  defp qualification_word(:approximate), do: "approximate"
-  defp qualification_word(:uncertain_and_approximate), do: "both uncertain and approximate"
-  defp qualification_word(other), do: to_string(other)
+  defp qualification_word(:uncertain) do
+    "uncertain"
+  end
 
-  defp qualification_symbol(:uncertain), do: "?"
-  defp qualification_symbol(:approximate), do: "~"
-  defp qualification_symbol(:uncertain_and_approximate), do: "%"
-  defp qualification_symbol(_), do: "?"
+  defp qualification_word(:approximate) do
+    "approximate"
+  end
+
+  defp qualification_word(:uncertain_and_approximate) do
+    "both uncertain and approximate"
+  end
+
+  defp qualification_word(other) do
+    to_string(other)
+  end
+
+  defp qualification_symbol(:uncertain) do
+    "?"
+  end
+
+  defp qualification_symbol(:approximate) do
+    "~"
+  end
+
+  defp qualification_symbol(:uncertain_and_approximate) do
+    "%"
+  end
+
+  defp qualification_symbol(_) do
+    "?"
+  end
 
   # Render an endpoint in a consistent `YYYY-MM-DDTHH:MM` shape,
   # padding missing trailing units with their minimum so the
@@ -1739,8 +2196,9 @@ defmodule Tempo.Explain do
   # An end that holds a set names several values and no one moment, and is
   # shown as it is written: `2026Y6M{20,25}D` was shown as the first day of
   # its month.
-  defp render_endpoint(%Tempo{time: [{:year, _year}, {:season, _season}]} = season),
-    do: season_phrase(season)
+  defp render_endpoint(%Tempo{time: [{:year, _year}, {:season, _season}]} = season) do
+    season_phrase(season)
+  end
 
   defp render_endpoint(%Tempo{time: time} = tempo) do
     cond do
@@ -1750,13 +2208,17 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp render_endpoint(other), do: Calendars.inspect(other)
+  defp render_endpoint(other) do
+    Calendars.inspect(other)
+  end
 
   # An end that holds a group (`2026Y1Q`, a quarter) is told as the value
   # alone is, by the months it names: "January to March 2026". It was shown
   # as its year, the group left out, so the interval from one quarter to the
   # next was "From: 2026. To: 2026".
-  defp holds_a_group?(time), do: Enum.any?(time, &match?({_unit, {:group, _values}}, &1))
+  defp holds_a_group?(time) do
+    Enum.any?(time, &match?({_unit, {:group, _values}}, &1))
+  end
 
   defp group_phrase(%Tempo{time: time} = tempo) do
     with true <- Enum.all?(time, &writable_unit?/1),
@@ -1782,12 +2244,13 @@ defmodule Tempo.Explain do
   # the equator where its dates are not.
   @season_names %{21 => "spring", 22 => "summer", 23 => "autumn", 24 => "winter"}
 
-  defp season_phrase(%Tempo{time: [{:year, year}, {:season, season}]}) when is_integer(year),
-    do: "the #{Map.fetch!(@season_names, season)} of #{year}, in no hemisphere"
+  defp season_phrase(%Tempo{time: [{:year, year}, {:season, season}]}) when is_integer(year) do
+    "the #{Map.fetch!(@season_names, season)} of #{year}, in no hemisphere"
+  end
 
-  defp season_phrase(%Tempo{time: [{:year, _several}, {:season, season}]} = tempo),
-    do:
-      "the #{Map.fetch!(@season_names, season)} of #{Calendars.inspect(tempo)}, in no hemisphere"
+  defp season_phrase(%Tempo{time: [{:year, _several}, {:season, season}]} = tempo) do
+    "the #{Map.fetch!(@season_names, season)} of #{Calendars.inspect(tempo)}, in no hemisphere"
+  end
 
   # An end as it is written, with the day it starts on where its writing
   # does not say (`starts_on/1`), and with what else is to be said of it:
@@ -1834,13 +2297,21 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp starts_on(_no_endpoint), do: nil
+  defp starts_on(_no_endpoint) do
+    nil
+  end
 
-  defp plain_date_unit?({unit, value}) when unit in [:year, :month, :week], do: is_integer(value)
-  defp plain_date_unit?(_a_day_a_time_or_another_shape), do: false
+  defp plain_date_unit?({unit, value}) when unit in [:year, :month, :week] do
+    is_integer(value)
+  end
 
-  defp start_not_written(year, month, nil, calendar) when is_integer(month),
-    do: start_other_than([year: year, month: month], {year, month, 1}, calendar)
+  defp plain_date_unit?(_a_day_a_time_or_another_shape) do
+    false
+  end
+
+  defp start_not_written(year, month, nil, calendar) when is_integer(month) do
+    start_other_than([year: year, month: month], {year, month, 1}, calendar)
+  end
 
   defp start_not_written(year, nil, week, calendar) when is_integer(week) do
     case UnitValues.date_from_iso_week(year, week, 1, calendar) do
@@ -1849,10 +2320,13 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp start_not_written(year, nil, nil, calendar),
-    do: start_other_than([year: year], {year, 1, 1}, calendar)
+  defp start_not_written(year, nil, nil, calendar) do
+    start_other_than([year: year], {year, 1, 1}, calendar)
+  end
 
-  defp start_not_written(_year, _month, _week, _calendar), do: nil
+  defp start_not_written(_year, _month, _week, _calendar) do
+    nil
+  end
 
   # A start is told only where it is another day than the writing reads as:
   # the day its first date is named by, in a calendar that counts its months
@@ -1861,15 +2335,22 @@ defmodule Tempo.Explain do
   defp start_other_than(units, evident, calendar) do
     case UnitValues.start_date(units, calendar) do
       {:ok, {year, month, day}} ->
-        year |> UnitValues.named_date(month, day, calendar) |> named_other_than(evident)
+        year
+        |> UnitValues.named_date(month, day, calendar)
+        |> named_other_than(evident)
 
       :error ->
         nil
     end
   end
 
-  defp named_other_than(evident, evident), do: nil
-  defp named_other_than({year, month, day}, _evident), do: month_date(year, month, day)
+  defp named_other_than(evident, evident) do
+    nil
+  end
+
+  defp named_other_than({year, month, day}, _evident) do
+    month_date(year, month, day)
+  end
 
   defp render_moment(tempo, time) do
     case {render_date_part(tempo), render_time_part(time)} do
@@ -1913,27 +2394,37 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp month_date(year, month, day) when is_integer(day),
-    do: "#{year_text(year)}-#{two_digit(month)}-#{two_digit(day)}"
+  defp month_date(year, month, day) when is_integer(day) do
+    "#{year_text(year)}-#{two_digit(month)}-#{two_digit(day)}"
+  end
 
-  defp month_date(year, month, _no_plain_day), do: "#{year_text(year)}-#{two_digit(month)}"
+  defp month_date(year, month, _no_plain_day) do
+    "#{year_text(year)}-#{two_digit(month)}"
+  end
 
   # A year as ISO 8601 writes it, to four digits, and with a minus before
   # the year 0: the year 44 BCE is `-0043` there, and was written `-43`.
-  defp year_text(year) when is_integer(year) and year < 0,
-    do: "-" <> String.pad_leading(Integer.to_string(-year), 4, "0")
+  defp year_text(year) when is_integer(year) and year < 0 do
+    "-" <> String.pad_leading(Integer.to_string(-year), 4, "0")
+  end
 
-  defp year_text(year) when is_integer(year),
-    do: String.pad_leading(Integer.to_string(year), 4, "0")
+  defp year_text(year) when is_integer(year) do
+    String.pad_leading(Integer.to_string(year), 4, "0")
+  end
 
   # A week, or the day of it a week date names, as ISO 8601 writes a week
   # date.
-  defp week_date(year, week, day_of_week) when is_integer(day_of_week),
-    do: "#{year_text(year)}-W#{two_digit(week)}-#{day_of_week}"
+  defp week_date(year, week, day_of_week) when is_integer(day_of_week) do
+    "#{year_text(year)}-W#{two_digit(week)}-#{day_of_week}"
+  end
 
-  defp week_date(year, week, _no_plain_day), do: "#{year_text(year)}-W#{two_digit(week)}"
+  defp week_date(year, week, _no_plain_day) do
+    "#{year_text(year)}-W#{two_digit(week)}"
+  end
 
-  defp three_digit(number), do: String.pad_leading(Integer.to_string(number), 3, "0")
+  defp three_digit(number) do
+    String.pad_leading(Integer.to_string(number), 3, "0")
+  end
 
   # ISO 8601 writes a yearless date `--MM-DD`, a yearless month `--MM`,
   # and a bare day `---DD`. Use the standard's own spelling so a span
@@ -1959,15 +2450,21 @@ defmodule Tempo.Explain do
   end
 
   # ISO 8601's yearless week spellings, by which parts the value carries.
-  defp render_week_axis(week, day) when is_integer(week) and is_integer(day),
-    do: "-W#{two_digit(week)}-#{day}"
+  defp render_week_axis(week, day) when is_integer(week) and is_integer(day) do
+    "-W#{two_digit(week)}-#{day}"
+  end
 
-  defp render_week_axis(week, _day) when is_integer(week), do: "-W#{two_digit(week)}"
+  defp render_week_axis(week, _day) when is_integer(week) do
+    "-W#{two_digit(week)}"
+  end
 
-  defp render_week_axis(_week, day) when is_integer(day),
-    do: {:in_words, "day #{day} of the week"}
+  defp render_week_axis(_week, day) when is_integer(day) do
+    {:in_words, "day #{day} of the week"}
+  end
 
-  defp render_week_axis(_week, _day), do: nil
+  defp render_week_axis(_week, _day) do
+    nil
+  end
 
   # The time of day an end is written to, and no more of it: an hour alone
   # is the hour, and is given no minute it does not have. A time that is no
@@ -1999,25 +2496,48 @@ defmodule Tempo.Explain do
         end
       end)
 
-    if written != "", do: written
+    if written != "" do
+      written
+    end
   end
 
-  defp fraction_of(:second, time), do: fraction_text(Keyword.get(time, :microsecond))
-  defp fraction_of(_unit, _time), do: ""
+  defp fraction_of(:second, time) do
+    fraction_text(Keyword.get(time, :microsecond))
+  end
+
+  defp fraction_of(_unit, _time) do
+    ""
+  end
 
   # An endpoint written with a time shift is at that shift from UTC, which
   # is part of the moment it names: `Z`, or the hours and minutes.
-  defp render_shift(%Tempo{shift: [hour: 0]}), do: "Z"
-  defp render_shift(%Tempo{shift: [_ | _] = shift}), do: shift_text(shift)
-  defp render_shift(_no_shift), do: ""
+  defp render_shift(%Tempo{shift: [hour: 0]}) do
+    "Z"
+  end
+
+  defp render_shift(%Tempo{shift: [_ | _] = shift}) do
+    shift_text(shift)
+  end
+
+  defp render_shift(_no_shift) do
+    ""
+  end
 
   defp shift_text(shift) do
-    sign = if Enum.any?(shift, fn {_unit, amount} -> amount < 0 end), do: "-", else: "+"
+    sign =
+      if Enum.any?(shift, fn {_unit, amount} -> amount < 0 end) do
+        "-"
+      else
+        "+"
+      end
+
     sign <> Enum.map_join(shift, ":", fn {_unit, amount} -> two_digit(abs(amount)) end)
   end
 
   defp duration_prose(time) do
-    time |> seconds_with_their_fraction() |> Enum.map_join(", ", &duration_component/1)
+    time
+    |> seconds_with_their_fraction()
+    |> Enum.map_join(", ", &duration_component/1)
   end
 
   # A fraction of a second is held beside its seconds, with the number of
@@ -2025,16 +2545,21 @@ defmodule Tempo.Explain do
   # {500_000, 1}]`, which is one and a half seconds and was worded "1
   # second, 0.5 seconds".
   defp seconds_with_their_fraction([{:second, seconds}, {:microsecond, {micro, digits}} | rest])
-       when is_integer(seconds) and seconds >= 0 and is_integer(micro) and micro >= 0,
-       do: [{:second, {seconds, micro, digits}} | rest]
+       when is_integer(seconds) and seconds >= 0 and is_integer(micro) and micro >= 0 do
+    [{:second, {seconds, micro, digits}} | rest]
+  end
 
-  defp seconds_with_their_fraction([component | rest]),
-    do: [component | seconds_with_their_fraction(rest)]
+  defp seconds_with_their_fraction([component | rest]) do
+    [component | seconds_with_their_fraction(rest)]
+  end
 
-  defp seconds_with_their_fraction([]), do: []
+  defp seconds_with_their_fraction([]) do
+    []
+  end
 
-  defp duration_component({:second, {seconds, micro, digits}}),
-    do: "#{seconds}#{fraction_text({micro, max(digits, 1)})} seconds"
+  defp duration_component({:second, {seconds, micro, digits}}) do
+    "#{seconds}#{fraction_text({micro, max(digits, 1)})} seconds"
+  end
 
   # A fraction alone is stored as `{value, precision}`, so it cannot be
   # interpolated directly. It is written at its own precision: 500000 µs at
@@ -2044,10 +2569,17 @@ defmodule Tempo.Explain do
     "#{:erlang.float_to_binary(seconds, decimals: max(precision, 1))} seconds"
   end
 
-  defp duration_component({unit, n}), do: "#{n} #{pluralise(unit, n)}"
+  defp duration_component({unit, n}) do
+    "#{n} #{pluralise(unit, n)}"
+  end
 
-  defp pluralise(unit, one) when one in [1, -1], do: Atom.to_string(unit)
-  defp pluralise(unit, _), do: Atom.to_string(unit) <> "s"
+  defp pluralise(unit, one) when one in [1, -1] do
+    Atom.to_string(unit)
+  end
+
+  defp pluralise(unit, _) do
+    Atom.to_string(unit) <> "s"
+  end
 
   # A month by its name where it has one, and by its number where it has not.
   defp month_name(month, naming) do
@@ -2071,51 +2603,91 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp fetch_month_name(_set_or_group, _naming), do: :error
+  defp fetch_month_name(_set_or_group, _naming) do
+    :error
+  end
 
   # A calendar of weeks has no named months of its own, so a month written in
   # one keeps the name it was written with, which is the notation's.
-  defp calendar_of_months(calendar),
-    do: if(Tempo.week_based_calendar?(calendar), do: Calendars.default(), else: calendar)
-
-  defp month_fields(month, calendar, year) when is_integer(year),
-    do: %{year: year, month: month, calendar: calendar}
-
-  defp month_fields(month, calendar, _no_year) do
-    if same_months_every_year?(calendar),
-      do: %{month: month, calendar: calendar},
-      else: :no_one_name
+  defp calendar_of_months(calendar) do
+    if Tempo.week_based_calendar?(calendar) do
+      Calendars.default()
+    else
+      calendar
+    end
   end
 
-  defp same_months_every_year?(calendar),
-    do: match?({:ok, months, months}, UnitValues.in_any_year(:month, [], calendar))
+  defp month_fields(month, calendar, year) when is_integer(year) do
+    %{year: year, month: month, calendar: calendar}
+  end
+
+  defp month_fields(month, calendar, _no_year) do
+    if same_months_every_year?(calendar) do
+      %{month: month, calendar: calendar}
+    else
+      :no_one_name
+    end
+  end
+
+  defp same_months_every_year?(calendar) do
+    match?({:ok, months, months}, UnitValues.in_any_year(:month, [], calendar))
+  end
 
   # What names the months of a rule's selection: its calendar and no year,
   # since it selects in each.
-  defp rule_naming(%Tempo.Interval{repeat_rule: %Tempo{} = rule}), do: {rule.calendar, nil}
-  defp rule_naming(%Tempo.Interval{}), do: {Calendars.default(), nil}
+  defp rule_naming(%Tempo.Interval{repeat_rule: %Tempo{} = rule}) do
+    {rule.calendar, nil}
+  end
 
-  defp two_digit(n) when is_integer(n) and n >= 0 and n < 10, do: "0#{n}"
-  defp two_digit(n) when is_integer(n), do: Integer.to_string(n)
-  defp two_digit(_), do: "??"
+  defp rule_naming(%Tempo.Interval{}) do
+    {Calendars.default(), nil}
+  end
+
+  defp two_digit(n) when is_integer(n) and n >= 0 and n < 10 do
+    "0#{n}"
+  end
+
+  defp two_digit(n) when is_integer(n) do
+    Integer.to_string(n)
+  end
+
+  defp two_digit(_) do
+    "??"
+  end
 
   # ── Recurrence + selection prose ───────────────────────────────
 
   # The units after a selection (`L5K2INT9H`) read as part of it: "on the
   # 2nd Friday, at 09:00".
-  defp selection_of(%Tempo{time: [{:selection, selection} | units]}), do: selection ++ units
-  defp selection_of(_), do: nil
+  defp selection_of(%Tempo{time: [{:selection, selection} | units]}) do
+    selection ++ units
+  end
+
+  defp selection_of(_) do
+    nil
+  end
 
   # A rule with no start that runs until an end, as an RRULE with `UNTIL`
   # read with no start is, has an end: it was "An unbounded recurrence".
-  defp open_start_headline(:infinity, %Tempo{} = until),
-    do: "A recurrence until #{render_endpoint(until)}."
+  defp open_start_headline(:infinity, %Tempo{} = until) do
+    "A recurrence until #{render_endpoint(until)}."
+  end
 
-  defp open_start_headline(recurrence, _no_end), do: recurrence_headline(recurrence)
+  defp open_start_headline(recurrence, _no_end) do
+    recurrence_headline(recurrence)
+  end
 
-  defp recurrence_headline(:infinity), do: "An unbounded recurrence."
-  defp recurrence_headline(1), do: "A recurrence of 1 occurrence."
-  defp recurrence_headline(n) when is_integer(n), do: "A recurrence of #{n} occurrences."
+  defp recurrence_headline(:infinity) do
+    "An unbounded recurrence."
+  end
+
+  defp recurrence_headline(1) do
+    "A recurrence of 1 occurrence."
+  end
+
+  defp recurrence_headline(n) when is_integer(n) do
+    "A recurrence of #{n} occurrences."
+  end
 
   defp open_start_hint do
     "The rule names no start of its own. List its occurrences within a window " <>
@@ -2125,14 +2697,17 @@ defmodule Tempo.Explain do
       "(`Tempo.RRule.parse(rule, from: ~o\"2026-01-01\")`)."
   end
 
-  defp recurrence_hint(:infinity, from),
-    do:
-      "List a window of occurrences: `Tempo.to_interval(interval, within: #{window_example(from)})`."
+  defp recurrence_hint(:infinity, from) do
+    "List a window of occurrences: `Tempo.to_interval(interval, within: #{window_example(from)})`."
+  end
 
-  defp recurrence_hint(1, _from), do: "Find the occurrence: `Tempo.to_interval(interval)`."
+  defp recurrence_hint(1, _from) do
+    "Find the occurrence: `Tempo.to_interval(interval)`."
+  end
 
-  defp recurrence_hint(n, _from) when is_integer(n),
-    do: "List the #{n} occurrences: `Tempo.to_interval(interval)`."
+  defp recurrence_hint(n, _from) when is_integer(n) do
+    "List the #{n} occurrences: `Tempo.to_interval(interval)`."
+  end
 
   defp window_example(%Tempo{time: time}) do
     case Keyword.get(time, :year) do
@@ -2180,8 +2755,13 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp inner_selection_of(%Tempo{time: [selection: selection]}), do: selection
-  defp inner_selection_of(%Tempo{time: time}), do: time
+  defp inner_selection_of(%Tempo{time: [selection: selection]}) do
+    selection
+  end
+
+  defp inner_selection_of(%Tempo{time: time}) do
+    time
+  end
 
   # A window of hours, minutes or seconds is worded in them (`PT4H` from
   # 22:00 is "the 4 hours from 22:00"). It was worded in ISO 8601, "the PT4H
@@ -2206,19 +2786,27 @@ defmodule Tempo.Explain do
   end
 
   # A resolved inner selection as a bare noun phrase, for embedding in a window.
-  defp selection_noun([{:event, name}], _naming), do: event_phrase(name)
-  defp selection_noun([{:month, m}], naming), do: month_name(m, naming)
+  defp selection_noun([{:event, name}], _naming) do
+    event_phrase(name)
+  end
 
-  defp selection_noun([{:month, m}, {:day, d}], naming) when is_integer(d),
-    do: "#{month_name(m, naming)} #{d}"
+  defp selection_noun([{:month, m}], naming) do
+    month_name(m, naming)
+  end
+
+  defp selection_noun([{:month, m}, {:day, d}], naming) when is_integer(d) do
+    "#{month_name(m, naming)} #{d}"
+  end
 
   defp selection_noun([{:day_of_week, wd}, {:instance, i}], _naming)
-       when is_integer(wd) and is_integer(i),
-       do: "the #{ordinal(i)} #{weekday_name(wd)}"
+       when is_integer(wd) and is_integer(i) do
+    "the #{ordinal(i)} #{weekday_name(wd)}"
+  end
 
   defp selection_noun([{:month, m}, {:day_of_week, wd}, {:instance, i}], naming)
-       when is_integer(wd) and is_integer(i),
-       do: "the #{ordinal(i)} #{weekday_name(wd)} of #{month_name(m, naming)}"
+       when is_integer(wd) and is_integer(i) do
+    "the #{ordinal(i)} #{weekday_name(wd)} of #{month_name(m, naming)}"
+  end
 
   # A time of day is "at 22:00" as a clause and "22:00" as what a window
   # runs from: "the 2 days from at 22:00" is "the 2 days from 22:00".
@@ -2231,15 +2819,19 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp only_day_or_week?(time),
-    do: Enum.all?(time, fn {unit, _value} -> unit in [:day, :week] end)
+  defp only_day_or_week?(time) do
+    Enum.all?(time, fn {unit, _value} -> unit in [:day, :week] end)
+  end
 
   # A window that runs back from its selection is written with each unit
   # negative, and worded by their lengths.
-  defp before?(time),
-    do: Enum.all?(time, fn {_unit, value} -> is_integer(value) and value < 0 end)
+  defp before?(time) do
+    Enum.all?(time, fn {_unit, value} -> is_integer(value) and value < 0 end)
+  end
 
-  defp lengths(time), do: Enum.map(time, fn {unit, value} -> {unit, abs(value)} end)
+  defp lengths(time) do
+    Enum.map(time, fn {unit, value} -> {unit, abs(value)} end)
+  end
 
   defp offset_in_days(time) do
     Enum.reduce(time, 0, fn
@@ -2249,8 +2841,13 @@ defmodule Tempo.Explain do
     end)
   end
 
-  defp day_count(1), do: "1 day"
-  defp day_count(n), do: "#{n} days"
+  defp day_count(1) do
+    "1 day"
+  end
+
+  defp day_count(n) do
+    "#{n} days"
+  end
 
   # A single-weekday `day_of_week` immediately followed by `instance` is the
   # ISO 8601-2 §12.9 position form of an ordinal weekday ("the 4th Thursday").
@@ -2263,91 +2860,155 @@ defmodule Tempo.Explain do
     [{:byday, ordinal_weekday_pairs(weekday, positions)} | fuse_ordinal_weekday(rest)]
   end
 
-  defp fuse_ordinal_weekday([entry | rest]), do: [entry | fuse_ordinal_weekday(rest)]
-  defp fuse_ordinal_weekday([]), do: []
+  defp fuse_ordinal_weekday([entry | rest]) do
+    [entry | fuse_ordinal_weekday(rest)]
+  end
+
+  defp fuse_ordinal_weekday([]) do
+    []
+  end
 
   # Each position with the weekday. A range of positions that reaches the
   # end of its period ("the 2nd to the last Monday") is kept as it is: which
   # positions it names depends on the period.
   defp ordinal_weekday_pairs(weekday, positions) do
-    positions |> List.wrap() |> Enum.flat_map(&positions_of/1) |> Enum.map(&{&1, weekday})
+    positions
+    |> List.wrap()
+    |> Enum.flat_map(&positions_of/1)
+    |> Enum.map(&{&1, weekday})
   end
 
-  defp positions_of(%Range{} = range),
-    do: if(reaches_the_end?(range), do: [range], else: Enum.to_list(range))
+  defp positions_of(%Range{} = range) do
+    if reaches_the_end?(range) do
+      [range]
+    else
+      Enum.to_list(range)
+    end
+  end
 
-  defp positions_of(position), do: [position]
+  defp positions_of(position) do
+    [position]
+  end
 
   # The hours, minutes and seconds of a selection are one time of day. One
   # written with unspecified digits is worded as it is written, on its own.
-  defp fuse_time_of_day([{_unit, {:mask, _mask}} = entry | rest]),
-    do: [entry | fuse_time_of_day(rest)]
+  defp fuse_time_of_day([{_unit, {:mask, _mask}} = entry | rest]) do
+    [entry | fuse_time_of_day(rest)]
+  end
 
-  defp fuse_time_of_day([{_unit, :any} = entry | rest]), do: [entry | fuse_time_of_day(rest)]
+  defp fuse_time_of_day([{_unit, :any} = entry | rest]) do
+    [entry | fuse_time_of_day(rest)]
+  end
 
   defp fuse_time_of_day([{unit, _value} = first | rest]) when unit in [:hour, :minute, :second] do
     {finer, rest} = Enum.split_while(rest, &unit_in?(&1, [:minute, :second]))
     [{:time_of_day, [first | finer]} | fuse_time_of_day(rest)]
   end
 
-  defp fuse_time_of_day([entry | rest]), do: [entry | fuse_time_of_day(rest)]
-  defp fuse_time_of_day([]), do: []
+  defp fuse_time_of_day([entry | rest]) do
+    [entry | fuse_time_of_day(rest)]
+  end
+
+  defp fuse_time_of_day([]) do
+    []
+  end
 
   # A part written with unspecified digits stands for each value of its unit
   # the digits match, which depend on the period, and is worded as written.
-  defp selection_clause({unit, {:mask, mask}}, _naming),
-    do: "#{masked_unit_phrase(unit)} written #{mask_text(mask)}"
+  defp selection_clause({unit, {:mask, mask}}, _naming) do
+    "#{masked_unit_phrase(unit)} written #{mask_text(mask)}"
+  end
 
   # An unspecified unit (`X*`) stands for every value its unit takes.
-  defp selection_clause({unit, :any}, _naming), do: "#{masked_unit_phrase(unit)} written X*"
+  defp selection_clause({unit, :any}, _naming) do
+    "#{masked_unit_phrase(unit)} written X*"
+  end
 
   # A month is named in the selection's calendar, and a weekday and a time
   # of day are counted in it; no other clause needs it.
-  defp selection_clause({:month, months}, naming), do: "in #{months_phrase(months, naming)}"
+  defp selection_clause({:month, months}, naming) do
+    "in #{months_phrase(months, naming)}"
+  end
 
-  defp selection_clause({:day_of_week, weekdays}, {calendar, _year}),
-    do: "on a #{weekdays_phrase(weekdays, calendar)}"
+  defp selection_clause({:day_of_week, weekdays}, {calendar, _year}) do
+    "on a #{weekdays_phrase(weekdays, calendar)}"
+  end
 
-  defp selection_clause({:byday, pairs}, {calendar, _year}),
-    do: "on #{byday_phrase(pairs, calendar)}"
+  defp selection_clause({:byday, pairs}, {calendar, _year}) do
+    "on #{byday_phrase(pairs, calendar)}"
+  end
 
-  defp selection_clause({:time_of_day, clock}, {calendar, _year}),
-    do: "at #{time_of_day_phrase(clock, calendar)}"
+  defp selection_clause({:time_of_day, clock}, {calendar, _year}) do
+    "at #{time_of_day_phrase(clock, calendar)}"
+  end
 
-  defp selection_clause(entry, _naming), do: selection_clause(entry)
+  defp selection_clause(entry, _naming) do
+    selection_clause(entry)
+  end
 
-  defp selection_clause({:traditional_month, {n, :leap}}),
-    do: "in the leap month after traditional month #{n}"
+  defp selection_clause({:traditional_month, {n, :leap}}) do
+    "in the leap month after traditional month #{n}"
+  end
 
-  defp selection_clause({:traditional_month, m}) when is_integer(m),
-    do: "in traditional month #{m}"
+  defp selection_clause({:traditional_month, m}) when is_integer(m) do
+    "in traditional month #{m}"
+  end
 
-  defp selection_clause({:wkst, w}), do: "with weeks starting on #{weekday_name(w)}"
+  defp selection_clause({:wkst, w}) do
+    "with weeks starting on #{weekday_name(w)}"
+  end
 
-  defp selection_clause({:skip, :forward}),
-    do: "on the first day of the month after where a month lacks the day"
+  defp selection_clause({:skip, :forward}) do
+    "on the first day of the month after where a month lacks the day"
+  end
 
-  defp selection_clause({:skip, :backward}),
-    do: "on the last day of a month that lacks the day"
+  defp selection_clause({:skip, :backward}) do
+    "on the last day of a month that lacks the day"
+  end
 
-  defp selection_clause({:day, d}), do: "on #{ordinals_phrase(d)}"
-  defp selection_clause({:week, w}), do: "in #{ordinals_phrase(w)} ISO week"
-  defp selection_clause({:calendar_week, w}), do: "in #{ordinals_phrase(w)} calendar week"
+  defp selection_clause({:day, d}) do
+    "on #{ordinals_phrase(d)}"
+  end
 
-  defp selection_clause({:week_of_month, w}),
-    do: "in #{ordinals_phrase(w)} week of the month"
+  defp selection_clause({:week, w}) do
+    "in #{ordinals_phrase(w)} ISO week"
+  end
 
-  defp selection_clause({:day_of_year, d}), do: "on #{ordinals_phrase(d)} day of the year"
-  defp selection_clause({:instance, p}), do: "keeping #{ordinals_phrase(p)} occurrence"
-  defp selection_clause({:event, name}), do: "on #{event_phrase(name)}"
-  defp selection_clause({_other, _value}), do: []
+  defp selection_clause({:calendar_week, w}) do
+    "in #{ordinals_phrase(w)} calendar week"
+  end
+
+  defp selection_clause({:week_of_month, w}) do
+    "in #{ordinals_phrase(w)} week of the month"
+  end
+
+  defp selection_clause({:day_of_year, d}) do
+    "on #{ordinals_phrase(d)} day of the year"
+  end
+
+  defp selection_clause({:instance, p}) do
+    "keeping #{ordinals_phrase(p)} occurrence"
+  end
+
+  defp selection_clause({:event, name}) do
+    "on #{event_phrase(name)}"
+  end
+
+  defp selection_clause({_other, _value}) do
+    []
+  end
 
   # Humanise a computed-event name: `"easter"` → "Easter"; a hyphenated
   # astronomical event → "the March equinox", and one taking its date in a zone
   # → "the March equinox in +09:00". An unknown name still reads sensibly ("the
   # winter-fair event") so `explain/1` never fails on one.
-  defp event_phrase("easter"), do: "Easter"
-  defp event_phrase("orthodox-easter"), do: "Orthodox Easter"
+  defp event_phrase("easter") do
+    "Easter"
+  end
+
+  defp event_phrase("orthodox-easter") do
+    "Orthodox Easter"
+  end
 
   defp event_phrase(name) when is_binary(name) do
     case String.split(name, "@", parts: 2) do
@@ -2382,10 +3043,13 @@ defmodule Tempo.Explain do
     |> or_join()
   end
 
-  defp position_phrase(%Range{first: first, last: last}),
-    do: "#{ordinal(first)} to the #{ordinal(last)}"
+  defp position_phrase(%Range{first: first, last: last}) do
+    "#{ordinal(first)} to the #{ordinal(last)}"
+  end
 
-  defp position_phrase(position), do: ordinal(position)
+  defp position_phrase(position) do
+    ordinal(position)
+  end
 
   # ── What a selection's values are called ──────────────────────
   #
@@ -2422,20 +3086,33 @@ defmodule Tempo.Explain do
   # Tuesday).
   defp weekdays_phrase(written, calendar) do
     case counted(written, :day_of_week, calendar) do
-      {:ok, days} -> days |> Enum.map(&day_of_week_name(&1, calendar)) |> or_join()
-      :as_written -> weekday_name(written)
+      {:ok, days} ->
+        days
+        |> Enum.map(&day_of_week_name(&1, calendar))
+        |> or_join()
+
+      :as_written ->
+        weekday_name(written)
     end
   end
 
-  defp day_of_week_name(day, calendar),
-    do: day |> UnitValues.iso_weekday_from_day_of_week(calendar) |> weekday_name()
+  defp day_of_week_name(day, calendar) do
+    day
+    |> UnitValues.iso_weekday_from_day_of_week(calendar)
+    |> weekday_name()
+  end
 
   # An RRULE's BYDAY names its weekdays themselves, Monday the first, in
   # whatever calendar the rule is resolved.
   defp named_weekdays_phrase(written, calendar) do
     case counted(written, :day_of_week, calendar) do
-      {:ok, weekdays} -> weekdays |> Enum.map(&weekday_name/1) |> or_join()
-      :as_written -> weekday_name(written)
+      {:ok, weekdays} ->
+        weekdays
+        |> Enum.map(&weekday_name/1)
+        |> or_join()
+
+      :as_written ->
+        weekday_name(written)
     end
   end
 
@@ -2444,15 +3121,21 @@ defmodule Tempo.Explain do
   defp months_phrase(written, {calendar, year} = naming) do
     with {:ok, months_of_year} <- months_of(calendar, year),
          {:ok, months} <- counted_among(written, months_of_year) do
-      months |> Enum.map(&month_name(&1, naming)) |> or_join()
+      months
+      |> Enum.map(&month_name(&1, naming))
+      |> or_join()
     else
       _counted_by_the_year ->
-        written |> List.wrap() |> Enum.flat_map(&month_as_written(&1, naming)) |> or_join()
+        written
+        |> List.wrap()
+        |> Enum.flat_map(&month_as_written(&1, naming))
+        |> or_join()
     end
   end
 
-  defp months_of(calendar, year) when is_integer(year),
-    do: UnitValues.in_period(:month, [year: year], calendar)
+  defp months_of(calendar, year) when is_integer(year) do
+    UnitValues.in_period(:month, [year: year], calendar)
+  end
 
   defp months_of(calendar, _no_year) do
     case UnitValues.in_any_year(:month, [], calendar) do
@@ -2461,16 +3144,20 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp month_as_written(month, naming) when is_integer(month) and month > 0,
-    do: [month_name(month, naming)]
+  defp month_as_written(month, naming) when is_integer(month) and month > 0 do
+    [month_name(month, naming)]
+  end
 
-  defp month_as_written(month, _naming) when is_integer(month),
-    do: ["the #{ordinal(month)} month"]
+  defp month_as_written(month, _naming) when is_integer(month) do
+    ["the #{ordinal(month)} month"]
+  end
 
   defp month_as_written(%Range{first: first, last: last, step: step} = range, naming) do
     cond do
       not reaches_the_end?(range) ->
-        range |> Enum.to_list() |> Enum.flat_map(&month_as_written(&1, naming))
+        range
+        |> Enum.to_list()
+        |> Enum.flat_map(&month_as_written(&1, naming))
 
       step == 1 ->
         ["#{month_name(first, naming)} to the #{ordinal(last)} month"]
@@ -2482,26 +3169,33 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp month_as_written(other, naming), do: [month_name(other, naming)]
+  defp month_as_written(other, naming) do
+    [month_name(other, naming)]
+  end
 
   # A time of day: each hour with each minute and second, "09:30 or 17:30".
   # A selection with no hour selects in each: "minute 30 of each hour".
   defp time_of_day_phrase(clock, calendar) do
     counted = Enum.map(clock, fn {unit, written} -> {unit, counted(written, unit, calendar)} end)
 
-    if Enum.all?(counted, &match?({_unit, {:ok, _values}}, &1)),
-      do:
-        counted |> Enum.map(fn {unit, {:ok, values}} -> {unit, values} end) |> clock_phrase_of(),
-      else:
-        Enum.map_join(clock, ", ", fn {unit, written} -> "#{unit} #{written_phrase(written)}" end)
+    if Enum.all?(counted, &match?({_unit, {:ok, _values}}, &1)) do
+      counted
+      |> Enum.map(fn {unit, {:ok, values}} -> {unit, values} end)
+      |> clock_phrase_of()
+    else
+      Enum.map_join(clock, ", ", fn {unit, written} -> "#{unit} #{written_phrase(written)}" end)
+    end
   end
 
   # An hour with no minute is the hour it is, "hour 9", and is not written
   # with the minutes it does not have ("09:00").
-  defp clock_phrase_of([{:hour, hours}]), do: hours_phrase(hours, length(hours))
+  defp clock_phrase_of([{:hour, hours}]) do
+    hours_phrase(hours, length(hours))
+  end
 
-  defp clock_phrase_of([{:hour, hours}, {:second, seconds}]),
-    do: "#{hours_phrase(hours, length(hours))}, second #{number_list(seconds)}"
+  defp clock_phrase_of([{:hour, hours}, {:second, seconds}]) do
+    "#{hours_phrase(hours, length(hours))}, second #{number_list(seconds)}"
+  end
 
   defp clock_phrase_of([{:hour, hours} | finer]) do
     times =
@@ -2512,83 +3206,158 @@ defmodule Tempo.Explain do
     times_phrase(times, "times of day")
   end
 
-  defp clock_phrase_of([{:minute, minutes}]),
-    do: "minute #{number_list(minutes)} of each hour"
+  defp clock_phrase_of([{:minute, minutes}]) do
+    "minute #{number_list(minutes)} of each hour"
+  end
 
   defp clock_phrase_of([{:minute, _minutes}, {:second, _seconds}] = finer) do
     times = for time <- finer_times(finer), do: Enum.map_join(time, ":", &two_digit/1)
     times_phrase(times, "times") <> " past each hour"
   end
 
-  defp clock_phrase_of([{:second, seconds}]),
-    do: "second #{number_list(seconds)} of each minute"
+  defp clock_phrase_of([{:second, seconds}]) do
+    "second #{number_list(seconds)} of each minute"
+  end
 
   # A handful of hours are each named, and more are counted.
-  defp hours_phrase(hours, count) when count <= 12, do: "hour #{number_list(hours)}"
+  defp hours_phrase(hours, count) when count <= 12 do
+    "hour #{number_list(hours)}"
+  end
 
-  defp hours_phrase(hours, count),
-    do: "#{count} hours from #{hd(hours)} to #{List.last(hours)}"
+  defp hours_phrase(hours, count) do
+    "#{count} hours from #{hd(hours)} to #{List.last(hours)}"
+  end
 
   # Each minute with each second, as the numbers that follow an hour.
-  defp finer_times([]), do: [[]]
+  defp finer_times([]) do
+    [[]]
+  end
 
-  defp finer_times([{_unit, values} | finer]),
-    do: for(value <- values, rest <- finer_times(finer), do: [value | rest])
+  defp finer_times([{_unit, values} | finer]) do
+    for(value <- values, rest <- finer_times(finer), do: [value | rest])
+  end
 
   # A handful of times are each named, and more are counted.
-  defp times_phrase(times, noun), do: times_phrase(times, noun, length(times))
+  defp times_phrase(times, noun) do
+    times_phrase(times, noun, length(times))
+  end
 
-  defp times_phrase(times, _noun, count) when count <= 12, do: or_join(times)
+  defp times_phrase(times, _noun, count) when count <= 12 do
+    or_join(times)
+  end
 
-  defp times_phrase(times, noun, count),
-    do: "#{count} #{noun} from #{hd(times)} to #{List.last(times)}"
+  defp times_phrase(times, noun, count) do
+    "#{count} #{noun} from #{hd(times)} to #{List.last(times)}"
+  end
 
-  defp number_list(numbers), do: numbers |> Enum.map(&Integer.to_string/1) |> or_join()
+  defp number_list(numbers) do
+    numbers
+    |> Enum.map(&Integer.to_string/1)
+    |> or_join()
+  end
 
-  defp written_phrase(written) when is_list(written),
-    do: written |> Enum.map(&written_phrase/1) |> and_join()
+  defp written_phrase(written) when is_list(written) do
+    written
+    |> Enum.map(&written_phrase/1)
+    |> and_join()
+  end
 
-  defp written_phrase(%Range{first: first, last: last, step: 1}), do: "#{first} to #{last}"
+  defp written_phrase(%Range{first: first, last: last, step: 1}) do
+    "#{first} to #{last}"
+  end
 
-  defp written_phrase(%Range{first: first, last: last, step: step}),
-    do: "#{first} to #{last} by #{step}"
+  defp written_phrase(%Range{first: first, last: last, step: step}) do
+    "#{first} to #{last} by #{step}"
+  end
 
-  defp written_phrase(other), do: Calendars.inspect(other)
+  defp written_phrase(other) do
+    Calendars.inspect(other)
+  end
 
   # Ordinal-list phrase — a contiguous run collapses to a range:
-  defp masked_unit_phrase(:month), do: "in a month"
-  defp masked_unit_phrase(:week), do: "in an ISO week"
-  defp masked_unit_phrase(:calendar_week), do: "in a calendar week"
-  defp masked_unit_phrase(:week_of_month), do: "in a week of the month"
-  defp masked_unit_phrase(:day), do: "on a day"
-  defp masked_unit_phrase(:day_of_year), do: "on a day of the year"
-  defp masked_unit_phrase(:day_of_week), do: "on a day of the week"
-  defp masked_unit_phrase(:hour), do: "at an hour"
-  defp masked_unit_phrase(unit) when unit in [:minute, :second], do: "at a #{unit}"
-  defp masked_unit_phrase(unit), do: "in a #{unit}"
+  defp masked_unit_phrase(:month) do
+    "in a month"
+  end
+
+  defp masked_unit_phrase(:week) do
+    "in an ISO week"
+  end
+
+  defp masked_unit_phrase(:calendar_week) do
+    "in a calendar week"
+  end
+
+  defp masked_unit_phrase(:week_of_month) do
+    "in a week of the month"
+  end
+
+  defp masked_unit_phrase(:day) do
+    "on a day"
+  end
+
+  defp masked_unit_phrase(:day_of_year) do
+    "on a day of the year"
+  end
+
+  defp masked_unit_phrase(:day_of_week) do
+    "on a day of the week"
+  end
+
+  defp masked_unit_phrase(:hour) do
+    "at an hour"
+  end
+
+  defp masked_unit_phrase(unit) when unit in [:minute, :second] do
+    "at a #{unit}"
+  end
+
+  defp masked_unit_phrase(unit) do
+    "in a #{unit}"
+  end
 
   # A mask as it is written: its digits, an `X` for each left out, and a set
   # of digits in braces.
-  defp mask_text(mask), do: Enum.map_join(mask, &mask_digit/1)
+  defp mask_text(mask) do
+    Enum.map_join(mask, &mask_digit/1)
+  end
 
-  defp mask_digit(:X), do: "X"
-  defp mask_digit(:negative), do: "-"
-  defp mask_digit(digit) when is_integer(digit), do: Integer.to_string(digit)
-  defp mask_digit(digits) when is_list(digits), do: "{" <> Enum.join(digits, ",") <> "}"
-  defp mask_digit(other), do: Calendars.inspect(other)
+  defp mask_digit(:X) do
+    "X"
+  end
+
+  defp mask_digit(:negative) do
+    "-"
+  end
+
+  defp mask_digit(digit) when is_integer(digit) do
+    Integer.to_string(digit)
+  end
+
+  defp mask_digit(digits) when is_list(digits) do
+    "{" <> Enum.join(digits, ",") <> "}"
+  end
+
+  defp mask_digit(other) do
+    Calendars.inspect(other)
+  end
 
   # `[2..8]` → "the 2nd–8th"; `[1, 15]` → "the 1st and 15th". Those counted
   # from the end follow those counted from the start ("the 1st, 15th, and
   # last"), and a range that reaches the end is worded by its ends ("the
   # 28th to the last").
   defp ordinals_phrase(value) do
-    {reaching, plain} = value |> List.wrap() |> Enum.split_with(&reaches_the_end?/1)
+    {reaching, plain} =
+      value
+      |> List.wrap()
+      |> Enum.split_with(&reaches_the_end?/1)
 
     and_join(plain_ordinals(plain) ++ Enum.map(reaching, &reaching_ordinals/1))
   end
 
   defp plain_ordinals(members) do
-    case members |> Enum.flat_map(&expand_int/1) |> Enum.sort_by(&{&1 < 0, &1}) do
+    case members
+         |> Enum.flat_map(&expand_int/1)
+         |> Enum.sort_by(&{&1 < 0, &1}) do
       [] ->
         []
 
@@ -2598,28 +3367,47 @@ defmodule Tempo.Explain do
       [lo | _] = list ->
         hi = List.last(list)
 
-        if match?([_, _, _ | _], list) and hi - lo + 1 == length(list),
-          do: ["the #{ordinal(lo)}–#{ordinal(hi)}"],
-          else: ["the " <> and_join(Enum.map(list, &ordinal/1))]
+        if match?([_, _, _ | _], list) and hi - lo + 1 == length(list) do
+          ["the #{ordinal(lo)}–#{ordinal(hi)}"]
+        else
+          ["the " <> and_join(Enum.map(list, &ordinal/1))]
+        end
     end
   end
 
   # Whether a range runs from a value counted from the start to one counted
   # from the end, so that the values it names depend on the period.
-  defp reaches_the_end?(%Range{first: first, last: last}), do: first >= 0 and last < 0
-  defp reaches_the_end?(_member), do: false
+  defp reaches_the_end?(%Range{first: first, last: last}) do
+    first >= 0 and last < 0
+  end
 
-  defp reaching_ordinals(%Range{first: first, last: last, step: 1}),
-    do: "the #{ordinal(first)} to the #{ordinal(last)}"
+  defp reaches_the_end?(_member) do
+    false
+  end
 
-  defp reaching_ordinals(%Range{first: first, last: last, step: step}),
-    do: "every #{ordinal(step)} from the #{ordinal(first)} to the #{ordinal(last)}"
+  defp reaching_ordinals(%Range{first: first, last: last, step: 1}) do
+    "the #{ordinal(first)} to the #{ordinal(last)}"
+  end
 
-  defp expand_int(%Range{} = range), do: Enum.to_list(range)
-  defp expand_int(n) when is_integer(n), do: [n]
+  defp reaching_ordinals(%Range{first: first, last: last, step: step}) do
+    "every #{ordinal(step)} from the #{ordinal(first)} to the #{ordinal(last)}"
+  end
 
-  defp ordinal(-1), do: "last"
-  defp ordinal(n) when is_integer(n) and n < 0, do: "#{ordinal(-n)}-to-last"
+  defp expand_int(%Range{} = range) do
+    Enum.to_list(range)
+  end
+
+  defp expand_int(n) when is_integer(n) do
+    [n]
+  end
+
+  defp ordinal(-1) do
+    "last"
+  end
+
+  defp ordinal(n) when is_integer(n) and n < 0 do
+    "#{ordinal(-n)}-to-last"
+  end
 
   defp ordinal(n) when is_integer(n) do
     suffix =
@@ -2644,19 +3432,34 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp weekday_name(other), do: "weekday #{Calendars.inspect(other)}"
+  defp weekday_name(other) do
+    "weekday #{Calendars.inspect(other)}"
+  end
 
-  defp or_join([]), do: "nothing"
-  defp or_join([one]), do: one
+  defp or_join([]) do
+    "nothing"
+  end
+
+  defp or_join([one]) do
+    one
+  end
 
   defp or_join(list) do
     {init, [last]} = Enum.split(list, -1)
     Enum.join(init, ", ") <> " or " <> last
   end
 
-  defp and_join([]), do: "nothing"
-  defp and_join([one]), do: one
-  defp and_join([first, second]), do: "#{first} and #{second}"
+  defp and_join([]) do
+    "nothing"
+  end
+
+  defp and_join([one]) do
+    one
+  end
+
+  defp and_join([first, second]) do
+    "#{first} and #{second}"
+  end
 
   defp and_join(list) do
     {init, [last]} = Enum.split(list, -1)

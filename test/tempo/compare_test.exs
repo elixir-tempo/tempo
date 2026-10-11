@@ -199,7 +199,13 @@ defmodule Tempo.CompareTest do
       ]
 
       for {a, b} <- pairs do
-        expected = if Compare.compare_endpoints(a, b) == :same, do: :eq, else: :lt
+        expected =
+          if Compare.compare_endpoints(a, b) == :same do
+            :eq
+          else
+            :lt
+          end
+
         assert Tempo.compare(a, b) == expected
       end
     end

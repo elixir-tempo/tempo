@@ -35,8 +35,13 @@ defmodule Tempo.SelectedByWeekdayTest do
     end
   end
 
-  defp as_value(%Date{} = day, nil), do: Tempo.from_date(day)
-  defp as_value(%Date{} = day, zone), do: Tempo.from_iso8601!("#{day}[#{zone}]")
+  defp as_value(%Date{} = day, nil) do
+    Tempo.from_date(day)
+  end
+
+  defp as_value(%Date{} = day, zone) do
+    Tempo.from_iso8601!("#{day}[#{zone}]")
+  end
 
   defp selected(base, selector) do
     {:ok, %IntervalSet{} = set} = Tempo.select(base, selector)
@@ -86,7 +91,11 @@ defmodule Tempo.SelectedByWeekdayTest do
                own_values(Date.range(~D[2026-06-15], ~D[2026-06-21]), 1..5)
 
       {:ok, from_here_on} = Tempo.select(~o"2026-06-15/..", ~o"1K")
-      next_two = from_here_on |> IntervalSet.walk() |> Enum.take(2)
+
+      next_two =
+        from_here_on
+        |> IntervalSet.walk()
+        |> Enum.take(2)
 
       assert next_two == own_values(Date.range(~D[2026-06-15], ~D[2026-06-22]), [1])
     end
@@ -101,7 +110,9 @@ defmodule Tempo.SelectedByWeekdayTest do
       business_days = Tempo.workdays(:AU, except: ~o"2026-06-08")
 
       assert selected(~o"2026-06", business_days) ==
-               @june |> own_values(1..5) |> Enum.reject(&(Interval.from(&1) == ~o"2026-06-08"))
+               @june
+               |> own_values(1..5)
+               |> Enum.reject(&(Interval.from(&1) == ~o"2026-06-08"))
     end
   end
 

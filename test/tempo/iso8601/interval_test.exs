@@ -604,10 +604,13 @@ defmodule Tempo.Parser.Interval.Test do
   describe "the zone written with one end of an interval" do
     @unix_epoch :calendar.datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}})
 
-    defp moment(%Tempo{} = value), do: trunc(Compare.to_utc_seconds(value)) - @unix_epoch
+    defp moment(%Tempo{} = value) do
+      trunc(Compare.to_utc_seconds(value)) - @unix_epoch
+    end
 
-    defp zone_and_offset(%Tempo{extended: extended, shift: shift}),
-      do: {extended && extended.zone_id, shift}
+    defp zone_and_offset(%Tempo{extended: extended, shift: shift}) do
+      {extended && extended.zone_id, shift}
+    end
 
     test "is the other end's without the offset written beside it" do
       zone = "America/New_York"

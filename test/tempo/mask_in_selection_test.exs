@@ -25,7 +25,10 @@ defmodule Tempo.MaskInSelectionTest do
   # Whether a number, written to the mask's width with zeros before it, has
   # the mask's digits where the mask gives one.
   defp matches?(number, mask) do
-    written = number |> Integer.to_string() |> String.pad_leading(String.length(mask), "0")
+    written =
+      number
+      |> Integer.to_string()
+      |> String.pad_leading(String.length(mask), "0")
 
     String.length(written) == String.length(mask) and
       written
@@ -34,16 +37,26 @@ defmodule Tempo.MaskInSelectionTest do
       |> Enum.all?(fn {digit, wanted} -> wanted == "X" or wanted == digit end)
   end
 
-  defp seconds(%Date{} = date),
-    do:
-      date |> NaiveDateTime.new!(~T[00:00:00]) |> NaiveDateTime.to_gregorian_seconds() |> elem(0)
+  defp seconds(%Date{} = date) do
+    date
+    |> NaiveDateTime.new!(~T[00:00:00])
+    |> NaiveDateTime.to_gregorian_seconds()
+    |> elem(0)
+  end
 
-  defp bounds(%Interval{} = span),
-    do: {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  defp bounds(%Interval{} = span) do
+    {Compare.to_utc_seconds(Interval.from(span)), Compare.to_utc_seconds(Interval.to(span))}
+  end
 
-  defp spans({:ok, %IntervalSet{} = set}), do: set |> IntervalSet.members() |> Enum.map(&bounds/1)
+  defp spans({:ok, %IntervalSet{} = set}) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&bounds/1)
+  end
 
-  defp days(dates), do: for(date <- dates, do: {seconds(date), seconds(Date.add(date, 1))})
+  defp days(dates) do
+    for(date <- dates, do: {seconds(date), seconds(Date.add(date, 1))})
+  end
 
   @day_masks ["1X", "2X", "3X", "X", "XX", "X5", "X0", "0X"]
 

@@ -204,7 +204,11 @@ defmodule Tempo.RRuleTest do
       # `1MO,3MO` shares one weekday, so it lowers to the §12.9 position form
       # (`1K{1,3}I`) and round-trips through the ISO 8601 selection string.
       rrule = RRule.parse!("FREQ=MONTHLY;BYDAY=1MO,3MO", from: ~o"2025-01-01")
-      iso = inspect(rrule) |> String.replace(~s(~o"), "") |> String.trim_trailing(~s("))
+
+      iso =
+        inspect(rrule)
+        |> String.replace(~s(~o"), "")
+        |> String.trim_trailing(~s("))
 
       assert Tempo.from_iso8601(iso) == {:ok, rrule}
       assert RRule.to_string(rrule) == {:ok, "FREQ=MONTHLY;BYDAY=1MO,3MO"}
@@ -294,7 +298,11 @@ defmodule Tempo.RRuleTest do
           from: ~o"2024-11-01"
         )
 
-      dates = range_form |> occurrences() |> Enum.map(& &1.from) |> Enum.take(3)
+      dates =
+        range_form
+        |> occurrences()
+        |> Enum.map(& &1.from)
+        |> Enum.take(3)
 
       assert occurrences(range_form) == occurrences(rrule_form)
       assert dates == [~o"2024-11-05", ~o"2025-11-04", ~o"2026-11-03"]
@@ -376,7 +384,11 @@ defmodule Tempo.RRuleTest do
         )
 
       {:ok, set} = Tempo.to_interval(i)
-      first = set |> IntervalSet.members() |> hd()
+
+      first =
+        set
+        |> IntervalSet.members()
+        |> hd()
 
       assert Tempo.hour(first.from) == 18
       assert Tempo.hour(first.to) == 20
@@ -432,7 +444,10 @@ defmodule Tempo.RRuleTest do
 
   defp first_occurrence(value) do
     {:ok, set} = Tempo.to_interval(value, within: ~o"2025")
-    set |> IntervalSet.members() |> hd()
+
+    set
+    |> IntervalSet.members()
+    |> hd()
   end
 
   defp occurrences(value) do

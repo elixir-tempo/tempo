@@ -101,10 +101,21 @@ defmodule Tempo.LengthPredicatesTest do
     end
   end
 
-  defp beside(_seconds, :a_month_or_more), do: :shorter
-  defp beside(seconds, lasting) when seconds > lasting, do: :longer
-  defp beside(seconds, lasting) when seconds == lasting, do: :exactly
-  defp beside(_seconds, _lasting), do: :shorter
+  defp beside(_seconds, :a_month_or_more) do
+    :shorter
+  end
+
+  defp beside(seconds, lasting) when seconds > lasting do
+    :longer
+  end
+
+  defp beside(seconds, lasting) when seconds == lasting do
+    :exactly
+  end
+
+  defp beside(_seconds, _lasting) do
+    :shorter
+  end
 
   # What each predicate says, as the one word they come to.
   defp said(span, duration) do
@@ -126,12 +137,13 @@ defmodule Tempo.LengthPredicatesTest do
     }
   end
 
-  defp to_say(word),
-    do: %{
+  defp to_say(word) do
+    %{
       one_of: [word],
       at_least: word in [:longer, :exactly],
       at_most: word in [:shorter, :exactly]
     }
+  end
 
   describe "a span with a year" do
     test "is as long as the duration that reaches its end from its start" do

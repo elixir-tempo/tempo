@@ -83,49 +83,92 @@ defmodule Tempo.Matrix.Spellings do
 
   """
   @spec date(form(), keyword(integer())) :: String.t() | nil
-  def date(_form, []), do: ""
+  def date(_form, []) do
+    ""
+  end
 
-  def date(:extended, year: year), do: year(year)
-  def date(:extended, year: year, month: month), do: "#{year(year)}-#{pad(month, 2)}"
+  def date(:extended, year: year) do
+    year(year)
+  end
 
-  def date(:extended, year: year, month: month, day: day),
-    do: "#{year(year)}-#{pad(month, 2)}-#{pad(day, 2)}"
+  def date(:extended, year: year, month: month) do
+    "#{year(year)}-#{pad(month, 2)}"
+  end
 
-  def date(:extended, year: year, week: week), do: "#{year(year)}-W#{pad(week, 2)}"
+  def date(:extended, year: year, month: month, day: day) do
+    "#{year(year)}-#{pad(month, 2)}-#{pad(day, 2)}"
+  end
 
-  def date(:extended, year: year, week: week, day_of_week: day),
-    do: "#{year(year)}-W#{pad(week, 2)}-#{day}"
+  def date(:extended, year: year, week: week) do
+    "#{year(year)}-W#{pad(week, 2)}"
+  end
 
-  def date(:extended, year: year, day_of_year: day), do: "#{year(year)}-#{pad(day, 3)}"
+  def date(:extended, year: year, week: week, day_of_week: day) do
+    "#{year(year)}-W#{pad(week, 2)}-#{day}"
+  end
 
-  def date(:basic, year: year), do: year(year)
-  def date(:basic, year: _year, month: _month), do: nil
+  def date(:extended, year: year, day_of_year: day) do
+    "#{year(year)}-#{pad(day, 3)}"
+  end
 
-  def date(:basic, year: year, month: month, day: day),
-    do: "#{year(year)}#{pad(month, 2)}#{pad(day, 2)}"
+  def date(:basic, year: year) do
+    year(year)
+  end
 
-  def date(:basic, year: year, week: week), do: "#{year(year)}W#{pad(week, 2)}"
+  def date(:basic, year: _year, month: _month) do
+    nil
+  end
 
-  def date(:basic, year: year, week: week, day_of_week: day),
-    do: "#{year(year)}W#{pad(week, 2)}#{day}"
+  def date(:basic, year: year, month: month, day: day) do
+    "#{year(year)}#{pad(month, 2)}#{pad(day, 2)}"
+  end
 
-  def date(:basic, year: year, day_of_year: day), do: "#{year(year)}#{pad(day, 3)}"
+  def date(:basic, year: year, week: week) do
+    "#{year(year)}W#{pad(week, 2)}"
+  end
+
+  def date(:basic, year: year, week: week, day_of_week: day) do
+    "#{year(year)}W#{pad(week, 2)}#{day}"
+  end
+
+  def date(:basic, year: year, day_of_year: day) do
+    "#{year(year)}#{pad(day, 3)}"
+  end
 
   def date(:explicit, units) do
     Enum.map_join(units, fn {unit, value} -> "#{value}#{designator(unit)}" end)
   end
 
-  defp designator(:year), do: "Y"
-  defp designator(:month), do: "M"
-  defp designator(:day), do: "D"
-  defp designator(:week), do: "W"
-  defp designator(:day_of_week), do: "K"
-  defp designator(:day_of_year), do: "O"
+  defp designator(:year) do
+    "Y"
+  end
+
+  defp designator(:month) do
+    "M"
+  end
+
+  defp designator(:day) do
+    "D"
+  end
+
+  defp designator(:week) do
+    "W"
+  end
+
+  defp designator(:day_of_week) do
+    "K"
+  end
+
+  defp designator(:day_of_year) do
+    "O"
+  end
 
   # A time of day in a form: with its designator, in each decimal sign for
   # a fraction, and, in the extended format with no date, without the
   # designator too (ISO 8601-1 §5.3.5) where no other reading is at risk.
-  defp times(_form, %{time: []}), do: [""]
+  defp times(_form, %{time: []}) do
+    [""]
+  end
 
   defp times(form, %{time: time, fraction: fraction, date: date}) do
     clock = clock(form, time)
@@ -136,69 +179,152 @@ defmodule Tempo.Matrix.Spellings do
     end
   end
 
-  defp clock(:extended, hour: hour), do: pad(hour, 2)
-  defp clock(:extended, hour: hour, minute: minute), do: "#{pad(hour, 2)}:#{pad(minute, 2)}"
+  defp clock(:extended, hour: hour) do
+    pad(hour, 2)
+  end
 
-  defp clock(:extended, hour: hour, minute: minute, second: second),
-    do: "#{pad(hour, 2)}:#{pad(minute, 2)}:#{pad(second, 2)}"
+  defp clock(:extended, hour: hour, minute: minute) do
+    "#{pad(hour, 2)}:#{pad(minute, 2)}"
+  end
 
-  defp clock(:basic, time), do: Enum.map_join(time, fn {_unit, value} -> pad(value, 2) end)
+  defp clock(:extended, hour: hour, minute: minute, second: second) do
+    "#{pad(hour, 2)}:#{pad(minute, 2)}:#{pad(second, 2)}"
+  end
 
-  defp clock(:explicit, hour: hour), do: "#{hour}H"
-  defp clock(:explicit, hour: hour, minute: minute), do: "#{hour}H#{minute}M"
+  defp clock(:basic, time) do
+    Enum.map_join(time, fn {_unit, value} -> pad(value, 2) end)
+  end
 
-  defp clock(:explicit, hour: hour, minute: minute, second: second),
-    do: "#{hour}H#{minute}M#{second}"
+  defp clock(:explicit, hour: hour) do
+    "#{hour}H"
+  end
+
+  defp clock(:explicit, hour: hour, minute: minute) do
+    "#{hour}H#{minute}M"
+  end
+
+  defp clock(:explicit, hour: hour, minute: minute, second: second) do
+    "#{hour}H#{minute}M#{second}"
+  end
 
   # The explicit form's second takes its designator after any fraction.
-  defp second_designator(:explicit, hour: _, minute: _, second: _), do: "S"
-  defp second_designator(_form, _time), do: ""
+  defp second_designator(:explicit, hour: _, minute: _, second: _) do
+    "S"
+  end
 
-  defp fractions(_form, nil), do: [""]
-  defp fractions(:explicit, {value, digits}), do: [".#{pad(value, digits)}"]
+  defp second_designator(_form, _time) do
+    ""
+  end
 
-  defp fractions(_form, {value, digits}),
-    do: [".#{pad(value, digits)}", ",#{pad(value, digits)}"]
+  defp fractions(_form, nil) do
+    [""]
+  end
 
-  defp prefixes(:extended, [{:hour, _hour}, {:minute, _minute} | _rest], []), do: ["T", ""]
-  defp prefixes(_form, _time, _date), do: ["T"]
+  defp fractions(:explicit, {value, digits}) do
+    [".#{pad(value, digits)}"]
+  end
+
+  defp fractions(_form, {value, digits}) do
+    [".#{pad(value, digits)}", ",#{pad(value, digits)}"]
+  end
+
+  defp prefixes(:extended, [{:hour, _hour}, {:minute, _minute} | _rest], []) do
+    ["T", ""]
+  end
+
+  defp prefixes(_form, _time, _date) do
+    ["T"]
+  end
 
   # A zone in a form: `Z`, an offset with and (when it is whole hours)
   # without its minutes, or a named zone as an IXDTF suffix. The explicit
   # form writes an offset after `Z`, with a sign only when it is behind
   # UTC (ISO 8601-2 §7.4).
-  defp zones(_form, nil), do: [""]
-  defp zones(_form, :utc), do: ["Z"]
-  defp zones(_form, {:zone, name}), do: ["[#{name}]"]
+  defp zones(_form, nil) do
+    [""]
+  end
+
+  defp zones(_form, :utc) do
+    ["Z"]
+  end
+
+  defp zones(_form, {:zone, name}) do
+    ["[#{name}]"]
+  end
 
   defp zones(form, {:offset, minutes}) do
-    sign = if minutes < 0, do: "-", else: "+"
+    sign =
+      if minutes < 0 do
+        "-"
+      else
+        "+"
+      end
+
     {hours, minutes} = {div(abs(minutes), 60), rem(abs(minutes), 60)}
-    whole = if minutes == 0, do: [offset(form, sign, hours)], else: []
+
+    whole =
+      if minutes == 0 do
+        [offset(form, sign, hours)]
+      else
+        []
+      end
+
     [offset(form, sign, hours, minutes) | whole]
   end
 
-  defp offset(:explicit, "-", hours), do: "Z-#{hours}H"
-  defp offset(:explicit, "+", hours), do: "Z#{hours}H"
-  defp offset(_form, sign, hours), do: sign <> pad(hours, 2)
+  defp offset(:explicit, "-", hours) do
+    "Z-#{hours}H"
+  end
 
-  defp offset(:explicit, "-", hours, minutes), do: "Z-#{hours}H#{minutes}M"
-  defp offset(:explicit, "+", hours, minutes), do: "Z#{hours}H#{minutes}M"
-  defp offset(:extended, sign, hours, minutes), do: "#{sign}#{pad(hours, 2)}:#{pad(minutes, 2)}"
-  defp offset(:basic, sign, hours, minutes), do: "#{sign}#{pad(hours, 2)}#{pad(minutes, 2)}"
+  defp offset(:explicit, "+", hours) do
+    "Z#{hours}H"
+  end
 
-  defp calendar(Calendrical.Gregorian), do: ""
+  defp offset(_form, sign, hours) do
+    sign <> pad(hours, 2)
+  end
+
+  defp offset(:explicit, "-", hours, minutes) do
+    "Z-#{hours}H#{minutes}M"
+  end
+
+  defp offset(:explicit, "+", hours, minutes) do
+    "Z#{hours}H#{minutes}M"
+  end
+
+  defp offset(:extended, sign, hours, minutes) do
+    "#{sign}#{pad(hours, 2)}:#{pad(minutes, 2)}"
+  end
+
+  defp offset(:basic, sign, hours, minutes) do
+    "#{sign}#{pad(hours, 2)}#{pad(minutes, 2)}"
+  end
+
+  defp calendar(Calendrical.Gregorian) do
+    ""
+  end
+
   # The calendar's BCP 47 name, which is its CLDR type with hyphens:
   # `islamic-civil`.
   defp calendar(calendar) do
-    name = calendar.cldr_calendar_type() |> Atom.to_string() |> String.replace("_", "-")
+    name =
+      calendar.cldr_calendar_type()
+      |> Atom.to_string()
+      |> String.replace("_", "-")
+
     "[u-ca=#{name}]"
   end
 
   # A year from 0 to 9999 is four digits in the basic and extended formats.
-  defp year(year) when year in 0..9999, do: pad(year, 4)
+  defp year(year) when year in 0..9999 do
+    pad(year, 4)
+  end
 
-  defp pad(value, width), do: value |> Integer.to_string() |> String.pad_leading(width, "0")
+  defp pad(value, width) do
+    value
+    |> Integer.to_string()
+    |> String.pad_leading(width, "0")
+  end
 
   ## Intervals
 
@@ -250,8 +376,13 @@ defmodule Tempo.Matrix.Spellings do
     duration([{duration_unit(unit), count}])
   end
 
-  defp duration_unit(unit) when unit in [:day_of_week, :day_of_year], do: :day
-  defp duration_unit(unit), do: unit
+  defp duration_unit(unit) when unit in [:day_of_week, :day_of_year] do
+    :day
+  end
+
+  defp duration_unit(unit) do
+    unit
+  end
 
   # The end with each run of the leading units it shares with the start
   # left out. Something of the end must be left, and what is left must be
@@ -267,60 +398,105 @@ defmodule Tempo.Matrix.Spellings do
         do: {:"#{form}_abbreviated", from_text <> "/" <> ending}
   end
 
-  defp shared_prefix([unit | from], [unit | to]), do: [unit | shared_prefix(from, to)]
-  defp shared_prefix(_from, _to), do: []
+  defp shared_prefix([unit | from], [unit | to]) do
+    [unit | shared_prefix(from, to)]
+  end
+
+  defp shared_prefix(_from, _to) do
+    []
+  end
 
   # An end with its first `omitted` units left out, or `nil` for one the
   # form has no writing of.
-  defp ending(:explicit, %{date: date, time: time}, omitted),
-    do: explicit_ending(Enum.drop(date, omitted), kept_time(date, time, omitted))
+  defp ending(:explicit, %{date: date, time: time}, omitted) do
+    explicit_ending(Enum.drop(date, omitted), kept_time(date, time, omitted))
+  end
 
-  defp ending(:extended, %{date: date, time: time}, omitted),
-    do: extended_ending(Enum.drop(date, omitted), kept_time(date, time, omitted), time)
+  defp ending(:extended, %{date: date, time: time}, omitted) do
+    extended_ending(Enum.drop(date, omitted), kept_time(date, time, omitted), time)
+  end
 
-  defp kept_time(date, time, omitted), do: Enum.drop(time, max(omitted - length(date), 0))
+  defp kept_time(date, time, omitted) do
+    Enum.drop(time, max(omitted - length(date), 0))
+  end
 
   defp explicit_ending(date, time) do
     date(:explicit, date) <> explicit_time(time)
   end
 
-  defp explicit_time([]), do: ""
+  defp explicit_time([]) do
+    ""
+  end
 
   defp explicit_time(time) do
     "T" <> Enum.map_join(time, fn {unit, value} -> "#{value}#{time_designator(unit)}" end)
   end
 
-  defp time_designator(:hour), do: "H"
-  defp time_designator(:minute), do: "M"
-  defp time_designator(:second), do: "S"
+  defp time_designator(:hour) do
+    "H"
+  end
+
+  defp time_designator(:minute) do
+    "M"
+  end
+
+  defp time_designator(:second) do
+    "S"
+  end
 
   # A month and a day, a day, or a week and its day, then the time of day
   # in full or from the unit it is left with.
-  defp extended_ending([month: month, day: day], time, _whole),
-    do: "#{pad(month, 2)}-#{pad(day, 2)}" <> extended_time(time)
+  defp extended_ending([month: month, day: day], time, _whole) do
+    "#{pad(month, 2)}-#{pad(day, 2)}" <> extended_time(time)
+  end
 
-  defp extended_ending([month: month], [], _whole), do: pad(month, 2)
-  defp extended_ending([day: day], time, _whole), do: pad(day, 2) <> extended_time(time)
-  defp extended_ending([week: week], [], _whole), do: "W#{pad(week, 2)}"
+  defp extended_ending([month: month], [], _whole) do
+    pad(month, 2)
+  end
 
-  defp extended_ending([week: week, day_of_week: day], [], _whole),
-    do: "W#{pad(week, 2)}-#{day}"
+  defp extended_ending([day: day], time, _whole) do
+    pad(day, 2) <> extended_time(time)
+  end
 
-  defp extended_ending([day_of_week: day], [], _whole), do: Integer.to_string(day)
-  defp extended_ending([day_of_year: day], [], _whole), do: pad(day, 3)
+  defp extended_ending([week: week], [], _whole) do
+    "W#{pad(week, 2)}"
+  end
+
+  defp extended_ending([week: week, day_of_week: day], [], _whole) do
+    "W#{pad(week, 2)}-#{day}"
+  end
+
+  defp extended_ending([day_of_week: day], [], _whole) do
+    Integer.to_string(day)
+  end
+
+  defp extended_ending([day_of_year: day], [], _whole) do
+    pad(day, 3)
+  end
 
   # A time of day in full is written with or without its designator; one
   # with its hour left out is the bare number of what is left.
-  defp extended_ending([], time, time) when time != [], do: "T" <> clock(:extended, time)
+  defp extended_ending([], time, time) when time != [] do
+    "T" <> clock(:extended, time)
+  end
 
-  defp extended_ending([], [{_unit, value}], _whole), do: pad(value, 2)
+  defp extended_ending([], [{_unit, value}], _whole) do
+    pad(value, 2)
+  end
 
   # A minute and a second with their hour left out would be read as an hour
   # and a minute, so they are not written so.
-  defp extended_ending(_date, _time, _whole), do: nil
+  defp extended_ending(_date, _time, _whole) do
+    nil
+  end
 
-  defp extended_time([]), do: ""
-  defp extended_time(time), do: "T" <> clock(:extended, time)
+  defp extended_time([]) do
+    ""
+  end
+
+  defp extended_time(time) do
+    "T" <> clock(:extended, time)
+  end
 
   ## Durations
 
@@ -361,20 +537,46 @@ defmodule Tempo.Matrix.Spellings do
     {date, time} =
       Enum.split_while(units, fn {unit, _value} -> unit in [:year, :month, :week, :day] end)
 
-    "P" <> written(date) <> if(time == [], do: "", else: "T" <> written(time))
+    "P" <>
+      written(date) <>
+      if time == [] do
+        ""
+      else
+        "T" <> written(time)
+      end
   end
 
   defp written(units) do
     Enum.map_join(units, fn {unit, value} -> "#{value}#{duration_designator(unit)}" end)
   end
 
-  defp duration_designator(:year), do: "Y"
-  defp duration_designator(:month), do: "M"
-  defp duration_designator(:week), do: "W"
-  defp duration_designator(:day), do: "D"
-  defp duration_designator(:hour), do: "H"
-  defp duration_designator(:minute), do: "M"
-  defp duration_designator(:second), do: "S"
+  defp duration_designator(:year) do
+    "Y"
+  end
+
+  defp duration_designator(:month) do
+    "M"
+  end
+
+  defp duration_designator(:week) do
+    "W"
+  end
+
+  defp duration_designator(:day) do
+    "D"
+  end
+
+  defp duration_designator(:hour) do
+    "H"
+  end
+
+  defp duration_designator(:minute) do
+    "M"
+  end
+
+  defp duration_designator(:second) do
+    "S"
+  end
 
   # The alternative format writes a duration as a date and a time of day
   # (ISO 8601-1 §5.5.2.4), so it has every unit from the year to the second,

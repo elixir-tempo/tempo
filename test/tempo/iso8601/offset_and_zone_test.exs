@@ -51,7 +51,9 @@ defmodule Tempo.Iso8601.OffsetAndZoneTest do
     }
   end
 
-  defp read(text), do: Tempo.from_iso8601!(text)
+  defp read(text) do
+    Tempo.from_iso8601!(text)
+  end
 
   describe "a time in UTC beside a zone" do
     @in_utc [
@@ -372,7 +374,9 @@ defmodule Tempo.Iso8601.OffsetAndZoneTest do
       assert held_moment(Interval.to(day)) == DateTime.to_unix(~U[2022-07-09 00:00:00Z])
     end
 
-    defp held_moment(%Tempo{} = value), do: Compare.to_utc_seconds(value) - @unix_epoch
+    defp held_moment(%Tempo{} = value) do
+      Compare.to_utc_seconds(value) - @unix_epoch
+    end
   end
 
   describe "a value the rule does not reach" do

@@ -84,13 +84,16 @@ defmodule Tempo.Enumeration do
   # unit to walk by.
   @spec implicit_walk(Tempo.t()) :: walk()
   def implicit_walk(%Tempo{calendar: calendar} = tempo) do
-    if explicitly_enumerable?(tempo),
-      do: start(tempo, walked_as_written(tempo, calendar), calendar),
-      else: walk_by_finer_unit(tempo, calendar)
+    if explicitly_enumerable?(tempo) do
+      start(tempo, walked_as_written(tempo, calendar), calendar)
+    else
+      walk_by_finer_unit(tempo, calendar)
+    end
   end
 
-  defp walk_by_finer_unit(tempo, calendar),
-    do: start(tempo, walked_by_finer_unit(tempo, calendar), calendar)
+  defp walk_by_finer_unit(tempo, calendar) do
+    start(tempo, walked_by_finer_unit(tempo, calendar), calendar)
+  end
 
   # A value of whole numbers, sets and ranges alone is read as it stands:
   # each was resolved, or left for the walk, when the value was read. Any
@@ -115,9 +118,15 @@ defmodule Tempo.Enumeration do
   # (a struct built with a thirteenth month) is the walk's error rather than
   # an empty walk.
   defp walked_by_finer_unit(tempo, calendar) do
-    case tempo |> add_implicit_enumeration() |> Validation.validate(calendar) do
+    case tempo
+         |> add_implicit_enumeration()
+         |> Validation.validate(calendar) do
       {:ok, %Tempo{time: time}} ->
-        [{finer, _settled?} | before] = time |> settled(true) |> Enum.reverse()
+        [{finer, _settled?} | before] =
+          time
+          |> settled(true)
+          |> Enum.reverse()
+
         {:start, Enum.reverse(before, [{finer, :resolved}])}
 
       {:error, exception} ->
@@ -125,46 +134,68 @@ defmodule Tempo.Enumeration do
     end
   end
 
-  defp start(tempo, first, calendar),
-    do: %{tempo: tempo, calendar: calendar, stack: [first], status: :empty}
+  defp start(tempo, first, calendar) do
+    %{tempo: tempo, calendar: calendar, stack: [first], status: :empty}
+  end
 
   # Pairs each component with whether every component before it names one
   # resolved value. A whole number after them was resolved when the value was
   # read, and is taken as it stands.
-  defp settled([], _settled?), do: []
+  defp settled([], _settled?) do
+    []
+  end
 
-  defp settled([component | rest], settled?),
-    do: [{component, settled?} | settled(rest, settled? and single?(component))]
+  defp settled([component | rest], settled?) do
+    [{component, settled?} | settled(rest, settled? and single?(component))]
+  end
 
-  defp single?({:selection, _selection}), do: true
-  defp single?({:year, :any}), do: true
+  defp single?({:selection, _selection}) do
+    true
+  end
 
-  defp single?({:microsecond, {value, precision}}),
-    do: is_integer(value) and is_integer(precision)
+  defp single?({:year, :any}) do
+    true
+  end
 
-  defp single?({_unit, value}) when is_integer(value), do: value >= 0
+  defp single?({:microsecond, {value, precision}}) do
+    is_integer(value) and is_integer(precision)
+  end
 
-  defp single?({_unit, {value, [{key, _} | _]}}) when is_integer(value),
-    do: value >= 0 and key != :significant_digits
+  defp single?({_unit, value}) when is_integer(value) do
+    value >= 0
+  end
 
-  defp single?(_component), do: false
+  defp single?({_unit, {value, [{key, _} | _]}}) when is_integer(value) do
+    value >= 0 and key != :significant_digits
+  end
+
+  defp single?(_component) do
+    false
+  end
 
   @doc false
   # The next values of a walk, at least one, and the walk after them; `:done`
   # when it has no more; or the error that stops it. The values are those of
   # the walk's finest component, read no more than `@read_ahead` at a time.
   @spec next(walk()) :: {:ok, [Tempo.t(), ...], walk()} | :done | {:error, Exception.t()}
-  def next(%{stack: [{:start, components}]} = walk),
-    do: descend(%{walk | stack: []}, [], components)
+  def next(%{stack: [{:start, components}]} = walk) do
+    descend(%{walk | stack: []}, [], components)
+  end
 
-  def next(%{stack: [{:error, exception}]}), do: {:error, exception}
-  def next(%{stack: []} = walk), do: finished(walk)
+  def next(%{stack: [{:error, exception}]}) do
+    {:error, exception}
+  end
+
+  def next(%{stack: []} = walk) do
+    finished(walk)
+  end
 
   # A group of a set (`{1,2}G3MU`) is walked group by group: each is the
   # group it is, so its values, and a unit after it, are read as a single
   # group's are.
-  def next(%{stack: [{ancestors, {:groups, unit, settled?}, [group], rest} | stack]} = walk),
-    do: descend(%{walk | stack: stack}, ancestors, [{{unit, {:group, group}}, settled?} | rest])
+  def next(%{stack: [{ancestors, {:groups, unit, settled?}, [group], rest} | stack]} = walk) do
+    descend(%{walk | stack: stack}, ancestors, [{{unit, {:group, group}}, settled?} | rest])
+  end
 
   def next(
         %{stack: [{ancestors, {:groups, unit, settled?} = groups, [group | more], rest} | stack]} =
@@ -175,16 +206,19 @@ defmodule Tempo.Enumeration do
   end
 
   # A run of years is read from its first, and the rest of it left a run.
-  def next(%{stack: [{ancestors, unit, [%Range{} = run | values], rest} | stack]} = walk),
-    do: next(%{walk | stack: [{ancestors, unit, unrolled(run, values), rest} | stack]})
+  def next(%{stack: [{ancestors, unit, [%Range{} = run | values], rest} | stack]} = walk) do
+    next(%{walk | stack: [{ancestors, unit, unrolled(run, values), rest} | stack]})
+  end
 
   # Each value of the last component is a value of the walk.
-  def next(%{stack: [{ancestors, unit, values, []} | stack]} = walk),
-    do: read(walk, stack, ancestors, unit, values)
+  def next(%{stack: [{ancestors, unit, values, []} | stack]} = walk) do
+    read(walk, stack, ancestors, unit, values)
+  end
 
   # A component's last value leaves no frame behind it.
-  def next(%{stack: [{ancestors, unit, [value], rest} | stack]} = walk),
-    do: descend(%{walk | stack: stack}, [{unit, value} | ancestors], rest)
+  def next(%{stack: [{ancestors, unit, [value], rest} | stack]} = walk) do
+    descend(%{walk | stack: stack}, [{unit, value} | ancestors], rest)
+  end
 
   def next(%{stack: [{ancestors, unit, [value | values], rest} | stack]} = walk) do
     walk = %{walk | stack: [{ancestors, unit, values, rest} | stack]}
@@ -206,32 +240,39 @@ defmodule Tempo.Enumeration do
   end
 
   defp read_ahead([%Range{} = run | values], count, ancestors, unit, tempo, read)
-       when count > 0,
-       do: read_ahead(unrolled(run, values), count, ancestors, unit, tempo, read)
+       when count > 0 do
+    read_ahead(unrolled(run, values), count, ancestors, unit, tempo, read)
+  end
 
   defp read_ahead([value | values], count, ancestors, unit, tempo, read) when count > 0 do
     value = yielded(tempo, :lists.reverse(ancestors, [{unit, value}]))
     read_ahead(values, count - 1, ancestors, unit, tempo, [value | read])
   end
 
-  defp read_ahead(left, _count, _ancestors, _unit, _tempo, read),
-    do: {:lists.reverse(read), left}
+  defp read_ahead(left, _count, _ancestors, _unit, _tempo, read) do
+    {:lists.reverse(read), left}
+  end
 
   # The first value of a run before the values after it, and the rest of the
   # run still a run.
-  defp unrolled(%Range{first: first, last: first}, values), do: [first | values]
+  defp unrolled(%Range{first: first, last: first}, values) do
+    [first | values]
+  end
 
-  defp unrolled(%Range{first: first, last: last, step: step}, values),
-    do: [first, Range.new(first + step, last, step) | values]
+  defp unrolled(%Range{first: first, last: last, step: step}, values) do
+    [first, Range.new(first + step, last, step) | values]
+  end
 
   # The components before the one read, and the value they are read into, as
   # every value read after them holds them. Where they name a week and a day
   # of it, or a day of the year, a calendar of months has the date of that
   # day, which is found once for the hours, minutes or seconds read under it.
   defp dated_before(tempo, ancestors) do
-    if List.keymember?(ancestors, :day_of_week, 0) or List.keymember?(ancestors, :day_of_year, 0),
-      do: dated_ancestors(tempo, ancestors),
-      else: {tempo, ancestors}
+    if List.keymember?(ancestors, :day_of_week, 0) or List.keymember?(ancestors, :day_of_year, 0) do
+      dated_ancestors(tempo, ancestors)
+    else
+      {tempo, ancestors}
+    end
   end
 
   defp dated_ancestors(tempo, ancestors) do
@@ -248,35 +289,44 @@ defmodule Tempo.Enumeration do
   # A week and a day of it are the date they name in a calendar of months, as
   # they are when a value is read, so the days of a Gregorian week are walked
   # as the dates they are and a calendar of weeks keeps its own.
-  defp yielded(tempo, [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _rest] = time),
-    do: Validation.calendar_date_from_week_date(%{tempo | time: time})
+  defp yielded(tempo, [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _rest] = time) do
+    Validation.calendar_date_from_week_date(%{tempo | time: time})
+  end
 
   # A day of the year is the date it names too, as `2026Y100O` is read: the
   # walk of a set of them yields each as that date.
-  defp yielded(tempo, [{:year, _year}, {:day_of_year, _day} | _rest] = time),
-    do: Validation.calendar_date_from_ordinal_date(%{tempo | time: time})
+  defp yielded(tempo, [{:year, _year}, {:day_of_year, _day} | _rest] = time) do
+    Validation.calendar_date_from_ordinal_date(%{tempo | time: time})
+  end
 
   # A traditional month of a year is the month it names in that year, as it
   # is when a value with one year is read, so each value walked holds the
   # month in its place in its year and is a value to convert as any other.
-  defp yielded(tempo, [{:year, _year}, {:traditional_month, _month} | _rest] = time),
-    do: Validation.month_from_traditional_month(%{tempo | time: time})
+  defp yielded(tempo, [{:year, _year}, {:traditional_month, _month} | _rest] = time) do
+    Validation.month_from_traditional_month(%{tempo | time: time})
+  end
 
-  defp yielded(tempo, time), do: %{tempo | time: time}
+  defp yielded(tempo, time) do
+    %{tempo | time: time}
+  end
 
   # With no component left to read, the components read are a value of the
   # walk; a value with no components has no values.
-  defp descend(walk, [], []), do: next(walk)
+  defp descend(walk, [], []) do
+    next(walk)
+  end
 
-  defp descend(%{tempo: tempo} = walk, ancestors, []),
-    do: {:ok, [yielded(tempo, :lists.reverse(ancestors))], %{walk | status: :yielded}}
+  defp descend(%{tempo: tempo} = walk, ancestors, []) do
+    {:ok, [yielded(tempo, :lists.reverse(ancestors))], %{walk | status: :yielded}}
+  end
 
   # An unspecified year (`X*Y`) is some year, and not one to list: ISO 8601-2
   # §4.6.2 reads `X*Y12M28D` as 28 December of an unspecified year. It is
   # carried into each value the walk yields, and the units after it are read
   # as they are with no year written.
-  defp descend(walk, ancestors, [{{:year, :any} = year, _settled?} | rest]),
-    do: descend(walk, [year | ancestors], rest)
+  defp descend(walk, ancestors, [{{:year, :any} = year, _settled?} | rest]) do
+    descend(walk, [year | ancestors], rest)
+  end
 
   # Whole numbers are read together. After components that each name one
   # resolved value they were resolved when the value was read, and stand as
@@ -287,9 +337,11 @@ defmodule Tempo.Enumeration do
        when is_integer(value) and value >= 0 do
     {literals, rest} = whole_numbers(components, [])
 
-    if settled? != false or valid_after?(literals, ancestors, walk.calendar),
-      do: descend(walk, literals ++ ancestors, rest),
-      else: next(unmatched(walk, :no_members))
+    if settled? != false or valid_after?(literals, ancestors, walk.calendar) do
+      descend(walk, literals ++ ancestors, rest)
+    else
+      next(unmatched(walk, :no_members))
+    end
   end
 
   # A group followed by a finer unit counts that unit from the group's start
@@ -313,9 +365,11 @@ defmodule Tempo.Enumeration do
         descend(walk, ancestors, resolved)
 
       :as_written ->
-        if counted_from_group_start?(unit, next_unit),
-          do: {:error, exception(walk.tempo, :counted_in_group)},
-          else: descend_into(walk, ancestors, components)
+        if counted_from_group_start?(unit, next_unit) do
+          {:error, exception(walk.tempo, :counted_in_group)}
+        else
+          descend_into(walk, ancestors, components)
+        end
     end
   end
 
@@ -338,17 +392,39 @@ defmodule Tempo.Enumeration do
     end
   end
 
-  defp descend(walk, ancestors, components), do: descend_into(walk, ancestors, components)
+  defp descend(walk, ancestors, components) do
+    descend_into(walk, ancestors, components)
+  end
 
   # The unit a group's start is counted in: the group's own unit, or the unit
   # next below it.
-  defp counted_from_group_start?(unit, unit), do: true
-  defp counted_from_group_start?(:year, :month), do: true
-  defp counted_from_group_start?(:month, :day), do: true
-  defp counted_from_group_start?(:day, :hour), do: true
-  defp counted_from_group_start?(:hour, :minute), do: true
-  defp counted_from_group_start?(:minute, :second), do: true
-  defp counted_from_group_start?(_unit, _next_unit), do: false
+  defp counted_from_group_start?(unit, unit) do
+    true
+  end
+
+  defp counted_from_group_start?(:year, :month) do
+    true
+  end
+
+  defp counted_from_group_start?(:month, :day) do
+    true
+  end
+
+  defp counted_from_group_start?(:day, :hour) do
+    true
+  end
+
+  defp counted_from_group_start?(:hour, :minute) do
+    true
+  end
+
+  defp counted_from_group_start?(:minute, :second) do
+    true
+  end
+
+  defp counted_from_group_start?(_unit, _next_unit) do
+    false
+  end
 
   # With a component of any other kind, its values are a new frame: read at
   # once when it is the last component, and passed over when it has none.
@@ -382,10 +458,13 @@ defmodule Tempo.Enumeration do
   # The run of whole numbers a list of components starts with, finest first,
   # and the components after it.
   defp whole_numbers([{{_unit, value} = literal, _settled?} | rest], literals)
-       when is_integer(value) and value >= 0,
-       do: whole_numbers(rest, [literal | literals])
+       when is_integer(value) and value >= 0 do
+    whole_numbers(rest, [literal | literals])
+  end
 
-  defp whole_numbers(rest, literals), do: {literals, rest}
+  defp whole_numbers(rest, literals) do
+    {literals, rest}
+  end
 
   defp valid_after?(literals, ancestors, calendar) do
     written = :lists.reverse(ancestors, :lists.reverse(literals))
@@ -396,24 +475,34 @@ defmodule Tempo.Enumeration do
     )
   end
 
-  defp unmatched(%{status: :empty} = walk, reason), do: %{walk | status: {:unmatched, reason}}
-  defp unmatched(walk, _reason), do: walk
+  defp unmatched(%{status: :empty} = walk, reason) do
+    %{walk | status: {:unmatched, reason}}
+  end
+
+  defp unmatched(walk, _reason) do
+    walk
+  end
 
   # A mask that matches nothing in one context, or a group that starts beyond
   # it, is passed over, as a set drops the values its context cannot hold
   # (`1985-XX-3X` has no February, and `2026Y{1,2}M31D` no 31 February). A
   # walk that ends having matched nothing anywhere names no date
   # (`1985-02-3X`, `2026Y{2,6}M31D`), and the first reason is its error.
-  defp finished(%{status: {:unmatched, reason}, tempo: tempo}),
-    do: {:error, exception(tempo, reason)}
+  defp finished(%{status: {:unmatched, reason}, tempo: tempo}) do
+    {:error, exception(tempo, reason)}
+  end
 
-  defp finished(_walk), do: :done
+  defp finished(_walk) do
+    :done
+  end
 
   @doc false
   # The most values `members/1` lists, which is the most spans a value is
   # converted to at once.
   @spec listed_at_once() :: unquote(@listed_at_once)
-  def listed_at_once, do: @listed_at_once
+  def listed_at_once do
+    @listed_at_once
+  end
 
   @doc false
   # Every value a walk names, in the order it names them, or the error that
@@ -424,9 +513,13 @@ defmodule Tempo.Enumeration do
   # `{1..9999}Y{1..12}M{1..28}D` did not come to an end.
   @spec members(Tempo.t()) :: {:ok, [Tempo.t()]} | {:error, Exception.t()}
   def members(%Tempo{time: time} = tempo) do
-    if more_years_than_listed?(time),
-      do: {:error, ConversionError.exception(value: tempo, reason: :too_many_values)},
-      else: tempo |> walk() |> gather([], 0, @listed_at_once)
+    if more_years_than_listed?(time) do
+      {:error, ConversionError.exception(value: tempo, reason: :too_many_values)}
+    else
+      tempo
+      |> walk()
+      |> gather([], 0, @listed_at_once)
+    end
   end
 
   @doc false
@@ -436,7 +529,11 @@ defmodule Tempo.Enumeration do
   # and was refused past the most that are listed. `:none` where it names no
   # value.
   @spec first_member(Tempo.t()) :: {:ok, Tempo.t()} | :none | {:error, Exception.t()}
-  def first_member(%Tempo{} = tempo), do: tempo |> walk() |> first_shown()
+  def first_member(%Tempo{} = tempo) do
+    tempo
+    |> walk()
+    |> first_shown()
+  end
 
   defp first_shown(%{tempo: tempo} = walk) do
     case next(walk) do
@@ -446,20 +543,38 @@ defmodule Tempo.Enumeration do
     end
   end
 
-  defp first_of([first | _rest], _walk), do: {:ok, first}
-  defp first_of([], walk), do: first_shown(walk)
+  defp first_of([first | _rest], _walk) do
+    {:ok, first}
+  end
+
+  defp first_of([], walk) do
+    first_shown(walk)
+  end
 
   # The years of a set are read whole before a unit after them is, and each
   # is a value of the set, so a set of more years than are listed is refused
   # before any is read: `{1..99999999}Y` took as long as its years did.
-  defp more_years_than_listed?([{:year, years} | _finer]) when is_list(years),
-    do: written(years) > @listed_at_once
+  defp more_years_than_listed?([{:year, years} | _finer]) when is_list(years) do
+    written(years) > @listed_at_once
+  end
 
-  defp more_years_than_listed?(_time), do: false
+  defp more_years_than_listed?(_time) do
+    false
+  end
 
-  defp written(values) when is_list(values), do: values |> Enum.map(&written/1) |> Enum.sum()
-  defp written(%Range{} = range), do: Range.size(range)
-  defp written(_one_value), do: 1
+  defp written(values) when is_list(values) do
+    values
+    |> Enum.map(&written/1)
+    |> Enum.sum()
+  end
+
+  defp written(%Range{} = range) do
+    Range.size(range)
+  end
+
+  defp written(_one_value) do
+    1
+  end
 
   # In a zone, a value the clock skips the whole of is no value: the hour a
   # spring-forward skips, and the day a zone leaves out. One written alone
@@ -469,13 +584,17 @@ defmodule Tempo.Enumeration do
   # values a mask stands for are taken from, as it is none of the walk
   # through `Enum`. It was a member, and gave spans that started on a
   # reading no value is read from.
-  defp shown_by_the_clock(values, %Tempo{extended: %{zone_id: zone}}) when is_binary(zone),
-    do: Enum.filter(values, &Zone.shown?/1)
+  defp shown_by_the_clock(values, %Tempo{extended: %{zone_id: zone}}) when is_binary(zone) do
+    Enum.filter(values, &Zone.shown?/1)
+  end
 
-  defp shown_by_the_clock(values, _no_zone), do: values
+  defp shown_by_the_clock(values, _no_zone) do
+    values
+  end
 
-  defp gather(%{tempo: tempo}, _gathered, count, most) when is_integer(most) and count > most,
-    do: {:error, ConversionError.exception(value: tempo, reason: :too_many_values)}
+  defp gather(%{tempo: tempo}, _gathered, count, most) when is_integer(most) and count > most do
+    {:error, ConversionError.exception(value: tempo, reason: :too_many_values)}
+  end
 
   defp gather(%{tempo: tempo} = walk, gathered, count, most) do
     case next(walk) do
@@ -484,7 +603,10 @@ defmodule Tempo.Enumeration do
         gather(walk, [shown | gathered], count + Enum.count(shown), most)
 
       :done ->
-        {:ok, gathered |> Enum.reverse() |> Enum.concat()}
+        {:ok,
+         gathered
+         |> Enum.reverse()
+         |> Enum.concat()}
 
       {:error, _exception} = error ->
         error
@@ -496,12 +618,25 @@ defmodule Tempo.Enumeration do
   # a set (`2026Y{1,2}G3MU`), which names values of its own unit and none
   # below it.
   @spec ends_in_group?(Tempo.t()) :: boolean()
-  def ends_in_group?(%Tempo{time: time}) when is_list(time), do: group?(List.last(time))
-  def ends_in_group?(%Tempo{}), do: false
+  def ends_in_group?(%Tempo{time: time}) when is_list(time) do
+    group?(List.last(time))
+  end
 
-  defp group?({_unit, {:group, %Range{}}}), do: true
-  defp group?({_unit, {:group, {_kind, members}}, _size}) when is_list(members), do: true
-  defp group?(_component), do: false
+  def ends_in_group?(%Tempo{}) do
+    false
+  end
+
+  defp group?({_unit, {:group, %Range{}}}) do
+    true
+  end
+
+  defp group?({_unit, {:group, {_kind, members}}, _size}) when is_list(members) do
+    true
+  end
+
+  defp group?(_component) do
+    false
+  end
 
   @doc false
   # A value that ends in a group, written as the values the group names where
@@ -533,26 +668,46 @@ defmodule Tempo.Enumeration do
     end
   end
 
-  defp named_or_read_on([], walk), do: names_a_value(walk)
-  defp named_or_read_on([_value | _more], _walk), do: :ok
+  defp named_or_read_on([], walk) do
+    names_a_value(walk)
+  end
+
+  defp named_or_read_on([_value | _more], _walk) do
+    :ok
+  end
 
   # The concrete components a value's last component is read after, finest
   # first: one list for each value the components before it name.
-  defp contexts(_tempo, []), do: {:ok, [[]]}
+  defp contexts(_tempo, []) do
+    {:ok, [[]]}
+  end
 
   # They are read to learn what the group names in each, and are none of the
   # values the result lists, so every one is read however many there are.
   defp contexts(tempo, before) do
-    with {:ok, values} <- %{tempo | time: before} |> walk() |> gather([], 0, :every) do
+    with {:ok, values} <-
+           %{tempo | time: before}
+           |> walk()
+           |> gather([], 0, :every) do
       {:ok, Enum.map(values, fn %Tempo{time: time} -> :lists.reverse(time) end)}
     end
   end
 
   defp named_in_each(group, contexts, calendar, tempo) do
-    case contexts |> Enum.map(&group_values(group, &1, calendar)) |> Enum.uniq() do
-      [{:ok, values}] -> {:ok, values |> Enum.uniq() |> Enum.sort()}
-      [{:error, reason} | _rest] -> {:error, exception(tempo, reason)}
-      _several -> {:error, exception(tempo, :group_differs)}
+    case contexts
+         |> Enum.map(&group_values(group, &1, calendar))
+         |> Enum.uniq() do
+      [{:ok, values}] ->
+        {:ok,
+         values
+         |> Enum.uniq()
+         |> Enum.sort()}
+
+      [{:error, reason} | _rest] ->
+        {:error, exception(tempo, reason)}
+
+      _several ->
+        {:error, exception(tempo, :group_differs)}
     end
   end
 
@@ -583,52 +738,92 @@ defmodule Tempo.Enumeration do
   # anything else or no set at all.
   @spec expand(Tempo.t()) :: {:ok, [Tempo.t()]} | {:error, Exception.t()} | :not_expandable
   def expand(%Tempo{time: time} = tempo) do
-    if expandable?(time), do: members(tempo), else: :not_expandable
+    if expandable?(time) do
+      members(tempo)
+    else
+      :not_expandable
+    end
   end
 
   @doc false
   # Whether `expand/1` lists a value's members: it holds a set, and nothing
   # else that names several values.
   @spec names_each_value?(Tempo.t()) :: boolean()
-  def names_each_value?(%Tempo{time: time}) when is_list(time), do: expandable?(time)
-  def names_each_value?(%Tempo{}), do: false
+  def names_each_value?(%Tempo{time: time}) when is_list(time) do
+    expandable?(time)
+  end
+
+  def names_each_value?(%Tempo{}) do
+    false
+  end
 
   # Expandable when every component is a plain integer, an annotated integer
   # (`{value, options}`, a margin of error), a fraction of a second, a range,
   # or a list of those, and at least one component is set-valued.
-  defp expandable?(time), do: expandable?(time, false)
+  defp expandable?(time) do
+    expandable?(time, false)
+  end
 
-  defp expandable?([], set_valued?), do: set_valued?
+  defp expandable?([], set_valued?) do
+    set_valued?
+  end
 
-  defp expandable?([{_unit, value} | rest], set_valued?) when is_integer(value),
-    do: expandable?(rest, set_valued?)
+  defp expandable?([{_unit, value} | rest], set_valued?) when is_integer(value) do
+    expandable?(rest, set_valued?)
+  end
 
-  defp expandable?([{_unit, %Range{}} | rest], _set_valued?), do: expandable?(rest, true)
+  defp expandable?([{_unit, %Range{}} | rest], _set_valued?) do
+    expandable?(rest, true)
+  end
 
-  defp expandable?([{_unit, values} | rest], _set_valued?) when is_list(values),
-    do: finite_values?(values) and expandable?(rest, true)
+  defp expandable?([{_unit, values} | rest], _set_valued?) when is_list(values) do
+    finite_values?(values) and expandable?(rest, true)
+  end
 
   defp expandable?([{_unit, {value, options}} | rest], set_valued?)
-       when is_integer(value) and is_list(options),
-       do: expandable?(rest, set_valued?)
+       when is_integer(value) and is_list(options) do
+    expandable?(rest, set_valued?)
+  end
 
   # A fraction of a second is one value, as a whole second is.
   defp expandable?([{:microsecond, {value, precision}} | rest], set_valued?)
-       when is_integer(value) and is_integer(precision),
-       do: expandable?(rest, set_valued?)
+       when is_integer(value) and is_integer(precision) do
+    expandable?(rest, set_valued?)
+  end
 
   # Anything else (a mask, an unspecified unit, a group, a selection) is not
   # expanded.
-  defp expandable?(_time, _set_valued?), do: false
+  defp expandable?(_time, _set_valued?) do
+    false
+  end
 
-  defp finite_values?([]), do: true
-  defp finite_values?([value | rest]), do: finite_value?(value) and finite_values?(rest)
+  defp finite_values?([]) do
+    true
+  end
 
-  defp finite_value?(value) when is_integer(value), do: true
-  defp finite_value?(%Range{}), do: true
-  defp finite_value?({value, options}) when is_integer(value) and is_list(options), do: true
-  defp finite_value?(values) when is_list(values), do: finite_values?(values)
-  defp finite_value?(_other), do: false
+  defp finite_values?([value | rest]) do
+    finite_value?(value) and finite_values?(rest)
+  end
+
+  defp finite_value?(value) when is_integer(value) do
+    true
+  end
+
+  defp finite_value?(%Range{}) do
+    true
+  end
+
+  defp finite_value?({value, options}) when is_integer(value) and is_list(options) do
+    true
+  end
+
+  defp finite_value?(values) when is_list(values) do
+    finite_values?(values)
+  end
+
+  defp finite_value?(_other) do
+    false
+  end
 
   ## The values a component names
 
@@ -646,13 +841,15 @@ defmodule Tempo.Enumeration do
     end
   end
 
-  defp candidates(component, ancestors, calendar, _settled?),
-    do: candidates(component, ancestors, calendar)
+  defp candidates(component, ancestors, calendar, _settled?) do
+    candidates(component, ancestors, calendar)
+  end
 
   # A selection (`L…N`) is a constraint on the value it is in, not a
   # sequence, so it is kept as it is.
-  defp candidates({:selection, selection}, _ancestors, _calendar),
-    do: {:ok, :selection, [selection]}
+  defp candidates({:selection, selection}, _ancestors, _calendar) do
+    {:ok, :selection, [selection]}
+  end
 
   defp candidates({unit, :any}, ancestors, calendar) do
     with {:ok, range} <- Mask.unspecified(unit, Enum.reverse(ancestors), calendar) do
@@ -675,8 +872,14 @@ defmodule Tempo.Enumeration do
     prefix = Enum.reverse(ancestors)
 
     case Group.bound_groups(prefix ++ [{unit, {:group, range}}], calendar) do
-      {:ok, bounded} -> {:ok, unit, bounded |> List.last() |> group_values()}
-      {:error, exception} -> {:unmatched, exception}
+      {:ok, bounded} ->
+        {:ok, unit,
+         bounded
+         |> List.last()
+         |> group_values()}
+
+      {:error, exception} ->
+        {:unmatched, exception}
     end
   end
 
@@ -724,41 +927,78 @@ defmodule Tempo.Enumeration do
   # `{2026,2028}Y2M{28,-1}D` is the 28th of the first February once, and the
   # 28th and 29th of the second.
   defp as_its_numbers(literal, values) do
-    if counts_from_end?(literal) and Enum.all?(values, &is_integer/1),
-      do: values |> Enum.uniq() |> Enum.sort(),
-      else: values
+    if counts_from_end?(literal) and Enum.all?(values, &is_integer/1) do
+      values
+      |> Enum.uniq()
+      |> Enum.sort()
+    else
+      values
+    end
   end
 
-  defp counts_from_end?(value) when is_integer(value), do: value < 0
-  defp counts_from_end?(%Range{first: first, last: last}), do: first < 0 or last < 0
-  defp counts_from_end?(values) when is_list(values), do: Enum.any?(values, &counts_from_end?/1)
-  defp counts_from_end?(_value), do: false
+  defp counts_from_end?(value) when is_integer(value) do
+    value < 0
+  end
 
-  defp group_values({_unit, {:group, %Range{} = range}}), do: Enum.to_list(range)
+  defp counts_from_end?(%Range{first: first, last: last}) do
+    first < 0 or last < 0
+  end
+
+  defp counts_from_end?(values) when is_list(values) do
+    Enum.any?(values, &counts_from_end?/1)
+  end
+
+  defp counts_from_end?(_value) do
+    false
+  end
+
+  defp group_values({_unit, {:group, %Range{} = range}}) do
+    Enum.to_list(range)
+  end
 
   # The values of a resolved literal: whole numbers from zero, ranges of them,
   # and the fractions of a second.
-  defp resolved_values(value) when is_integer(value) and value >= 0, do: {:ok, [value]}
+  defp resolved_values(value) when is_integer(value) and value >= 0 do
+    {:ok, [value]}
+  end
 
-  defp resolved_values(%Range{first: first, last: last} = range) when first >= 0 and last >= 0,
-    do: {:ok, Enum.to_list(range)}
+  defp resolved_values(%Range{first: first, last: last} = range) when first >= 0 and last >= 0 do
+    {:ok, Enum.to_list(range)}
+  end
 
   defp resolved_values({value, precision} = fraction)
-       when is_integer(value) and is_integer(precision),
-       do: {:ok, [fraction]}
+       when is_integer(value) and is_integer(precision) do
+    {:ok, [fraction]}
+  end
 
-  defp resolved_values(_unresolved), do: :unresolved
+  defp resolved_values(_unresolved) do
+    :unresolved
+  end
 
-  defp raw_candidates(value) when is_list(value), do: Enum.flat_map(value, &raw_candidates/1)
-  defp raw_candidates(value), do: [value]
+  defp raw_candidates(value) when is_list(value) do
+    Enum.flat_map(value, &raw_candidates/1)
+  end
+
+  defp raw_candidates(value) do
+    [value]
+  end
 
   # `Enum.flat_map/2` over results: each `fun` gives `{:ok, list}`, and the
   # first `:unresolved` is the answer for them all.
-  defp flat_map_resolved([item], fun), do: fun.(item)
-  defp flat_map_resolved(items, fun), do: flat_map_resolved(items, fun, [])
+  defp flat_map_resolved([item], fun) do
+    fun.(item)
+  end
 
-  defp flat_map_resolved([], _fun, gathered),
-    do: {:ok, gathered |> :lists.reverse() |> :lists.append()}
+  defp flat_map_resolved(items, fun) do
+    flat_map_resolved(items, fun, [])
+  end
+
+  defp flat_map_resolved([], _fun, gathered) do
+    {:ok,
+     gathered
+     |> :lists.reverse()
+     |> :lists.append()}
+  end
 
   defp flat_map_resolved([item | items], fun, gathered) do
     case fun.(item) do
@@ -779,8 +1019,9 @@ defmodule Tempo.Enumeration do
     end
   end
 
-  defp resolve_candidate(unit, raw, ancestors, calendar),
-    do: resolve_after(unit, raw, ancestors, calendar)
+  defp resolve_candidate(unit, raw, ancestors, calendar) do
+    resolve_after(unit, raw, ancestors, calendar)
+  end
 
   # Resolve one candidate against its concrete ancestors. A range or a
   # negative resolves to this context's real values; a value the
@@ -813,25 +1054,35 @@ defmodule Tempo.Enumeration do
 
   # The candidate as validation left it, when validation left the value in
   # the units it was written in.
-  defp validated_value([{unit, value}], [{unit, _written}]), do: {:ok, value}
+  defp validated_value([{unit, value}], [{unit, _written}]) do
+    {:ok, value}
+  end
 
-  defp validated_value([{unit, _} | validated], [{unit, _} | written]),
-    do: validated_value(validated, written)
+  defp validated_value([{unit, _} | validated], [{unit, _} | written]) do
+    validated_value(validated, written)
+  end
 
-  defp validated_value(_validated, _written), do: :restated
+  defp validated_value(_validated, _written) do
+    :restated
+  end
 
   # Validation restates some literals in other units — a week date or a day
   # of the year as the calendar date it names — and the candidate it accepted
   # then stands as written. One that counts from the end (`-1`, the last) is
   # read as a range of one, which validation resolves where it stands.
-  defp restated_candidate(unit, raw, ancestors, calendar) when is_integer(raw) and raw < 0,
-    do: resolve_after(unit, raw..raw//1, ancestors, calendar)
+  defp restated_candidate(unit, raw, ancestors, calendar) when is_integer(raw) and raw < 0 do
+    resolve_after(unit, raw..raw//1, ancestors, calendar)
+  end
 
-  defp restated_candidate(_unit, raw, _ancestors, _calendar), do: integers(raw)
+  defp restated_candidate(_unit, raw, _ancestors, _calendar) do
+    integers(raw)
+  end
 
   # The values a range names among those the unit can hold, read by
   # `Tempo.UnitValues` as every range and count from the end is.
-  defp values_as_written(%Range{} = range, valid), do: UnitValues.named(range, valid)
+  defp values_as_written(%Range{} = range, valid) do
+    UnitValues.named(range, valid)
+  end
 
   # The whole numbers a validated value names. A range of years is each of
   # its years whatever its ends: a year below zero is a year before year 1
@@ -846,28 +1097,43 @@ defmodule Tempo.Enumeration do
   # memory there was. It is cut at a year the calendar lacks.
   defp listed(:year, %Range{step: 1} = years, calendar)
        when years.last - years.first >= @read_ahead do
-    if UnitValues.year?(0, calendar) or years.first > 0 or years.last < 0,
-      do: {:ok, [years]},
-      else: {:ok, Enum.filter([years.first..-1//1, 1..years.last//1], &(Range.size(&1) > 0))}
+    if UnitValues.year?(0, calendar) or years.first > 0 or years.last < 0 do
+      {:ok, [years]}
+    else
+      {:ok, Enum.filter([years.first..-1//1, 1..years.last//1], &(Range.size(&1) > 0))}
+    end
   end
 
-  defp listed(:year, %Range{} = years, calendar),
-    do: {:ok, Enum.filter(years, &UnitValues.year?(&1, calendar))}
+  defp listed(:year, %Range{} = years, calendar) do
+    {:ok, Enum.filter(years, &UnitValues.year?(&1, calendar))}
+  end
 
-  defp listed(_unit, value, _calendar), do: integers(value)
+  defp listed(_unit, value, _calendar) do
+    integers(value)
+  end
 
   # A count from the end is resolved by the calendar for date units and by
   # the unit's fixed extent for clock units, both in `Tempo.Validation`. A
   # range that still counts from the end has no container to count in — the
   # weeks of no year, the days of no month — so it cannot be listed: not as
   # nothing, which would turn the question into an empty answer silently.
-  defp integers(%Range{first: first, last: last}) when first < 0 or last < 0, do: :unresolved
+  defp integers(%Range{first: first, last: last}) when first < 0 or last < 0 do
+    :unresolved
+  end
 
   # `Enum.to_list/1` respects the range's step, so a range whose step
   # cannot reach its end is empty.
-  defp integers(%Range{} = range), do: {:ok, Enum.to_list(range)}
-  defp integers(value) when is_list(value), do: flat_map_resolved(value, &integers/1)
-  defp integers(value), do: {:ok, [value]}
+  defp integers(%Range{} = range) do
+    {:ok, Enum.to_list(range)}
+  end
+
+  defp integers(value) when is_list(value) do
+    flat_map_resolved(value, &integers/1)
+  end
+
+  defp integers(value) do
+    {:ok, [value]}
+  end
 
   # Returns the range of integers sharing `value`'s first `n`
   # digits. Honours sign: for `value < 0` the range runs from
@@ -893,29 +1159,47 @@ defmodule Tempo.Enumeration do
     end
   end
 
-  defp digit_count(0), do: 1
-  defp digit_count(n) when n < 0, do: digit_count(-n)
-  defp digit_count(n), do: length(Integer.digits(n))
+  defp digit_count(0) do
+    1
+  end
 
-  defp integer_pow10(0), do: 1
-  defp integer_pow10(n) when n > 0, do: 10 * integer_pow10(n - 1)
+  defp digit_count(n) when n < 0 do
+    digit_count(-n)
+  end
+
+  defp digit_count(n) do
+    length(Integer.digits(n))
+  end
+
+  defp integer_pow10(0) do
+    1
+  end
+
+  defp integer_pow10(n) when n > 0 do
+    10 * integer_pow10(n - 1)
+  end
 
   ## The error that stops a walk
 
   # Each names the value being walked, as `Tempo.to_interval/2` names it.
 
-  defp exception(_tempo, exception) when is_exception(exception), do: exception
+  defp exception(_tempo, exception) when is_exception(exception) do
+    exception
+  end
 
-  defp exception(tempo, :grouped_component),
-    do: ConversionError.exception(value: tempo, reason: :grouped_component)
+  defp exception(tempo, :grouped_component) do
+    ConversionError.exception(value: tempo, reason: :grouped_component)
+  end
 
-  defp exception(tempo, :counted_in_group),
-    do: ConversionError.exception(value: tempo, reason: :counted_in_group)
+  defp exception(tempo, :counted_in_group) do
+    ConversionError.exception(value: tempo, reason: :counted_in_group)
+  end
 
   # A mask or an unspecified unit whose values depend on a year the value
   # does not have.
-  defp exception(tempo, :unanchored),
-    do: UnanchoredError.exception(value: tempo, reason: :masked)
+  defp exception(tempo, :unanchored) do
+    UnanchoredError.exception(value: tempo, reason: :masked)
+  end
 
   # A count from the end of a unit the value does not bound: the weeks of no
   # year, the days of no month.
@@ -956,29 +1240,59 @@ defmodule Tempo.Enumeration do
     )
   end
 
-  defp exception(tempo, reason), do: Mask.error(tempo, reason)
+  defp exception(tempo, reason) do
+    Mask.error(tempo, reason)
+  end
 
   ## Implicit enumeration
 
   # Whether a value names several values of its own (a set, a range, a mask,
   # an unspecified unit, a group), which a walk yields, rather than one span,
   # which is walked by the unit below its own.
-  def explicitly_enumerable?(%Tempo{time: time}), do: names_several?(time)
+  def explicitly_enumerable?(%Tempo{time: time}) do
+    names_several?(time)
+  end
 
   # A selection is a constraint, not a sequence, so it does not make the
   # value enumerable on its own, though its inner keyword list is a list.
-  defp names_several?([{:selection, _} | rest]), do: names_several?(rest)
+  defp names_several?([{:selection, _} | rest]) do
+    names_several?(rest)
+  end
+
   # An unspecified year is one year, though no one knows which.
-  defp names_several?([{:year, :any} | rest]), do: names_several?(rest)
-  defp names_several?([{_unit, value} | _rest]) when is_list(value), do: true
-  defp names_several?([{_unit, :any} | _rest]), do: true
-  defp names_several?([{_unit, {:mask, _}} | _rest]), do: true
-  defp names_several?([{_unit, {:group, _}} | _rest]), do: true
+  defp names_several?([{:year, :any} | rest]) do
+    names_several?(rest)
+  end
+
+  defp names_several?([{_unit, value} | _rest]) when is_list(value) do
+    true
+  end
+
+  defp names_several?([{_unit, :any} | _rest]) do
+    true
+  end
+
+  defp names_several?([{_unit, {:mask, _}} | _rest]) do
+    true
+  end
+
+  defp names_several?([{_unit, {:group, _}} | _rest]) do
+    true
+  end
+
   # A group of a set (`{1,2}G3MU`) names several spans, though nothing walks
   # them.
-  defp names_several?([{_unit, {:group, _members}, _size} | _rest]), do: true
-  defp names_several?([_component | rest]), do: names_several?(rest)
-  defp names_several?([]), do: false
+  defp names_several?([{_unit, {:group, _members}, _size} | _rest]) do
+    true
+  end
+
+  defp names_several?([_component | rest]) do
+    names_several?(rest)
+  end
+
+  defp names_several?([]) do
+    false
+  end
 
   # The value written with the unit below its own as an enumeration, which a
   # walk yields. Raises for a value with no finer unit to walk by, as
@@ -1050,7 +1364,9 @@ defmodule Tempo.Enumeration do
     end
   end
 
-  defp every(unit, %Range{} = range, _time, _calendar), do: {unit, [range]}
+  defp every(unit, %Range{} = range, _time, _calendar) do
+    {unit, [range]}
+  end
 
   # A fraction of a second, or the fractions an enumeration of one holds
   # (a second written as its ten tenths), each as its ten finer ones.

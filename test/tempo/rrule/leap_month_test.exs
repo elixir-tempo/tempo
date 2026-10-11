@@ -39,8 +39,11 @@ defmodule Tempo.RRule.LeapMonthTest do
   @window ~o"2014/2026"
   @years 5774..5786
 
-  defp gregorian(year, month, day, calendar),
-    do: year |> Date.new!(month, day, calendar) |> Date.convert!(Calendar.ISO)
+  defp gregorian(year, month, day, calendar) do
+    year
+    |> Date.new!(month, day, calendar)
+    |> Date.convert!(Calendar.ISO)
+  end
 
   # The date a day of Adar I is each Hebrew year, by what the rule does in a
   # year without one: Adar I and Adar are each a year's sixth month, and
@@ -64,12 +67,18 @@ defmodule Tempo.RRule.LeapMonthTest do
     {:ok, set} = Tempo.to_interval(rule, within: @window)
 
     for occurrence <- IntervalSet.members(set) do
-      {:ok, date} = occurrence |> Interval.from() |> Tempo.to_calendar(Calendar.ISO)
+      {:ok, date} =
+        occurrence
+        |> Interval.from()
+        |> Tempo.to_calendar(Calendar.ISO)
+
       Date.new!(Tempo.year(date), Tempo.month(date), Tempo.day(date))
     end
   end
 
-  defp hebrew(rule, from), do: RRule.parse("RSCALE=HEBREW;" <> rule, from: from)
+  defp hebrew(rule, from) do
+    RRule.parse("RSCALE=HEBREW;" <> rule, from: from)
+  end
 
   describe "the measure" do
     test "is the calendar's own: RFC 7529's dates are the 8th of each year's sixth month" do
@@ -142,9 +151,11 @@ defmodule Tempo.RRule.LeapMonthTest do
       # Adar I and Adar II in a year with both, and Adar once in one without.
       expected =
         Enum.flat_map(@years, fn year ->
-          if Hebrew.leap_year?(year),
-            do: [gregorian(year, 6, 8, Hebrew), gregorian(year, 7, 8, Hebrew)],
-            else: [gregorian(year, 6, 8, Hebrew)]
+          if Hebrew.leap_year?(year) do
+            [gregorian(year, 6, 8, Hebrew), gregorian(year, 7, 8, Hebrew)]
+          else
+            [gregorian(year, 6, 8, Hebrew)]
+          end
         end)
 
       assert starts(rule) == Enum.filter(expected, &(Date.compare(&1, ~D[2026-01-01]) == :lt))
@@ -186,7 +197,16 @@ defmodule Tempo.RRule.LeapMonthTest do
 
       expected =
         for year <- 5775..5786 do
-          gregorian(year, if(Hebrew.leap_year?(year), do: 7, else: 6), 8, Hebrew)
+          gregorian(
+            year,
+            if Hebrew.leap_year?(year) do
+              7
+            else
+              6
+            end,
+            8,
+            Hebrew
+          )
         end
 
       assert starts(rule) == Enum.filter(expected, &(Date.compare(&1, ~D[2026-01-01]) == :lt))
@@ -205,7 +225,9 @@ defmodule Tempo.RRule.LeapMonthTest do
       # its second, the third month of the year.
       {year, ordinal} =
         Enum.find_value(4650..4670, fn year ->
-          if Chinese.traditional_leap_month(year) == 2, do: {year, Chinese.leap_month(year)}
+          if Chinese.traditional_leap_month(year) == 2 do
+            {year, Chinese.leap_month(year)}
+          end
         end)
 
       first = gregorian(year, ordinal, 1, Chinese)

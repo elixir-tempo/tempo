@@ -43,7 +43,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       lookahead(
         choice([
           zulu(),
-          sign() |> concat(digit()) |> concat(digit()) |> concat(colon())
+          sign()
+          |> concat(digit())
+          |> concat(digit())
+          |> concat(colon())
         ])
       )
       |> parsec({Tempo.Iso8601.Tokenizer.Time, :extended_time_shift_p})
@@ -55,10 +58,14 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # several values of the unit there, as it is before a designator in the
   # explicit form (decided 2026-10-07): `2026-[01,03]` is `2026Y[1,3]M`, one
   # of January and March. It was not read.
-  defp one_of(tag),
-    do: parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}) |> unwrap_and_tag(tag)
+  defp one_of(tag) do
+    parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one})
+    |> unwrap_and_tag(tag)
+  end
 
-  defp or_one_of(unit, tag), do: choice([unit, one_of(tag)])
+  defp or_one_of(unit, tag) do
+    choice([unit, one_of(tag)])
+  end
 
   # The year of a date in the extended format: one year, or one of several
   # where the separator follows them (`[2026,2027]-01`, as `[2026,2027]Y1M`
@@ -113,7 +120,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def explicit_date_time do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_date_p}),
-      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_month_p}) |> lookahead(string("T"))
+      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_month_p})
+      |> lookahead(string("T"))
     ])
     |> concat(parsec({Tempo.Iso8601.Tokenizer.Time, :explicit_time_of_day_p}))
   end
@@ -200,7 +208,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_month_p}))
       |> choice([
         explicit_day_of_month(),
-        week_of_month() |> optional(explicit_day_of_week())
+        week_of_month()
+        |> optional(explicit_day_of_week())
       ]),
 
       # Year, week, day of week
@@ -327,12 +336,14 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   defp week_or_one_of do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p}),
-      ignore(string("W")) |> concat(one_of(:week))
+      ignore(string("W"))
+      |> concat(one_of(:week))
     ])
   end
 
-  defp day_of_week_or_one_of,
-    do: or_one_of(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p}), :day_of_week)
+  defp day_of_week_or_one_of do
+    or_one_of(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p}), :day_of_week)
+  end
 
   def explicit_week_date do
     choice([
@@ -356,7 +367,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # of hours is written after a `T` (`T{19,20}`).
   def implicit_time_of_day do
     choice([
-      ignore(string("T")) |> implicit_clock(empty()),
+      ignore(string("T"))
+      |> implicit_clock(empty()),
       implicit_clock(lookahead_not(string("{")))
     ])
     |> optional(time_fraction())
@@ -381,7 +393,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     hour = parsec({Tempo.Iso8601.Tokenizer.Time, :implicit_hour_p})
 
     choice([
-      ignore(string("T")) |> extended_clock(empty(), or_one_of(hour, :hour)),
+      ignore(string("T"))
+      |> extended_clock(empty(), or_one_of(hour, :hour)),
       extended_clock(lookahead_not(string("{")), hour)
     ])
     |> optional(time_fraction())
@@ -413,7 +426,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   # What goes on a number written with no designator after it: a digit, an
   # unspecified digit, or a set.
-  defp more_of_a_number, do: ascii_char([?0..?9, ?X, ?{])
+  defp more_of_a_number do
+    ascii_char([?0..?9, ?X, ?{])
+  end
 
   def explicit_time_of_day do
     ignore(optional(string("T")))
@@ -464,19 +479,35 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   def duration_date_element do
     choice([
-      maybe_negative_number(min: 1) |> ignore(string("C")) |> unwrap_and_tag(:century),
-      maybe_negative_number(min: 1) |> ignore(string("J")) |> unwrap_and_tag(:decade),
-      maybe_negative_number(min: 1) |> ignore(string("Y")) |> unwrap_and_tag(:year),
-      maybe_negative_number(min: 1) |> ignore(string("M")) |> unwrap_and_tag(:month),
-      maybe_negative_number(min: 1) |> ignore(string("W")) |> unwrap_and_tag(:week),
-      maybe_negative_number(min: 1) |> ignore(string("D")) |> unwrap_and_tag(:day)
+      maybe_negative_number(min: 1)
+      |> ignore(string("C"))
+      |> unwrap_and_tag(:century),
+      maybe_negative_number(min: 1)
+      |> ignore(string("J"))
+      |> unwrap_and_tag(:decade),
+      maybe_negative_number(min: 1)
+      |> ignore(string("Y"))
+      |> unwrap_and_tag(:year),
+      maybe_negative_number(min: 1)
+      |> ignore(string("M"))
+      |> unwrap_and_tag(:month),
+      maybe_negative_number(min: 1)
+      |> ignore(string("W"))
+      |> unwrap_and_tag(:week),
+      maybe_negative_number(min: 1)
+      |> ignore(string("D"))
+      |> unwrap_and_tag(:day)
     ])
   end
 
   def duration_time_element do
     choice([
-      maybe_negative_number(min: 1) |> ignore(string("H")) |> unwrap_and_tag(:hour),
-      maybe_negative_number(min: 1) |> ignore(string("M")) |> unwrap_and_tag(:minute),
+      maybe_negative_number(min: 1)
+      |> ignore(string("H"))
+      |> unwrap_and_tag(:hour),
+      maybe_negative_number(min: 1)
+      |> ignore(string("M"))
+      |> unwrap_and_tag(:minute),
       # The sign, integer, and fraction of a duration second reduce
       # together, so `PT-0.2S` keeps its sign (a `-0` integer second
       # cannot carry it alone). The fraction is preserved with its digit
@@ -505,7 +536,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def selection_elements(combinator \\ empty()) do
     combinator
     |> choice([
-      selection_date_elements() |> optional(selection_time_elements()),
+      selection_date_elements()
+      |> optional(selection_time_elements()),
       selection_time_elements()
     ])
   end
@@ -617,7 +649,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def implicit_year do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
-      parsec({Tempo.Iso8601.Tokenizer.Set, :year_set_all}) |> unwrap_and_tag(:year),
+      parsec({Tempo.Iso8601.Tokenizer.Set, :year_set_all})
+      |> unwrap_and_tag(:year),
 
       # EDTF Level 2 long-year with exponent or significant-digit
       # annotation: `Y17E8` (17 × 10^8) or `Y171010000S3`. Requires
@@ -640,7 +673,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       |> unwrap_and_tag(:year),
 
       # Short `Y`-prefix form (`Y2022`) — exactly 4 digits.
-      ignore(string("Y")) |> maybe_negative_number(4) |> unwrap_and_tag(:year),
+      ignore(string("Y"))
+      |> maybe_negative_number(4)
+      |> unwrap_and_tag(:year),
 
       # ISO 8601-2 expanded year: a *mandatory* sign (`+` or `-`)
       # followed by *five or more* digits (`+12022`, `-12022`,
@@ -655,7 +690,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       |> positive_integer(min: 5)
       |> reduce(:form_number)
       |> unwrap_and_tag(:year),
-      maybe_negative_integer(4) |> unwrap_and_tag(:year)
+      maybe_negative_integer(4)
+      |> unwrap_and_tag(:year)
     ])
     |> label("implicit year")
   end
@@ -671,7 +707,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def list_of_year_or_range(combinator \\ empty()) do
     combinator
     |> year_or_range()
-    |> repeat(ignore(string(",")) |> year_or_range())
+    |> repeat(
+      ignore(string(","))
+      |> year_or_range()
+    )
     |> label("list of years or ranges of years")
   end
 
@@ -681,7 +720,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       set_year()
       |> ignore(string(".."))
       |> concat(set_year())
-      |> optional(ignore(string("//")) |> integer(min: 1))
+      |> optional(
+        ignore(string("//"))
+        |> integer(min: 1)
+      )
       |> post_traverse({__MODULE__, :year_range, []}),
       set_year()
     ])
@@ -689,7 +731,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   defp set_year do
     choice([
-      negative() |> positive_integer(min: 5) |> reduce(:form_number),
+      negative()
+      |> positive_integer(min: 5)
+      |> reduce(:form_number),
       maybe_negative_integer(4)
     ])
     |> lookahead_not(digit())
@@ -701,15 +745,18 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # not whole years (`{19XX..20XX}`) is no range of years.
   @doc false
   def year_range(rest, [last, first], context, _line, _offset)
-      when is_integer(first) and is_integer(last),
-      do: {rest, [iterable_range(first, last)], context}
+      when is_integer(first) and is_integer(last) do
+    {rest, [iterable_range(first, last)], context}
+  end
 
   def year_range(rest, [step, last, first], context, _line, _offset)
-      when is_integer(first) and is_integer(last),
-      do: {rest, [first..last//step], context}
+      when is_integer(first) and is_integer(last) do
+    {rest, [first..last//step], context}
+  end
 
-  def year_range(_rest, _ends, _context, _line, _offset),
-    do: {:error, "a range of years runs from one whole year to another"}
+  def year_range(_rest, _ends, _context, _line, _offset) do
+    {:error, "a range of years runs from one whole year to another"}
+  end
 
   def explicit_year do
     choice([
@@ -756,7 +803,11 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     {qualifiers, value_tokens} =
       Enum.split_with(acc, &match?({:individual_qualification, _}, &1))
 
-    year = value_tokens |> Enum.reverse() |> convert_bc()
+    year =
+      value_tokens
+      |> Enum.reverse()
+      |> convert_bc()
+
     {rest, qualifiers ++ [{:year, year}], context}
   end
 
@@ -822,7 +873,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def as_leap_month([month]), do: {month, :leap}
+  def as_leap_month([month]) do
+    {month, :leap}
+  end
 
   # Weeks
 
@@ -897,8 +950,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def implicit_day_of_year do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
-      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}) |> unwrap_and_tag(:day_of_year),
-      positive_integer(3) |> unwrap_and_tag(:day_of_year)
+      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all})
+      |> unwrap_and_tag(:day_of_year),
+      positive_integer(3)
+      |> unwrap_and_tag(:day_of_year)
     ])
   end
 
@@ -936,9 +991,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   defp before_year_one_or_not(number) do
     choice([
       ignore(negative())
-      |> concat(number |> reduce(:form_number))
+      |> concat(
+        number
+        |> reduce(:form_number)
+      )
       |> unwrap_and_tag(:before_year_one),
-      number |> reduce(:form_number)
+      number
+      |> reduce(:form_number)
     ])
   end
 
@@ -953,7 +1012,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def implicit_century do
     before_year_one_or_not(positive_integer(2))
     |> lookahead_not(colon())
-    |> lookahead_not(decimal_sign() |> concat(digit()))
+    |> lookahead_not(
+      decimal_sign()
+      |> concat(digit())
+    )
     |> unwrap_and_tag(:century)
   end
 
@@ -1050,8 +1112,15 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> unwrap_and_tag(:time_shift)
   end
 
-  defp shift_hour, do: integer(2) |> unwrap_and_tag(:hour)
-  defp shift_minute, do: integer(2) |> unwrap_and_tag(:minute)
+  defp shift_hour do
+    integer(2)
+    |> unwrap_and_tag(:hour)
+  end
+
+  defp shift_minute do
+    integer(2)
+    |> unwrap_and_tag(:minute)
+  end
 
   # An explicit time shift must begin with the zulu indicator `Z`.
   # Permitting a bare signed + explicit-designator shift like `-1H`
@@ -1073,7 +1142,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   #     and §7.4 example 8)
   def explicit_time_shift do
     zulu()
-    |> optional(optional(sign()) |> concat(shift_units()))
+    |> optional(
+      optional(sign())
+      |> concat(shift_units())
+    )
     |> lookahead_not(digit())
     |> reduce(:resolve_shift)
     |> unwrap_and_tag(:time_shift)
@@ -1092,16 +1164,22 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  defp shift_unit(unit, designator),
-    do: integer(min: 1) |> ignore(string(designator)) |> unwrap_and_tag(unit)
+  defp shift_unit(unit, designator) do
+    integer(min: 1)
+    |> ignore(string(designator))
+    |> unwrap_and_tag(unit)
+  end
 
   # A sign is required if no Z indicator
   # A sign is optional if there is a Z indicator
 
   def shift_indicator do
     choice([
-      ignore(zulu()) |> concat(sign()) |> lookahead(digit()),
-      sign() |> lookahead(digit()),
+      ignore(zulu())
+      |> concat(sign())
+      |> lookahead(digit()),
+      sign()
+      |> lookahead(digit()),
       zulu()
     ])
   end
@@ -1122,7 +1200,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     combinator
     |> members_of_a_set(
       time_or_range_member()
-      |> repeat(ignore(string(",")) |> time_or_range_member())
+      |> repeat(
+        ignore(string(","))
+        |> time_or_range_member()
+      )
     )
     |> label("list of times or ranges")
   end
@@ -1150,7 +1231,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def time_or_range_member(combinator \\ empty()) do
     combinator
     |> choice([
-      ignore(string("^")) |> time_or_range() |> tag(:except),
+      ignore(string("^"))
+      |> time_or_range()
+      |> tag(:except),
       time_or_range()
     ])
   end
@@ -1172,7 +1255,8 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       |> member_value()
       |> optional(
         choice([
-          ignore(string("..")) |> member_value(),
+          ignore(string(".."))
+          |> member_value(),
           replace(string(".."), :undefined)
         ])
       )
@@ -1197,8 +1281,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   # A member alone is the member, and one with what follows it a range.
   @doc false
-  def range_or_member([member]), do: member
-  def range_or_member(ends), do: range(ends)
+  def range_or_member([member]) do
+    member
+  end
+
+  def range_or_member(ends) do
+    range(ends)
+  end
 
   # What a member of a set is: an interval, a duration, or a date or a time
   # with its qualifiers.
@@ -1275,13 +1364,20 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   # What is written as a range and is none of the above: one between
   # unspecified digits, which `range_of_whole_numbers/5` refuses.
-  def range(other), do: {:no_range, other}
+  def range(other) do
+    {:no_range, other}
+  end
 
   # Used by the `range/1` clauses above for forms where the user
   # supplies no step: ascending first..last counts up by `1`, and one
   # written backwards is marked with `-1` for the parser to refuse.
-  defp iterable_range(first, last) when last >= first, do: first..last//1
-  defp iterable_range(first, last), do: first..last//-1
+  defp iterable_range(first, last) when last >= first do
+    first..last//1
+  end
+
+  defp iterable_range(first, last) do
+    first..last//-1
+  end
 
   # The days of the year in a set of the extended or the basic format: each
   # is three digits, as a day of the year is written there (`2026-166`), and
@@ -1290,26 +1386,39 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   def list_of_day_of_year_or_range(combinator \\ empty()) do
     combinator
     |> day_of_year_or_range()
-    |> repeat(ignore(string(",")) |> day_of_year_or_range())
+    |> repeat(
+      ignore(string(","))
+      |> day_of_year_or_range()
+    )
     |> label("list of days of the year or ranges of them")
   end
 
   defp day_of_year_or_range(combinator) do
     combinator
     |> choice([
-      wrap(three_digits() |> string("..") |> concat(three_digits()))
+      wrap(
+        three_digits()
+        |> string("..")
+        |> concat(three_digits())
+      )
       |> reduce(:range)
       |> post_traverse({__MODULE__, :range_of_whole_numbers, []}),
       three_digits()
     ])
   end
 
-  defp three_digits, do: positive_integer(3) |> lookahead_not(digit())
+  defp three_digits do
+    positive_integer(3)
+    |> lookahead_not(digit())
+  end
 
   def list_of_integer_or_range(combinator \\ empty()) do
     combinator
     |> integer_or_range()
-    |> repeat(ignore(string(",")) |> integer_or_range())
+    |> repeat(
+      ignore(string(","))
+      |> integer_or_range()
+    )
     |> label("list of integers or ranges")
   end
 
@@ -1319,7 +1428,10 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
       maybe_negative_integer(min: 1)
       |> string("..")
       |> maybe_negative_integer(min: 1)
-      |> optional(ignore(string("//")) |> maybe_negative_integer(min: 1))
+      |> optional(
+        ignore(string("//"))
+        |> maybe_negative_integer(min: 1)
+      )
       |> reduce(:range)
       |> post_traverse({__MODULE__, :range_of_whole_numbers, []}),
       maybe_negative_integer(min: 1)
@@ -1332,11 +1444,13 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # of them, and `range/1` raised for it. It is refused here, in a combinator
   # read through `parsec`, so that it is that combinator failing.
   @doc false
-  def range_of_whole_numbers(rest, [%Range{}] = range, context, _line, _offset),
-    do: {rest, range, context}
+  def range_of_whole_numbers(rest, [%Range{}] = range, context, _line, _offset) do
+    {rest, range, context}
+  end
 
-  def range_of_whole_numbers(_rest, _no_range, _context, _line, _offset),
-    do: {:error, "a range of whole numbers runs from one whole number to another"}
+  def range_of_whole_numbers(_rest, _no_range, _context, _line, _offset) do
+    {:error, "a range of whole numbers runs from one whole number to another"}
+  end
 
   # A negative shift carries its sign on its first non-zero component,
   # so `-00:30` stays negative as `[hour: 0, minute: -30]`. It is written
@@ -1354,9 +1468,11 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # and `+00:00`. A zero with its hour alone was `[hour: 0]` whichever way
   # it was written, and `-00:00` was the shift `+00:00` is.
   def resolve_shift([{:sign, minus} | components]) when minus in [?-, ?−] do
-    if Enum.all?(components, &match?({_unit, 0}, &1)),
-      do: [hour: 0],
-      else: negate_leading(components)
+    if Enum.all?(components, &match?({_unit, 0}, &1)) do
+      [hour: 0]
+    else
+      negate_leading(components)
+    end
   end
 
   def resolve_shift([{:sign, ?+} | rest]) do
@@ -1375,14 +1491,25 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     with_its_minutes(other)
   end
 
-  defp with_its_minutes(hour: 0), do: [hour: 0, minute: 0]
-  defp with_its_minutes(units), do: units
+  defp with_its_minutes(hour: 0) do
+    [hour: 0, minute: 0]
+  end
 
-  defp negate_leading([{component, 0} | [_ | _] = rest]),
-    do: [{component, 0} | negate_leading(rest)]
+  defp with_its_minutes(units) do
+    units
+  end
 
-  defp negate_leading([{component, value} | rest]), do: [{component, -value} | rest]
-  defp negate_leading([]), do: []
+  defp negate_leading([{component, 0} | [_ | _] = rest]) do
+    [{component, 0} | negate_leading(rest)]
+  end
+
+  defp negate_leading([{component, value} | rest]) do
+    [{component, -value} | rest]
+  end
+
+  defp negate_leading([]) do
+    []
+  end
 
   # ISO 8601-1:2019 §5.5.1: "higher order time scale components may be
   # omitted from the 'end of time interval' … the omitted higher order
@@ -1432,7 +1559,9 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     end
   end
 
-  defp abbreviated_end([]), do: []
+  defp abbreviated_end([]) do
+    []
+  end
 
   defp finest_unit(start) do
     Enum.reduce(start, nil, fn
@@ -1441,15 +1570,35 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     end)
   end
 
-  defp abbreviated(:two_digits, number, unit) when unit in @two_digit_units, do: {unit, number}
-  defp abbreviated(:two_digits, number, _unit), do: {:century, number}
-  defp abbreviated(:three_digits, number, :day_of_year), do: {:day_of_year, number}
-  defp abbreviated(:three_digits, number, _unit), do: {:decade, number}
-  defp abbreviated(:one_digit, number, :day_of_week), do: {:day_of_week, number}
+  defp abbreviated(:two_digits, number, unit) when unit in @two_digit_units do
+    {unit, number}
+  end
 
-  defp abbreviated(:one_digit, _number, _unit),
-    do: {:error, "one digit ends an interval only after a day of the week"}
+  defp abbreviated(:two_digits, number, _unit) do
+    {:century, number}
+  end
 
-  defp abbreviated_tag(unit) when unit in @time_units, do: :time_of_day
-  defp abbreviated_tag(_unit), do: :date
+  defp abbreviated(:three_digits, number, :day_of_year) do
+    {:day_of_year, number}
+  end
+
+  defp abbreviated(:three_digits, number, _unit) do
+    {:decade, number}
+  end
+
+  defp abbreviated(:one_digit, number, :day_of_week) do
+    {:day_of_week, number}
+  end
+
+  defp abbreviated(:one_digit, _number, _unit) do
+    {:error, "one digit ends an interval only after a day of the week"}
+  end
+
+  defp abbreviated_tag(unit) when unit in @time_units do
+    :time_of_day
+  end
+
+  defp abbreviated_tag(_unit) do
+    :date
+  end
 end

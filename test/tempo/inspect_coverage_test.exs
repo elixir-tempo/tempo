@@ -126,7 +126,9 @@ defmodule Tempo.InspectCoverageTest do
   # these away before they reach inspect.
   describe "component value rendering" do
     @cal Calendar.ISO
-    defp t(time), do: inspect(%Tempo{time: time, calendar: @cal})
+    defp t(time) do
+      inspect(%Tempo{time: time, calendar: @cal})
+    end
 
     test "unit designators for each time unit" do
       assert t(year: 2020, day_of_year: [100, 200]) == ~s|~o"2020Y{100,200}O"|

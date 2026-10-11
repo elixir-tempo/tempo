@@ -16,9 +16,15 @@ defmodule Tempo.WorkdaysTest do
     ])
   end
 
-  defp school_days, do: Tempo.workdays(:AU, except: holidays())
+  defp school_days do
+    Tempo.workdays(:AU, except: holidays())
+  end
 
-  defp days(set), do: set |> IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+  defp days(set) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(&Tempo.to_iso8601!/1)
+  end
 
   describe "workdays/2" do
     test "without :except is the day-of-week selector it always was" do
@@ -121,7 +127,10 @@ defmodule Tempo.WorkdaysTest do
 
       refute IntervalSet.bounded?(set)
 
-      assert set |> IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Tempo.to_iso8601!/1) ==
+      assert set
+             |> IntervalSet.walk()
+             |> Enum.take(3)
+             |> Enum.map(&Tempo.to_iso8601!/1) ==
                ["2027Y4M23D/24D", "2027Y4M27D/28D", "2027Y4M28D/29D"]
     end
 
@@ -136,7 +145,11 @@ defmodule Tempo.WorkdaysTest do
 
     defp walked(base, workdays, count) do
       {:ok, set} = Tempo.select(base, workdays)
-      set |> IntervalSet.walk() |> Enum.take(count) |> Enum.map(&Tempo.to_iso8601!/1)
+
+      set
+      |> IntervalSet.walk()
+      |> Enum.take(count)
+      |> Enum.map(&Tempo.to_iso8601!/1)
     end
 
     test "an open-ended span with holidays that have no end is the error the next workday is" do

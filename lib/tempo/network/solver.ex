@@ -108,7 +108,10 @@ defmodule Tempo.Network.Solver do
   @spec propagate(Network.t()) :: {:ok, Network.t()} | {:error, :inconsistent | Exception.t()}
   def propagate(%Network{} = network) do
     if Calendars.outside?(network) do
-      network |> Calendars.inside() |> propagate() |> Calendars.outside()
+      network
+      |> Calendars.inside()
+      |> propagate()
+      |> Calendars.outside()
     else
       with {:ok, %{normalized: normalized, dist: distances}} <- solved(network),
            {:ok, periods} <- tightened_periods(network.periods, distances, normalized) do
@@ -173,8 +176,9 @@ defmodule Tempo.Network.Solver do
     end
   end
 
-  defp settled(measured, _lengths, mode, normalized, _solution),
-    do: settle(normalized, measured, mode)
+  defp settled(measured, _lengths, mode, normalized, _solution) do
+    settle(normalized, measured, mode)
+  end
 
   @doc """
   Classify whether two periods overlap in time, given the whole network.
@@ -265,8 +269,13 @@ defmodule Tempo.Network.Solver do
 
   # A predicate has only true and false to give, so an error the network's
   # builders recorded, or one solving it met, raises.
-  defp verdict({:error, exception}) when is_exception(exception), do: raise(exception)
-  defp verdict(verdict), do: verdict
+  defp verdict({:error, exception}) when is_exception(exception) do
+    raise(exception)
+  end
+
+  defp verdict(verdict) do
+    verdict
+  end
 
   # Prop. 7 — overlap is entailed iff both synchronism inequalities
   # beg(p₁) ≤ end(p₂) and beg(p₂) ≤ end(p₁) are already implied, i.e. the
@@ -284,11 +293,21 @@ defmodule Tempo.Network.Solver do
       at_least_zero?(get(distances, {:end, p1}, {:start, p2}))
   end
 
-  defp at_most_zero?(:inf), do: false
-  defp at_most_zero?(weight), do: weight <= 0
+  defp at_most_zero?(:inf) do
+    false
+  end
 
-  defp at_least_zero?(:inf), do: true
-  defp at_least_zero?(weight), do: weight >= 0
+  defp at_most_zero?(weight) do
+    weight <= 0
+  end
+
+  defp at_least_zero?(:inf) do
+    true
+  end
+
+  defp at_least_zero?(weight) do
+    weight >= 0
+  end
 
   # The thirteen Allen relations as endpoint constraints (half-open, matching
   # `Tempo.relation/2`): `:a1`/`:a2` are period p1's start/end, `:b1`/`:b2`
@@ -431,7 +450,11 @@ defmodule Tempo.Network.Solver do
   end
 
   defp known_period(%Network{periods: periods}, id) do
-    if Map.has_key?(periods, id), do: :ok, else: {:error, :unknown_period}
+    if Map.has_key?(periods, id) do
+      :ok
+    else
+      {:error, :unknown_period}
+    end
   end
 
   # A relation is feasible iff adding its endpoint constraints (plus the
@@ -454,12 +477,22 @@ defmodule Tempo.Network.Solver do
     single_or_list(relations)
   end
 
-  defp single_or_list([single]), do: single
-  defp single_or_list(list), do: list
+  defp single_or_list([single]) do
+    single
+  end
+
+  defp single_or_list(list) do
+    list
+  end
 
   defp induced(distances, nodes) do
     for from <- nodes, to <- nodes, into: %{} do
-      {{from, to}, if(from == to, do: 0, else: get(distances, from, to))}
+      {{from, to},
+       if from == to do
+         0
+       else
+         get(distances, from, to)
+       end}
     end
   end
 
@@ -473,7 +506,12 @@ defmodule Tempo.Network.Solver do
       for k <- nodes, i <- nodes, j <- nodes, reduce: augmented do
         distances ->
           via = add_weight(distances[{i, k}], distances[{k, j}])
-          if less?(via, distances[{i, j}]), do: %{distances | {i, j} => via}, else: distances
+
+          if less?(via, distances[{i, j}]) do
+            %{distances | {i, j} => via}
+          else
+            distances
+          end
       end
 
     Enum.all?(nodes, fn node -> not negative?(Map.get(final, {node, node}, :inf)) end)
@@ -485,21 +523,43 @@ defmodule Tempo.Network.Solver do
     end)
   end
 
-  defp edges_for(:lt, from, to), do: lt_edges(from, to)
-  defp edges_for(:eq, from, to), do: eq_edges(from, to)
+  defp edges_for(:lt, from, to) do
+    lt_edges(from, to)
+  end
+
+  defp edges_for(:eq, from, to) do
+    eq_edges(from, to)
+  end
 
   # from < to ⇒ from − to ≤ −1 (strict on the integer time-scale).
-  defp lt_edges(from, to), do: [{from, to, -1}]
+  defp lt_edges(from, to) do
+    [{from, to, -1}]
+  end
 
   # from = to ⇒ from − to ≤ 0 ∧ to − from ≤ 0.
-  defp eq_edges(from, to), do: [{from, to, 0}, {to, from, 0}]
+  defp eq_edges(from, to) do
+    [{from, to, 0}, {to, from, 0}]
+  end
 
-  defp min_weight(:inf, other), do: other
-  defp min_weight(other, :inf), do: other
-  defp min_weight(a, b), do: min(a, b)
+  defp min_weight(:inf, other) do
+    other
+  end
 
-  defp negative?(:inf), do: false
-  defp negative?(weight), do: weight < 0
+  defp min_weight(other, :inf) do
+    other
+  end
+
+  defp min_weight(a, b) do
+    min(a, b)
+  end
+
+  defp negative?(:inf) do
+    false
+  end
+
+  defp negative?(weight) do
+    weight < 0
+  end
 
   @doc """
   Explain a propagated bound as a trace — the chain of constraints that
@@ -554,7 +614,10 @@ defmodule Tempo.Network.Solver do
 
   def trace(%Network{} = network, {edge, _id} = boundary, options) when edge in [:start, :end] do
     if Calendars.outside?(network) do
-      network |> Calendars.inside() |> trace(boundary, options) |> Calendars.outside()
+      network
+      |> Calendars.inside()
+      |> trace(boundary, options)
+      |> Calendars.outside()
     else
       with :ok <- Network.check(network),
            {:ok, bound} <- trace_bound(options) do
@@ -614,8 +677,13 @@ defmodule Tempo.Network.Solver do
     end
   end
 
-  defp trace_nodes(boundary, :earliest), do: {:origin, boundary}
-  defp trace_nodes(boundary, :latest), do: {boundary, :origin}
+  defp trace_nodes(boundary, :earliest) do
+    {:origin, boundary}
+  end
+
+  defp trace_nodes(boundary, :latest) do
+    {boundary, :origin}
+  end
 
   # --- bound extraction ------------------------------------------
 
@@ -683,7 +751,12 @@ defmodule Tempo.Network.Solver do
   defp shortest_paths(%{nodes: nodes, edges: edges}) do
     distances =
       for from <- nodes, to <- nodes, into: %{} do
-        {{from, to}, if(from == to, do: 0, else: :inf)}
+        {{from, to},
+         if from == to do
+           0
+         else
+           :inf
+         end}
       end
 
     seeded =
@@ -717,19 +790,39 @@ defmodule Tempo.Network.Solver do
     end)
   end
 
-  defp get(distances, from, to), do: Map.get(distances, {from, to}, :inf)
+  defp get(distances, from, to) do
+    Map.get(distances, {from, to}, :inf)
+  end
 
-  defp add_weight(:inf, _), do: :inf
-  defp add_weight(_, :inf), do: :inf
-  defp add_weight(a, b), do: a + b
+  defp add_weight(:inf, _) do
+    :inf
+  end
 
-  defp less?(_a, :inf), do: true
-  defp less?(:inf, _b), do: false
-  defp less?(a, b), do: a < b
+  defp add_weight(_, :inf) do
+    :inf
+  end
+
+  defp add_weight(a, b) do
+    a + b
+  end
+
+  defp less?(_a, :inf) do
+    true
+  end
+
+  defp less?(:inf, _b) do
+    false
+  end
+
+  defp less?(a, b) do
+    a < b
+  end
 
   # --- trace reconstruction --------------------------------------
 
-  defp reconstruct(_next, node, node), do: [node]
+  defp reconstruct(_next, node, node) do
+    [node]
+  end
 
   defp reconstruct(next, from, to) do
     case Map.get(next, {from, to}) do
@@ -787,8 +880,13 @@ defmodule Tempo.Network.Solver do
     for [prev, node] <- Enum.reverse(hops), prev != :origin, do: {{prev, node}, prev}
   end
 
-  defp in_order({:ok, steps}), do: {:ok, Enum.reverse(steps)}
-  defp in_order({:error, _reason} = error), do: error
+  defp in_order({:ok, steps}) do
+    {:ok, Enum.reverse(steps)}
+  end
+
+  defp in_order({:error, _reason} = error) do
+    error
+  end
 
   defp bound_value(distances, boundary, :earliest, normalized) do
     Normalize.date_at(-get(distances, :origin, boundary), normalized)
@@ -807,75 +905,178 @@ defmodule Tempo.Network.Solver do
     end)
   end
 
-  defp render_source({:bound, :start, :lower, id, value}, network),
-    do: "#{label(network, id)} starts no earlier than #{year_label(value)}"
+  defp render_source({:bound, :start, :lower, id, value}, network) do
+    "#{label(network, id)} starts no earlier than #{year_label(value)}"
+  end
 
-  defp render_source({:bound, :start, :upper, id, value}, network),
-    do: "#{label(network, id)} starts no later than #{year_label(value)}"
+  defp render_source({:bound, :start, :upper, id, value}, network) do
+    "#{label(network, id)} starts no later than #{year_label(value)}"
+  end
 
-  defp render_source({:bound, :end, :lower, id, value}, network),
-    do: "#{label(network, id)} ends no earlier than #{year_label(value)}"
+  defp render_source({:bound, :end, :lower, id, value}, network) do
+    "#{label(network, id)} ends no earlier than #{year_label(value)}"
+  end
 
-  defp render_source({:bound, :end, :upper, id, value}, network),
-    do: "#{label(network, id)} ends no later than #{year_label(value)}"
+  defp render_source({:bound, :end, :upper, id, value}, network) do
+    "#{label(network, id)} ends no later than #{year_label(value)}"
+  end
 
-  defp render_source({:duration, :min, id, duration}, network),
-    do: "#{label(network, id)} lasts at least #{duration_label(duration)}"
+  defp render_source({:duration, :min, id, duration}, network) do
+    "#{label(network, id)} lasts at least #{duration_label(duration)}"
+  end
 
-  defp render_source({:duration, :max, id, duration}, network),
-    do: "#{label(network, id)} lasts at most #{duration_label(duration)}"
+  defp render_source({:duration, :max, id, duration}, network) do
+    "#{label(network, id)} lasts at most #{duration_label(duration)}"
+  end
 
-  defp render_source({:non_negative, id}, network),
-    do: "#{label(network, id)} cannot end before it starts"
+  defp render_source({:non_negative, id}, network) do
+    "#{label(network, id)} cannot end before it starts"
+  end
 
-  defp render_source({:sequence, a, b}, network),
-    do: "#{label(network, a)} immediately precedes #{label(network, b)}"
+  defp render_source({:sequence, a, b}, network) do
+    "#{label(network, a)} immediately precedes #{label(network, b)}"
+  end
 
   defp render_source({:relation, relation}, network) do
     "#{label(network, relation.from)} #{relation_phrase(relation.type)} #{label(network, relation.to)}"
   end
 
-  defp relation_phrase(:starts_during), do: "starts during"
-  defp relation_phrase(:ends_during), do: "ends during"
-  defp relation_phrase(:includes_start), do: "includes the start of"
-  defp relation_phrase(:includes_end), do: "includes the end of"
-  defp relation_phrase(:included_in), do: "is included in"
-  defp relation_phrase(:includes), do: "includes"
-  defp relation_phrase(:contemporary), do: "is contemporary with"
-  defp relation_phrase(:overlaps), do: "overlaps"
-  defp relation_phrase(:overlapped_by), do: "is overlapped by"
-  defp relation_phrase(:before), do: "is before"
-  defp relation_phrase(:after), do: "is after"
-  defp relation_phrase(:immediately_precedes), do: "immediately precedes"
-  defp relation_phrase(:immediately_follows), do: "immediately follows"
-  defp relation_phrase(:synchronous_start), do: "shares a start with"
-  defp relation_phrase(:synchronous_end), do: "shares an end with"
-  defp relation_phrase(:starts), do: "starts with, and ends no later than,"
-  defp relation_phrase(:started_by), do: "starts with, and ends no earlier than,"
-  defp relation_phrase(:finishes), do: "ends with, and starts no earlier than,"
-  defp relation_phrase(:finished_by), do: "ends with, and starts no later than,"
-  defp relation_phrase(:strictly_contemporary), do: "shares more than a boundary with"
-  defp relation_phrase(:equals), do: "equals"
-  defp relation_phrase({:delay, _, _, _, _}), do: "is offset from"
+  defp relation_phrase(:starts_during) do
+    "starts during"
+  end
+
+  defp relation_phrase(:ends_during) do
+    "ends during"
+  end
+
+  defp relation_phrase(:includes_start) do
+    "includes the start of"
+  end
+
+  defp relation_phrase(:includes_end) do
+    "includes the end of"
+  end
+
+  defp relation_phrase(:included_in) do
+    "is included in"
+  end
+
+  defp relation_phrase(:includes) do
+    "includes"
+  end
+
+  defp relation_phrase(:contemporary) do
+    "is contemporary with"
+  end
+
+  defp relation_phrase(:overlaps) do
+    "overlaps"
+  end
+
+  defp relation_phrase(:overlapped_by) do
+    "is overlapped by"
+  end
+
+  defp relation_phrase(:before) do
+    "is before"
+  end
+
+  defp relation_phrase(:after) do
+    "is after"
+  end
+
+  defp relation_phrase(:immediately_precedes) do
+    "immediately precedes"
+  end
+
+  defp relation_phrase(:immediately_follows) do
+    "immediately follows"
+  end
+
+  defp relation_phrase(:synchronous_start) do
+    "shares a start with"
+  end
+
+  defp relation_phrase(:synchronous_end) do
+    "shares an end with"
+  end
+
+  defp relation_phrase(:starts) do
+    "starts with, and ends no later than,"
+  end
+
+  defp relation_phrase(:started_by) do
+    "starts with, and ends no earlier than,"
+  end
+
+  defp relation_phrase(:finishes) do
+    "ends with, and starts no earlier than,"
+  end
+
+  defp relation_phrase(:finished_by) do
+    "ends with, and starts no later than,"
+  end
+
+  defp relation_phrase(:strictly_contemporary) do
+    "shares more than a boundary with"
+  end
+
+  defp relation_phrase(:equals) do
+    "equals"
+  end
+
+  defp relation_phrase({:delay, _, _, _, _}) do
+    "is offset from"
+  end
 
   # One boundary of each period compared: "ends before or at the start of".
-  defp relation_phrase({:boundary, edge, comparison, other_edge}),
-    do: "#{edge_verb(edge)} #{boundary_words(comparison)} the #{other_edge} of"
+  defp relation_phrase({:boundary, edge, comparison, other_edge}) do
+    "#{edge_verb(edge)} #{boundary_words(comparison)} the #{other_edge} of"
+  end
 
-  defp edge_verb(:start), do: "starts"
-  defp edge_verb(:end), do: "ends"
+  defp edge_verb(:start) do
+    "starts"
+  end
 
-  defp boundary_words(:before), do: "before"
-  defp boundary_words(:at_or_before), do: "before or at"
-  defp boundary_words(:coincident), do: "at"
-  defp boundary_words(:at_or_after), do: "at or after"
-  defp boundary_words(:after), do: "after"
+  defp edge_verb(:end) do
+    "ends"
+  end
 
-  defp boundary_phrase({:start, id}, network), do: "the start of #{label(network, id)}"
-  defp boundary_phrase({:end, id}, network), do: "the end of #{label(network, id)}"
+  defp boundary_words(:before) do
+    "before"
+  end
 
-  defp comparison(:earliest), do: "≥"
-  defp comparison(:latest), do: "≤"
+  defp boundary_words(:at_or_before) do
+    "before or at"
+  end
+
+  defp boundary_words(:coincident) do
+    "at"
+  end
+
+  defp boundary_words(:at_or_after) do
+    "at or after"
+  end
+
+  defp boundary_words(:after) do
+    "after"
+  end
+
+  defp boundary_phrase({:start, id}, network) do
+    "the start of #{label(network, id)}"
+  end
+
+  defp boundary_phrase({:end, id}, network) do
+    "the end of #{label(network, id)}"
+  end
+
+  defp comparison(:earliest) do
+    "≥"
+  end
+
+  defp comparison(:latest) do
+    "≤"
+  end
 
   defp label(network, id) do
     case network.periods[id] do
@@ -884,7 +1085,9 @@ defmodule Tempo.Network.Solver do
     end
   end
 
-  defp year_label(%Tempo{time: time}), do: "#{Keyword.get(time, :year)}"
+  defp year_label(%Tempo{time: time}) do
+    "#{Keyword.get(time, :year)}"
+  end
 
   defp duration_label(%Tempo.Duration{time: time}) do
     case Keyword.get(time, :year) do

@@ -69,6 +69,11 @@ defmodule Tempo.Set do
   end
 
   # A member of a set of durations is built where it is read.
-  defp member(%Tempo.Duration{} = duration, _calendar), do: duration
-  defp member(tokens, calendar), do: AST.build(tokens, calendar)
+  defp member(%Tempo.Duration{} = duration, _calendar) do
+    duration
+  end
+
+  defp member(tokens, calendar) do
+    AST.build(tokens, calendar)
+  end
 end

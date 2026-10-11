@@ -74,7 +74,11 @@ defmodule Tempo.Matrix.Runner do
 
   """
   @spec outcome((-> term())) :: outcome()
-  def outcome(fun) when is_function(fun, 0), do: fun |> detailed() |> elem(0)
+  def outcome(fun) when is_function(fun, 0) do
+    fun
+    |> detailed()
+    |> elem(0)
+  end
 
   @doc """
   The time a cell is allowed when its run does not say.
@@ -85,7 +89,9 @@ defmodule Tempo.Matrix.Runner do
 
   """
   @spec time_limit() :: pos_integer()
-  def time_limit, do: @time_limit
+  def time_limit do
+    @time_limit
+  end
 
   @doc """
   Runs `fun` and classes its outcome, with the message of what it raised
@@ -155,59 +161,111 @@ defmodule Tempo.Matrix.Runner do
     end
   end
 
-  defp classified({:check, :ok}), do: {:consistent, nil}
-  defp classified({:check, :skip}), do: {:skipped, nil}
-  defp classified({:check, {:fail, detail}}), do: {:inconsistent, String.slice(detail, 0, 400)}
-  defp classified({:ok, _value}), do: {:ok, nil}
-
-  defp classified({:error, %{__exception__: true, __struct__: module} = exception}),
-    do: {{:error, module}, message(exception)}
-
-  defp classified({:error, other}), do: {{:bad_error, describe(other)}, nil}
-
-  defp classified(text) when is_binary(text) do
-    if String.contains?(text, "Inspect.Error"),
-      do: {:inspect_error, String.slice(text, 0, 160)},
-      else: {:value, nil}
+  defp classified({:check, :ok}) do
+    {:consistent, nil}
   end
 
-  defp classified(_value), do: {:value, nil}
+  defp classified({:check, :skip}) do
+    {:skipped, nil}
+  end
+
+  defp classified({:check, {:fail, detail}}) do
+    {:inconsistent, String.slice(detail, 0, 400)}
+  end
+
+  defp classified({:ok, _value}) do
+    {:ok, nil}
+  end
+
+  defp classified({:error, %{__exception__: true, __struct__: module} = exception}) do
+    {{:error, module}, message(exception)}
+  end
+
+  defp classified({:error, other}) do
+    {{:bad_error, describe(other)}, nil}
+  end
+
+  defp classified(text) when is_binary(text) do
+    if String.contains?(text, "Inspect.Error") do
+      {:inspect_error, String.slice(text, 0, 160)}
+    else
+      {:value, nil}
+    end
+  end
+
+  defp classified(_value) do
+    {:value, nil}
+  end
 
   # Whether an answer holds the inside module anywhere in it, read whole:
   # every element of a list and of a tuple, every key and value of a map
   # and of a struct, the text of a string and the message of an exception.
   # A stream is what a value keeps to give later, and is not read.
-  defp holds_inside?(@inside), do: true
-  defp holds_inside?(%Stream{}), do: false
-  defp holds_inside?(text) when is_binary(text), do: String.contains?(text, @inside_name)
+  defp holds_inside?(@inside) do
+    true
+  end
+
+  defp holds_inside?(%Stream{}) do
+    false
+  end
+
+  defp holds_inside?(text) when is_binary(text) do
+    String.contains?(text, @inside_name)
+  end
 
   defp holds_inside?(%{__exception__: true, __struct__: _module} = exception) do
-    fields = exception |> Map.from_struct() |> Map.delete(:__exception__)
+    fields =
+      exception
+      |> Map.from_struct()
+      |> Map.delete(:__exception__)
 
     holds_inside?(fields) or holds_inside?(Exception.message(exception))
   end
 
-  defp holds_inside?([head | tail]), do: holds_inside?(head) or holds_inside?(tail)
-  defp holds_inside?(term) when is_tuple(term), do: holds_inside?(Tuple.to_list(term))
-  defp holds_inside?(term) when is_map(term), do: holds_inside?(Map.to_list(term))
-  defp holds_inside?(_term), do: false
+  defp holds_inside?([head | tail]) do
+    holds_inside?(head) or holds_inside?(tail)
+  end
 
-  defp exited({%{__exception__: true} = exception, _stacktrace}), do: raised(exception)
+  defp holds_inside?(term) when is_tuple(term) do
+    holds_inside?(Tuple.to_list(term))
+  end
 
-  defp exited({reason, stacktrace}) when is_list(stacktrace),
-    do: :error |> Exception.normalize(reason, stacktrace) |> raised()
+  defp holds_inside?(term) when is_map(term) do
+    holds_inside?(Map.to_list(term))
+  end
 
-  defp exited(:killed), do: {:killed, nil}
-  defp exited(reason), do: {{:raised, ErlangError}, describe(reason)}
+  defp holds_inside?(_term) do
+    false
+  end
+
+  defp exited({%{__exception__: true} = exception, _stacktrace}) do
+    raised(exception)
+  end
+
+  defp exited({reason, stacktrace}) when is_list(stacktrace) do
+    :error
+    |> Exception.normalize(reason, stacktrace)
+    |> raised()
+  end
+
+  defp exited(:killed) do
+    {:killed, nil}
+  end
+
+  defp exited(reason) do
+    {{:raised, ErlangError}, describe(reason)}
+  end
 
   # An `ArgumentError` whose message is the runtime's own came from a built-in
   # function given what it cannot take, not from a `raise` written on purpose.
   defp raised(%ArgumentError{} = exception) do
     message = message(exception)
 
-    if message =~ ~r/^(errors were found at the given arguments|argument error)/,
-      do: {:builtin_raise, message},
-      else: {{:raised, ArgumentError}, message}
+    if message =~ ~r/^(errors were found at the given arguments|argument error)/ do
+      {:builtin_raise, message}
+    else
+      {{:raised, ArgumentError}, message}
+    end
   end
 
   defp raised(%{__struct__: module} = exception) do
@@ -219,10 +277,17 @@ defmodule Tempo.Matrix.Runner do
   end
 
   defp message(exception) do
-    exception |> Exception.message() |> String.replace(~r/\s+/, " ") |> String.slice(0, 160)
+    exception
+    |> Exception.message()
+    |> String.replace(~r/\s+/, " ")
+    |> String.slice(0, 160)
   end
 
-  defp describe(term), do: term |> inspect(limit: 5) |> String.slice(0, 60)
+  defp describe(term) do
+    term
+    |> inspect(limit: 5)
+    |> String.slice(0, 60)
+  end
 
   @doc """
   Whether an outcome keeps the contract of an operation that `raises` as
@@ -243,15 +308,37 @@ defmodule Tempo.Matrix.Runner do
 
   """
   @spec passes?(outcome(), :never | :deliberate) :: boolean()
-  def passes?(:ok, _raises), do: true
-  def passes?(:value, _raises), do: true
-  def passes?(:consistent, _raises), do: true
-  def passes?(:skipped, _raises), do: true
-  def passes?({:error, _module}, _raises), do: true
-  def passes?({:raised, module}, :deliberate), do: deliberate?(module)
-  def passes?(_outcome, _raises), do: false
+  def passes?(:ok, _raises) do
+    true
+  end
 
-  defp deliberate?(module) when module in [ArgumentError, Protocol.UndefinedError], do: true
+  def passes?(:value, _raises) do
+    true
+  end
+
+  def passes?(:consistent, _raises) do
+    true
+  end
+
+  def passes?(:skipped, _raises) do
+    true
+  end
+
+  def passes?({:error, _module}, _raises) do
+    true
+  end
+
+  def passes?({:raised, module}, :deliberate) do
+    deliberate?(module)
+  end
+
+  def passes?(_outcome, _raises) do
+    false
+  end
+
+  defp deliberate?(module) when module in [ArgumentError, Protocol.UndefinedError] do
+    true
+  end
 
   defp deliberate?(module) do
     name = Atom.to_string(module)
@@ -271,19 +358,57 @@ defmodule Tempo.Matrix.Runner do
 
   """
   @spec label(outcome()) :: String.t()
-  def label(:ok), do: "ok"
-  def label(:value), do: "value"
-  def label({:error, module}), do: "error #{inspect(module)}"
-  def label({:bad_error, description}), do: "bad error #{description}"
-  def label(:inspect_error), do: "inspect error"
-  def label(:inside_calendar), do: "holds the calendar Tempo works with"
-  def label({:raised, module}), do: "raised #{inspect(module)}"
-  def label(:builtin_raise), do: "raised ArgumentError from a built-in"
-  def label(:timeout), do: "timeout"
-  def label(:killed), do: "killed"
-  def label(:consistent), do: "consistent"
-  def label(:skipped), do: "skipped"
-  def label(:inconsistent), do: "inconsistent"
+  def label(:ok) do
+    "ok"
+  end
+
+  def label(:value) do
+    "value"
+  end
+
+  def label({:error, module}) do
+    "error #{inspect(module)}"
+  end
+
+  def label({:bad_error, description}) do
+    "bad error #{description}"
+  end
+
+  def label(:inspect_error) do
+    "inspect error"
+  end
+
+  def label(:inside_calendar) do
+    "holds the calendar Tempo works with"
+  end
+
+  def label({:raised, module}) do
+    "raised #{inspect(module)}"
+  end
+
+  def label(:builtin_raise) do
+    "raised ArgumentError from a built-in"
+  end
+
+  def label(:timeout) do
+    "timeout"
+  end
+
+  def label(:killed) do
+    "killed"
+  end
+
+  def label(:consistent) do
+    "consistent"
+  end
+
+  def label(:skipped) do
+    "skipped"
+  end
+
+  def label(:inconsistent) do
+    "inconsistent"
+  end
 
   @doc """
   Runs `fun` in a process of its own and says what it did, keeping what it
@@ -321,10 +446,15 @@ defmodule Tempo.Matrix.Runner do
     end
   end
 
-  defp raised_module({%{__exception__: true, __struct__: module}, _stacktrace}), do: module
+  defp raised_module({%{__exception__: true, __struct__: module}, _stacktrace}) do
+    module
+  end
 
-  defp raised_module({reason, stacktrace}) when is_list(stacktrace),
-    do: Exception.normalize(:error, reason, stacktrace).__struct__
+  defp raised_module({reason, stacktrace}) when is_list(stacktrace) do
+    Exception.normalize(:error, reason, stacktrace).__struct__
+  end
 
-  defp raised_module(_reason), do: ErlangError
+  defp raised_module(_reason) do
+    ErlangError
+  end
 end

@@ -36,8 +36,9 @@ defmodule Tempo.Iso8601.GeneratedSetsTest do
     {:ok, texts: texts, findings: GeneratedSets.findings(texts)}
   end
 
-  defp found(findings, property),
-    do: for({^property, text, detail} <- findings, do: {text, detail})
+  defp found(findings, property) do
+    for({^property, text, detail} <- findings, do: {text, detail})
+  end
 
   test "the texts are of every family and form", %{texts: texts} do
     # A generator that makes nothing holds to every property.

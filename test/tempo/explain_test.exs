@@ -21,16 +21,34 @@ defmodule Tempo.Explain.Test do
   end
 
   # The first line of a value's explanation, parsed from ISO 8601 text.
-  defp headline(iso), do: iso |> Tempo.from_iso8601!() |> first_line()
-  defp headline(iso, calendar), do: iso |> Tempo.from_iso8601!(calendar) |> first_line()
+  defp headline(iso) do
+    iso
+    |> Tempo.from_iso8601!()
+    |> first_line()
+  end
 
-  defp first_line(value), do: value |> Tempo.explain() |> String.split("\n") |> hd()
+  defp headline(iso, calendar) do
+    iso
+    |> Tempo.from_iso8601!(calendar)
+    |> first_line()
+  end
+
+  defp first_line(value) do
+    value
+    |> Tempo.explain()
+    |> String.split("\n")
+    |> hd()
+  end
 
   describe "scalar Tempo" do
     test "a year is classified :anchored with headline, span, enumeration, hint" do
       exp = Explain.explain(~o"2022Y")
       assert exp.kind == :anchored
-      tags = exp.parts |> Enum.map(&elem(&1, 0))
+
+      tags =
+        exp.parts
+        |> Enum.map(&elem(&1, 0))
+
       assert :headline in tags
       assert :span in tags
       assert :enumeration in tags
@@ -51,7 +69,11 @@ defmodule Tempo.Explain.Test do
 
     test "a qualified year mentions the qualifier" do
       exp = Explain.explain(~o"2022Y?")
-      tags = exp.parts |> Enum.map(&elem(&1, 0))
+
+      tags =
+        exp.parts
+        |> Enum.map(&elem(&1, 0))
+
       assert :qualification in tags
 
       assert Tempo.explain(~o"2022Y?") =~ "uncertain"
@@ -72,7 +94,9 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(~o"2026-W53") =~ "Span: [2026-W53, 2027-W01).\nStarts on 2026-12-28."
 
       # The measure: the Mondays of those weeks.
-      assert Date.from_iso8601!("2025-12-29") |> Date.day_of_week() == 1
+      assert Date.from_iso8601!("2025-12-29")
+             |> Date.day_of_week() == 1
+
       assert :calendar.iso_week_number({2025, 12, 29}) == {2026, 1}
       assert :calendar.iso_week_number({2026, 12, 28}) == {2026, 53}
     end
@@ -203,7 +227,9 @@ defmodule Tempo.Explain.Test do
       end
 
       # The interval a value converts to is explained as it is written too.
-      assert ~o"1984/1986" |> Tempo.to_interval!() |> Tempo.explain() ==
+      assert ~o"1984/1986"
+             |> Tempo.to_interval!()
+             |> Tempo.explain() ==
                "A closed interval.\nFrom: 1984.\nTo:   1986 (exclusive — half-open `[from, to)`)."
 
       assert Tempo.explain(~o"1984") =~ "The year 1984.\nSpan: [1984, 1985).\nIterates"
@@ -266,8 +292,17 @@ defmodule Tempo.Explain.Test do
   # is the value it names; a day, a week and a position are counted in a
   # period the selection alone does not fix, so theirs is worded as written.
   describe "a selection's values" do
-    defp selects(iso), do: iso |> Tempo.from_iso8601!() |> selects_line()
-    defp selects(iso, calendar), do: iso |> Tempo.from_iso8601!(calendar) |> selects_line()
+    defp selects(iso) do
+      iso
+      |> Tempo.from_iso8601!()
+      |> selects_line()
+    end
+
+    defp selects(iso, calendar) do
+      iso
+      |> Tempo.from_iso8601!(calendar)
+      |> selects_line()
+    end
 
     defp selects_line(value) do
       value

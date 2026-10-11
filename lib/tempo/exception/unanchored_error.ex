@@ -61,15 +61,27 @@ defmodule Tempo.UnanchoredError do
     "This needs a value with a year#{named(value)}. " <> placement(value)
   end
 
-  defp named(nil), do: ""
-  defp named(value), do: ": #{Calendars.inspect(value)} has none"
+  defp named(nil) do
+    ""
+  end
 
-  defp without_year(nil), do: ""
-  defp without_year(value), do: ": #{Calendars.inspect(value)} has no year"
+  defp named(value) do
+    ": #{Calendars.inspect(value)} has none"
+  end
 
-  defp placement(nil),
-    do: "Place a value without a year on a date first with `Tempo.at/2` or `Tempo.on/2`."
+  defp without_year(nil) do
+    ""
+  end
 
-  defp placement(_value),
-    do: "Place the value on a date first with `Tempo.at/2` or `Tempo.on/2`."
+  defp without_year(value) do
+    ": #{Calendars.inspect(value)} has no year"
+  end
+
+  defp placement(nil) do
+    "Place a value without a year on a date first with `Tempo.at/2` or `Tempo.on/2`."
+  end
+
+  defp placement(_value) do
+    "Place the value on a date first with `Tempo.at/2` or `Tempo.on/2`."
+  end
 end

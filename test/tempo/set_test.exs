@@ -16,19 +16,35 @@ defmodule Tempo.SetTest do
 
   # The calendar of every value a set holds: its members, the ends of its
   # ranges and of its interval members, and the members it excludes.
-  defp calendars(%Tempo.Set{set: members, except: except}),
-    do: Enum.flat_map(members ++ except, &calendars/1)
+  defp calendars(%Tempo.Set{set: members, except: except}) do
+    Enum.flat_map(members ++ except, &calendars/1)
+  end
 
-  defp calendars(%Tempo{calendar: calendar}), do: [calendar]
-  defp calendars(%Tempo.Range{first: first, last: last}), do: calendars(first) ++ calendars(last)
-  defp calendars(%Interval{from: from, to: to}), do: calendars(from) ++ calendars(to)
-  defp calendars(_open_end), do: []
+  defp calendars(%Tempo{calendar: calendar}) do
+    [calendar]
+  end
+
+  defp calendars(%Tempo.Range{first: first, last: last}) do
+    calendars(first) ++ calendars(last)
+  end
+
+  defp calendars(%Interval{from: from, to: to}) do
+    calendars(from) ++ calendars(to)
+  end
+
+  defp calendars(_open_end) do
+    []
+  end
 
   defp gregorian_dates(set) do
     {:ok, days} = Tempo.to_interval(set)
 
     for day <- IntervalSet.members(days) do
-      {:ok, date} = day |> Interval.from() |> Tempo.to_date()
+      {:ok, date} =
+        day
+        |> Interval.from()
+        |> Tempo.to_date()
+
       Date.convert!(date, Calendar.ISO)
     end
   end
@@ -132,7 +148,10 @@ defmodule Tempo.SetTest do
       assert IntervalSet.count(rest) == 5
 
       {:ok, shared} = Tempo.intersection(~o"{2026-06-15..2026-06-20}", ~o"2026-06-18")
-      assert shared |> IntervalSet.members() |> Enum.map(&Interval.from/1) == [~o"2026-06-18"]
+
+      assert shared
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.from/1) == [~o"2026-06-18"]
     end
 
     test "meets a set in another calendar on the days it names" do
@@ -169,7 +188,9 @@ defmodule Tempo.SetTest do
           Tempo.from_iso8601!("{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]")
         )
 
-      assert set |> IntervalSet.members() |> Enum.map(&Interval.from/1) == [
+      assert set
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.from/1) == [
                Tempo.from_iso8601!("2026-06-15T10:00[Europe/Paris]"),
                Tempo.from_iso8601!("2026-06-16T10:00[Europe/Paris]")
              ]

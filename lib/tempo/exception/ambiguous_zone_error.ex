@@ -34,5 +34,7 @@ defmodule Tempo.AmbiguousZoneError do
     "Wall time #{wall} is ambiguous in #{Calendars.inspect(zone)}"
   end
 
-  def message(%__MODULE__{}), do: "Wall time is ambiguous in the given zone"
+  def message(%__MODULE__{}) do
+    "Wall time is ambiguous in the given zone"
+  end
 end

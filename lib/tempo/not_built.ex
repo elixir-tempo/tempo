@@ -66,9 +66,11 @@ defmodule Tempo.NotBuilt do
   end
 
   defp rrule_in(%Interval{duration: duration, repeat_rule: rule} = recurrence, calendar) do
-    if stepped_by_rrule_calendar?(duration) or selected_by_rrule_calendar?(rule),
-      do: {:error, error(recurrence, :rrule, calendar)},
-      else: :ok
+    if stepped_by_rrule_calendar?(duration) or selected_by_rrule_calendar?(rule) do
+      {:error, error(recurrence, :rrule, calendar)}
+    else
+      :ok
+    end
   end
 
   # The calendar a recurrence is in where that is not the Gregorian: its
@@ -82,13 +84,17 @@ defmodule Tempo.NotBuilt do
     |> List.first()
   end
 
-  defp stepped_by_rrule_calendar?(%Duration{time: time}) when is_list(time),
-    do: Enum.any?(time, &(is_tuple(&1) and elem(&1, 0) in @stepped_by_rrule_calendar))
+  defp stepped_by_rrule_calendar?(%Duration{time: time}) when is_list(time) do
+    Enum.any?(time, &(is_tuple(&1) and elem(&1, 0) in @stepped_by_rrule_calendar))
+  end
 
-  defp stepped_by_rrule_calendar?(_no_cadence), do: false
+  defp stepped_by_rrule_calendar?(_no_cadence) do
+    false
+  end
 
-  defp selected_by_rrule_calendar?(%Tempo{time: time}) when is_list(time),
-    do: selected_by_rrule_calendar?(time)
+  defp selected_by_rrule_calendar?(%Tempo{time: time}) when is_list(time) do
+    selected_by_rrule_calendar?(time)
+  end
 
   defp selected_by_rrule_calendar?(units) when is_list(units) do
     Enum.any?(units, fn
@@ -98,7 +104,9 @@ defmodule Tempo.NotBuilt do
     end)
   end
 
-  defp selected_by_rrule_calendar?(_no_rule), do: false
+  defp selected_by_rrule_calendar?(_no_rule) do
+    false
+  end
 
   @doc false
   # A week selected from a month that the merge cannot place. A week after a
@@ -123,6 +131,7 @@ defmodule Tempo.NotBuilt do
   # count, no start and an end it runs until, which only a struct built by
   # hand is, is refused by the same name.
   @spec rule_to_an_end(Interval.t()) :: ConversionError.t()
-  def rule_to_an_end(%Interval{to: %Tempo{calendar: calendar}} = recurrence),
-    do: error(recurrence, :rule_to_an_end, calendar)
+  def rule_to_an_end(%Interval{to: %Tempo{calendar: calendar}} = recurrence) do
+    error(recurrence, :rule_to_an_end, calendar)
+  end
 end
