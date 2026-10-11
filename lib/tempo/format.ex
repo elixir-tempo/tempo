@@ -840,6 +840,9 @@ defmodule Tempo.Format do
 
   # Convert a Tempo to the map shape Localize accepts: flatten the
   # time keyword list into map keys and append the :calendar field.
+  # Localize is another library, and is given the calendar as a caller
+  # holds it: what it says of a value it cannot format names the calendar
+  # the caller gave.
   defp to_locale_map(%Tempo{time: time, calendar: calendar}) do
     time
     |> week_date_as_day(calendar)
@@ -847,7 +850,7 @@ defmodule Tempo.Format do
       {k, v}, acc when is_integer(v) -> Map.put(acc, k, v)
       _other, acc -> acc
     end)
-    |> Map.put(:calendar, calendar)
+    |> Map.put(:calendar, Calendars.outside(calendar))
   end
 
   # A week date names a day — its day of the week, or the first day of a

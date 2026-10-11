@@ -27,6 +27,7 @@ defmodule Tempo.Matrix.Runner do
           | {:error, module()}
           | {:bad_error, String.t()}
           | :inspect_error
+          | :inside_calendar
           | {:raised, module()}
           | :builtin_raise
           | :timeout
@@ -53,6 +54,11 @@ defmodule Tempo.Matrix.Runner do
   * `{:bad_error, description}` for an error that carries no exception.
 
   * `:inspect_error` for text holding an `#Inspect.Error`.
+
+  * `:inside_calendar` for an answer, an error or a raise that holds or
+    names the module Tempo works with in place of `Calendar.ISO` inside a
+    call: a public function replaces it in what it answers
+    (`Tempo.Calendars.outside/1`), so a caller never sees it.
 
   * `{:raised, module}` for a raise or an Erlang error.
 
@@ -136,23 +142,55 @@ defmodule Tempo.Matrix.Runner do
     end
   end
 
-  defp classify({:check, :ok}), do: {:consistent, nil}
-  defp classify({:check, :skip}), do: {:skipped, nil}
-  defp classify({:check, {:fail, detail}}), do: {:inconsistent, String.slice(detail, 0, 400)}
-  defp classify({:ok, _value}), do: {:ok, nil}
+  # The module Tempo works with for `Calendar.ISO` inside a call, and its
+  # name as text would write it.
+  @inside Tempo.Calendars.default()
+  @inside_name inspect(@inside)
 
-  defp classify({:error, %{__exception__: true, __struct__: module} = exception}),
+  defp classify(answer) do
+    if holds_inside?(answer) do
+      {:inside_calendar, describe(answer)}
+    else
+      classified(answer)
+    end
+  end
+
+  defp classified({:check, :ok}), do: {:consistent, nil}
+  defp classified({:check, :skip}), do: {:skipped, nil}
+  defp classified({:check, {:fail, detail}}), do: {:inconsistent, String.slice(detail, 0, 400)}
+  defp classified({:ok, _value}), do: {:ok, nil}
+
+  defp classified({:error, %{__exception__: true, __struct__: module} = exception}),
     do: {{:error, module}, message(exception)}
 
-  defp classify({:error, other}), do: {{:bad_error, describe(other)}, nil}
+  defp classified({:error, other}), do: {{:bad_error, describe(other)}, nil}
 
-  defp classify(text) when is_binary(text) do
+  defp classified(text) when is_binary(text) do
     if String.contains?(text, "Inspect.Error"),
       do: {:inspect_error, String.slice(text, 0, 160)},
       else: {:value, nil}
   end
 
-  defp classify(_value), do: {:value, nil}
+  defp classified(_value), do: {:value, nil}
+
+  # Whether an answer holds the inside module anywhere in it, read whole:
+  # every element of a list and of a tuple, every key and value of a map
+  # and of a struct, the text of a string and the message of an exception.
+  # A stream is what a value keeps to give later, and is not read.
+  defp holds_inside?(@inside), do: true
+  defp holds_inside?(%Stream{}), do: false
+  defp holds_inside?(text) when is_binary(text), do: String.contains?(text, @inside_name)
+
+  defp holds_inside?(%{__exception__: true, __struct__: _module} = exception) do
+    fields = exception |> Map.from_struct() |> Map.delete(:__exception__)
+
+    holds_inside?(fields) or holds_inside?(Exception.message(exception))
+  end
+
+  defp holds_inside?([head | tail]), do: holds_inside?(head) or holds_inside?(tail)
+  defp holds_inside?(term) when is_tuple(term), do: holds_inside?(Tuple.to_list(term))
+  defp holds_inside?(term) when is_map(term), do: holds_inside?(Map.to_list(term))
+  defp holds_inside?(_term), do: false
 
   defp exited({%{__exception__: true} = exception, _stacktrace}), do: raised(exception)
 
@@ -172,7 +210,13 @@ defmodule Tempo.Matrix.Runner do
       else: {{:raised, ArgumentError}, message}
   end
 
-  defp raised(%{__struct__: module} = exception), do: {{:raised, module}, message(exception)}
+  defp raised(%{__struct__: module} = exception) do
+    if holds_inside?(exception) do
+      {:inside_calendar, message(exception)}
+    else
+      {{:raised, module}, message(exception)}
+    end
+  end
 
   defp message(exception) do
     exception |> Exception.message() |> String.replace(~r/\s+/, " ") |> String.slice(0, 160)
@@ -232,6 +276,7 @@ defmodule Tempo.Matrix.Runner do
   def label({:error, module}), do: "error #{inspect(module)}"
   def label({:bad_error, description}), do: "bad error #{description}"
   def label(:inspect_error), do: "inspect error"
+  def label(:inside_calendar), do: "holds the calendar Tempo works with"
   def label({:raised, module}), do: "raised #{inspect(module)}"
   def label(:builtin_raise), do: "raised ArgumentError from a built-in"
   def label(:timeout), do: "timeout"

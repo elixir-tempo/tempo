@@ -922,8 +922,9 @@ defmodule Tempo.Interval do
           :unanchored ->
             {:error, UnanchoredError.exception(value: tempo)}
 
+          # An exception holds its values as a caller holds them.
           {:error, %ConversionError{} = error} ->
-            {:error, %{error | value: tempo}}
+            {:error, %{error | value: Calendars.outside(tempo)}}
 
           :no_mask ->
             concrete_boundary(tempo, calendar)

@@ -9016,8 +9016,12 @@ defmodule Tempo do
               (recurrence == 1 and is_struct(rule, Tempo)) do
     with {:ok, duration} <- duration(from, to) do
       case materialise(%{interval | to: nil, duration: duration}, opts) do
-        {:error, %UnboundedRecurrenceError{} = error} -> {:error, %{error | interval: interval}}
-        materialised -> materialised
+        # An exception holds its values as a caller holds them.
+        {:error, %UnboundedRecurrenceError{} = error} ->
+          {:error, %{error | interval: Calendars.outside(interval)}}
+
+        materialised ->
+          materialised
       end
     end
   end
