@@ -53,26 +53,26 @@ defmodule Tempo.Calendars do
   @typedoc false
   @type notation :: Localize.Calendar.ISO
 
+  # Whether what names its calendar once names `Calendar.ISO`: a value (or
+  # one written by hand with no calendar), a date or a time of Elixir's.
+  defguardp is_held_outside(value)
+            when is_map(value) and is_map_key(value, :calendar) and
+                   (:erlang.map_get(:calendar, value) == @outside or
+                      (:erlang.map_get(:calendar, value) == nil and is_struct(value, Tempo)))
+
   @doc false
   # Whether a value is as a caller holds it, for the first clause of a
   # public function: a value in `Calendar.ISO` (or written by hand with no
-  # calendar), or an interval either end of which is one. What a function's
-  # head cannot see (the members of a set, the values of a list of options)
-  # is asked of `outside?/1`. The structs are matched as maps, so that this
-  # module does not wait on `Tempo` to compile.
+  # calendar), a date or a time of Elixir's in it, or an interval either end
+  # of which is one. What a function's head cannot see (the members of a
+  # set, the values of a list of options) is asked of `outside?/1`. The
+  # structs are matched as maps, so that this module does not wait on
+  # `Tempo` to compile.
   defguard is_outside(value)
-           when (is_struct(value, Tempo) and :erlang.map_get(:calendar, value) in [@outside, nil]) or
+           when is_held_outside(value) or
                   (is_struct(value, Tempo.Interval) and
-                     ((is_struct(:erlang.map_get(:from, value), Tempo) and
-                         :erlang.map_get(:calendar, :erlang.map_get(:from, value)) in [
-                           @outside,
-                           nil
-                         ]) or
-                        (is_struct(:erlang.map_get(:to, value), Tempo) and
-                           :erlang.map_get(:calendar, :erlang.map_get(:to, value)) in [
-                             @outside,
-                             nil
-                           ])))
+                     (is_held_outside(:erlang.map_get(:from, value)) or
+                        is_held_outside(:erlang.map_get(:to, value))))
 
   @doc false
   # What a public function was given, as Tempo works with it: `Calendar.ISO`
@@ -210,6 +210,19 @@ defmodule Tempo.Calendars do
 
   defp replaced_units(time, from, to) do
     replaced(time, from, to)
+  end
+
+  @doc false
+  # A selector as Tempo works with it. One that is a caller's own function
+  # is called from inside a call, and is given each period as the caller
+  # holds it: what it answers is replaced where it is called.
+  @spec inside_selector(term()) :: term()
+  def inside_selector(selector) when is_function(selector, 1) do
+    fn period -> selector.(outside(period)) end
+  end
+
+  def inside_selector(selector) do
+    inside(selector)
   end
 
   @doc false

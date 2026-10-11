@@ -2,7 +2,6 @@ defmodule Tempo.Validation do
   @moduledoc false
 
   alias Localize.Utils.Math
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
@@ -390,7 +389,7 @@ defmodule Tempo.Validation do
   # Elixir's `Calendar.ISO` for one of Calendrical's calendars of weeks. That
   # is a calendar named to Tempo by another library, as a caller names it,
   # and it comes in as a caller's does.
-  defp reading_calendar(calendar), do: Border.enter(calendar.parsing_calendar())
+  defp reading_calendar(calendar), do: Calendars.inside(calendar.parsing_calendar())
 
   # A date that does not exist as it is written (30 February) is an
   # `InvalidDateError` from resolving it. One that exists and cannot be

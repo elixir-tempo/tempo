@@ -374,7 +374,7 @@ defmodule Tempo.Sigils do
     # at the same `time` prefix.
     bindings = bindings_from_modifiers(opts)
 
-    case Tempo.from_iso8601(string, Calendars.default()) do
+    case Tempo.read(string, Calendars.default()) do
       {:ok, parsed} -> build_match_pattern(parsed, bindings)
       {:error, exception} -> raise exception
     end

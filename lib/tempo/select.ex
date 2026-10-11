@@ -869,7 +869,7 @@ defmodule Tempo.Select do
   # keeping what starts in it, so no two periods select the same span
   # and nothing outside the span is selected.
   defp select_in_period(period, selector) when is_function(selector, 1),
-    do: select_in_period(period, selector.(period))
+    do: select_in_period(period, Calendars.inside(selector.(period)))
 
   defp select_in_period(period, selector) do
     with {:ok, %IntervalSet{} = selected} <- select_period(period, selector) do
@@ -1111,7 +1111,7 @@ defmodule Tempo.Select do
   end
 
   defp select_period(period, fun) when is_function(fun, 1),
-    do: select_period(period, fun.(period))
+    do: select_period(period, Calendars.inside(fun.(period)))
 
   defp select_period(_period, {:error, _reason} = error), do: error
   defp select_period(_period, selector), do: {:error, unrecognised_selector(selector)}

@@ -1,6 +1,4 @@
 defmodule Tempo do
-  use Tempo.Border
-
   @moduledoc """
   Documentation for `Tempo`.
 
@@ -108,7 +106,6 @@ defmodule Tempo do
   alias Calendrical.Kday
   alias Localize.Territory.Hemisphere
   alias Tempo.AbstractSeasonError
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Clock
   alias Tempo.Compare
@@ -119,6 +116,7 @@ defmodule Tempo do
   alias Tempo.EventError
   alias Tempo.Explain
   alias Tempo.FloatingTempoError
+  alias Tempo.Format
   alias Tempo.Interval
   alias Tempo.Interval.Steps
   alias Tempo.IntervalEndpointsError
@@ -135,6 +133,7 @@ defmodule Tempo do
   alias Tempo.Mask
   alias Tempo.Math
   alias Tempo.NotBuilt
+  alias Tempo.Operations
   alias Tempo.ParseError
   alias Tempo.Qualification
   alias Tempo.RecurrenceSet.Conditional
@@ -142,6 +141,7 @@ defmodule Tempo do
   alias Tempo.Rounding
   alias Tempo.RoundingError
   alias Tempo.RRule.Selection
+  alias Tempo.Select
   alias Tempo.Split
   alias Tempo.Territory
   alias Tempo.TimeZoneDatabase
@@ -153,7 +153,7 @@ defmodule Tempo do
   alias Tempo.Validation
   alias Tempo.ZonedTempoError
 
-  import Tempo.Calendars, only: [is_notation: 1, is_notation_weeks: 1]
+  import Tempo.Calendars, only: [is_notation: 1, is_notation_weeks: 1, is_outside: 1]
 
   # A value is in a calendar, and one built with none is in the default: a
   # struct written by hand (`%Tempo{time: [year: 2026]}`) had `nil` there,
@@ -164,7 +164,7 @@ defmodule Tempo do
     :shift,
     :extended,
     :qualifications,
-    calendar: Border.outside(),
+    calendar: Calendars.outside(Calendars.default()),
     metadata: %{}
   ]
 
@@ -498,16 +498,12 @@ defmodule Tempo do
   """
   @spec new(keyword() | map()) :: {:ok, t()} | {:error, error_reason()}
   def new(components) when is_list(components) do
-    with :ok <- ensure_keyword(components),
-         {components, options} <- split_components_and_options(components),
-         :ok <- validate_options(options),
-         :ok <- validate_components(components),
-         :ok <- validate_axis_coherence(components),
-         {:ok, components} <- fraction_of_second(components),
-         {:ok, components} <- quarter_to_group(components, options),
-         {:ok, components} <- day_of_year_to_date(components, options),
-         {:ok, tempo} <- build_tempo(components, options) do
-      validate_against_calendar(tempo)
+    calendar = Keyword.get(components, :calendar)
+
+    if is_nil(calendar) or Calendars.outside?(calendar) do
+      components |> Calendars.inside() |> do_new() |> Calendars.outside()
+    else
+      do_new(components)
     end
   end
 
@@ -523,6 +519,23 @@ defmodule Tempo do
        "Tempo.new/1 expects a keyword list of time-scale components " <>
          "and options. Got: #{Calendars.inspect(other)}"
      )}
+  end
+
+  # A value is built in the calendar it is given, and in `Calendar.ISO` when
+  # it is given none: that one is built as Tempo works with it and answered
+  # as the caller holds it.
+  defp do_new(components) do
+    with :ok <- ensure_keyword(components),
+         {components, options} <- split_components_and_options(components),
+         :ok <- validate_options(options),
+         :ok <- validate_components(components),
+         :ok <- validate_axis_coherence(components),
+         {:ok, components} <- fraction_of_second(components),
+         {:ok, components} <- quarter_to_group(components, options),
+         {:ok, components} <- day_of_year_to_date(components, options),
+         {:ok, tempo} <- build_tempo(components, options) do
+      validate_against_calendar(tempo)
+    end
   end
 
   @doc """
@@ -1000,14 +1013,16 @@ defmodule Tempo do
            | Tempo.Duration.t()
            | Tempo.Set.t()}
           | {:error, error_reason()}
-  def from_iso8601(string, calendar_or_options \\ []), do: read(string, calendar_or_options)
+  def from_iso8601(string, calendar_or_options \\ []) do
+    string |> read(Calendars.inside(calendar_or_options)) |> Calendars.outside()
+  end
 
   @doc false
-  # Text read as `from_iso8601/2` reads it, for the library's own use. A
-  # public function crosses the border, and a call from inside is known by a
-  # value among its arguments, which text is not: so where the library reads
-  # text itself it reads through this, and what it reads is as Tempo holds
-  # it inside.
+  # Text read as `from_iso8601/2` reads it, for the library's own use. Text
+  # shows no value by which a caller's call can be told from one of the
+  # library's, so `from_iso8601/2` is the caller's, and where the library
+  # reads text itself it reads through this: what it reads is as Tempo works
+  # with it.
   @spec read(String.t(), Calendar.calendar() | keyword()) ::
           {:ok,
            t()
@@ -1537,7 +1552,7 @@ defmodule Tempo do
   def parse_date(string, options \\ [])
 
   def parse_date(string, options) when is_binary(string) and is_list(options) do
-    parse_kind(string, :date, options)
+    string |> parse_kind(:date, Calendars.inside(options)) |> Calendars.outside()
   end
 
   def parse_date(not_a_string, options) when not is_binary(not_a_string) and is_list(options) do
@@ -1612,7 +1627,7 @@ defmodule Tempo do
   def parse_datetime(string, options \\ [])
 
   def parse_datetime(string, options) when is_binary(string) and is_list(options) do
-    parse_kind(string, :datetime, options)
+    string |> parse_kind(:datetime, Calendars.inside(options)) |> Calendars.outside()
   end
 
   def parse_datetime(not_a_string, options)
@@ -1707,7 +1722,7 @@ defmodule Tempo do
   def parse_time(string, options \\ [])
 
   def parse_time(string, options) when is_binary(string) and is_list(options) do
-    parse_kind(string, :time, options)
+    string |> parse_kind(:time, Calendars.inside(options)) |> Calendars.outside()
   end
 
   def parse_time(not_a_string, options) when not is_binary(not_a_string) and is_list(options) do
@@ -1789,7 +1804,7 @@ defmodule Tempo do
   def parse_interval(string, options \\ [])
 
   def parse_interval(string, options) when is_binary(string) and is_list(options) do
-    parse_kind(string, :interval, options)
+    string |> parse_kind(:interval, Calendars.inside(options)) |> Calendars.outside()
   end
 
   def parse_interval(not_a_string, options)
@@ -2147,13 +2162,17 @@ defmodule Tempo do
   def parse(input, options \\ [])
 
   def parse(input, options) when is_binary(input) do
-    case from_iso8601(input, options) do
+    input |> do_parse(Calendars.inside(options)) |> Calendars.outside()
+  end
+
+  def parse(not_a_string, _options), do: {:error, not_a_string(not_a_string)}
+
+  defp do_parse(input, options) do
+    case read(input, options) do
       {:error, %ParseError{}} -> parse_text(input, options)
       result -> result
     end
   end
-
-  def parse(not_a_string, _options), do: {:error, not_a_string(not_a_string)}
 
   @doc """
   Bang variant of `parse/2`: the parsed value, or a raised exception.
@@ -2357,6 +2376,8 @@ defmodule Tempo do
   """
   @spec to_iso8601(term()) :: {:ok, String.t()} | {:error, Iso8601EncodeError.t()}
   def to_iso8601(%struct{} = value) when struct in [Tempo, Interval, Duration, Tempo.Set] do
+    value = Calendars.inside(value)
+
     with nil <- Tempo.Inspect.unencodable(value),
          nil <- Tempo.Inspect.unnamed_calendar(value) do
       {:ok, value |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()}
@@ -2436,6 +2457,10 @@ defmodule Tempo do
   @dialyzer {:nowarn_function, from_date: 1, from_time: 1, from_naive_datetime: 1}
 
   @spec from_date(date :: Date.t()) :: t()
+  def from_date(date) when is_outside(date) do
+    date |> Calendars.inside() |> from_date() |> Calendars.outside()
+  end
+
   def from_date(%{year: year, month: month, day: day, calendar: calendar}) do
     AST.build(date_units(year, month, day, calendar), calendar)
   end
@@ -2515,6 +2540,10 @@ defmodule Tempo do
   @spec from_date_range(Date.Range.t(), Keyword.t()) ::
           {:ok, Tempo.Interval.t()} | {:error, error_reason()}
   def from_date_range(range, options \\ [])
+
+  def from_date_range(%Date.Range{first: first} = range, options) when is_outside(first) do
+    range |> Calendars.inside() |> from_date_range(options) |> Calendars.outside()
+  end
 
   def from_date_range(%Date.Range{step: 1, first: first, last: last} = range, options) do
     if Compare.compare_days(first, last) == :gt do
@@ -2598,6 +2627,10 @@ defmodule Tempo do
 
   """
   @spec from_time(time :: Time.t()) :: t()
+  def from_time(time) when is_outside(time) do
+    time |> Calendars.inside() |> from_time() |> Calendars.outside()
+  end
+
   def from_time(%{hour: hour, minute: minute, second: second} = time) do
     AST.build([hour: hour, minute: minute, second: second] ++ microsecond_component(time))
   end
@@ -2622,6 +2655,10 @@ defmodule Tempo do
 
   """
   @spec from_naive_datetime(naive_datetime :: NaiveDateTime.t()) :: t()
+  def from_naive_datetime(naive) when is_outside(naive) do
+    naive |> Calendars.inside() |> from_naive_datetime() |> Calendars.outside()
+  end
+
   def from_naive_datetime(
         %{
           year: year,
@@ -2680,6 +2717,10 @@ defmodule Tempo do
 
   """
   @spec from_datetime(DateTime.t()) :: t()
+  def from_datetime(datetime) when is_outside(datetime) do
+    datetime |> Calendars.inside() |> from_datetime() |> Calendars.outside()
+  end
+
   def from_datetime(
         %DateTime{
           year: year,
@@ -2865,7 +2906,13 @@ defmodule Tempo do
 
     """
     @spec unquote(unit)(t() | Tempo.Interval.t()) :: integer() | nil
-    def unquote(unit)(value), do: component(value, unquote(unit))
+    def unquote(unit)(value) when is_outside(value) do
+      component(Calendars.inside(value), unquote(unit))
+    end
+
+    def unquote(unit)(value) do
+      component(value, unquote(unit))
+    end
   end
 
   @doc """
@@ -2960,6 +3007,10 @@ defmodule Tempo do
 
   """
   @spec week(t() | Tempo.Interval.t()) :: integer() | nil
+  def week(value) when is_outside(value) do
+    week(Calendars.inside(value))
+  end
+
   def week(%__MODULE__{time: time}) when is_list(time) do
     case List.keyfind(time, :week, 0) do
       {:week, value} when is_integer(value) -> value
@@ -3254,6 +3305,10 @@ defmodule Tempo do
   @spec trunc(tempo :: t | Tempo.Interval.t(), truncate_to :: time_unit()) ::
           t | Tempo.Interval.t() | {:error, error_reason()}
   def trunc(tempo, truncate_to \\ :day)
+
+  def trunc(tempo, truncate_to) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> trunc(truncate_to) |> Calendars.outside()
+  end
 
   def trunc(%__MODULE__{} = tempo, truncate_to) do
     with {:ok, truncate_to} <- validate_unit(truncate_to),
@@ -3554,6 +3609,10 @@ defmodule Tempo do
           t | Tempo.Interval.t() | {:error, error_reason()}
   def round(tempo, round_to \\ :day)
 
+  def round(tempo, round_to) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> round(round_to) |> Calendars.outside()
+  end
+
   def round(%__MODULE__{} = tempo, round_to) do
     with {:ok, round_to} <- validate_unit(round_to),
          :ok <- has_its_dates(tempo, "round"),
@@ -3639,6 +3698,10 @@ defmodule Tempo do
 
   """
   @spec split(t()) :: {t() | nil, t() | nil}
+  def split(tempo) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> split() |> Calendars.outside()
+  end
+
   def split(%__MODULE__{time: time} = tempo) when is_list(time) do
     case Split.split(time) do
       {date, []} ->
@@ -3848,6 +3911,10 @@ defmodule Tempo do
 
   @spec at(t() | Interval.t(), t() | Interval.t()) ::
           {:ok, t() | Interval.t()} | {:error, error_reason()}
+  def at(value, other) when is_outside(value) or is_outside(other) do
+    Calendars.outside(at(Calendars.inside(value), Calendars.inside(other)))
+  end
+
   def at(%__MODULE__{} = value, %__MODULE__{} = other) do
     with {:ok, placed} <- place_on(value, other),
          :ok <- shown_by_its_zone(placed) do
@@ -4292,6 +4359,10 @@ defmodule Tempo do
   @spec extend(t(), nil) :: {:ok, t()} | {:error, error_reason()}
   def extend(tempo, unit \\ nil)
 
+  def extend(tempo, unit) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> extend(unit) |> Calendars.outside()
+  end
+
   def extend(%Tempo{time: time} = tempo, nil) when is_list(time) do
     with :ok <- has_its_dates(tempo, "extend") do
       extended =
@@ -4525,6 +4596,10 @@ defmodule Tempo do
         ) :: t() | Duration.t() | {:ok, Tempo.Interval.t()} | {:error, error_reason()}
   def from_elixir(value, options \\ [])
 
+  def from_elixir(value, options) when is_outside(value) do
+    value |> Calendars.inside() |> from_elixir(options) |> Calendars.outside()
+  end
+
   def from_elixir(%Date{} = date, options) do
     resolution = Keyword.get_lazy(options, :resolution, fn -> day_unit(date.calendar) end)
 
@@ -4664,6 +4739,10 @@ defmodule Tempo do
   """
   @spec extend_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
+  def extend_resolution(tempo, target_unit) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> extend_resolution(target_unit) |> Calendars.outside()
+  end
+
   # The first value of a finer unit is one the clock of the value's zone
   # skips where it goes forward at that moment, and the value starts then on
   # the reading the clock shows, which is where it is compared from already.
@@ -4807,6 +4886,10 @@ defmodule Tempo do
   """
   @spec at_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
+  def at_resolution(tempo, target_unit) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> at_resolution(target_unit) |> Calendars.outside()
+  end
+
   def at_resolution(%Tempo{} = tempo, target_unit) do
     with {:ok, target_unit} <- validate_unit(target_unit) do
       target_unit = day_unit(target_unit, tempo)
@@ -4925,6 +5008,10 @@ defmodule Tempo do
     end
   end
 
+  def to_date(tempo) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> to_date() |> Calendars.outside()
+  end
+
   def to_date(value) do
     {:error, ConversionError.exception(value: value, target: Date)}
   end
@@ -4953,6 +5040,10 @@ defmodule Tempo do
   def to_time(%Tempo{time: [hour: hour, minute: minute, second: second]})
       when is_integer(hour) and is_integer(minute) and is_integer(second) do
     Time.new(hour, minute, second, {0, 0})
+  end
+
+  def to_time(value) when is_outside(value) do
+    value |> Calendars.inside() |> to_time() |> Calendars.outside()
   end
 
   def to_time(%Tempo{
@@ -5007,6 +5098,10 @@ defmodule Tempo do
 
   """
   @spec to_naive_datetime(t()) :: {:ok, NaiveDateTime.t()} | {:error, error_reason()}
+  def to_naive_datetime(tempo) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> to_naive_datetime() |> Calendars.outside()
+  end
+
   def to_naive_datetime(
         %Tempo{
           time: [
@@ -5130,6 +5225,10 @@ defmodule Tempo do
     with {:ok, naive} <- to_naive_datetime(tempo) do
       naive_to_zoned_datetime(naive, zone_id, tempo)
     end
+  end
+
+  def to_datetime(tempo) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> to_datetime() |> Calendars.outside()
   end
 
   # A value with a UTC offset (`+10:00`; `Z` is offset zero)
@@ -5301,6 +5400,14 @@ defmodule Tempo do
   @spec to_calendar(t() | Interval.t() | IntervalSet.t(), module()) ::
           {:ok, t() | Interval.t() | IntervalSet.t()} | {:error, Tempo.ConversionError.t()}
   def to_calendar(value, calendar) do
+    if Calendars.outside?([value, calendar]) do
+      Calendars.outside(to_calendar(Calendars.inside(value), Calendars.inside(calendar)))
+    else
+      do_to_calendar(value, calendar)
+    end
+  end
+
+  defp do_to_calendar(value, calendar) do
     case Calendars.validated(calendar) do
       {:ok, calendar} -> in_calendar(value, calendar)
       :error -> {:error, not_a_calendar_error(value, calendar)}
@@ -5545,6 +5652,10 @@ defmodule Tempo do
   @spec to_elixir(t() | Duration.t()) ::
           {:ok, Elixir.Duration.t() | Date.t() | Time.t() | NaiveDateTime.t() | DateTime.t()}
           | {:error, Tempo.ConversionError.t()}
+  def to_elixir(value) when is_outside(value) do
+    value |> Calendars.inside() |> to_elixir() |> Calendars.outside()
+  end
+
   def to_elixir(%Duration{time: time} = duration) do
     case Enum.find(time, fn {unit, _value} -> unit in [:day_of_year, :day_of_week] end) do
       nil ->
@@ -5653,7 +5764,7 @@ defmodule Tempo do
     # Truncate the clock's microsecond so the result honours the
     # documented second resolution. For a sub-second reading, use
     # `Tempo.from_elixir(DateTime.utc_now())`.
-    Clock.utc_now() |> DateTime.truncate(:second) |> from_datetime()
+    Clock.utc_now() |> DateTime.truncate(:second) |> from_datetime() |> Calendars.outside()
   end
 
   @doc """
@@ -5695,7 +5806,7 @@ defmodule Tempo do
 
   def now(zone) when is_binary(zone) do
     # Second resolution per the contract — see `utc_now/0`.
-    Clock.utc_now() |> DateTime.truncate(:second) |> zoned_now(zone)
+    Clock.utc_now() |> DateTime.truncate(:second) |> zoned_now(zone) |> Calendars.outside()
   end
 
   def now(zone), do: {:error, UnknownZoneError.exception(zone_id: Calendars.inspect(zone))}
@@ -5836,6 +5947,10 @@ defmodule Tempo do
 
   """
   @spec in_zone(t(), String.t()) :: {:ok, t()} | {:error, error_reason()}
+  def in_zone(tempo, zone) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> in_zone(zone) |> Calendars.outside()
+  end
+
   def in_zone(%Tempo{} = tempo, zone) when is_binary(zone) do
     cond do
       not floating?(tempo) ->
@@ -5935,6 +6050,14 @@ defmodule Tempo do
   @spec in_territory(value, Tempo.Territory.input()) :: {:ok, term()} | {:error, error_reason()}
         when value: t() | Interval.t() | Tempo.Set.t()
   def in_territory(value, territory) do
+    if Calendars.outside?(value) do
+      value |> Calendars.inside() |> in_territory(territory) |> Calendars.outside()
+    else
+      do_in_territory(value, territory)
+    end
+  end
+
+  defp do_in_territory(value, territory) do
     if Group.abstract_season?(value) do
       with {:ok, hemisphere} <- hemisphere_of_territory(territory, value) do
         Group.resolve_seasons(value, hemisphere)
@@ -6050,6 +6173,10 @@ defmodule Tempo do
   """
   @spec shift_zone(t(), String.t()) ::
           {:ok, t() | Tempo.Interval.t()} | {:error, error_reason()}
+  def shift_zone(tempo, target_zone) when is_outside(tempo) do
+    tempo |> Calendars.inside() |> shift_zone(target_zone) |> Calendars.outside()
+  end
+
   def shift_zone(%Tempo{} = tempo, target_zone) when is_binary(target_zone) do
     cond do
       not anchored?(tempo) ->
@@ -6507,6 +6634,10 @@ defmodule Tempo do
   @spec day_of_week(t(), atom()) :: Calendar.day_of_week()
   def day_of_week(tempo, starting_on \\ :default)
 
+  def day_of_week(tempo, starting_on) when is_outside(tempo) do
+    day_of_week(Calendars.inside(tempo), starting_on)
+  end
+
   def day_of_week(%Tempo{} = tempo, starting_on) do
     {year, month, day} = require_ymd!(tempo, :day_of_week)
     {dow, _first, _last} = tempo.calendar.day_of_week(year, month, day, starting_on)
@@ -6542,6 +6673,10 @@ defmodule Tempo do
 
   """
   @spec day_of_year(t()) :: pos_integer()
+  def day_of_year(tempo) when is_outside(tempo) do
+    day_of_year(Calendars.inside(tempo))
+  end
+
   def day_of_year(%Tempo{} = tempo) do
     {year, month, day} = require_ymd!(tempo, :day_of_year)
     tempo.calendar.day_of_year(year, month, day)
@@ -6580,6 +6715,10 @@ defmodule Tempo do
 
   """
   @spec quarter_of_year(t()) :: 1..4
+  def quarter_of_year(tempo) when is_outside(tempo) do
+    quarter_of_year(Calendars.inside(tempo))
+  end
+
   def quarter_of_year(%Tempo{} = tempo) do
     {year, month, day} = require_ymd!(tempo, :quarter_of_year, default_day: 1)
     tempo.calendar.quarter_of_year(year, month, day)
@@ -6613,6 +6752,10 @@ defmodule Tempo do
 
   """
   @spec leap_year?(t()) :: boolean()
+  def leap_year?(tempo) when is_outside(tempo) do
+    leap_year?(Calendars.inside(tempo))
+  end
+
   def leap_year?(%Tempo{} = tempo) do
     tempo.calendar.leap_year?(whole!(tempo, :year, "leap_year?"))
   end
@@ -6649,6 +6792,10 @@ defmodule Tempo do
 
   """
   @spec days_in_month(t()) :: pos_integer()
+  def days_in_month(tempo) when is_outside(tempo) do
+    days_in_month(Calendars.inside(tempo))
+  end
+
   def days_in_month(%Tempo{} = tempo) do
     year = whole!(tempo, :year, "days_in_month")
     month = whole!(tempo, :month, "days_in_month")
@@ -6978,13 +7125,21 @@ defmodule Tempo do
           | Tempo.Set.t()
           | Tempo.IntervalSet.t()
           | {:error, error_reason()}
-  def shift(tempo, shift, options \\ [])
+  def shift(tempo, shift, options \\ []) do
+    if Calendars.outside?([tempo, shift, options]) do
+      Calendars.outside(
+        shift(Calendars.inside(tempo), Calendars.inside(shift), Calendars.inside(options))
+      )
+    else
+      do_shift(tempo, shift, options)
+    end
+  end
 
-  def shift(%Tempo{} = tempo, %Tempo.Duration{} = duration, []) do
+  defp do_shift(%Tempo{} = tempo, %Tempo.Duration{} = duration, []) do
     Math.add(tempo, duration)
   end
 
-  def shift(%Tempo{} = tempo, %Tempo.Duration{} = duration, options) when is_list(options) do
+  defp do_shift(%Tempo{} = tempo, %Tempo.Duration{} = duration, options) when is_list(options) do
     case Keyword.fetch(options, :skipping) do
       {:ok, busy} -> Math.shift_skipping(tempo, duration, busy)
       :error -> Math.add(tempo, duration)
@@ -6995,7 +7150,7 @@ defmodule Tempo do
   # iCalendar `DURATION`, `TRIGGER`, `REPEAT` — so accept the string
   # and parse it here rather than at every call site. `"-PT30M"`
   # (leading-sign form) parses to the negated duration.
-  def shift(%Tempo{} = tempo, duration_string, options) when is_binary(duration_string) do
+  defp do_shift(%Tempo{} = tempo, duration_string, options) when is_binary(duration_string) do
     case read(duration_string) do
       {:ok, %Duration{} = duration} ->
         shift(tempo, duration, options)
@@ -7015,7 +7170,7 @@ defmodule Tempo do
     end
   end
 
-  def shift(%Tempo{} = tempo, units, options) when is_list(units) do
+  defp do_shift(%Tempo{} = tempo, units, options) when is_list(units) do
     # In the keyword form the options merge into the same list —
     # `shift(t, second: -3600, skipping: busy)` — so split them
     # out before the rest becomes a duration.
@@ -7033,13 +7188,13 @@ defmodule Tempo do
   # the end is then moved on by the days that makes up, and the interval is
   # as many days long as it was. One written with a duration keeps the
   # duration, and an open end stays open.
-  def shift(%Interval{} = interval, shift, options) when is_list(options) do
+  defp do_shift(%Interval{} = interval, shift, options) when is_list(options) do
     if skipping?(shift, options),
       do: {:error, skipping_an_interval(interval)},
       else: shift_interval(interval, shift, options, months_and_years_apart(shift))
   end
 
-  def shift(tempo, shift, _options) do
+  defp do_shift(tempo, shift, _options) do
     {:error,
      ArgumentError.exception(
        "Tempo.shift/3 shifts a Tempo value or an interval by a duration or by keyword " <>
@@ -7305,7 +7460,13 @@ defmodule Tempo do
           | Tempo.Duration.t(),
           keyword()
         ) :: {:ok, String.t()} | {:error, Exception.t()}
-  defdelegate to_string(value, options \\ []), to: Tempo.Format
+  def to_string(value, options \\ []) do
+    if Calendars.outside?([value, options]) do
+      to_string(Calendars.inside(value), Calendars.inside(options))
+    else
+      Format.to_string(value, options)
+    end
+  end
 
   @doc """
   Format a Tempo value as a locale-aware string, raising for a value it cannot render.
@@ -7408,7 +7569,13 @@ defmodule Tempo do
   """
   @spec to_relative_string(t() | Tempo.Interval.t(), keyword()) ::
           {:ok, String.t()} | {:error, Exception.t()}
-  defdelegate to_relative_string(value, options \\ []), to: Tempo.Format
+  def to_relative_string(value, options \\ []) do
+    if Calendars.outside?([value, options]) do
+      to_relative_string(Calendars.inside(value), Calendars.inside(options))
+    else
+      Format.to_relative_string(value, options)
+    end
+  end
 
   @doc """
   Format a Tempo as a locale-aware relative time string, raising for a value it cannot format.
@@ -7656,9 +7823,15 @@ defmodule Tempo do
           keyword()
         ) ::
           {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
-  def to_interval(value, opts \\ [])
+  def to_interval(value, opts \\ []) do
+    if Calendars.outside?([value, opts]) do
+      Calendars.outside(to_interval(Calendars.inside(value), Calendars.inside(opts)))
+    else
+      do_to_interval(value, opts)
+    end
+  end
 
-  def to_interval(value, opts) do
+  defp do_to_interval(value, opts) do
     if Group.abstract_season?(value) or Group.abstract_season?(Keyword.get(opts, :within)),
       do: season_to_interval(value, opts),
       else: value_to_interval(value, opts)
@@ -13186,7 +13359,15 @@ defmodule Tempo do
       {2, 1}
 
   """
-  defdelegate union(a, b, options \\ []), to: Tempo.Operations
+  def union(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        union(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.union(a, b, options)
+    end
+  end
 
   @doc """
   Intersection of two values: every instant present in both operands, returned as one or more trimmed intervals.
@@ -13248,7 +13429,15 @@ defmodule Tempo do
       [%{free: ["Alice", "Bob"]}]
 
   """
-  defdelegate intersection(a, b, options \\ []), to: Tempo.Operations
+  def intersection(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        intersection(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.intersection(a, b, options)
+    end
+  end
 
   @doc """
   Complement of a value within a window: the instants of the `:within` window that no member of `set` covers.
@@ -13279,7 +13468,13 @@ defmodule Tempo do
       #Tempo.IntervalSet<[~o"2026Y6M15DT9H0M/T10H0M", ~o"2026Y6M15DT11H0M/T17H0M"]>
 
   """
-  defdelegate complement(set, options), to: Tempo.Operations
+  def complement(set, options) do
+    if Calendars.outside?([set, options]) do
+      Calendars.outside(complement(Calendars.inside(set), Calendars.inside(options)))
+    else
+      Operations.complement(set, options)
+    end
+  end
 
   @doc """
   Difference `a \\ b`: every instant in `a` that is not in `b`, returned as one or more trimmed intervals.
@@ -13331,7 +13526,15 @@ defmodule Tempo do
       1
 
   """
-  defdelegate difference(a, b, options \\ []), to: Tempo.Operations
+  def difference(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        difference(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.difference(a, b, options)
+    end
+  end
 
   @doc """
   Symmetric difference `a △ b`: every instant in exactly one of the two operands, returned as trimmed intervals. It is `(a \\ b) ∪ (b \\ a)`, each by `difference/3`.
@@ -13367,7 +13570,15 @@ defmodule Tempo do
       [~o"2026Y1M/3M", ~o"2026Y4M/6M"]
 
   """
-  defdelegate symmetric_difference(a, b, options \\ []), to: Tempo.Operations
+  def symmetric_difference(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        symmetric_difference(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.symmetric_difference(a, b, options)
+    end
+  end
 
   @doc """
   Member-preserving overlap filter: the **members of `a`** that overlap any member of `b`, kept as distinct intervals with their original metadata.
@@ -13408,7 +13619,15 @@ defmodule Tempo do
       [~o"2026Y1M5D/6D"]
 
   """
-  defdelegate members_overlapping(a, b, options \\ []), to: Tempo.Operations
+  def members_overlapping(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        members_overlapping(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.members_overlapping(a, b, options)
+    end
+  end
 
   @doc """
   Member-preserving anti-overlap filter: the **members of `a`** that no member of `b` overlaps, kept whole with their original metadata.
@@ -13449,7 +13668,15 @@ defmodule Tempo do
       [~o"2026Y1M20D/21D"]
 
   """
-  defdelegate members_outside(a, b, options \\ []), to: Tempo.Operations
+  def members_outside(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        members_outside(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.members_outside(a, b, options)
+    end
+  end
 
   @doc """
   Member-preserving symmetric-difference filter: the members of either operand that no member of the other overlaps, kept whole with their original metadata. It is `members_outside(a, b)` united with `members_outside(b, a)`.
@@ -13492,7 +13719,19 @@ defmodule Tempo do
       [~o"2026Y1M5D/6D", ~o"2026Y1M25D/26D"]
 
   """
-  defdelegate members_in_exactly_one(a, b, options \\ []), to: Tempo.Operations
+  def members_in_exactly_one(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        members_in_exactly_one(
+          Calendars.inside(a),
+          Calendars.inside(b),
+          Calendars.inside(options)
+        )
+      )
+    else
+      Operations.members_in_exactly_one(a, b, options)
+    end
+  end
 
   @doc """
   `true` when `a` and `b` share no instant: no member of `a` overlaps any member of `b`.
@@ -13522,7 +13761,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate disjoint?(a, b, options \\ []), to: Tempo.Operations
+  def disjoint?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      disjoint?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.disjoint?(a, b, options)
+    end
+  end
 
   @doc """
   `true` when `a` and `b` share at least one instant.
@@ -13552,7 +13797,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate overlaps?(a, b, options \\ []), to: Tempo.Operations
+  def overlaps?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      overlaps?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.overlaps?(a, b, options)
+    end
+  end
 
   @doc """
   `true` when every instant of `b` is also in `a`: the mirror of `within?/3`.
@@ -13582,7 +13833,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate contains?(a, b, options \\ []), to: Tempo.Operations
+  def contains?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      contains?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.contains?(a, b, options)
+    end
+  end
 
   @doc """
   `true` when `a` and `b` cover the same instants. Which members cover them, and what metadata they carry, is ignored: only the covered instants count.
@@ -13612,7 +13869,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate equal?(a, b, options \\ []), to: Tempo.Operations
+  def equal?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      equal?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.equal?(a, b, options)
+    end
+  end
 
   @doc """
   Classify the Allen interval-algebra relation between two interval-like values.
@@ -13667,7 +13930,13 @@ defmodule Tempo do
       :contains
 
   """
-  defdelegate relation(a, b), to: Tempo.Interval
+  def relation(a, b) do
+    if Calendars.outside?([a, b]) do
+      relation(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.relation(a, b)
+    end
+  end
 
   @doc """
   Compare two Tempo values, returning the standard library's ternary `:lt | :eq | :gt`.
@@ -13737,7 +14006,13 @@ defmodule Tempo do
       :lt
 
   """
-  defdelegate compare(a, b, options \\ []), to: Tempo.Compare
+  def compare(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      compare(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Compare.compare(a, b, options)
+    end
+  end
 
   @doc """
   Return the length of an interval or of the span a value names, or
@@ -13788,6 +14063,10 @@ defmodule Tempo do
   """
   @spec duration(t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()) ::
           Duration.t() | :infinity | {:error, Exception.t()}
+  def duration(value) when is_outside(value) do
+    duration(Calendars.inside(value))
+  end
+
   def duration(%IntervalSet{} = set), do: IntervalSet.duration(set)
 
   # A value with no year is measured where its span has a length on any
@@ -13873,6 +14152,10 @@ defmodule Tempo do
 
   """
   @spec duration(t(), t()) :: {:ok, Duration.t()} | {:error, Exception.t()}
+  def duration(from, to) when is_outside(from) or is_outside(to) do
+    duration(Calendars.inside(from), Calendars.inside(to))
+  end
+
   def duration(%__MODULE__{} = from, %__MODULE__{} = to) do
     cond do
       not anchored?(from) ->
@@ -13962,7 +14245,15 @@ defmodule Tempo do
 
   """
   @spec at_least?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
-  def at_least?(value, duration),
+  def at_least?(value, duration) do
+    if Calendars.outside?(value) do
+      at_least?(Calendars.inside(value), duration)
+    else
+      do_at_least?(value, duration)
+    end
+  end
+
+  defp do_at_least?(value, duration),
     do: length_holds?(value, duration, &Interval.at_least?/2, [:gt, :eq])
 
   @doc """
@@ -13991,7 +14282,15 @@ defmodule Tempo do
 
   """
   @spec at_most?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
-  def at_most?(value, duration),
+  def at_most?(value, duration) do
+    if Calendars.outside?(value) do
+      at_most?(Calendars.inside(value), duration)
+    else
+      do_at_most?(value, duration)
+    end
+  end
+
+  defp do_at_most?(value, duration),
     do: length_holds?(value, duration, &Interval.at_most?/2, [:lt, :eq])
 
   @doc """
@@ -14023,7 +14322,15 @@ defmodule Tempo do
 
   """
   @spec exactly?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
-  def exactly?(value, duration),
+  def exactly?(value, duration) do
+    if Calendars.outside?(value) do
+      exactly?(Calendars.inside(value), duration)
+    else
+      do_exactly?(value, duration)
+    end
+  end
+
+  defp do_exactly?(value, duration),
     do: length_holds?(value, duration, &Interval.exactly?/2, [:eq])
 
   @doc """
@@ -14052,7 +14359,15 @@ defmodule Tempo do
 
   """
   @spec longer_than?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
-  def longer_than?(value, duration),
+  def longer_than?(value, duration) do
+    if Calendars.outside?(value) do
+      longer_than?(Calendars.inside(value), duration)
+    else
+      do_longer_than?(value, duration)
+    end
+  end
+
+  defp do_longer_than?(value, duration),
     do: length_holds?(value, duration, &Interval.longer_than?/2, [:gt])
 
   @doc """
@@ -14087,7 +14402,15 @@ defmodule Tempo do
 
   """
   @spec shorter_than?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
-  def shorter_than?(value, duration),
+  def shorter_than?(value, duration) do
+    if Calendars.outside?(value) do
+      shorter_than?(Calendars.inside(value), duration)
+    else
+      do_shorter_than?(value, duration)
+    end
+  end
+
+  defp do_shorter_than?(value, duration),
     do: length_holds?(value, duration, &Interval.shorter_than?/2, [:lt])
 
   # Whether a value's length stands in one of `orders` to `duration`. An
@@ -14162,6 +14485,10 @@ defmodule Tempo do
 
   """
   @spec bounded?(t() | Interval.t() | IntervalSet.t()) :: boolean()
+  def bounded?(value) when is_outside(value) do
+    bounded?(Calendars.inside(value))
+  end
+
   def bounded?(%Interval{} = interval), do: Interval.bounded?(interval)
   def bounded?(%IntervalSet{} = set), do: IntervalSet.bounded?(set)
   def bounded?(value), do: value |> span!() |> bounded?()
@@ -14185,6 +14512,10 @@ defmodule Tempo do
 
   """
   @spec empty?(t() | Interval.t() | IntervalSet.t()) :: boolean()
+  def empty?(value) when is_outside(value) do
+    empty?(Calendars.inside(value))
+  end
+
   def empty?(%Interval{} = interval), do: Interval.empty?(interval)
   def empty?(%IntervalSet{} = set), do: IntervalSet.empty?(set)
   def empty?(value), do: value |> span!() |> empty?()
@@ -14219,7 +14550,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate before?(a, b), to: Tempo.Interval
+  def before?(a, b) do
+    if Calendars.outside?([a, b]) do
+      before?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.before?(a, b)
+    end
+  end
 
   @doc """
   `true` when `a` starts at or after `b` ends: the two share no instant and `a` is later.
@@ -14245,7 +14582,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate after?(a, b), to: Tempo.Interval
+  def after?(a, b) do
+    if Calendars.outside?([a, b]) do
+      after?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.after?(a, b)
+    end
+  end
 
   @doc """
   `true` when the two intervals touch at a single boundary: either ends exactly where the other starts. This is Allen's `:meets` or `:met_by`, and `Tempo.Allen.meets?/2` tests the one direction.
@@ -14269,7 +14612,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate adjacent?(a, b), to: Tempo.Interval
+  def adjacent?(a, b) do
+    if Calendars.outside?([a, b]) do
+      adjacent?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.adjacent?(a, b)
+    end
+  end
 
   @doc """
   `true` when every instant of `a` is also in `b`: `a` fits inside `b`, shared ends included. The "does this fit inside that window?" predicate, for single values and sets alike: it compares the instants each operand covers, not member with member.
@@ -14304,7 +14653,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate within?(a, b, options \\ []), to: Tempo.Operations
+  def within?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      within?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.within?(a, b, options)
+    end
+  end
 
   @doc """
   The three-valued certainty that `a` and `b` intersect, given their `±` margins.
@@ -14333,7 +14688,13 @@ defmodule Tempo do
       :impossible
 
   """
-  defdelegate overlap_certainty(a, b), to: Tempo.Interval
+  def overlap_certainty(a, b) do
+    if Calendars.outside?([a, b]) do
+      overlap_certainty(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.overlap_certainty(a, b)
+    end
+  end
 
   @doc """
   The three-valued certainty that `a` falls within `b`, given any uncertainty in either.
@@ -14366,7 +14727,13 @@ defmodule Tempo do
       :possible
 
   """
-  defdelegate within_certainty(a, b), to: Tempo.Interval
+  def within_certainty(a, b) do
+    if Calendars.outside?([a, b]) do
+      within_certainty(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.within_certainty(a, b)
+    end
+  end
 
   @doc """
   The three-valued certainty that `relation(a, b)` is `target`, or one of the relations of `target`.
@@ -14401,7 +14768,13 @@ defmodule Tempo do
       :certain
 
   """
-  defdelegate relation_certainty(a, b, target), to: Tempo.Interval
+  def relation_certainty(a, b, target) do
+    if Calendars.outside?([a, b]) do
+      relation_certainty(Calendars.inside(a), Calendars.inside(b), target)
+    else
+      Interval.relation_certainty(a, b, target)
+    end
+  end
 
   @doc """
   `true` when `a` and `b` intersect for *every* placement of their `±` margins: `overlap_certainty/2` is `:certain`. With no uncertainty it is `overlaps?/3`.
@@ -14425,7 +14798,13 @@ defmodule Tempo do
       true
 
   """
-  defdelegate certainly_overlaps?(a, b), to: Tempo.Interval
+  def certainly_overlaps?(a, b) do
+    if Calendars.outside?([a, b]) do
+      certainly_overlaps?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.certainly_overlaps?(a, b)
+    end
+  end
 
   @doc """
   `true` when `a` and `b` *could* intersect for some placement of their `±` margins: `overlap_certainty/2` is `:certain` or `:possible`.
@@ -14449,7 +14828,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate possibly_overlaps?(a, b), to: Tempo.Interval
+  def possibly_overlaps?(a, b) do
+    if Calendars.outside?([a, b]) do
+      possibly_overlaps?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.possibly_overlaps?(a, b)
+    end
+  end
 
   @doc """
   `true` when `a` falls within `b` for *every* placement of their `±` margins: `within_certainty/2` is `:certain`. With no uncertainty it is `within?/3`.
@@ -14473,7 +14858,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate certainly_within?(a, b), to: Tempo.Interval
+  def certainly_within?(a, b) do
+    if Calendars.outside?([a, b]) do
+      certainly_within?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.certainly_within?(a, b)
+    end
+  end
 
   @doc """
   `true` when `a` *could* fall within `b` for some placement of their `±` margins: `within_certainty/2` is `:certain` or `:possible`.
@@ -14494,7 +14885,13 @@ defmodule Tempo do
       true
 
   """
-  defdelegate possibly_within?(a, b), to: Tempo.Interval
+  def possibly_within?(a, b) do
+    if Calendars.outside?([a, b]) do
+      possibly_within?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.possibly_within?(a, b)
+    end
+  end
 
   @doc """
   `true` when `a` ends at or before `b` starts, the two sharing no instant and `a` the earlier, for *every* placement of their `±` margins. With no uncertainty it is `before?/2`.
@@ -14518,7 +14915,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate certainly_before?(a, b), to: Tempo.Interval
+  def certainly_before?(a, b) do
+    if Calendars.outside?([a, b]) do
+      certainly_before?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.certainly_before?(a, b)
+    end
+  end
 
   @doc """
   `true` when `a` *could* end at or before `b` starts for some placement of their `±` margins.
@@ -14539,7 +14942,13 @@ defmodule Tempo do
       true
 
   """
-  defdelegate possibly_before?(a, b), to: Tempo.Interval
+  def possibly_before?(a, b) do
+    if Calendars.outside?([a, b]) do
+      possibly_before?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.possibly_before?(a, b)
+    end
+  end
 
   @doc """
   `true` when `a` starts at or after `b` ends, the two sharing no instant and `a` the later, for *every* placement of their `±` margins. With no uncertainty it is `after?/2`.
@@ -14563,7 +14972,13 @@ defmodule Tempo do
       false
 
   """
-  defdelegate certainly_after?(a, b), to: Tempo.Interval
+  def certainly_after?(a, b) do
+    if Calendars.outside?([a, b]) do
+      certainly_after?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.certainly_after?(a, b)
+    end
+  end
 
   @doc """
   `true` when `a` *could* start at or after `b` ends for some placement of their `±` margins.
@@ -14584,7 +14999,13 @@ defmodule Tempo do
       true
 
   """
-  defdelegate possibly_after?(a, b), to: Tempo.Interval
+  def possibly_after?(a, b) do
+    if Calendars.outside?([a, b]) do
+      possibly_after?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.possibly_after?(a, b)
+    end
+  end
 
   @doc """
   Narrow a Tempo span by a selector, returning what it selects as a `t:Tempo.IntervalSet.t/0`: the composition primitive for "workdays of June", "the 15th of every month", and similar questions. `Tempo.Select` has the whole vocabulary of selectors.
@@ -14685,7 +15106,16 @@ defmodule Tempo do
       [~o"2024Y3M10DT3H/T4H[America/New_York]"]
 
   """
-  defdelegate select(base, selector), to: Tempo.Select
+  def select(base, selector) do
+    if Calendars.outside?([base, selector]) do
+      base
+      |> Calendars.inside()
+      |> select(Calendars.inside_selector(selector))
+      |> Calendars.outside()
+    else
+      Select.select(base, selector)
+    end
+  end
 
   @doc """
   Raising version of `select/2`.
@@ -14784,8 +15214,8 @@ defmodule Tempo do
 
   def workdays(territory, options) do
     with {:ok, resolved} <- Territory.resolve(territory),
-         {:ok, except} <- workdays_except(options) do
-      workdays_of(resolved, except)
+         {:ok, except} <- workdays_except(Calendars.inside(options)) do
+      resolved |> workdays_of(except) |> Calendars.outside()
     end
   end
 
@@ -14869,7 +15299,7 @@ defmodule Tempo do
   @spec weekends(Tempo.Territory.input()) :: t() | {:error, error_reason()}
   def weekends(territory \\ nil) do
     with {:ok, resolved} <- Territory.resolve(territory) do
-      day_of_week_tempo(Localize.Calendar.weekend(resolved))
+      resolved |> Localize.Calendar.weekend() |> day_of_week_tempo() |> Calendars.outside()
     end
   end
 
@@ -14927,10 +15357,16 @@ defmodule Tempo do
 
   """
   @spec weekend?(t(), Tempo.Territory.input() | Tempo.Workdays.t()) :: boolean()
-  def weekend?(tempo, territory \\ nil)
+  def weekend?(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      weekend?(Calendars.inside(tempo), Calendars.inside(territory))
+    else
+      do_weekend?(tempo, territory)
+    end
+  end
 
-  def weekend?(%Tempo{} = tempo, territory), do: on_weekend?(tempo, territory, :weekend?)
-  def weekend?(value, _territory), do: raise(not_one_value("weekend?/2", value))
+  defp do_weekend?(%Tempo{} = tempo, territory), do: on_weekend?(tempo, territory, :weekend?)
+  defp do_weekend?(value, _territory), do: raise(not_one_value("weekend?/2", value))
 
   @doc """
   Return `true` when `tempo` falls on a workday — a day that is *not*
@@ -14964,14 +15400,20 @@ defmodule Tempo do
 
   """
   @spec workday?(t(), Tempo.Territory.input() | Tempo.Workdays.t()) :: boolean()
-  def workday?(tempo, territory \\ nil)
+  def workday?(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      workday?(Calendars.inside(tempo), Calendars.inside(territory))
+    else
+      do_workday?(tempo, territory)
+    end
+  end
 
-  def workday?(%Tempo{} = tempo, territory) do
+  defp do_workday?(%Tempo{} = tempo, territory) do
     answer = with {:ok, days_off} <- days_off(territory), do: day_off?(tempo, days_off, :workday?)
     not predicate_answer!(answer)
   end
 
-  def workday?(value, _territory), do: raise(not_one_value("workday?/2", value))
+  defp do_workday?(value, _territory), do: raise(not_one_value("workday?/2", value))
 
   # Whether `tempo` falls on the territory's weekend.
   defp on_weekend?(tempo, territory, function) do
@@ -15038,6 +15480,14 @@ defmodule Tempo do
   @spec add_workdays(t(), integer(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
           t() | {:error, error_reason()}
   def add_workdays(tempo, count, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      Calendars.outside(add_workdays(Calendars.inside(tempo), count, Calendars.inside(territory)))
+    else
+      do_add_workdays(tempo, count, territory)
+    end
+  end
+
+  defp do_add_workdays(tempo, count, territory) do
     workdays_from(tempo, count, territory, :add_workdays)
   end
 
@@ -15073,6 +15523,14 @@ defmodule Tempo do
   @spec next_workday(t(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
           t() | {:error, error_reason()}
   def next_workday(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      Calendars.outside(next_workday(Calendars.inside(tempo), Calendars.inside(territory)))
+    else
+      do_next_workday(tempo, territory)
+    end
+  end
+
+  defp do_next_workday(tempo, territory) do
     workdays_from(tempo, 1, territory, :next_workday)
   end
 
@@ -15101,6 +15559,14 @@ defmodule Tempo do
   @spec previous_workday(t(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
           t() | {:error, error_reason()}
   def previous_workday(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      Calendars.outside(previous_workday(Calendars.inside(tempo), Calendars.inside(territory)))
+    else
+      do_previous_workday(tempo, territory)
+    end
+  end
+
+  defp do_previous_workday(tempo, territory) do
     workdays_from(tempo, -1, territory, :previous_workday)
   end
 
@@ -15147,9 +15613,15 @@ defmodule Tempo do
   """
   @spec nearest_workday(t(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
           t() | {:error, error_reason()}
-  def nearest_workday(tempo, territory \\ nil)
+  def nearest_workday(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      Calendars.outside(nearest_workday(Calendars.inside(tempo), Calendars.inside(territory)))
+    else
+      do_nearest_workday(tempo, territory)
+    end
+  end
 
-  def nearest_workday(%Tempo{} = tempo, territory) do
+  defp do_nearest_workday(%Tempo{} = tempo, territory) do
     with :ok <- one_value(tempo),
          {:ok, days_off} <- days_off(territory),
          {:ok, off?} <- day_off?(tempo, days_off, :nearest_workday) do
@@ -15157,7 +15629,7 @@ defmodule Tempo do
     end
   end
 
-  def nearest_workday(value, _territory), do: {:error, not_a_day(value, :nearest_workday)}
+  defp do_nearest_workday(value, _territory), do: {:error, not_a_day(value, :nearest_workday)}
 
   @doc """
   Roll `tempo` to a workday of the territory: `tempo` itself when it is a workday, otherwise the workday the `:roll` convention names.
@@ -15214,12 +15686,24 @@ defmodule Tempo do
           Tempo.Territory.input() | Tempo.Workdays.t() | keyword(),
           keyword()
         ) :: t() | {:error, error_reason()}
-  def roll_to_workday(tempo, territory \\ nil, options \\ [])
+  def roll_to_workday(tempo, territory \\ nil, options \\ []) do
+    if Calendars.outside?([tempo, territory, options]) do
+      Calendars.outside(
+        roll_to_workday(
+          Calendars.inside(tempo),
+          Calendars.inside(territory),
+          Calendars.inside(options)
+        )
+      )
+    else
+      do_roll_to_workday(tempo, territory, options)
+    end
+  end
 
-  def roll_to_workday(tempo, options, []) when is_list(options),
+  defp do_roll_to_workday(tempo, options, []) when is_list(options),
     do: roll_to_workday(tempo, nil, options)
 
-  def roll_to_workday(%Tempo{} = tempo, territory, options) do
+  defp do_roll_to_workday(%Tempo{} = tempo, territory, options) do
     with {:ok, roll} <- roll_convention(options),
          :ok <- one_value(tempo),
          {:ok, days_off} <- days_off(territory),
@@ -15229,7 +15713,7 @@ defmodule Tempo do
     end
   end
 
-  def roll_to_workday(value, _territory, _options),
+  defp do_roll_to_workday(value, _territory, _options),
     do: {:error, not_a_day(value, :roll_to_workday)}
 
   @rolls [:following, :preceding, :modified_following, :modified_preceding]
@@ -15335,6 +15819,14 @@ defmodule Tempo do
           Tempo.Territory.input() | Tempo.Workdays.t()
         ) :: non_neg_integer() | {:error, error_reason()}
   def count_workdays(value, territory \\ nil) do
+    if Calendars.outside?([value, territory]) do
+      count_workdays(Calendars.inside(value), Calendars.inside(territory))
+    else
+      do_count_workdays(value, territory)
+    end
+  end
+
+  defp do_count_workdays(value, territory) do
     with {:ok, selector} <- workday_selector(territory),
          {:ok, %IntervalSet{} = selected} <- value |> whole_days() |> select(selector) do
       count_selected(selected)
