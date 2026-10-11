@@ -30,16 +30,24 @@ defmodule Tempo.IntervalSet.Backend do
         use Tempo.IntervalSet.Backend
 
         @impl true
-        def from_list(intervals, _options), do: build_my_state(intervals)
+        def from_list(intervals, _options) do
+          build_my_state(intervals)
+        end
 
         @impl true
-        def to_list(state), do: my_state_to_list(state)
+        def to_list(state) do
+          my_state_to_list(state)
+        end
 
         @impl true
-        def walk(state), do: my_lazy_stream(state)
+        def walk(state) do
+          my_lazy_stream(state)
+        end
 
         @impl true
-        def bounded?(_state), do: true
+        def bounded?(_state) do
+          true
+        end
       end
 
   `use` provides overridable `count/1`, `empty?/1`, and `first/1`

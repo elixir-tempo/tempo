@@ -115,7 +115,8 @@ defmodule Tempo.RecurrenceSet do
   ### Examples
 
       iex> christmas = Tempo.from_iso8601!("R/../P1Y/FL12M25DN")
-      iex> Tempo.RecurrenceSet.new!([christmas]) |> Tempo.RecurrenceSet.members()
+      iex> Tempo.RecurrenceSet.new!([christmas])
+      ...> |> Tempo.RecurrenceSet.members()
       [christmas]
 
   """

@@ -27,7 +27,9 @@ defmodule Tempo.Inspect do
 
   ### Examples
 
-      iex> ~o"2022-11-20" |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()
+      iex> ~o"2022-11-20"
+      ...> |> Tempo.Inspect.to_iodata()
+      ...> |> IO.iodata_to_binary()
       "2022Y11M20D"
 
   """

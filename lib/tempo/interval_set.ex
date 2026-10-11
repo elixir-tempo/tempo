@@ -284,8 +284,14 @@ defmodule Tempo.IntervalSet do
   ### Examples
 
       iex> mondays = Stream.iterate(~o"2026-01-05", &Tempo.shift(&1, week: 1))
-      iex> set = mondays |> Stream.map(&Tempo.to_interval!/1) |> Tempo.IntervalSet.from_stream()
-      iex> set |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> set =
+      ...>   mondays
+      ...>   |> Stream.map(&Tempo.to_interval!/1)
+      ...>   |> Tempo.IntervalSet.from_stream()
+      iex> set
+      ...> |> Tempo.IntervalSet.walk()
+      ...> |> Enum.take(2)
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [5, 12]
 
   """
@@ -338,7 +344,7 @@ defmodule Tempo.IntervalSet do
       ])
 
       Enum.count(set)                             #=> 25200 — every second
-      Tempo.IntervalSet.members(set) |> length()  #=> 2 — the two blocks
+      length(Tempo.IntervalSet.members(set))      #=> 2 — the two blocks
 
   The two agree at day resolution — a five-member set of days
   enumerates as five days — so code that reaches for `Enum` is correct
@@ -361,7 +367,8 @@ defmodule Tempo.IntervalSet do
       ...>   %Tempo.Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"},
       ...>   %Tempo.Interval{from: ~o"2026-07-01", to: ~o"2026-07-10"}
       ...> ])
-      iex> Tempo.IntervalSet.members(set) |> length()
+      iex> Tempo.IntervalSet.members(set)
+      ...> |> length()
       2
 
   Pair with the interval predicates for expressive scheduling:
@@ -397,7 +404,9 @@ defmodule Tempo.IntervalSet do
       iex> set = Tempo.IntervalSet.new!([
       ...>   %Tempo.Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"}
       ...> ])
-      iex> set |> Tempo.IntervalSet.walk() |> Enum.count()
+      iex> set
+      ...> |> Tempo.IntervalSet.walk()
+      ...> |> Enum.count()
       1
 
   """
@@ -720,11 +729,15 @@ defmodule Tempo.IntervalSet do
   ### Examples
 
       iex> work = Tempo.Interval.new!(from: ~o"2026-06-15T09:00:00", to: ~o"2026-06-15T12:00:00")
-      iex> work |> Tempo.IntervalSet.slots(~o"PT1H") |> Tempo.IntervalSet.count()
+      iex> work
+      ...> |> Tempo.IntervalSet.slots(~o"PT1H")
+      ...> |> Tempo.IntervalSet.count()
       3
 
       iex> work = Tempo.Interval.new!(from: ~o"2026-06-15T09:00:00", to: ~o"2026-06-15T12:00:00")
-      iex> work |> Tempo.IntervalSet.slots(~o"PT1H", every: ~o"PT30M") |> Tempo.IntervalSet.count()
+      iex> work
+      ...> |> Tempo.IntervalSet.slots(~o"PT1H", every: ~o"PT30M")
+      ...> |> Tempo.IntervalSet.count()
       5
 
   """

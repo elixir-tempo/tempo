@@ -2533,17 +2533,20 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> Tempo.from_iso8601!("2022-11-20") |> Tempo.to_iso8601()
+      iex> Tempo.from_iso8601!("2022-11-20")
+      ...> |> Tempo.to_iso8601()
       {:ok, "2022Y11M20D"}
 
-      iex> Tempo.from_iso8601!("R5/2022-01-01/P1M") |> Tempo.to_iso8601()
+      iex> Tempo.from_iso8601!("R5/2022-01-01/P1M")
+      ...> |> Tempo.to_iso8601()
       {:ok, "R5/2022Y1M1D/P1M"}
 
       iex> {:ok, i} = Tempo.from_iso8601("1984?/2004~")
       iex> Tempo.to_iso8601(i)
       {:ok, "1984Y?/2004Y~"}
 
-      iex> Tempo.to_calendar!(~o"2026-06-15", Calendrical.Hebrew) |> Tempo.to_iso8601()
+      iex> Tempo.to_calendar!(~o"2026-06-15", Calendrical.Hebrew)
+      ...> |> Tempo.to_iso8601()
       {:ok, "5786Y9M30D[u-ca=hebrew]"}
 
       iex> holidays = Tempo.RecurrenceSet.new!([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
@@ -5905,7 +5908,9 @@ defmodule Tempo do
 
       iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15/2026-06-16"])
       iex> {:ok, hebrew} = Tempo.to_calendar(set, Calendrical.Hebrew)
-      iex> hebrew |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+      iex> hebrew
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.to_iso8601!/1)
       ["5786Y9M30D/10M1D[u-ca=hebrew]"]
 
   """
@@ -6288,7 +6293,8 @@ defmodule Tempo do
       iex> tempo.extended.zone_id
       "Etc/UTC"
 
-      iex> Tempo.utc_now() |> Tempo.resolution()
+      iex> Tempo.utc_now()
+      ...> |> Tempo.resolution()
       {:second, 1}
 
   """
@@ -6374,10 +6380,12 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> Tempo.utc_today() |> Tempo.resolution()
+      iex> Tempo.utc_today()
+      ...> |> Tempo.resolution()
       {:day, 1}
 
-      iex> Tempo.utc_today() |> Tempo.floating?()
+      iex> Tempo.utc_today()
+      ...> |> Tempo.floating?()
       true
 
   """
@@ -6410,10 +6418,12 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> Tempo.today("Etc/UTC") |> Tempo.resolution()
+      iex> Tempo.today("Etc/UTC")
+      ...> |> Tempo.resolution()
       {:day, 1}
 
-      iex> Tempo.today("Australia/Sydney") |> Tempo.floating?()
+      iex> Tempo.today("Australia/Sydney")
+      ...> |> Tempo.floating?()
       true
 
   """
@@ -7696,7 +7706,9 @@ defmodule Tempo do
   which no one value names, so the answer is the set of the two days:
 
       iex> days = Tempo.shift(~o"2026Y6M{15,30}D", day: 1)
-      iex> days |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.Interval.from/1)
+      iex> days
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.Interval.from/1)
       [~o"2026Y6M16D", ~o"2026Y7M1D"]
 
   Some day of June, a day on, is one of the days from 2 June to 1 July,
@@ -14923,9 +14935,12 @@ defmodule Tempo do
   Members stay distinct even when they touch, and `Tempo.IntervalSet.coalesce/1` merges them:
 
       iex> {:ok, both} = Tempo.union(~o"2026-01", ~o"2026-02")
-      iex> {Tempo.IntervalSet.count(both),
-      ...>  both |> Tempo.IntervalSet.coalesce() |> Tempo.IntervalSet.count()}
-      {2, 1}
+      iex> Tempo.IntervalSet.count(both)
+      2
+      iex> both
+      ...> |> Tempo.IntervalSet.coalesce()
+      ...> |> Tempo.IntervalSet.count()
+      1
 
   """
   def union(a, b, options \\ []) do
@@ -14994,7 +15009,9 @@ defmodule Tempo do
       ...>   metadata: %{free: ["Bob"]})
       iex> accumulate = fn a, b -> Map.merge(a, b, fn _key, x, y -> x ++ y end) end
       iex> {:ok, both} = Tempo.intersection(alice, bob, metadata: {:merge, accumulate})
-      iex> both |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.Interval.metadata/1)
+      iex> both
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.Interval.metadata/1)
       [%{free: ["Alice", "Bob"]}]
 
   """
@@ -16693,7 +16710,9 @@ defmodule Tempo do
   ### Examples
 
       iex> {:ok, set} = Tempo.select(~o"2026-02", [1, 15])
-      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> set
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [1, 15]
 
       iex> {:ok, set} = Tempo.select(~o"2026", ~o"12-25")
@@ -16711,7 +16730,9 @@ defmodule Tempo do
       {1, 10}
 
       iex> {:ok, set} = Tempo.select(~o"2026-06", ~o"5K")
-      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> set
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [5, 12, 19, 26]
 
       iex> {:ok, set} = Tempo.select(~o"2026-02", Tempo.workdays(:US))
@@ -16721,18 +16742,25 @@ defmodule Tempo do
   A span is selected period by period, and an open-ended one lazily:
 
       iex> {:ok, set} = Tempo.select(~o"2026/2029", ~o"12-25")
-      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.year(Tempo.Interval.from(&1)))
+      iex> set
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.year(Tempo.Interval.from(&1)))
       [2026, 2027, 2028]
 
       iex> {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:US))
-      iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> weekends
+      ...> |> Tempo.IntervalSet.walk()
+      ...> |> Enum.take(2)
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [20, 21]
 
   The school days of a term are tagged with the term:
 
       iex> {:ok, term} = Tempo.Interval.new(from: ~o"2027-07-19", to: ~o"2027-07-21", metadata: %{term: 3})
       iex> {:ok, days} = Tempo.select(term, Tempo.workdays(:AU))
-      iex> days |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.metadata/1)
+      iex> days
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.metadata/1)
       [%{term: 3}, %{term: 3}]
 
   On the night New York's clocks go forward, 02:00 is not on the clock:
@@ -16835,7 +16863,9 @@ defmodule Tempo do
       20
 
       iex> {:ok, workdays} = Tempo.select(~o"2026-06-15/2026-06-22", Tempo.workdays(:SA))
-      iex> workdays |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> workdays
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [15, 16, 17, 18, 21]
 
   Leaving out the King's Birthday, June 2026 has 21 Australian
@@ -16929,11 +16959,15 @@ defmodule Tempo do
   ### Examples
 
       iex> {:ok, weekends} = Tempo.select(~o"2026-02", Tempo.weekends(:US))
-      iex> weekends |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> weekends
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [1, 7, 8, 14, 15, 21, 22, 28]
 
       iex> {:ok, weekends} = Tempo.select(~o"2026-02", Tempo.weekends(:SA))
-      iex> weekends |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> weekends
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [6, 7, 13, 14, 20, 21, 27, 28]
 
   From a date on, the weekends are a lazy set that walks only as far as
@@ -16941,7 +16975,10 @@ defmodule Tempo do
   the weekends skipped, run to Tuesday at 16:00:
 
       iex> {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:US))
-      iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      iex> weekends
+      ...> |> Tempo.IntervalSet.walk()
+      ...> |> Enum.take(3)
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
       [20, 21, 27]
       iex> Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
       ~o"2026Y6M23DT16H0M0S"
@@ -17858,13 +17895,18 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> Tempo.explain(~o"2026-06") |> String.split("\\n") |> hd()
+      iex> Tempo.explain(~o"2026-06")
+      ...> |> String.split("\\n")
+      ...> |> hd()
       "June 2026."
 
-      iex> Tempo.explain(~o"1984/1986") |> String.split("\\n")
+      iex> Tempo.explain(~o"1984/1986")
+      ...> |> String.split("\\n")
       ["A closed interval.", "From: 1984.", "To:   1986 (exclusive — half-open `[from, to)`)."]
 
-      iex> Tempo.explain(~o"2026-W25") |> String.split("\\n") |> Enum.take(3)
+      iex> Tempo.explain(~o"2026-W25")
+      ...> |> String.split("\\n")
+      ...> |> Enum.take(3)
       ["Week 25 of 2026.", "Span: [2026-W25, 2026-W26).", "Starts on 2026-06-15."]
 
   """

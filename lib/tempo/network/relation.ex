@@ -237,13 +237,16 @@ defmodule Tempo.Network.Relation do
 
   ### Examples
 
-      iex> Tempo.Network.Relation.new(:before, :a, :b) |> Tempo.Network.Relation.to_atomic()
+      iex> Tempo.Network.Relation.new(:before, :a, :b)
+      ...> |> Tempo.Network.Relation.to_atomic()
       [{{:end, :a}, {:start, :b}, -1}]
 
-      iex> Tempo.Network.Relation.new(:immediately_precedes, :a, :b) |> Tempo.Network.Relation.to_atomic()
+      iex> Tempo.Network.Relation.new(:immediately_precedes, :a, :b)
+      ...> |> Tempo.Network.Relation.to_atomic()
       [{{:end, :a}, {:start, :b}, 0}, {{:start, :b}, {:end, :a}, 0}]
 
-      iex> Tempo.Network.Relation.new({:boundary, :end, :at_or_before, :start}, :a, :b) |> Tempo.Network.Relation.to_atomic()
+      iex> Tempo.Network.Relation.new({:boundary, :end, :at_or_before, :start}, :a, :b)
+      ...> |> Tempo.Network.Relation.to_atomic()
       [{{:end, :a}, {:start, :b}, 0}]
 
   """

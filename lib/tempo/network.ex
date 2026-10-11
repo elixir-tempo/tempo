@@ -75,7 +75,9 @@ defmodule Tempo.Network do
   ### Examples
 
       iex> {:ok, period} = Tempo.Network.TimePeriod.new(:k1, name: "King 1")
-      iex> network = Tempo.Network.new() |> Tempo.Network.add_period(period)
+      iex> network =
+      ...>   Tempo.Network.new()
+      ...>   |> Tempo.Network.add_period(period)
       iex> Map.keys(network.periods)
       [:k1]
 
@@ -118,7 +120,9 @@ defmodule Tempo.Network do
 
   ### Examples
 
-      iex> network = Tempo.Network.new() |> Tempo.Network.add_period(:k1, from: {:not_before, ~o"1200Y"})
+      iex> network =
+      ...>   Tempo.Network.new()
+      ...>   |> Tempo.Network.add_period(:k1, from: {:not_before, ~o"1200Y"})
       iex> network.periods[:k1].earliest_start
       ~o"1200Y"
 
@@ -152,7 +156,9 @@ defmodule Tempo.Network do
 
   ### Examples
 
-      iex> network = Tempo.Network.new() |> Tempo.Network.add_sequence([:k1, :k2, :k3])
+      iex> network =
+      ...>   Tempo.Network.new()
+      ...>   |> Tempo.Network.add_sequence([:k1, :k2, :k3])
       iex> network.sequences
       [[:k1, :k2, :k3]]
 
@@ -195,7 +201,9 @@ defmodule Tempo.Network do
 
   ### Examples
 
-      iex> network = Tempo.Network.new() |> Tempo.Network.add_relation(:included_in, :s1, :k1)
+      iex> network =
+      ...>   Tempo.Network.new()
+      ...>   |> Tempo.Network.add_relation(:included_in, :s1, :k1)
       iex> [relation] = network.relations
       iex> {relation.type, relation.from, relation.to}
       {:included_in, :s1, :k1}
@@ -237,7 +245,10 @@ defmodule Tempo.Network do
 
   ### Examples
 
-      iex> network = Tempo.Network.new() |> Tempo.Network.add_period(:k1, []) |> Tempo.Network.add_relation(:before, :k1, :k2)
+      iex> network =
+      ...>   Tempo.Network.new()
+      ...>   |> Tempo.Network.add_period(:k1, [])
+      ...>   |> Tempo.Network.add_relation(:before, :k1, :k2)
       iex> Enum.sort(Tempo.Network.period_ids(network))
       [:k1, :k2]
 

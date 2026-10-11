@@ -36,10 +36,12 @@ defmodule Tempo.Interval.Relations do
 
   ### Examples
 
-      iex> Tempo.Interval.Relations.full() |> length()
+      iex> Tempo.Interval.Relations.full()
+      ...> |> length()
       13
 
-      iex> Tempo.Interval.Relations.full() |> hd()
+      iex> Tempo.Interval.Relations.full()
+      ...> |> hd()
       :precedes
 
   """

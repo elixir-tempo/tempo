@@ -1175,9 +1175,12 @@ defmodule Tempo.Operations do
   Members stay distinct even when they touch; `coalesce/1` merges them:
 
       iex> {:ok, both} = Tempo.union(~o"2026-01", ~o"2026-02")
-      iex> {Tempo.IntervalSet.count(both),
-      ...>  both |> Tempo.IntervalSet.coalesce() |> Tempo.IntervalSet.count()}
-      {2, 1}
+      iex> Tempo.IntervalSet.count(both)
+      2
+      iex> both
+      ...> |> Tempo.IntervalSet.coalesce()
+      ...> |> Tempo.IntervalSet.count()
+      1
 
   """
   @spec union(operand, operand | [operand], keyword()) ::
@@ -1259,7 +1262,9 @@ defmodule Tempo.Operations do
       ...>   metadata: %{free: ["Bob"]})
       iex> accumulate = fn a, b -> Map.merge(a, b, fn _key, x, y -> x ++ y end) end
       iex> {:ok, both} = Tempo.intersection(alice, bob, metadata: {:merge, accumulate})
-      iex> both |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.Interval.metadata/1)
+      iex> both
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.Interval.metadata/1)
       [%{free: ["Alice", "Bob"]}]
 
   """

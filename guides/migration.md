@@ -376,7 +376,8 @@ Tempo.relation(Tempo.today("Australia/Sydney"), ~o"2026-12-25")
 ```
 
 ```elixir
-iex> Tempo.today("Australia/Sydney") |> Tempo.floating?()
+iex> Tempo.today("Australia/Sydney")
+...> |> Tempo.floating?()
 true
 ```
 
@@ -689,7 +690,9 @@ iex> Tempo.to_iso8601(~o"2026-12-25")
 {:ok, "2026Y12M25D"}
 iex> {:ok, holidays} = Tempo.RecurrenceSet.new([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
 iex> {:error, %Tempo.Iso8601EncodeError{}} = Tempo.to_iso8601(holidays)
-iex> holidays |> Tempo.RecurrenceSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+iex> holidays
+...> |> Tempo.RecurrenceSet.members()
+...> |> Enum.map(&Tempo.to_iso8601!/1)
 ["R/../P1Y/FL12M25DN", "R/../P1Y/FL1M1DN"]
 ```
 
@@ -883,7 +886,9 @@ true
 iex> Tempo.shift(~o"2026-07-29", month: -5, day: -1)
 ~o"2026Y2M27D"
 iex> {:ok, months} = Tempo.to_interval(~o"R3/2026-01-31/P1M")
-iex> months |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.Interval.to/1)
+iex> months
+...> |> Tempo.IntervalSet.members()
+...> |> Enum.map(&Tempo.Interval.to/1)
 [~o"2026Y2M28D", ~o"2026Y3M31D", ~o"2026Y4M30D"]
 ```
 
@@ -911,7 +916,9 @@ A `:within` window with no zone bounds a value in a zone in that zone, where it 
 ```elixir
 iex> late_show = Tempo.from_iso8601!("R/2026-05-30T23:30[America/New_York]/P1D")
 iex> {:ok, shows} = Tempo.to_interval(late_show, within: ~o"2026-06-01/2026-06-03")
-iex> shows |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+iex> shows
+...> |> Tempo.IntervalSet.members()
+...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
 [31, 1, 2]
 ```
 
@@ -946,7 +953,9 @@ ISO 8601 wants the date of a date and time complete, so reading such text at all
 monthly
 #=> ~o"R3/2026Y1M31D/P1M"
 {:ok, occurrences} = Tempo.to_interval(monthly)
-occurrences |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+occurrences
+|> Tempo.IntervalSet.members()
+|> Enum.map(&Tempo.to_iso8601!/1)
 #=> ["2026Y1M31D/2M28D", "2026Y2M28D/3M31D", "2026Y3M31D/4M30D"]
 ```
 
@@ -955,7 +964,9 @@ iex> {:ok, monthly} = Tempo.RRule.parse("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01
 iex> monthly
 ~o"R3/2026Y1M31D/P1M/FL31DN"
 iex> {:ok, occurrences} = Tempo.to_interval(monthly)
-iex> occurrences |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.to_iso8601!/1)
+iex> occurrences
+...> |> Tempo.IntervalSet.members()
+...> |> Enum.map(&Tempo.to_iso8601!/1)
 ["2026Y1M31D/2M1D", "2026Y3M31D/4M1D", "2026Y5M31D/6M1D"]
 iex> Tempo.RRule.to_string(monthly)
 {:ok, "FREQ=MONTHLY;COUNT=3;BYMONTHDAY=31"}

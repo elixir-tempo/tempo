@@ -29,12 +29,22 @@ defmodule Tempo.Event.Resolver do
         @behaviour Tempo.Event.Resolver
 
         @impl true
-        def known, do: ["fiscal-year-start", "fiscal-q3"]
+        def known do
+          ["fiscal-year-start", "fiscal-q3"]
+        end
 
         @impl true
-        def date("fiscal-year-start", year, _calendar), do: Date.new(year, 4, 1)
-        def date("fiscal-q3", year, _calendar), do: Date.new(year, 10, 1)
-        def date(_name, _year, _calendar), do: {:error, :unknown_event}
+        def date("fiscal-year-start", year, _calendar) do
+          Date.new(year, 4, 1)
+        end
+
+        def date("fiscal-q3", year, _calendar) do
+          Date.new(year, 10, 1)
+        end
+
+        def date(_name, _year, _calendar) do
+          {:error, :unknown_event}
+        end
       end
 
   """

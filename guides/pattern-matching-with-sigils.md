@@ -252,7 +252,9 @@ Patterns from `~o"…"` cannot appear in a `when` clause. Elixir guards have a c
 
 ```elixir
 # Not allowed — raises ArgumentError at compile time:
-def summer?(t) when match?(~o"2026Y6M", t), do: true   # ✗
+def summer?(t) when match?(~o"2026Y6M", t) do          # ✗
+  true
+end
 
 # Use a preceding match clause:
 def summer?(t) do
@@ -261,7 +263,9 @@ end
 
 # Or a direct comparison when you actually want equality, not
 # prefix matching:
-def exactly_june_2026?(t), do: t == ~o"2026Y6M"        # ✓
+def exactly_june_2026?(t) do
+  t == ~o"2026Y6M"                                     # ✓
+end
 ```
 
 ## Expansion-time errors
@@ -311,7 +315,11 @@ Oh wait — that's **not legal** (match-context sigil inside a guard). Written c
 handle = fn date ->
   case date do
     ~o[2026Y]K ->
-      if day_of_week in 1..5, do: :workday, else: :weekend
+      if day_of_week in 1..5 do
+        :workday
+      else
+        :weekend
+      end
   end
 end
 ```

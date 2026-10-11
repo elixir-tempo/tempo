@@ -213,7 +213,9 @@ reigns = [
 `reign_spans` is now the six reigns as intervals (Psammetichus I is `~o"-664Y/-610Y"`, and so on). Because Tempo's intervals are half-open, the consecutive reigns abut exactly, so collapsing them yields the dynasty as one span:
 
 ```elixir
-reign_spans |> Tempo.IntervalSet.new!() |> Tempo.IntervalSet.coalesce()
+reign_spans
+|> Tempo.IntervalSet.new!()
+|> Tempo.IntervalSet.coalesce()
 #=> #Tempo.IntervalSet<[~o"-664Y/-525Y"]>
 ```
 

@@ -83,7 +83,8 @@ defmodule Tempo.Interval.RelationNetwork do
   ### Examples
 
       iex> net = Tempo.Interval.RelationNetwork.new([:a, :b])
-      iex> Tempo.Interval.RelationNetwork.between(net, :a, :b) |> length()
+      iex> Tempo.Interval.RelationNetwork.between(net, :a, :b)
+      ...> |> length()
       13
 
       iex> net = Tempo.Interval.RelationNetwork.new([:a, :b])
@@ -175,7 +176,9 @@ defmodule Tempo.Interval.RelationNetwork do
   ### Examples
 
       iex> alias Tempo.Interval.RelationNetwork, as: Net
-      iex> net = Net.new([:a, :b]) |> Net.constrain(:a, [:precedes, :meets], :b)
+      iex> net =
+      ...>   Net.new([:a, :b])
+      ...>   |> Net.constrain(:a, [:precedes, :meets], :b)
       iex> Net.between(net, :b, :a)
       [:met_by, :preceded_by]
 
@@ -271,7 +274,9 @@ defmodule Tempo.Interval.RelationNetwork do
   ### Examples
 
       iex> alias Tempo.Interval.RelationNetwork, as: Net
-      iex> Net.new([:a, :b]) |> Net.constrain(:a, [:precedes], :b) |> Net.consistent?()
+      iex> Net.new([:a, :b])
+      ...> |> Net.constrain(:a, [:precedes], :b)
+      ...> |> Net.consistent?()
       true
 
       iex> alias Tempo.Interval.RelationNetwork, as: Net

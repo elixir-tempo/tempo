@@ -50,7 +50,9 @@ Tempo.IntervalSet.count(set)
 For ad-hoc use, `Stream.take/2` and `Enum.take/2` work directly on the recurring interval — it's enumerable, lazily:
 
 ```elixir
-recurrence |> Stream.take(10) |> Enum.to_list()
+recurrence
+|> Stream.take(10)
+|> Enum.to_list()
 ```
 
 ### Pitfall
@@ -262,7 +264,9 @@ Free-busy answers *where* something can go. The dual question — **when will it
 
 ```elixir
 start   = ~o"2026-06-19T15:00"                        # Friday afternoon
-weekend = ~o"2026-06-19/2026-06-23" |> Enum.filter(&Tempo.weekend?/1)
+weekend =
+  ~o"2026-06-19/2026-06-23"
+  |> Enum.filter(&Tempo.weekend?/1)
 freeze  = ~o"2026-06-22T00:00/2026-06-22T06:00"       # Monday deploy freeze
 
 Tempo.shift(start, ~o"PT12H", skipping: [freeze | weekend])

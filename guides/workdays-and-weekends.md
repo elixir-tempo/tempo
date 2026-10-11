@@ -196,7 +196,9 @@ The benefit of naming a selector `Tempo.workdays(:US)` is that **the territory i
 ```elixir
 @us_workdays Tempo.workdays(:US)  # safe — :US is explicit
 
-def workdays_in(window), do: Tempo.select(window, @us_workdays)
+def workdays_in(window) do
+  Tempo.select(window, @us_workdays)
+end
 ```
 
 Because the result is an `IntervalSet`, set operations compose naturally and preserve member identity. Three common patterns:

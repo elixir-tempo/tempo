@@ -127,7 +127,8 @@ defmodule Tempo.Explain do
 
   ### Examples
 
-      iex> Tempo.Explain.explain(~o"2022Y") |> Tempo.Explain.to_string()
+      iex> Tempo.Explain.explain(~o"2022Y")
+      ...> |> Tempo.Explain.to_string()
       "The year 2022.\\nSpan: [2022, 2023).\\nIterates at :month granularity.\\nConvert it to an interval with `Tempo.to_interval/1`."
 
   """

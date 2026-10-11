@@ -31,7 +31,8 @@ The rule is: **resolution follows the type's declared precision, not the magnitu
 | `~U[2022-07-04 14:30:00.000000Z]` | `:microsecond` (sub-second precision present) |
 
 ```elixir
-Tempo.from_elixir(~U[2022-07-04 14:30:00Z]) |> Tempo.resolution()
+Tempo.from_elixir(~U[2022-07-04 14:30:00Z])
+|> Tempo.resolution()
 #=> {:second, 1}
 ```
 
@@ -56,13 +57,17 @@ Every Tempo value converts to an explicit half-open `[from, to)` span via `Tempo
 | `~U[…14:30:45.123456Z]` (µs) | `[…45.123456, …45.123457)` | 1 microsecond |
 
 ```elixir
-{:ok, interval} = Tempo.from_elixir(~U[2022-07-04 14:30:45Z]) |> Tempo.to_interval()
+{:ok, interval} =
+  Tempo.from_elixir(~U[2022-07-04 14:30:45Z])
+  |> Tempo.to_interval()
 Tempo.Interval.duration(interval)
 #=> ~o"PT1S"
 ```
 
 ```elixir
-{:ok, day} = Tempo.from_elixir(~D[2022-07-04]) |> Tempo.to_interval()
+{:ok, day} =
+  Tempo.from_elixir(~D[2022-07-04])
+  |> Tempo.to_interval()
 Tempo.Interval.duration(day)
 #=> ~o"P1D"
 ```

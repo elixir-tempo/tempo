@@ -93,7 +93,9 @@ Tempo recovers the "instant" not as a primitive point, but as **the interval of 
 
 ```elixir
 # A second-resolution timestamp is a one-second interval
-{:ok, iv} = Tempo.from_elixir(~U[2022-07-04 14:30:45Z]) |> Tempo.to_interval()
+{:ok, iv} =
+  Tempo.from_elixir(~U[2022-07-04 14:30:45Z])
+  |> Tempo.to_interval()
 Tempo.Interval.duration(iv)
 #=> ~o"PT1S"
 ```

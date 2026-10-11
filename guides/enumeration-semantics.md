@@ -383,9 +383,13 @@ Per-endpoint qualifiers attach to that endpoint's value, not to the interior val
 
 ```elixir
 iex> {:ok, interval} = Tempo.from_iso8601("1984?/2004~")
-iex> interval |> Tempo.Interval.from() |> Tempo.qualification()
+iex> interval
+...> |> Tempo.Interval.from()
+...> |> Tempo.qualification()
 :uncertain
-iex> interval |> Tempo.Interval.to() |> Tempo.qualification()
+iex> interval
+...> |> Tempo.Interval.to()
+...> |> Tempo.qualification()
 :approximate
 ```
 

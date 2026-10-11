@@ -225,7 +225,9 @@ defmodule Tempo.Interval.Cycle do
   ### Examples
 
       iex> {:ok, parts} = Tempo.Interval.Cycle.parts(~o"T22H/T2H")
-      iex> parts |> Enum.reverse() |> Tempo.Interval.Cycle.joined()
+      iex> parts
+      ...> |> Enum.reverse()
+      ...> |> Tempo.Interval.Cycle.joined()
       [~o"T22H/T2H"]
 
   """

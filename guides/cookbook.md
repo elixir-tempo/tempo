@@ -172,7 +172,8 @@ A year iterates at month granularity — the next-finer unit below what's specif
 ### How do I list every day of a month?
 
 ```elixir
-iex> Enum.take(~o"2026-06", 30) |> length()
+iex> Enum.take(~o"2026-06", 30)
+...> |> length()
 30
 ```
 
@@ -430,7 +431,10 @@ iex> Tempo.IntervalSet.map(sa_weekend, &Tempo.day/1)
 
 ```elixir
 iex> {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:SA))
-iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(3) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+iex> weekends
+...> |> Tempo.IntervalSet.walk()
+...> |> Enum.take(3)
+...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
 [19, 20, 26]
 ```
 
@@ -481,11 +485,15 @@ Time-of-day units work the same way. `~o"-1H"` is hour 23, `~o"T-1M"` is minute 
 
 ```elixir
 iex> {:ok, last_hour} = Tempo.select(~o"2026-06-15", ~o"-1H")
-iex> last_hour |> Tempo.IntervalSet.first() |> Tempo.Interval.from()
+iex> last_hour
+...> |> Tempo.IntervalSet.first()
+...> |> Tempo.Interval.from()
 ~o"2026Y6M15DT23H"
 
 iex> {:ok, last_minute} = Tempo.select(~o"2026-06-15T14", ~o"T-1M")
-iex> last_minute |> Tempo.IntervalSet.first() |> Tempo.Interval.from()
+iex> last_minute
+...> |> Tempo.IntervalSet.first()
+...> |> Tempo.Interval.from()
 ~o"2026Y6M15DT14H59M"
 ```
 
@@ -749,7 +757,8 @@ iex> Tempo.shift(~o"156X", ~o"P1Y")
 iex> Tempo.shift(~o"1985-XX-15", ~o"P1D")
 # The day after the 15th of some month is its 16th: ~o"1985YXXM16D".
 
-iex> Tempo.shift(~o"156X-06-XX", ~o"P1Y") |> Tempo.IntervalSet.count()
+iex> Tempo.shift(~o"156X-06-XX", ~o"P1Y")
+...> |> Tempo.IntervalSet.count()
 # The Junes of the 1560s, a year on — ten disjoint month spans: 10.
 ```
 
@@ -1149,7 +1158,8 @@ iex> {Tempo.year(ides), Tempo.month(ides), Tempo.day(ides)}
 
 ```elixir
 iex> decade = ~o"156X"
-iex> Enum.to_list(decade) |> Enum.map(&Tempo.year/1)
+iex> Enum.to_list(decade)
+...> |> Enum.map(&Tempo.year/1)
 [1560, 1561, 1562, 1563, 1564, 1565, 1566, 1567, 1568, 1569]
 ```
 

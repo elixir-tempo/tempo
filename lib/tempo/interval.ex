@@ -2024,7 +2024,8 @@ defmodule Tempo.Interval do
   ### Examples
 
       iex> iv = %Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-20"}
-      iex> Tempo.Interval.from(iv) |> Tempo.day()
+      iex> Tempo.Interval.from(iv)
+      ...> |> Tempo.day()
       15
 
       iex> Tempo.Interval.from(~o"2026-06")
@@ -2077,7 +2078,8 @@ defmodule Tempo.Interval do
   ### Examples
 
       iex> iv = %Tempo.Interval{from: ~o"2026-06-15", to: ~o"2026-06-20"}
-      iex> Tempo.Interval.to(iv) |> Tempo.day()
+      iex> Tempo.Interval.to(iv)
+      ...> |> Tempo.day()
       20
 
       iex> Tempo.Interval.to(~o"2027-04-09")

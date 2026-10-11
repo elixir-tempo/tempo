@@ -121,7 +121,9 @@ defmodule Tempo.Schedule do
   ### Examples
 
       iex> import Tempo.Sigils
-      iex> schedule = Tempo.Schedule.new() |> Tempo.Schedule.task(:a, duration: ~o"P2D")
+      iex> schedule =
+      ...>   Tempo.Schedule.new()
+      ...>   |> Tempo.Schedule.task(:a, duration: ~o"P2D")
       iex> Map.keys(schedule.network.periods)
       [:a]
 

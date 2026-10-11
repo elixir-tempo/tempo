@@ -198,7 +198,9 @@ For the canonical instant-set form (touching members merged into one span), coal
 
 ```elixir
 iex> {:ok, r} = Tempo.union(~o"2022Y", ~o"2023Y")
-iex> r |> Tempo.IntervalSet.coalesce() |> Tempo.IntervalSet.count()
+iex> r
+...> |> Tempo.IntervalSet.coalesce()
+...> |> Tempo.IntervalSet.count()
 1                                    # [2022-01-01, 2024-01-01)
 ```
 
@@ -321,7 +323,9 @@ iex> Tempo.IntervalSet.count(free)
 iex> Enum.count(free)
 62                                   # 62 sub-points: 31 + 31 days
 
-iex> free |> Tempo.IntervalSet.members() |> Enum.filter(&Tempo.at_least?(&1, ~o"P1M"))
+iex> free
+...> |> Tempo.IntervalSet.members()
+...> |> Enum.filter(&Tempo.at_least?(&1, ~o"P1M"))
 [~o"2026Y1M1D/2M1D", ~o"2026Y3M1D/4M1D"]   # both windows ≥ 1 month
 ```
 

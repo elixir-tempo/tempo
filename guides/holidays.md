@@ -201,11 +201,26 @@ defmodule MyApp.HolidayCalendar do
     end
   end
 
-  defp territory_slug(:US), do: "usa"
-  defp territory_slug(:GB), do: "united-kingdom"
-  defp territory_slug(:DE), do: "germany"
-  defp territory_slug(:JP), do: "japan"
-  defp territory_slug(:SA), do: "saudi-arabia"
+  defp territory_slug(:US) do
+    "usa"
+  end
+
+  defp territory_slug(:GB) do
+    "united-kingdom"
+  end
+
+  defp territory_slug(:DE) do
+    "germany"
+  end
+
+  defp territory_slug(:JP) do
+    "japan"
+  end
+
+  defp territory_slug(:SA) do
+    "saudi-arabia"
+  end
+
   # extend as needed
 end
 ```
