@@ -603,9 +603,9 @@ defmodule Tempo.Validation do
   end
 
   # An endpoint validates against its own calendar when it carries one —
-  # a per-endpoint IXDTF `u-ca` suffix can make one endpoint of an
-  # interval calendar-distinct from the other — falling back to the
-  # interval-level calendar otherwise.
+  # an IXDTF `u-ca` suffix on an endpoint names the interval's calendar,
+  # which both ends then carry — falling back to the interval-level
+  # calendar otherwise.
   defp endpoint_calendar(%Tempo{calendar: calendar}, _default) when not is_nil(calendar) do
     calendar
   end

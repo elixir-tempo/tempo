@@ -59,6 +59,8 @@ These keep their names and change their meaning:
 
 * **An interval with a zone on its start only** — the zone applies to its end too, as ISO 8601-1 says.
 
+* **An interval with ends of two calendars** — an error, where 1.x kept each end in its own: `Tempo.Interval.new/1` refuses the pair, and in text a `[u-ca=…]` on either end names the calendar of both. Convert one end with `Tempo.to_calendar/2` first.
+
 * **`duration/1` and `duration/2`** — counted in the unit the endpoints are written in, where 1.x counted seconds.
 
 * **`shift/2` on a zoned value** — hours, minutes and seconds are time on the time line, where 1.x added them to the wall clock.

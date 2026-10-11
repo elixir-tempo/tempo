@@ -567,11 +567,24 @@ defmodule Tempo.CalendarTest do
             Tempo.from_iso8601!("5786-06-15/5786-07-01", Calendrical.Hebrew),
             Tempo.from_iso8601!("{5786-06-15,5786-07-01}", Calendrical.Hebrew),
             Tempo.from_iso8601!("R3/5787Y3M25D/P1Y", Calendrical.Hebrew),
-            Tempo.from_iso8601!("2026-06-01[u-ca=gregory]/5786-10-01[u-ca=hebrew]"),
-            Tempo.from_iso8601!("1447Y9M1D[u-ca=islamic-civil]/2026Y6M1D")
+            Tempo.from_iso8601!("5786-06-01[u-ca=hebrew]/5786-10-01[u-ca=hebrew]"),
+            Tempo.from_iso8601!("1447Y9M1D[u-ca=islamic-civil]/1447Y10M1D")
           ] do
         assert Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
       end
+    end
+
+    test "an interval is in one calendar, whichever end names it" do
+      on_the_start = Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]/5786-10-01")
+      on_the_end = Tempo.from_iso8601!("5786-06-15/5786-10-01[u-ca=hebrew]")
+      on_both = Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]/5786-10-01[u-ca=hebrew]")
+
+      assert on_the_start == Tempo.from_iso8601!("5786-06-15/5786-10-01", Calendrical.Hebrew)
+      assert on_the_end == on_the_start
+      assert on_both == on_the_start
+
+      assert {:error, %Tempo.ParseError{}} =
+               Tempo.from_iso8601("2026-06-01[u-ca=gregory]/5786-10-01[u-ca=hebrew]")
     end
 
     test "what a value gives is equal however the value was made" do

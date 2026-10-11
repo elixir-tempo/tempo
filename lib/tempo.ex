@@ -1237,6 +1237,7 @@ defmodule Tempo do
          # Endpoint calendars first: a group is expanded in its value's own
          # calendar, so a Hebrew endpoint's quarter holds Hebrew months.
          parsed = maybe_resolve_endpoint_calendars(parsed, requested_calendar),
+         :ok <- in_one_calendar(parsed),
          {:ok, expanded} <- Group.expand_groups(parsed, effective_calendar),
          # Propagate before validating. `2026-09-02T18:00/2026-09-02T20:00[Australia/Melbourne]`
          # binds the suffix to the `to` endpoint, so an unpropagated pair reaches
@@ -1319,34 +1320,29 @@ defmodule Tempo do
     %{set | set: Enum.map(members, fun), except: Enum.map(except, fun)}
   end
 
-  # A per-endpoint IXDTF `u-ca` suffix (`1447Y9M1D[u-ca=islamic-civil]/…`,
-  # the form `to_iso8601/1` emits for non-Gregorian interval endpoints)
-  # determines that endpoint's calendar the same way a top-level suffix
-  # does for a whole value — otherwise the endpoint's units would be
-  # interpreted in the default calendar while its tag claims another,
-  # breaking the serialise/re-parse round trip. Applies only when the
-  # caller didn't choose a calendar explicitly: an explicit calendar
-  # always wins.
+  # An IXDTF `u-ca` suffix on an end of an interval
+  # (`1447Y9M1D[u-ca=islamic-civil]/…`) names the calendar of the interval:
+  # an interval is in one calendar, so an end that names none takes the
+  # other's, and each end's units are read in it, as a top-level suffix has
+  # a whole value's read. Two ends that name different calendars are
+  # refused (`in_one_calendar/1`). Applies only when the caller didn't
+  # choose a calendar explicitly: an explicit calendar always wins.
   defp maybe_resolve_endpoint_calendars(%Tempo.Interval{} = interval, :from_ixdtf_or_default) do
-    %{
-      interval
-      | from: resolve_endpoint_calendar(interval.from),
-        to: resolve_endpoint_calendar(interval.to)
-    }
+    {from, to} = Interval.propagate_calendar({interval.from, interval.to})
+
+    %{interval | from: resolve_endpoint_calendar(from), to: resolve_endpoint_calendar(to)}
   end
 
   defp maybe_resolve_endpoint_calendars(%Tempo.Set{} = set, :from_ixdtf_or_default) do
     map_members(set, &maybe_resolve_endpoint_calendars(&1, :from_ixdtf_or_default))
   end
 
-  # A member of a set, and each end of a range in one, is in the calendar its
-  # own suffix names, as an end of an interval is.
+  # A member of a set is in the calendar its own suffix names, and a range
+  # in one is in one calendar, as an interval is.
   defp maybe_resolve_endpoint_calendars(%Tempo.Range{} = range, :from_ixdtf_or_default) do
-    %{
-      range
-      | first: resolve_endpoint_calendar(range.first),
-        last: resolve_endpoint_calendar(range.last)
-    }
+    {first, last} = Interval.propagate_calendar({range.first, range.last})
+
+    %{range | first: resolve_endpoint_calendar(first), last: resolve_endpoint_calendar(last)}
   end
 
   defp maybe_resolve_endpoint_calendars(%__MODULE__{} = member, :from_ixdtf_or_default) do
@@ -1355,6 +1351,47 @@ defmodule Tempo do
 
   defp maybe_resolve_endpoint_calendars(other, _requested_calendar) do
     other
+  end
+
+  # An interval, and a range of a set, is in one calendar: its ends name one
+  # between them, and two that name different ones are no one expression.
+  defp in_one_calendar(%Interval{
+         from: %__MODULE__{calendar: from_calendar},
+         to: %__MODULE__{calendar: to_calendar}
+       })
+       when from_calendar != to_calendar do
+    {:error, two_calendars("An interval", from_calendar, to_calendar)}
+  end
+
+  defp in_one_calendar(%Tempo.Range{
+         first: %__MODULE__{calendar: first_calendar},
+         last: %__MODULE__{calendar: last_calendar}
+       })
+       when first_calendar != last_calendar do
+    {:error, two_calendars("A range", first_calendar, last_calendar)}
+  end
+
+  defp in_one_calendar(%Tempo.Set{set: members, except: except}) do
+    Enum.find_value(members ++ except, :ok, &not_in_one_calendar/1)
+  end
+
+  defp in_one_calendar(_other) do
+    :ok
+  end
+
+  defp not_in_one_calendar(member) do
+    case in_one_calendar(member) do
+      :ok -> nil
+      {:error, _exception} = error -> error
+    end
+  end
+
+  defp two_calendars(what, first, second) do
+    ParseError.exception(
+      reason:
+        "#{what} is in one calendar, and its ends name two: " <>
+          "#{Calendars.name(first)} and #{Calendars.name(second)}"
+    )
   end
 
   defp resolve_endpoint_calendar(%__MODULE__{extended: %{calendar: type}} = endpoint)
@@ -15771,6 +15808,10 @@ defmodule Tempo do
           end
 
         {:error, FloatingTempoError.exception(operation: :measure, value: floating)}
+
+      # Two values of different calendars are no two ends of one interval.
+      from.calendar != to.calendar ->
+        {:error, Interval.different_calendars_error(from, to, :duration)}
 
       true ->
         measured_between(from, to)

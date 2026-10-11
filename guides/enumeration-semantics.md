@@ -397,7 +397,7 @@ When the interval is enumerated forward from its start, each yielded value keeps
 
 ### 5.3. IXDTF metadata propagation on intervals
 
-Per-endpoint IXDTF suffixes (`[Europe/Paris]`) attach to that endpoint. A top-level IXDTF suffix on an interval propagates to each endpoint that does not already carry its own. Iteration walks forward from `:from`, so yielded values carry `:from`'s zone, offset, and calendar.
+Per-endpoint IXDTF suffixes (`[Europe/Paris]`) attach to that endpoint. A top-level IXDTF suffix on an interval propagates to each endpoint that does not already carry its own. A calendar is the interval's: an interval is in one calendar, so `[u-ca=hebrew]` written on either endpoint names the calendar of both, and two endpoints that name different calendars are an error. Iteration walks forward from `:from`, so yielded values carry `:from`'s zone, offset, and calendar.
 
 ### 5.4. Calendar-aware increment
 

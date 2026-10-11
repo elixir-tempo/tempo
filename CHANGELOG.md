@@ -8,6 +8,8 @@
 
 * `Calendar.ISO`'s own weeks are ISO 8601's, and its weeks of a month TR35's, the first the one that holds four or more of the month's days: `~o"2023Y1w1K"` is 2 January 2023 and `~o"2026Y8M1W"` is 3 to 10 August. A value written `[u-ca=gregory]` keeps the Gregorian calendar's rules, which gave 26 December 2022 and 27 July to 3 August.
 
+* An interval is in one calendar. `Tempo.Interval.new/1` returns a `Tempo.IntervalEndpointsError` for two ends of different calendars, where it answered an interval of both, and in text a `[u-ca=…]` on either end names the calendar of both ends, two that name different calendars being a `Tempo.ParseError`.
+
 * A solar term is the calendar's to answer, and `Calendar.ISO` reckons none: `(qingming)e` on a value that names no calendar is a `Tempo.EventError` whose reason is `{:no_solar_terms, Calendar.ISO}`, as `Tempo.Event.date("qingming", 2026)` is. A value of `[u-ca=gregory]` or of a lunisolar calendar has its solar terms, and `Tempo.Event.date/3` takes the calendar to ask.
 
 * An operation on any value is documented on `Tempo` alone: a relation, a certainty and a length predicate (`Tempo.before?/2`, `Tempo.at_least?/2`) are no longer documented on `Tempo.Interval` as well, nor a set operation, a selection and a formatted string in modules of their own. The engine's modules, which the documentation grouped as Internals, are no longer documented either.

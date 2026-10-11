@@ -169,14 +169,25 @@ defmodule Tempo.Iso8601.InspectTest do
       assert iv == Tempo.from_iso8601!("5786Y9M30D[u-ca=hebrew]/10M1D[u-ca=hebrew]")
     end
 
-    test "a deliberately mixed pair keeps both calendars" do
-      # Propagation only fills an endpoint carrying no tag of its own, and
-      # only backward, so a `from` that names its calendar keeps it.
-      iv = Tempo.from_iso8601!("1447Y9M1D[u-ca=islamic-civil]/2026Y6M1D")
+    test "a calendar written on the start alone applies to both endpoints" do
+      # An interval is in one calendar, so a suffix on either end names it.
+      # This was read as a pair of two calendars, an Islamic start and an
+      # end in `Calendar.ISO`.
+      iv = Tempo.from_iso8601!("1447Y9M1D[u-ca=islamic-civil]/10M1D")
 
       assert iv.from.calendar == Calendrical.Islamic.Civil
-      assert iv.to.calendar == Calendar.ISO
-      assert Tempo.to_iso8601!(iv) =~ "[u-ca=islamic-civil]/"
+      assert iv.to.calendar == Calendrical.Islamic.Civil
+      assert iv == Tempo.from_iso8601!("1447Y9M1D/10M1D[u-ca=islamic-civil]")
+      assert Tempo.to_iso8601!(iv) == "1447Y9M1D/10M1D[u-ca=islamic-civil]"
+    end
+
+    test "two endpoints that name different calendars are refused" do
+      assert {:error, %Tempo.ParseError{} = error} =
+               Tempo.from_iso8601("1447Y9M1D[u-ca=islamic-civil]/5786Y10M1D[u-ca=hebrew]")
+
+      assert Exception.message(error) ==
+               "An interval is in one calendar, and its ends name two: " <>
+                 "Calendrical.Islamic.Civil and Calendrical.Hebrew"
     end
 
     test "Interval with no extended info renders cleanly (no empty brackets)" do

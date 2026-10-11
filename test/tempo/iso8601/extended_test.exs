@@ -627,7 +627,7 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert interval.to.extended.zone_id == "Europe/London"
     end
 
-    test "endpoint-local IXDTF supports `u-ca` calendar identifiers" do
+    test "a `u-ca` calendar identifier on one endpoint names the interval's calendar" do
       assert {:ok, interval} =
                Tempo.from_iso8601(
                  "2022-06-15T10:00[Europe/Paris][u-ca=hebrew]/2022-06-15T12:00[Europe/Paris]"
@@ -636,7 +636,7 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert interval.from.extended.zone_id == "Europe/Paris"
       assert interval.from.calendar == Calendrical.Hebrew
       assert interval.to.extended.zone_id == "Europe/Paris"
-      assert interval.to.calendar == Calendar.ISO
+      assert interval.to.calendar == Calendrical.Hebrew
 
       # Regression (OTP ≤ 28): the Hebrew-read units resolve to a
       # pre-common-era Gregorian instant (year −1738), which used to

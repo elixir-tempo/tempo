@@ -178,11 +178,13 @@ defmodule Tempo.Interval do
 
   * `{:ok, t()}` on success.
 
-  * `{:error, reason}` when endpoints are invalid, `:from` is not
-    strictly earlier than `:to` (a zero-extent interval is not a
-    valid interval under the half-open convention; see
-    `Tempo.Interval.empty?/1` for the predicate that detects
-    malformed struct literals), or required fields are missing.
+  * `{:error, reason}` when endpoints are invalid, the two ends are of
+    different calendars (an interval is in one calendar: convert one
+    end with `Tempo.to_calendar/2`), `:from` is not strictly earlier
+    than `:to` (a zero-extent interval is not a valid interval under
+    the half-open convention; see `Tempo.Interval.empty?/1` for the
+    predicate that detects malformed struct literals), or required
+    fields are missing.
 
   ### Examples
 
@@ -226,6 +228,7 @@ defmodule Tempo.Interval do
          from <- Keyword.get(options, :from),
          to <- Keyword.get(options, :to),
          :ok <- validate_endpoint_types(from, to),
+         :ok <- validate_one_calendar(from, to),
          {from, to} = propagate_zone({from, to}),
          :ok <- validate_from_to_order(from, to),
          {:ok, unit} <- validate_unit(Keyword.get(options, :unit), from),
@@ -355,7 +358,7 @@ defmodule Tempo.Interval do
 
   * `{:ok, interval}` on success.
 
-  * `{:error, reason}` when the endpoints are of incompatible
+  * `{:error, reason}` when the endpoints are of different
     calendars, or `from` is not strictly earlier than `to`.
 
   ### Examples
@@ -436,6 +439,29 @@ defmodule Tempo.Interval do
     end
   end
 
+  # An interval is in one calendar: two values of different calendars are no
+  # two ends of one. Neither is converted for the caller, since a month or a
+  # year of one calendar is no month or year of another, and the interval's
+  # resolution is the caller's to choose.
+  defp validate_one_calendar(%Tempo{calendar: calendar}, %Tempo{calendar: calendar}) do
+    :ok
+  end
+
+  defp validate_one_calendar(%Tempo{calendar: from_calendar}, %Tempo{calendar: to_calendar}) do
+    {:error,
+     IntervalEndpointsError.exception(
+       operation: :new,
+       reason:
+         "The start is in #{Calendars.name(from_calendar)} and the end in " <>
+           "#{Calendars.name(to_calendar)}. An interval is in one calendar: convert one " <>
+           "end with `Tempo.to_calendar/2`."
+     )}
+  end
+
+  defp validate_one_calendar(_from, _to) do
+    :ok
+  end
+
   @doc false
   # A single interval names one span, and a span cannot straddle the
   # floating and universal time lines — so a zone or offset on either
@@ -450,13 +476,15 @@ defmodule Tempo.Interval do
   # so a constructed interval and its re-parsed ISO 8601 string cannot
   # disagree.
   #
-  # The calendar's rule is the parser's alone. In text a trailing `[u-ca=…]`
-  # is how both ends are written; two values given to `new/1` are each in the
-  # calendar they have, and naming the start's units as the end's calendar
-  # would make 1 January 2025 a day of the Hebrew year 2025. The rule reads
-  # the name a suffix gave an endpoint, which an endpoint holds only while
-  # its text is being read: the parser drops it once the calendars are
-  # settled, so for any other pair of values this rule does nothing.
+  # The calendar's rule is the parser's alone. In text a `[u-ca=…]` on
+  # either end is how both ends are written; two values given to `new/1` are
+  # each in the calendar they have, which must be one calendar
+  # (`validate_one_calendar/2`), since naming the start's units as the end's
+  # calendar would make 1 January 2025 a day of the Hebrew year 2025. The
+  # rule reads the name a suffix gave an endpoint, which an endpoint holds
+  # only while its text is being read: the parser drops it once the
+  # calendars are settled, so for any other pair of values this rule does
+  # nothing.
   def propagate_endpoint_frame(%Tempo{} = from, %Tempo{} = to) do
     {from, to}
     |> propagate_zone()
@@ -541,22 +569,35 @@ defmodule Tempo.Interval do
     end
   end
 
-  # A `[u-ca=…]` at the end names the calendar the interval is written in,
-  # and an endpoint carrying none of its own inherits it — the same
-  # backward flow as the zone. Without this,
-  # `1448Y9M24D/25D[u-ca=islamic-civil]` parses as a *mixed*
-  # Gregorian/Islamic pair, which cannot be what it means: the abbreviated
-  # `25D` is only readable against `from`'s own year and month.
+  @doc false
+  # A `[u-ca=…]` on either end names the calendar the interval is written
+  # in: an interval is in one calendar, so an end carrying no name of its
+  # own takes the other's. Without this, `1448Y9M24D/25D[u-ca=islamic-civil]`
+  # and `1448Y9M24D[u-ca=islamic-civil]/25D` would each be read as a pair of
+  # two calendars, which neither can mean: the abbreviated `25D` is only
+  # readable against the start's own year and month.
   #
-  # Never overwrites, so a deliberately mixed pair
-  # (`1447Y9M1D[u-ca=islamic-civil]/2026Y6M1D`) and a pair tagging both
-  # ends keep exactly the calendars they name.
-  defp propagate_calendar({%Tempo{} = from, %Tempo{} = to}) do
-    if is_nil(tagged_calendar(from)) and not is_nil(tagged_calendar(to)) do
-      {copy_calendar(to, from), to}
-    else
-      {from, to}
-    end
+  # Never overwrites: two ends that each name a calendar keep what they
+  # name, and the reader refuses the pair where the two differ.
+  @spec propagate_calendar({Tempo.t(), Tempo.t()}) :: {Tempo.t(), Tempo.t()}
+  def propagate_calendar({%Tempo{} = from, %Tempo{} = to}) do
+    propagate_calendar(from, to, tagged_calendar(from), tagged_calendar(to))
+  end
+
+  def propagate_calendar({from, to}) do
+    {from, to}
+  end
+
+  defp propagate_calendar(from, to, nil, tagged) when not is_nil(tagged) do
+    {copy_calendar(to, from), to}
+  end
+
+  defp propagate_calendar(from, to, tagged, nil) when not is_nil(tagged) do
+    {from, copy_calendar(from, to)}
+  end
+
+  defp propagate_calendar(from, to, _from_tagged, _to_tagged) do
+    {from, to}
   end
 
   defp tagged_calendar(%Tempo{extended: %{calendar: calendar}}) when not is_nil(calendar) do
@@ -2627,10 +2668,12 @@ defmodule Tempo.Interval do
     end
   end
 
+  @doc false
   # Cross-calendar endpoints produce nonsense arithmetic — the Gregorian
   # seconds of Hebrew 5786 and Gregorian 2026 measure from different epochs —
   # so they are refused, with how to fix it.
-  defp different_calendars_error(from, to, operation) do
+  @spec different_calendars_error(Tempo.t(), Tempo.t(), atom()) :: Exception.t()
+  def different_calendars_error(from, to, operation) do
     ArgumentError.exception(
       "`Tempo.Interval.#{operation}` requires both endpoints in the same calendar. " <>
         "Got #{Calendars.name(from.calendar)} and #{Calendars.name(to.calendar)}. " <>

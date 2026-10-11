@@ -72,6 +72,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **An interval is in one calendar** — the user, 2026-10-12: "An expression (a tempo, an interval or duration) can only be in a single calendar. No mixing calendars across endpoints". `Tempo.Interval.new/1` returns an error for two ends of different calendars, and in text a `[u-ca=…]` on either end names the calendar of both, two that differ being an error. 2026-10-12.
+
 * [x] **Calendrical from GitHub again** — the path dependency of the callback work is gone: `mix.exs` names `github: "elixir-localize/calendrical", branch: "main"`, and the locks are at Calendrical `06aa274` and Localize `d01dead0`, the heads pushed on 2026-10-10. 2026-10-11.
 
 * [x] **Traditional months that are sets or masks** — `5787Y{5,6}m`, `1Xm`, `{-1}m`, `X+m` and `{5}+m` name the months their calendar numbers so, in a value with one year, in a walk of several and in a rule's selection, from the year's months as Calendrical names them (`Calendrical.traditional_months/2`); a number names no leap month, so a range passes over the one between its ends. Found beside it and fixed: a set of traditional months alone was read as a digit of a mask, one number its year lacks was the bare `:invalid_date`, a walked traditional month could not be converted, and a calendar not yet loaded was answered for as one with no leap months. Four probes of optional callbacks and the call of `new/3` went with it. 2026-10-10.

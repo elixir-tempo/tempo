@@ -286,21 +286,36 @@ defmodule Tempo.OneReadingTest do
   end
 
   describe "Interval.new/2" do
-    # The start was named as a day of the Hebrew year 2025.
-    test "keeps each end in the calendar it has" do
+    # An interval is in one calendar. The start was once named as a day of
+    # the Hebrew year 2025, and after that each end kept the calendar it
+    # had, an interval of two calendars.
+    test "refuses two ends of different calendars" do
       hebrew = Tempo.from_iso8601!("5786Y6M15D[u-ca=hebrew]")
-      {:ok, mixed} = Interval.new(~o"2025-01-01", hebrew)
 
-      assert {mixed.from.calendar, mixed.to.calendar} ==
-               {Calendar.ISO, Calendrical.Hebrew}
+      assert {:error, %Tempo.IntervalEndpointsError{} = error} =
+               Interval.new(~o"2025-01-01", hebrew)
 
-      {:ok, text} = Tempo.to_iso8601(mixed)
-      again = Tempo.from_iso8601!(text)
+      assert Exception.message(error) ==
+               "The start is in Calendar.ISO and the end in Calendrical.Hebrew. An interval " <>
+                 "is in one calendar: convert one end with `Tempo.to_calendar/2`."
 
-      assert {again.from.calendar, again.to.calendar} ==
-               {Calendrical.Gregorian, Calendrical.Hebrew}
+      assert {:error, %Tempo.IntervalEndpointsError{}} =
+               Interval.new(from: hebrew, to: ~o"2026-07-01")
+
+      assert {:error, %Tempo.IntervalEndpointsError{}} =
+               Interval.new(from: ~o"2025-01-01", through: hebrew)
 
       assert {:error, %ArgumentError{}} = Tempo.duration(~o"2025-01-01", hebrew)
+    end
+
+    test "takes an end converted to the start's calendar" do
+      hebrew = Tempo.from_iso8601!("5786Y6M15D[u-ca=hebrew]")
+      {:ok, start} = Tempo.to_calendar(~o"2025-01-01", Calendrical.Hebrew)
+
+      assert {:ok, interval} = Interval.new(start, hebrew)
+
+      assert {Interval.from(interval).calendar, Interval.to(interval).calendar} ==
+               {Calendrical.Hebrew, Calendrical.Hebrew}
     end
   end
 
