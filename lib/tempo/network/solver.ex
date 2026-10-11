@@ -1,6 +1,4 @@
 defmodule Tempo.Network.Solver do
-  use Tempo.Border
-
   @moduledoc """
   Consistency checking and constraint propagation for a chronological
   network, by solving its Simple Temporal Problem.
@@ -66,10 +64,14 @@ defmodule Tempo.Network.Solver do
   """
   @spec consistent?(Network.t()) :: boolean()
   def consistent?(%Network{} = network) do
-    case solved(network) do
-      {:ok, _solution} -> true
-      {:error, :inconsistent} -> false
-      {:error, exception} -> raise exception
+    if Calendars.outside?(network) do
+      consistent?(Calendars.inside(network))
+    else
+      case solved(network) do
+        {:ok, _solution} -> true
+        {:error, :inconsistent} -> false
+        {:error, exception} -> raise exception
+      end
     end
   end
 
@@ -105,9 +107,13 @@ defmodule Tempo.Network.Solver do
   """
   @spec propagate(Network.t()) :: {:ok, Network.t()} | {:error, :inconsistent | Exception.t()}
   def propagate(%Network{} = network) do
-    with {:ok, %{normalized: normalized, dist: distances}} <- solved(network),
-         {:ok, periods} <- tightened_periods(network.periods, distances, normalized) do
-      {:ok, %{network | periods: periods}}
+    if Calendars.outside?(network) do
+      network |> Calendars.inside() |> propagate() |> Calendars.outside()
+    else
+      with {:ok, %{normalized: normalized, dist: distances}} <- solved(network),
+           {:ok, periods} <- tightened_periods(network.periods, distances, normalized) do
+        {:ok, %{network | periods: periods}}
+      end
     end
   end
 
@@ -222,6 +228,14 @@ defmodule Tempo.Network.Solver do
   @spec contemporaneity(Network.t(), term(), term()) ::
           :certain | :possible | :impossible | {:error, :inconsistent | Exception.t()}
   def contemporaneity(%Network{} = network, p1, p2) do
+    if Calendars.outside?(network) do
+      contemporaneity(Calendars.inside(network), p1, p2)
+    else
+      overlap_of(network, p1, p2)
+    end
+  end
+
+  defp overlap_of(network, p1, p2) do
     with {:ok, %{dist: distances}} <- solved(network) do
       cond do
         sure_overlap?(distances, p1, p2) -> :certain
@@ -351,11 +365,15 @@ defmodule Tempo.Network.Solver do
   @spec relation(Network.t(), term(), term()) ::
           atom() | [atom()] | {:error, :inconsistent | :unknown_period | Exception.t()}
   def relation(%Network{} = network, p1, p2) do
-    with :ok <- Network.check(network),
-         :ok <- known_period(network, p1),
-         :ok <- known_period(network, p2),
-         {:ok, %{dist: distances}} <- solved(network) do
-      feasible_relations(distances, p1, p2)
+    if Calendars.outside?(network) do
+      relation(Calendars.inside(network), p1, p2)
+    else
+      with :ok <- Network.check(network),
+           :ok <- known_period(network, p1),
+           :ok <- known_period(network, p2),
+           {:ok, %{dist: distances}} <- solved(network) do
+        feasible_relations(distances, p1, p2)
+      end
     end
   end
 
@@ -535,9 +553,13 @@ defmodule Tempo.Network.Solver do
   def trace(network, boundary, options \\ [])
 
   def trace(%Network{} = network, {edge, _id} = boundary, options) when edge in [:start, :end] do
-    with :ok <- Network.check(network),
-         {:ok, bound} <- trace_bound(options) do
-      traced(network, boundary, bound)
+    if Calendars.outside?(network) do
+      network |> Calendars.inside() |> trace(boundary, options) |> Calendars.outside()
+    else
+      with :ok <- Network.check(network),
+           {:ok, bound} <- trace_bound(options) do
+        traced(network, boundary, bound)
+      end
     end
   end
 

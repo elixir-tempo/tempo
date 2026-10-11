@@ -1,6 +1,4 @@
 defmodule Tempo.Set do
-  use Tempo.Border
-
   @moduledoc """
   A Tempo-valued set — either **all-of** (`{a, b, c}` in ISO
   8601-2, free/busy semantics) or **one-of** (`[a, b, c]`,

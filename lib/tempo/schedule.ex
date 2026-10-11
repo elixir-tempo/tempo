@@ -1,6 +1,4 @@
 defmodule Tempo.Schedule do
-  use Tempo.Border
-
   @moduledoc """
   Constraint-based project scheduling over `Tempo.Network`.
 
@@ -128,7 +126,10 @@ defmodule Tempo.Schedule do
   """
   @spec task(t(), term(), keyword()) :: t()
   def task(%__MODULE__{network: network} = schedule, id, options \\ []) do
-    %{schedule | network: add_task(network, id, options, task_options(options))}
+    options = Calendars.inside(options)
+    network = add_task(network, id, options, task_options(options))
+
+    %{schedule | network: Calendars.outside(network)}
   end
 
   @doc """
@@ -171,17 +172,24 @@ defmodule Tempo.Schedule do
   @spec solve(t()) ::
           {:ok, %{optional(term()) => ScheduledTask.t()}}
           | {:error, :infeasible | Exception.t()}
-  def solve(%__MODULE__{network: network}) do
-    case Solver.propagate(network) do
-      {:ok, propagated} ->
-        {:ok, Map.new(propagated.periods, fn {id, period} -> {id, scheduled(id, period)} end)}
-
-      {:error, :inconsistent} ->
-        {:error, :infeasible}
-
-      {:error, _reason} = error ->
-        error
+  def solve(%__MODULE__{network: network} = schedule) do
+    if Calendars.outside?(schedule) do
+      schedule |> Calendars.inside() |> solve() |> Calendars.outside()
+    else
+      solved(Solver.propagate(network))
     end
+  end
+
+  defp solved({:ok, propagated}) do
+    {:ok, Map.new(propagated.periods, fn {id, period} -> {id, scheduled(id, period)} end)}
+  end
+
+  defp solved({:error, :inconsistent}) do
+    {:error, :infeasible}
+  end
+
+  defp solved({:error, _reason} = error) do
+    error
   end
 
   @doc """
@@ -215,6 +223,7 @@ defmodule Tempo.Schedule do
   @spec critical_path(%{optional(term()) => ScheduledTask.t()}) :: [term()]
   def critical_path(plan) when is_map(plan) do
     plan
+    |> Calendars.inside()
     |> Map.values()
     |> Enum.filter(& &1.critical?)
     |> Enum.sort_by(&Interval.from(&1.early), &start_not_after?/2)
@@ -252,9 +261,13 @@ defmodule Tempo.Schedule do
   @spec span(%{optional(term()) => ScheduledTask.t()}) ::
           Tempo.Interval.t() | {:error, Exception.t()}
   def span(plan) when is_map(plan) do
-    case plan |> Map.values() |> Enum.map(& &1.early) do
-      [_ | _] = schedules -> span_of(schedules)
-      [] -> {:error, no_span("A plan with no tasks has no span.")}
+    if Calendars.outside?(plan) do
+      plan |> Calendars.inside() |> span() |> Calendars.outside()
+    else
+      case plan |> Map.values() |> Enum.map(& &1.early) do
+        [_ | _] = schedules -> span_of(schedules)
+        [] -> {:error, no_span("A plan with no tasks has no span.")}
+      end
     end
   end
 

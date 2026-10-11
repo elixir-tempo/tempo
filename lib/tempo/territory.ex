@@ -1,6 +1,4 @@
 defmodule Tempo.Territory do
-  use Tempo.Border
-
   @moduledoc """
   Territory resolution — the bridge between the CLDR/BCP 47
   territory world (`:US`, `:SA`, `:GB`) and Tempo's

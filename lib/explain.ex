@@ -38,8 +38,6 @@ defmodule Tempo.Explanation do
 end
 
 defmodule Tempo.Explain do
-  use Tempo.Border
-
   import Kernel, except: [to_string: 1]
 
   @moduledoc """
@@ -90,7 +88,7 @@ defmodule Tempo.Explain do
   """
   @spec explain(term()) :: Explanation.t()
   def explain(value) do
-    value = as_resolved(value)
+    value = value |> Calendars.inside() |> as_resolved()
     %Explanation{kind: classify(value), parts: explain_parts(value)}
   end
 

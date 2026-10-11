@@ -1,7 +1,5 @@
 if Code.ensure_loaded?(JSCalendar) do
   defmodule Tempo.JSCalendar do
-    use Tempo.Border
-
     @moduledoc """
     Import JSCalendar ([RFC 8984](https://www.rfc-editor.org/rfc/rfc8984.html))
     data into `%Tempo.IntervalSet{}`.
@@ -151,9 +149,11 @@ if Code.ensure_loaded?(JSCalendar) do
     def parse(json, options \\ [])
 
     def parse(json, options) when is_binary(json) do
+      options = Calendars.inside(options)
+
       with :ok <- Tempo.check_within_option(options, "Tempo.JSCalendar.parse/2"),
            {:ok, object} <- JSCalendar.decode(json) do
-        to_interval_set(object, options)
+        object |> placed(options) |> Calendars.outside()
       end
     end
 
@@ -195,6 +195,14 @@ if Code.ensure_loaded?(JSCalendar) do
     """
     @spec to_interval_set(struct(), keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
     def to_interval_set(object, options \\ []) do
+      object |> placed(Calendars.inside(options)) |> Calendars.outside()
+    end
+
+    # A JSCalendar object shows no value by which a caller's call can be told
+    # from one of the library's, so `parse/2` and `to_interval_set/2` are the
+    # caller's: their options are replaced as they come in, and what they
+    # answer as it leaves.
+    defp placed(object, options) do
       with :ok <- Tempo.check_within_option(options, "Tempo.JSCalendar.to_interval_set/2"),
            {:ok, intervals} <- object_occurrences(object, options),
            {:ok, kept} <- Tempo.occurrences_within(intervals, options) do

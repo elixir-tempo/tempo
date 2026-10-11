@@ -1,6 +1,4 @@
 defmodule Tempo.Network.TimePeriod do
-  use Tempo.Border
-
   @moduledoc """
   A single time-period in a chronological network — a reign, era, or
   the time-span of a stratum.
@@ -126,6 +124,14 @@ defmodule Tempo.Network.TimePeriod do
   """
   @spec new(term(), keyword()) :: {:ok, t()} | {:error, Exception.t()}
   def new(id, options \\ []) do
+    id |> built(options) |> Calendars.outside()
+  end
+
+  # A period is built for a caller, of what the caller gives: a bound given
+  # as a value is kept as it is held, and one read from a number or from
+  # text is read as Tempo works with it, so the period is answered as the
+  # caller holds it.
+  defp built(id, options) do
     with :ok <- known_options(options),
          {:ok, {start_lower, start_upper}} <- date_bounds(Keyword.get(options, :from)),
          {:ok, {end_lower, end_upper}} <- date_bounds(Keyword.get(options, :to)),

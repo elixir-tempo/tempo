@@ -1,6 +1,4 @@
 defmodule Tempo.Clock do
-  use Tempo.Border
-
   @moduledoc """
   A behaviour for providing the current time to Tempo.
 
@@ -39,7 +37,7 @@ defmodule Tempo.Clock do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   @doc """
   Return the current UTC time as a `t:DateTime.t/0` in `Etc/UTC`.
@@ -50,9 +48,12 @@ defmodule Tempo.Clock do
   @doc false
   # The current UTC time from the configured clock (`:ex_tempo, :clock`,
   # `Tempo.Clock.System` unless another is set). The clock is a caller's
-  # module, so its reading comes in as a caller's value does.
+  # module, so its reading is a caller's value, and is given as Tempo works
+  # with it.
   @spec utc_now() :: DateTime.t()
-  def utc_now, do: Border.call_out(clock(), :utc_now, [])
+  def utc_now do
+    Calendars.inside(clock().utc_now())
+  end
 
   @doc """
   Return the currently configured clock module.

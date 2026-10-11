@@ -1,6 +1,4 @@
 defmodule Tempo.TimeZoneDatabase do
-  use Tempo.Border
-
   @moduledoc """
   Access to the time zone database Tempo uses for zone validation,
   offset resolution, and DST-aware arithmetic.

@@ -1,6 +1,4 @@
 defmodule Tempo.RecurrenceSet do
-  use Tempo.Border
-
   @moduledoc """
   A collection of recurrence rules whose occurrences form one interval set.
 

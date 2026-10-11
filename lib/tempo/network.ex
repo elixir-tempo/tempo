@@ -1,6 +1,4 @@
 defmodule Tempo.Network do
-  use Tempo.Border
-
   @moduledoc """
   A chronological network — a set of time-periods together with the
   sequences and relations that constrain them.

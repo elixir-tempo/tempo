@@ -1,6 +1,4 @@
 defmodule Tempo.Interval.RelationNetwork do
-  use Tempo.Border
-
   @moduledoc """
   A qualitative constraint network over Allen relations, with the
   path-consistency propagation of Allen (1983) §3.

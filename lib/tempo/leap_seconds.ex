@@ -1,6 +1,4 @@
 defmodule Tempo.LeapSeconds do
-  use Tempo.Border
-
   @moduledoc """
   The canonical list of positive leap seconds announced by the
   International Earth Rotation and Reference Systems Service

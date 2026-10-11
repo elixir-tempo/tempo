@@ -1,6 +1,4 @@
 defmodule Tempo.ZoneOffsetMismatchError do
-  use Tempo.Border
-
   @moduledoc """
   Exception raised (or returned) when a value's numeric offset disagrees
   with the zone beside it at the value's reading.

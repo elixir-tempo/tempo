@@ -1,6 +1,4 @@
 defmodule Tempo.RecurrenceSet.Conditional do
-  use Tempo.Border
-
   @moduledoc """
   A recurrence-set member kept or moved by the other members' occurrences.
 

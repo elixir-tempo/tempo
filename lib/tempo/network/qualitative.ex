@@ -1,6 +1,4 @@
 defmodule Tempo.Network.Qualitative do
-  use Tempo.Border
-
   @moduledoc """
   The bridge between Tempo's two constraint networks.
 
@@ -44,6 +42,7 @@ defmodule Tempo.Network.Qualitative do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Interval.RelationNetwork
   alias Tempo.Network
   alias Tempo.Network.Relation
@@ -74,7 +73,7 @@ defmodule Tempo.Network.Qualitative do
           RelationNetwork.t() | {:error, :inconsistent | Exception.t()}
   def from_network(%Network{} = network) do
     with :ok <- Network.check(network) do
-      read_relations(network)
+      network |> Calendars.inside() |> read_relations()
     end
   end
 

@@ -1,6 +1,4 @@
 defmodule Tempo.Allen do
-  use Tempo.Border
-
   @moduledoc """
   Allen's interval algebra, in Allen's own words.
 
@@ -39,6 +37,7 @@ defmodule Tempo.Allen do
 
   """
 
+  alias Tempo.Calendars
   alias Tempo.Interval
   alias Tempo.Interval.Composition
   alias Tempo.Interval.Relations
@@ -226,7 +225,7 @@ defmodule Tempo.Allen do
   # A relation error must surface, not read as `false` — a silent false
   # asserts "the relation does not hold", a claim the error could not make.
   defp holds?(a, b, relation) do
-    case Interval.relation(a, b) do
+    case Interval.relation(Calendars.inside(a), Calendars.inside(b)) do
       held when is_atom(held) -> held == relation
       {:error, exception} when is_exception(exception) -> raise exception
       {:error, reason} -> raise ArgumentError, to_string(reason)

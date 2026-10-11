@@ -1,6 +1,4 @@
 defmodule Tempo.Cron do
-  use Tempo.Border
-
   @moduledoc """
   Parses cron expressions into recurring `t:Tempo.Interval.t/0`
   values — the same first-class recurrence that `Tempo.RRule.parse/2`
@@ -178,9 +176,11 @@ defmodule Tempo.Cron do
   """
   @spec parse(String.t(), keyword()) :: {:ok, Tempo.Interval.t()} | {:error, Exception.t()}
   def parse(expression, options \\ []) do
+    from = Calendars.inside(Keyword.get(options, :from))
+
     with {:ok, rule} <- to_rule(expression),
-         {:ok, from} <- firing_start(Keyword.get(options, :from), rule, expression) do
-      Expander.to_ast(rule, from)
+         {:ok, from} <- firing_start(from, rule, expression) do
+      rule |> Expander.to_ast(from) |> Calendars.outside()
     end
   end
 

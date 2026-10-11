@@ -1,6 +1,4 @@
 defmodule Tempo.Workdays do
-  use Tempo.Border
-
   @moduledoc """
   A territory's workdays less a set of holidays: the days a school or a
   business is open.

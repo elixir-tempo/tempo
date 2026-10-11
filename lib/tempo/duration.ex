@@ -1,6 +1,4 @@
 defmodule Tempo.Duration do
-  use Tempo.Border
-
   @moduledoc """
   A calendar-relative duration — a list of `{unit, amount}`
   pairs such as `[year: 1, month: 6]`. Produced by the ISO 8601
@@ -569,7 +567,7 @@ defmodule Tempo.Duration do
   def to_unit(%__MODULE__{} = duration, unit, options) when unit in @fixed_units do
     case Keyword.get(options, :relative_to) do
       nil -> to_unit_nominal(duration, unit)
-      reference -> to_unit_relative(duration, unit, reference)
+      reference -> to_unit_relative(duration, unit, Calendars.inside(reference))
     end
   end
 
@@ -650,7 +648,8 @@ defmodule Tempo.Duration do
   # date, then measure the elapsed seconds on the UTC time line and
   # express them in `unit`. A zoned reference makes day/week DST-exact
   # and resolves month/year against the calendar. Runtime calls into
-  # `Tempo` (no struct match) keep this module free of a compile cycle.
+  # `Tempo` (no struct match) keep this module free of a compile cycle. The
+  # reference is a caller's value, given here as Tempo works with it.
   defp to_unit_relative(duration, unit, reference) do
     cond do
       not is_struct(reference, Tempo) ->

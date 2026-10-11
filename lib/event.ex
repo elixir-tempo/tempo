@@ -1,6 +1,4 @@
 defmodule Tempo.Event do
-  use Tempo.Border
-
   @moduledoc """
   Resolves a named computed event to its date in a given year.
 
@@ -42,7 +40,6 @@ defmodule Tempo.Event do
 
   alias Calendrical.Ecclesiastical
   alias Calendrical.Lunisolar
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.TimeZoneDatabase
 
@@ -188,15 +185,17 @@ defmodule Tempo.Event do
 
   """
   @spec date(String.t(), integer(), module() | nil) :: {:ok, Date.t()} | {:error, term()}
-  def date(name, year, calendar \\ nil)
-      when is_binary(name) and is_integer(year),
-      do: dated(name, year, calendar || Calendars.default())
+  def date(name, year, calendar \\ nil) when is_binary(name) and is_integer(year) do
+    name
+    |> dated(year, Calendars.inside(calendar) || Calendars.default())
+    |> Calendars.outside()
+  end
 
   @doc false
   # The date of an event in a year, asked of a calendar, for the library's
-  # own use: `date/3` with no crossing of the border (`Tempo.Border`), which
-  # a call from inside is not known to make where its calendar is not the
-  # one a value that names none is in.
+  # own use: `date/3` as Tempo works with it. A name and a year show no
+  # value by which a caller's call can be told from one of the library's,
+  # so `date/3` is the caller's, and the library asks this.
   @spec dated(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, term()}
   def dated(name, year, calendar) when is_binary(name) and is_integer(year) do
     case String.split(name, "@", parts: 2) do
@@ -331,13 +330,17 @@ defmodule Tempo.Event do
   # which the selection resolver returns as a `Tempo.EventError`.
   defp resolve_via_resolvers(name, year, calendar) do
     Enum.find_value(registered_resolvers(), {:error, {:unknown_event, name}}, fn resolver ->
-      if name in resolver.known(),
-        do: a_date_or_an_error(Border.call_out(resolver, :date, [name, year, calendar]))
+      if name in resolver.known() do
+        name
+        |> resolver.date(year, Calendars.outside(calendar))
+        |> Calendars.inside()
+        |> a_date_or_an_error()
+      end
     end)
   end
 
-  # A resolver is a consumer's module, called as one is (`Tempo.Border`), and
-  # what it gives is a date or an error. Anything else is an error that says
+  # A resolver is a consumer's module: it is given the calendar as a caller
+  # holds it, and what it gives is a caller's, a date or an error. Anything else is an error that says
   # so, where it was handed on as the answer.
   defp a_date_or_an_error({:ok, %Date{}} = date), do: date
   defp a_date_or_an_error({:error, _reason} = error), do: error

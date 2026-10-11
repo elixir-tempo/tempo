@@ -1,6 +1,4 @@
 defmodule Tempo.RRule do
-  use Tempo.Border
-
   @moduledoc """
   Reads and writes [iCalendar RFC 5545](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10)
   `RRULE` strings. `parse/2` turns a rule into Tempo's AST — a
@@ -145,15 +143,23 @@ defmodule Tempo.RRule do
   def parse("RRULE:" <> rest, options), do: parse(rest, options)
 
   def parse(rrule, options) when is_binary(rrule) do
+    rrule |> parsed(Calendars.inside(options)) |> Calendars.outside()
+  end
+
+  # What is read is a string: any other value is an error and no raise.
+  def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
+
+  # A rule is text, which shows no value by which a caller's call can be
+  # told from one of the library's, so `parse/2` is the caller's: what it is
+  # given beside the text is replaced as it comes in, and what it answers as
+  # it leaves.
+  defp parsed(rrule, options) do
     with {:ok, parts} <- parse_parts(rrule),
          :ok <- skip_with_rscale(parts),
          :ok <- one_start(Keyword.get(options, :from)) do
       build_interval(parts, options)
     end
   end
-
-  # What is read is a string: any other value is an error and no raise.
-  def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
 
   # A rule's start is one value, or none. An interval was taken for one, and
   # the recurrence built from it was one nothing expands:
@@ -231,7 +237,9 @@ defmodule Tempo.RRule do
   """
   @spec to_string(Tempo.Interval.t() | term()) ::
           {:ok, String.t()} | {:error, ConversionError.t()}
-  def to_string(value), do: Encoder.encode(value)
+  def to_string(value) do
+    value |> Calendars.inside() |> Encoder.encode()
+  end
 
   @doc """
   Bang variant of `to_string/1`: the RRULE string, or a raised

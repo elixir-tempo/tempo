@@ -1,7 +1,5 @@
 if Code.ensure_loaded?(ICal) do
   defmodule Tempo.ICal do
-    use Tempo.Border
-
     @moduledoc """
     Import iCalendar (RFC 5545) data into `%Tempo.IntervalSet{}`.
 
@@ -173,6 +171,16 @@ if Code.ensure_loaded?(ICal) do
     def parse(ics, options \\ [])
 
     def parse(ics, options) when is_binary(ics) do
+      ics |> parsed(Calendars.inside(options)) |> Calendars.outside()
+    end
+
+    # What is read is a string: any other value is an error and no raise.
+    def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
+
+    # An iCalendar is text, which shows no value by which a caller's call can
+    # be told from one of the library's, so `parse/2` is the caller's: its
+    # options are replaced as they come in, and what it answers as it leaves.
+    defp parsed(ics, options) do
       with :ok <- Tempo.check_within_option(options, "Tempo.ICal.parse/2") do
         calendar = ICal.from_ics(ics)
         build_interval_set(calendar, options)
@@ -181,9 +189,6 @@ if Code.ensure_loaded?(ICal) do
       e in [ArgumentError, MatchError, FunctionClauseError] ->
         {:error, Exception.message(e)}
     end
-
-    # What is read is a string: any other value is an error and no raise.
-    def parse(not_a_string, _options), do: {:error, {:not_a_string, not_a_string}}
 
     @doc """
     Parse an iCalendar file and return a `%Tempo.IntervalSet{}`.
@@ -328,6 +333,10 @@ if Code.ensure_loaded?(ICal) do
     end
 
     def available(%ICal{} = calendar, options) do
+      calendar |> offered(Calendars.inside(options)) |> Calendars.outside()
+    end
+
+    defp offered(calendar, options) do
       with :ok <- Tempo.check_within_option(options, "Tempo.ICal.available/2"),
            {:ok, window} <- query_window(options) do
         calendar
