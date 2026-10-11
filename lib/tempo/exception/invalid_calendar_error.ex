@@ -12,7 +12,7 @@ defmodule Tempo.InvalidCalendarError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:calendar, :reason]
 
@@ -23,12 +23,12 @@ defmodule Tempo.InvalidCalendarError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{calendar: calendar}) when not is_nil(calendar) do
-    "#{Border.name(calendar)} is not a usable calendar module. A calendar is a module such " <>
+    "#{Calendars.name(calendar)} is not a usable calendar module. A calendar is a module such " <>
       "as `Calendrical.Hebrew`, never the name of one. If it is a namespace " <>
       "(such as `Calendrical.Islamic`), use a concrete calendar like " <>
       "`Calendrical.Islamic.Civil` instead."

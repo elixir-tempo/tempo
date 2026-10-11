@@ -6,7 +6,7 @@ defmodule Tempo.DuplicateZoneError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:zones, :suffix]
 
@@ -17,12 +17,12 @@ defmodule Tempo.DuplicateZoneError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{zones: zones}) when is_list(zones) and zones != [] do
-    "Only one time zone may appear in a single IXDTF suffix; got #{Border.inspect(zones)}"
+    "Only one time zone may appear in a single IXDTF suffix; got #{Calendars.inspect(zones)}"
   end
 
   def message(%__MODULE__{}) do

@@ -37,7 +37,7 @@ defmodule Tempo.Network.Solver do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Network
   alias Tempo.Network.Normalize
 
@@ -544,7 +544,7 @@ defmodule Tempo.Network.Solver do
   def trace(%Network{}, boundary, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Network.Solver.trace/3 takes {:start, id} or {:end, id}, not #{Border.inspect(boundary)}."
+       "Tempo.Network.Solver.trace/3 takes {:start, id} or {:end, id}, not #{Calendars.inspect(boundary)}."
      )}
   end
 
@@ -558,7 +558,7 @@ defmodule Tempo.Network.Solver do
         {:error,
          ArgumentError.exception(
            "Tempo.Network.Solver.trace/3 takes one option, :bound, :earliest or :latest, " <>
-             "not #{Border.inspect(options)}."
+             "not #{Calendars.inspect(options)}."
          )}
     end
   end

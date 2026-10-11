@@ -25,7 +25,7 @@ defmodule Tempo.Interval.Cycle do
   # unit takes: hour 24, month 13, day of the week 8. No value is written
   # with it, and it is not returned to a caller.
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
@@ -389,7 +389,7 @@ defmodule Tempo.Interval.Cycle do
   defp no_cycle_error(interval) do
     UnanchoredError.exception(
       operation:
-        "read where #{Border.inspect(interval)} ends: it runs past the last value of its " <>
+        "read where #{Calendars.inspect(interval)} ends: it runs past the last value of its " <>
           "leading unit, whose count depends on a year or a month the span does not have",
       reason: :comparison
     )
@@ -398,7 +398,7 @@ defmodule Tempo.Interval.Cycle do
   defp no_length_error(interval) do
     UnanchoredError.exception(
       operation:
-        "measure #{Border.inspect(interval)}: the length of a span of months and days depends " <>
+        "measure #{Calendars.inspect(interval)}: the length of a span of months and days depends " <>
           "on the year",
       reason: :measure
     )
@@ -409,7 +409,7 @@ defmodule Tempo.Interval.Cycle do
       interval: interval,
       operation: :compare,
       reason:
-        "#{Border.inspect(interval)} has no year and does not end after it starts, so it runs " <>
+        "#{Calendars.inspect(interval)} has no year and does not end after it starts, so it runs " <>
           "through the end of its cycle and is two spans in any one turn of it: ask of both with " <>
           "the set operations (`Tempo.overlaps?/2`, `Tempo.intersection/2`)."
     )

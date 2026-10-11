@@ -18,7 +18,7 @@ defmodule Tempo.ZoneOffsetMismatchError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:zone_id, :wall_time, :stated_offset, :zone_offsets]
 
@@ -31,7 +31,7 @@ defmodule Tempo.ZoneOffsetMismatchError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
@@ -43,7 +43,7 @@ defmodule Tempo.ZoneOffsetMismatchError do
       }) do
     actual = Enum.map_join(zone_offsets, " or ", &format_offset/1)
 
-    "Stated offset #{format_offset(stated)} disagrees with #{Border.inspect(zone_id)} " <>
+    "Stated offset #{format_offset(stated)} disagrees with #{Calendars.inspect(zone_id)} " <>
       "(#{actual})#{at_the_reading(wall_time)}."
   end
 

@@ -98,7 +98,6 @@ defmodule Tempo.Cron do
 
   """
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.CronError
   alias Tempo.RRule.Expander
@@ -219,7 +218,7 @@ defmodule Tempo.Cron do
 
   # What is read is a string: any other value is an error and no raise.
   def to_rule(not_a_string) do
-    written = Border.inspect(not_a_string, limit: 5, printable_limit: 60)
+    written = Calendars.inspect(not_a_string, limit: 5, printable_limit: 60)
 
     {:error, CronError.exception(reason: "A cron expression is a string, and #{written} is none")}
   end
@@ -242,7 +241,7 @@ defmodule Tempo.Cron do
     {:error,
      CronError.exception(
        input: expression,
-       reason: "The :from option must be a date or time, got #{Border.inspect(from)}"
+       reason: "The :from option must be a date or time, got #{Calendars.inspect(from)}"
      )}
   end
 
@@ -644,7 +643,7 @@ defmodule Tempo.Cron do
          CronError.exception(
            field: field,
            value: part,
-           reason: "Malformed field (multiple `/`): #{Border.inspect(part)}"
+           reason: "Malformed field (multiple `/`): #{Calendars.inspect(part)}"
          )}
     end
   end
@@ -691,7 +690,7 @@ defmodule Tempo.Cron do
              field: field,
              value: string,
              reason:
-               "Value #{int} is outside the valid range #{Border.inspect(range)} for #{field}"
+               "Value #{int} is outside the valid range #{Calendars.inspect(range)} for #{field}"
            )}
         end
 
@@ -700,7 +699,7 @@ defmodule Tempo.Cron do
          CronError.exception(
            field: field,
            value: string,
-           reason: "Expected an integer for #{field}, got #{Border.inspect(string)}"
+           reason: "Expected an integer for #{field}, got #{Calendars.inspect(string)}"
          )}
     end
   end
@@ -788,7 +787,7 @@ defmodule Tempo.Cron do
          CronError.exception(
            field: :day_of_week,
            value: part,
-           reason: "Malformed `#`: #{Border.inspect(part)}"
+           reason: "Malformed `#`: #{Calendars.inspect(part)}"
          )}
     end
   end
@@ -830,7 +829,7 @@ defmodule Tempo.Cron do
            CronError.exception(
              field: :day_of_week,
              value: orig,
-             reason: "Invalid day-of-week: #{Border.inspect(orig)}"
+             reason: "Invalid day-of-week: #{Calendars.inspect(orig)}"
            )}
       end
     end
@@ -853,7 +852,7 @@ defmodule Tempo.Cron do
            CronError.exception(
              field: :day_of_week,
              value: orig,
-             reason: "Invalid day-of-week: #{Border.inspect(orig)}"
+             reason: "Invalid day-of-week: #{Calendars.inspect(orig)}"
            )}
       end
     end

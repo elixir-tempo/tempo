@@ -4,7 +4,6 @@ defmodule Tempo.Inspect do
   import Kernel, except: [inspect: 1]
 
   alias Localize.Validity.U
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Interval
@@ -372,7 +371,7 @@ defmodule Tempo.Inspect do
     encoded(
       tempo,
       "Tempo",
-      &(@from_iso8601 <> &1 <> "\", " <> Border.name(calendar) <> ")")
+      &(@from_iso8601 <> &1 <> "\", " <> Calendars.name(calendar) <> ")")
     )
   end
 
@@ -417,7 +416,7 @@ defmodule Tempo.Inspect do
         &(@sigil_o <> &1 <> "\"")
 
       [%Tempo{calendar: calendar} | _rest] ->
-        &(@from_iso8601 <> &1 <> "\", " <> Border.name(calendar) <> ")")
+        &(@from_iso8601 <> &1 <> "\", " <> Calendars.name(calendar) <> ")")
     end
   end
 

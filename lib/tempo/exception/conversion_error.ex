@@ -71,7 +71,7 @@ defmodule Tempo.ConversionError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Enumeration
 
   defexception [:value, :target, :reason, :calendar]
@@ -85,7 +85,7 @@ defmodule Tempo.ConversionError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
@@ -104,14 +104,14 @@ defmodule Tempo.ConversionError do
   end
 
   def message(%__MODULE__{reason: :recurrence_set_member, value: value}) do
-    "Cannot read #{Border.inspect(value)} as a Tempo.RecurrenceSet member — a " <>
+    "Cannot read #{Calendars.inspect(value)} as a Tempo.RecurrenceSet member — a " <>
       "member is a Tempo.Interval (a recurrence or a concrete interval), a Tempo value, " <>
       "a nested Tempo.RecurrenceSet, or a conditional member from " <>
       "Tempo.RecurrenceSet.keep_when/2 or move_when/2."
   end
 
   def message(%__MODULE__{reason: :conditional_member, value: value}) do
-    "Cannot resolve #{Border.inspect(value)} as a conditional Tempo.RecurrenceSet member — it " <>
+    "Cannot resolve #{Calendars.inspect(value)} as a conditional Tempo.RecurrenceSet member — it " <>
       "needs :falls_on, a metadata map or a recurrence set, and either :at, a list of durations " <>
       "(Tempo.RecurrenceSet.keep_when/2), or :to_next, a selector " <>
       "(Tempo.RecurrenceSet.move_when/2)."
@@ -120,7 +120,7 @@ defmodule Tempo.ConversionError do
   def message(%__MODULE__{reason: :too_many_values, value: value}) do
     most = Enumeration.listed_at_once()
 
-    "#{Border.inspect(value)} names more than #{most} values, and #{most} are the most listed or " <>
+    "#{Calendars.inspect(value)} names more than #{most} values, and #{most} are the most listed or " <>
       "converted at once. Convert a narrower value, or take its values one at a time " <>
       "with `Enum` or `Stream`."
   end
@@ -139,7 +139,7 @@ defmodule Tempo.ConversionError do
   end
 
   def message(%__MODULE__{reason: :finest_resolution, value: value}) when not is_nil(value) do
-    "Cannot convert #{Border.inspect(value)} at its finest resolution to an " <>
+    "Cannot convert #{Calendars.inspect(value)} at its finest resolution to an " <>
       "explicit interval — no finer unit exists to bound the span."
   end
 
@@ -148,7 +148,7 @@ defmodule Tempo.ConversionError do
   end
 
   def message(%__MODULE__{reason: :unanchored_group, value: value}) when not is_nil(value) do
-    "Cannot convert the group #{Border.inspect(value)} to an interval — its unit " <>
+    "Cannot convert the group #{Calendars.inspect(value)} to an interval — its unit " <>
       "needs coarser calendar context (year/month) to bound the span, which an " <>
       "unanchored or ordinal-day group does not supply."
   end
@@ -159,7 +159,7 @@ defmodule Tempo.ConversionError do
   end
 
   def message(%__MODULE__{reason: :open_range, value: value}) when not is_nil(value) do
-    "Cannot convert the open-ended range #{Border.inspect(value)} to an interval — " <>
+    "Cannot convert the open-ended range #{Calendars.inspect(value)} to an interval — " <>
       "one endpoint is unbounded, so it spans no finite set of occurrences."
   end
 
@@ -168,7 +168,7 @@ defmodule Tempo.ConversionError do
   end
 
   def message(%__MODULE__{reason: :grouped_component, value: value}) when not is_nil(value) do
-    "Cannot step #{Border.inspect(value)} — the step counts from a unit that holds several " <>
+    "Cannot step #{Calendars.inspect(value)} — the step counts from a unit that holds several " <>
       "values (a set, a range, a group or unspecified digits), which is no one value " <>
       "to count from. Step each value it names instead."
   end
@@ -178,7 +178,7 @@ defmodule Tempo.ConversionError do
   end
 
   def message(%__MODULE__{reason: :counted_in_group, value: value}) when not is_nil(value) do
-    "Cannot convert #{Border.inspect(value)} — the unit after its group counts from the " <>
+    "Cannot convert #{Calendars.inspect(value)} — the unit after its group counts from the " <>
       "group's start (ISO 8601-2 §5.4.2), which takes one whole number and the units " <>
       "the group is counted in: a year, for a day counted in a group of months."
   end
@@ -195,13 +195,13 @@ defmodule Tempo.ConversionError do
   end
 
   def message(%__MODULE__{reason: :not_built, target: target, calendar: calendar} = error) do
-    "#{not_built_subject(error)} — #{not_built(target)} is not built for #{Border.name(calendar)}, " <>
+    "#{not_built_subject(error)} — #{not_built(target)} is not built for #{Calendars.name(calendar)}, " <>
       "#{not_built_calendar(target)}, and is refused where it would be answered wrongly."
   end
 
   def message(%__MODULE__{value: value, target: target})
       when not is_nil(value) and not is_nil(target) do
-    "Cannot convert #{Border.inspect(value)} to #{describe_target(target)}"
+    "Cannot convert #{Calendars.inspect(value)} to #{describe_target(target)}"
   end
 
   def message(%__MODULE__{target: target}) when not is_nil(target) do
@@ -217,7 +217,8 @@ defmodule Tempo.ConversionError do
   defp not_built_subject(%__MODULE__{value: value}) when is_binary(value),
     do: "Cannot answer #{value}"
 
-  defp not_built_subject(%__MODULE__{value: value}), do: "Cannot answer #{Border.inspect(value)}"
+  defp not_built_subject(%__MODULE__{value: value}),
+    do: "Cannot answer #{Calendars.inspect(value)}"
 
   defp not_built(:selection), do: "a selection that counts days within a month or a year"
   defp not_built(:season), do: "a season"
@@ -261,5 +262,5 @@ defmodule Tempo.ConversionError do
     end
   end
 
-  defp describe_target(other), do: Border.inspect(other)
+  defp describe_target(other), do: Calendars.inspect(other)
 end

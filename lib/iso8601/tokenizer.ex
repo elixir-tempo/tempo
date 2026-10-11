@@ -14,7 +14,7 @@ defmodule Tempo.Iso8601.Tokenizer do
   import NimbleParsec
   import Tempo.Iso8601.Tokenizer.Grammar
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Iso8601.Tokenizer.Extended
   alias Tempo.Iso8601.Tokenizer.Memo
   alias Tempo.Iso8601.Tokenizer.Plain
@@ -182,8 +182,8 @@ defmodule Tempo.Iso8601.Tokenizer do
          ParseError.exception(
            input: string,
            reason:
-             "Could not parse #{Border.inspect(string)} as a duration. " <>
-               "Error detected at #{Border.inspect(remaining)}"
+             "Could not parse #{Calendars.inspect(string)} as a duration. " <>
+               "Error detected at #{Calendars.inspect(remaining)}"
          )}
 
       {:error, message, detected_at, _context, _line, _column} ->
@@ -191,8 +191,9 @@ defmodule Tempo.Iso8601.Tokenizer do
          ParseError.exception(
            input: string,
            reason:
-             "Could not parse #{Border.inspect(string)} as a duration. " <>
-               String.capitalize(message) <> ". Error detected at #{Border.inspect(detected_at)}"
+             "Could not parse #{Calendars.inspect(string)} as a duration. " <>
+               String.capitalize(message) <>
+               ". Error detected at #{Calendars.inspect(detected_at)}"
          )}
     end
   end
@@ -255,8 +256,8 @@ defmodule Tempo.Iso8601.Tokenizer do
      ParseError.exception(
        input: string,
        reason:
-         "Could not parse #{Border.inspect(string)} as #{article(profile)}. " <>
-           "Error detected at #{Border.inspect(remaining)}"
+         "Could not parse #{Calendars.inspect(string)} as #{article(profile)}. " <>
+           "Error detected at #{Calendars.inspect(remaining)}"
      )}
   end
 
@@ -265,8 +266,8 @@ defmodule Tempo.Iso8601.Tokenizer do
      ParseError.exception(
        input: string,
        reason:
-         "Could not parse #{Border.inspect(string)} as #{article(profile)}. " <>
-           String.capitalize(message) <> ". Error detected at #{Border.inspect(detected_at)}"
+         "Could not parse #{Calendars.inspect(string)} as #{article(profile)}. " <>
+           String.capitalize(message) <> ". Error detected at #{Calendars.inspect(detected_at)}"
      )}
   end
 
@@ -335,7 +336,7 @@ defmodule Tempo.Iso8601.Tokenizer do
          ParseError.exception(
            input: string,
            reason:
-             "Could not parse #{Border.inspect(string)}. Error detected at #{Border.inspect(remaining)}"
+             "Could not parse #{Calendars.inspect(string)}. Error detected at #{Calendars.inspect(remaining)}"
          )}
 
       {:error, message, detected_at, _, _, _} ->
@@ -343,7 +344,7 @@ defmodule Tempo.Iso8601.Tokenizer do
          ParseError.exception(
            input: string,
            reason:
-             String.capitalize(message) <> ". Error detected at #{Border.inspect(detected_at)}"
+             String.capitalize(message) <> ". Error detected at #{Calendars.inspect(detected_at)}"
          )}
     end
   end

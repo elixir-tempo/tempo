@@ -17,7 +17,7 @@ defmodule Tempo.UnboundedRecurrenceError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:interval, :reason]
 
@@ -28,7 +28,7 @@ defmodule Tempo.UnboundedRecurrenceError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true

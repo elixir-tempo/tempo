@@ -14,7 +14,7 @@ defmodule Tempo.FloatingTempoError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:operation, :value]
 
@@ -25,7 +25,7 @@ defmodule Tempo.FloatingTempoError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true

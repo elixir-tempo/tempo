@@ -1,8 +1,6 @@
 defmodule Tempo.Border do
   @moduledoc false
 
-  import Kernel, except: [inspect: 1, inspect: 2]
-
   # The border between what a caller holds and what Tempo works with.
   #
   # A value that names no calendar is in `Calendar.ISO`, Elixir's own, and
@@ -87,21 +85,6 @@ defmodule Tempo.Border do
   @spec leave(term(), :inside | :outside) :: term()
   def leave(result, :inside), do: result
   def leave(result, :outside), do: leave(result)
-
-  @doc false
-  # A calendar's name in text a caller is to read (a message, a value as it
-  # is written): text is what it is once it is written, so a name bound for
-  # a caller is written as the caller knows it.
-  @spec name(module()) :: String.t()
-  def name(calendar), do: Kernel.inspect(leave(calendar))
-
-  @doc false
-  # A term as text a caller is to read. A message is written inside Tempo of
-  # what Tempo holds, and what it says of a term it says as the caller holds
-  # it: every message in the library is written with this, and none with
-  # `Kernel.inspect/2` (`test/tempo/border_test.exs` reads the source for it).
-  @spec inspect(term(), keyword()) :: String.t()
-  def inspect(term, options \\ []), do: Kernel.inspect(leave(term), options)
 
   @doc false
   # A call from inside Tempo to a function of a caller's own module (a

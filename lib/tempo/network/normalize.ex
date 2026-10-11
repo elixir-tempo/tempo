@@ -40,7 +40,6 @@ defmodule Tempo.Network.Normalize do
   #   and is an error in a zone or in a calendar whose years come round in
   #   no cycle.
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Enumeration.Zone
@@ -1104,7 +1103,7 @@ defmodule Tempo.Network.Normalize do
 
   defp unplaceable_error(value) do
     ArgumentError.exception(
-      "Tempo.Network cannot place #{Border.inspect(value)} as a bound: it names no single span."
+      "Tempo.Network cannot place #{Calendars.inspect(value)} as a bound: it names no single span."
     )
   end
 
@@ -1117,32 +1116,32 @@ defmodule Tempo.Network.Normalize do
 
   defp fractional_error(duration, unit) do
     ArgumentError.exception(
-      "Tempo.Network measures durations in whole units on its #{Border.inspect(unit)} axis, and " <>
-        "#{Border.inspect(duration)} names a fraction of one."
+      "Tempo.Network measures durations in whole units on its #{Calendars.inspect(unit)} axis, and " <>
+        "#{Calendars.inspect(duration)} names a fraction of one."
     )
   end
 
   defp unmeasurable_error(duration, calendar) do
     ArgumentError.exception(
-      "Tempo.Network cannot measure #{Border.inspect(duration)} in #{Border.name(calendar)} from a " <>
+      "Tempo.Network cannot measure #{Calendars.inspect(duration)} in #{Calendars.name(calendar)} from a " <>
         "position its start can take."
     )
   end
 
   defp unbounded_error(%{duration: duration, source: source} = measure) do
     ArgumentError.exception(
-      "#{describe_source(source)} counts #{Border.inspect(duration)} in #{describe_frame(measure)}, " <>
+      "#{describe_source(source)} counts #{Calendars.inspect(duration)} in #{describe_frame(measure)}, " <>
         "whose length depends on where it starts, and nothing bounds that start. Bound it, " <>
         "or give the duration in the network's unit."
     )
   end
 
   defp describe_frame(%{zone: {:zone, zone}}), do: zone
-  defp describe_frame(%{calendar: calendar}), do: Border.name(calendar)
+  defp describe_frame(%{calendar: calendar}), do: Calendars.name(calendar)
 
   defp describe_source({:duration, _bound, id, _duration}),
-    do: "The duration of #{Border.inspect(id)}"
+    do: "The duration of #{Calendars.inspect(id)}"
 
   defp describe_source({:relation, %Relation{from: from, to: to}}),
-    do: "The delay between #{Border.inspect(from)} and #{Border.inspect(to)}"
+    do: "The delay between #{Calendars.inspect(from)} and #{Calendars.inspect(to)}"
 end

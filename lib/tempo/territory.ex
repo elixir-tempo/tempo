@@ -45,7 +45,7 @@ defmodule Tempo.Territory do
 
   alias Localize.Territory
   alias Localize.Validity.U
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   @type input ::
           atom()
@@ -109,7 +109,7 @@ defmodule Tempo.Territory do
          {:error, _} <- decode_region_override(value) do
       {:error,
        ArgumentError.exception(
-         "Tempo.Territory.resolve/1 does not recognise #{Border.inspect(value)} as a " <>
+         "Tempo.Territory.resolve/1 does not recognise #{Calendars.inspect(value)} as a " <>
            "territory, locale, or region override."
        )}
     end
@@ -118,7 +118,7 @@ defmodule Tempo.Territory do
   def resolve(other) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Territory.resolve/1 does not recognise #{Border.inspect(other)} — " <>
+       "Tempo.Territory.resolve/1 does not recognise #{Calendars.inspect(other)} — " <>
          "pass a territory atom, territory string, locale string, or " <>
          "%Localize.LanguageTag{}."
      )}

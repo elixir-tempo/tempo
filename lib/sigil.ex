@@ -243,7 +243,6 @@ defmodule Tempo.Sigils do
 
   """
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Sigils.Options
 
@@ -399,7 +398,7 @@ defmodule Tempo.Sigils do
         :error ->
           raise ArgumentError,
                 "~o sigil in a match context does not recognise modifier " <>
-                  "#{Border.inspect(<<letter::utf8>>)}; valid modifiers are " <>
+                  "#{Calendars.inspect(<<letter::utf8>>)}; valid modifiers are " <>
                   "Y (year), O (month), W (week), D (day), I (day-of-year), " <>
                   "K (day-of-week), H (hour), N (minute), S (second)"
       end
@@ -447,16 +446,16 @@ defmodule Tempo.Sigils do
   defp build_match_pattern(other, _bindings) do
     raise ArgumentError,
           "~o sigil in a match context does not support matching on " <>
-            "#{Border.inspect(other.__struct__)} values"
+            "#{Calendars.inspect(other.__struct__)} values"
   end
 
   defp reject_container_bindings!([], _module), do: :ok
 
   defp reject_container_bindings!(bindings, module) do
     raise ArgumentError,
-          "~o sigil modifier bindings #{Border.inspect(bindings)} are only " <>
+          "~o sigil modifier bindings #{Calendars.inspect(bindings)} are only " <>
             "supported on %Tempo{} and %Tempo.Duration{} values; " <>
-            "#{Border.inspect(module)} values match structurally only"
+            "#{Calendars.inspect(module)} values match structurally only"
   end
 
   # Build a cons-pattern AST ending in `| _` for the `time` field
@@ -548,7 +547,7 @@ defmodule Tempo.Sigils do
   defp assert_matchable!(unit, value) do
     raise ArgumentError,
           "~o sigil in a match context only supports simple integer components; " <>
-            "got #{Border.inspect(unit)}: #{Border.inspect(value)}"
+            "got #{Calendars.inspect(unit)}: #{Calendars.inspect(value)}"
   end
 
   defp assert_no_modifier_duplicates!(sigil_units, bindings) do
@@ -557,7 +556,7 @@ defmodule Tempo.Sigils do
     if dupes != [] do
       raise ArgumentError,
             "~o sigil modifier binds a unit already present in the sigil literal: " <>
-              "#{Border.inspect(dupes)}"
+              "#{Calendars.inspect(dupes)}"
     end
   end
 
@@ -578,7 +577,7 @@ defmodule Tempo.Sigils do
     if Enum.count([week?, ordinal?, gregorian?, season?], & &1) > 1 do
       raise ArgumentError,
             "~o sigil in a match context cannot mix calendar axes: " <>
-              "#{Border.inspect(units)}"
+              "#{Calendars.inspect(units)}"
     end
 
     axis_of(week?, ordinal?, season?)
@@ -593,8 +592,8 @@ defmodule Tempo.Sigils do
     case Enum.find_index(axis, &(&1 == unit)) do
       nil ->
         raise ArgumentError,
-              "~o sigil in a match context cannot place unit #{Border.inspect(unit)} " <>
-                "on the inferred calendar axis #{Border.inspect(axis)}"
+              "~o sigil in a match context cannot place unit #{Calendars.inspect(unit)} " <>
+                "on the inferred calendar axis #{Calendars.inspect(axis)}"
 
       idx ->
         idx
@@ -684,7 +683,7 @@ defmodule Tempo.Sigils do
   defp set_member_pattern(other) do
     raise ArgumentError,
           "~o sigil in a match context does not support set members of type " <>
-            "#{Border.inspect(other.__struct__)}"
+            "#{Calendars.inspect(other.__struct__)}"
   end
 
   # Append `{field, transform.(value)}` to `fields` when `value`

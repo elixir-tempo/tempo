@@ -30,7 +30,7 @@ defmodule Tempo.Network do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Network.{Relation, TimePeriod}
 
   @type t :: %__MODULE__{
@@ -88,7 +88,7 @@ defmodule Tempo.Network do
   def add_period(%__MODULE__{} = network, period) do
     record(
       network,
-      "Tempo.Network.add_period/2 takes a Tempo.Network.TimePeriod, not #{Border.inspect(period)}."
+      "Tempo.Network.add_period/2 takes a Tempo.Network.TimePeriod, not #{Calendars.inspect(period)}."
     )
   end
 
@@ -165,7 +165,7 @@ defmodule Tempo.Network do
   def add_sequence(%__MODULE__{} = network, period_ids) do
     record(
       network,
-      "Tempo.Network.add_sequence/2 takes a list of period ids, not #{Border.inspect(period_ids)}."
+      "Tempo.Network.add_sequence/2 takes a list of period ids, not #{Calendars.inspect(period_ids)}."
     )
   end
 
@@ -207,14 +207,14 @@ defmodule Tempo.Network do
       not Relation.valid_type?(type) ->
         record(
           network,
-          "Tempo.Network.add_relation/5 does not know the relation #{Border.inspect(type)}."
+          "Tempo.Network.add_relation/5 does not know the relation #{Calendars.inspect(type)}."
         )
 
       not relation_options?(options) ->
         record(
           network,
           "Tempo.Network.add_relation/5 takes one option, :metadata, a map, not " <>
-            "#{Border.inspect(options)}."
+            "#{Calendars.inspect(options)}."
         )
 
       true ->
@@ -264,7 +264,7 @@ defmodule Tempo.Network do
         :ok
 
       relation ->
-        {:error, ArgumentError.exception("Unknown relation #{Border.inspect(relation.type)}.")}
+        {:error, ArgumentError.exception("Unknown relation #{Calendars.inspect(relation.type)}.")}
     end
   end
 

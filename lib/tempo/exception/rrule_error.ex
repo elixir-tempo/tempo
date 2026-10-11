@@ -7,7 +7,7 @@ defmodule Tempo.RRuleError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:reason, :rule, :detail]
 
@@ -19,7 +19,7 @@ defmodule Tempo.RRuleError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true

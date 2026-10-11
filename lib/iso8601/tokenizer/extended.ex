@@ -27,7 +27,7 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   import NimbleParsec
   import Tempo.Iso8601.Tokenizer.Helpers, only: [digit: 0, colon: 0]
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.DuplicateZoneError
   alias Tempo.ParseError
   alias Tempo.TimeZoneDatabase
@@ -402,8 +402,8 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   defp two_values(key, first, second) do
     ParseError.exception(
       reason:
-        "The suffix key #{Border.inspect(key)} is written twice, as #{Border.inspect(Enum.join(first, "-"))} " <>
-          "and as #{Border.inspect(Enum.join(second, "-"))}, and one of the two is critical"
+        "The suffix key #{Calendars.inspect(key)} is written twice, as #{Calendars.inspect(Enum.join(first, "-"))} " <>
+          "and as #{Calendars.inspect(Enum.join(second, "-"))}, and one of the two is critical"
     )
   end
 
@@ -498,7 +498,7 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
         {:error,
          ParseError.exception(
            input: raw,
-           reason: "Invalid u extension #{Border.inspect(raw)} in extended suffix"
+           reason: "Invalid u extension #{Calendars.inspect(raw)} in extended suffix"
          )}
 
       {:error, _reason} ->
@@ -550,7 +550,7 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
         {:error,
          ParseError.exception(
            input: raw,
-           reason: "Unknown calendar identifier #{Border.inspect(raw)} in extended suffix"
+           reason: "Unknown calendar identifier #{Calendars.inspect(raw)} in extended suffix"
          )}
 
       :error ->

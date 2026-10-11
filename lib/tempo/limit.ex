@@ -1,7 +1,7 @@
 defmodule Tempo.Limit do
   @moduledoc false
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   # The most values Tempo gives at once: the values of one that are listed,
   # the spans one is converted to, the occurrences of a recurrence and the
@@ -25,7 +25,7 @@ defmodule Tempo.Limit do
     raise ArgumentError,
           "The :max_values_at_once of :ex_tempo is the most values Tempo gives at once, a whole " <>
             "number of 1 or more (#{@default} unless it is set). Found: " <>
-            Border.inspect(@values_at_once)
+            Calendars.inspect(@values_at_once)
   end
 
   # The function returns the number it was compiled with, so its contract

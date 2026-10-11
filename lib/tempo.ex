@@ -521,7 +521,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "Tempo.new/1 expects a keyword list of time-scale components " <>
-         "and options. Got: #{Border.inspect(other)}"
+         "and options. Got: #{Calendars.inspect(other)}"
      )}
   end
 
@@ -539,7 +539,7 @@ defmodule Tempo do
     case new(components) do
       {:ok, tempo} -> tempo
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, "Tempo.new!/1 failed: #{Border.inspect(reason)}"
+      {:error, reason} -> raise ArgumentError, "Tempo.new!/1 failed: #{Calendars.inspect(reason)}"
     end
   end
 
@@ -550,7 +550,7 @@ defmodule Tempo do
       {:error,
        ArgumentError.exception(
          "Tempo.new/1 expects a keyword list of time-scale components " <>
-           "and options. Got: #{Border.inspect(components)}"
+           "and options. Got: #{Calendars.inspect(components)}"
        )}
     end
   end
@@ -612,14 +612,14 @@ defmodule Tempo do
   defp validate_qualification(other) do
     {:error,
      ArgumentError.exception(
-       ":qualification must be one of #{Border.inspect(@qualification_values)}, got #{Border.inspect(other)}"
+       ":qualification must be one of #{Calendars.inspect(@qualification_values)}, got #{Calendars.inspect(other)}"
      )}
   end
 
   defp validate_metadata(metadata) when is_map(metadata), do: :ok
 
   defp validate_metadata(other) do
-    {:error, ArgumentError.exception(":metadata must be a map, got #{Border.inspect(other)}")}
+    {:error, ArgumentError.exception(":metadata must be a map, got #{Calendars.inspect(other)}")}
   end
 
   # IXDTF (RFC 9557) elective suffix tags, written `[key=value]`: a key of
@@ -633,7 +633,7 @@ defmodule Tempo do
   end
 
   defp validate_tags(other) do
-    {:error, ArgumentError.exception(":tags must be a map, got #{Border.inspect(other)}")}
+    {:error, ArgumentError.exception(":tags must be a map, got #{Calendars.inspect(other)}")}
   end
 
   defp valid_tag?(key, value) when is_binary(key) and key != "u-ca" do
@@ -654,7 +654,7 @@ defmodule Tempo do
   defp invalid_tag(key, value) do
     {:error,
      ArgumentError.exception(
-       "Invalid IXDTF tag #{Border.inspect(key)} => #{Border.inspect(value)}: a tag key is a string of " <>
+       "Invalid IXDTF tag #{Calendars.inspect(key)} => #{Calendars.inspect(value)}: a tag key is a string of " <>
          "lowercase letters, digits, `_` and `-` starting with a letter or `_` (and not " <>
          "`u-ca`, which is the :calendar option), and its value letters and digits, " <>
          "several joined by `-`"
@@ -676,8 +676,8 @@ defmodule Tempo do
           {:halt,
            {:error,
             ArgumentError.exception(
-              "Tempo.new/1 does not recognise the component #{Border.inspect(unit)}. " <>
-                "Valid components are #{Border.inspect(@canonical_unit_order)}."
+              "Tempo.new/1 does not recognise the component #{Calendars.inspect(unit)}. " <>
+                "Valid components are #{Calendars.inspect(@canonical_unit_order)}."
             )}}
 
         not component_value?(unit, value) ->
@@ -741,7 +741,7 @@ defmodule Tempo do
        ArgumentError.exception(
          "Tempo.new/1 cannot mix calendar axes — choose one of: " <>
            ":month/:day (Gregorian), :week/:day_of_week (week), " <>
-           ":day_of_year (ordinal), or :quarter. Got: #{Border.inspect(keys)}"
+           ":day_of_year (ordinal), or :quarter. Got: #{Calendars.inspect(keys)}"
        )}
     else
       :ok
@@ -1048,7 +1048,7 @@ defmodule Tempo do
   # empty, a number, a map) is an error and no raise, as a string that is no
   # date is: a reader sits where what a caller was sent arrives.
   defp not_a_string(value) do
-    written = Border.inspect(value, limit: 5, printable_limit: 60)
+    written = Calendars.inspect(value, limit: 5, printable_limit: 60)
     ParseError.exception(reason: "Could not parse #{written}: it is not a string")
   end
 
@@ -1104,7 +1104,7 @@ defmodule Tempo do
     do: %{exception | reason: reason, unit: nil, value: nil, valid_range: nil}
 
   defp basic_end_reason(string, date, time, digits) do
-    "The end #{Border.inspect(digits)} of #{Border.inspect(string)} is read as #{basic_end_reading(digits)}: " <>
+    "The end #{Calendars.inspect(digits)} of #{Calendars.inspect(string)} is read as #{basic_end_reading(digits)}: " <>
       "in the basic format digits alone are a date (ISO 8601-1 §5.3.5), and an interval's end " <>
       "may leave out its higher components only where the result is unambiguous (§5.5.1). " <>
       basic_end_advice(date, time, digits)
@@ -1471,7 +1471,7 @@ defmodule Tempo do
     case parse_duration(string) do
       {:ok, duration} -> duration
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
     end
   end
 
@@ -1885,7 +1885,7 @@ defmodule Tempo do
 
   defp raise_on_error({:ok, value}), do: value
   defp raise_on_error({:error, exception}) when is_exception(exception), do: raise(exception)
-  defp raise_on_error({:error, reason}), do: raise(ArgumentError, Border.inspect(reason))
+  defp raise_on_error({:error, reason}), do: raise(ArgumentError, Calendars.inspect(reason))
 
   # Apply the `strict: true` IXDTF offset/zone consistency check when
   # requested; otherwise the value passes through unchanged.
@@ -2178,9 +2178,14 @@ defmodule Tempo do
           t() | Tempo.Interval.t() | Duration.t() | Tempo.Set.t()
   def parse!(input, options \\ []) do
     case parse(input, options) do
-      {:ok, value} -> value
-      {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, "Tempo.parse!/2 failed: #{Border.inspect(reason)}"
+      {:ok, value} ->
+        value
+
+      {:error, exception} when is_exception(exception) ->
+        raise exception
+
+      {:error, reason} ->
+        raise ArgumentError, "Tempo.parse!/2 failed: #{Calendars.inspect(reason)}"
     end
   end
 
@@ -2569,7 +2574,7 @@ defmodule Tempo do
     case from_date_range(range, options) do
       {:ok, interval} -> interval
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
     end
   end
 
@@ -3031,7 +3036,7 @@ defmodule Tempo do
 
       true ->
         raise ArgumentError,
-              "Tempo.#{unit}/1 is ambiguous for an interval spanning at #{Border.inspect(span_res)} resolution. " <>
+              "Tempo.#{unit}/1 is ambiguous for an interval spanning at #{Calendars.inspect(span_res)} resolution. " <>
                 "Use `Tempo.Interval.endpoints/1` and extract the component from each endpoint explicitly."
     end
   end
@@ -3065,13 +3070,13 @@ defmodule Tempo do
   # interval that has one. Anything else has none to read.
   defp no_component_error(unit, %Tempo.Interval{} = interval) do
     ArgumentError.exception(
-      "Tempo.#{unit}/1 reads an interval from its start, and #{Border.inspect(interval)} has none."
+      "Tempo.#{unit}/1 reads an interval from its start, and #{Calendars.inspect(interval)} has none."
     )
   end
 
   defp no_component_error(unit, value) do
     ArgumentError.exception(
-      "Tempo.#{unit}/1 takes a date or time value or an interval, and #{Border.inspect(value)} " <>
+      "Tempo.#{unit}/1 takes a date or time value or an interval, and #{Calendars.inspect(value)} " <>
         "is neither."
     )
   end
@@ -3313,7 +3318,7 @@ defmodule Tempo do
   defp not_one_interval(function, value) do
     ArgumentError.exception(
       "Tempo.#{function} takes one date or time value or one interval, and " <>
-        "#{Border.inspect(value)} is not one: it is a recurrence, or it names several spans."
+        "#{Calendars.inspect(value)} is not one: it is a recurrence, or it names several spans."
     )
   end
 
@@ -3450,7 +3455,7 @@ defmodule Tempo do
          target: truncate_to,
          current: resolution(tempo) |> elem(0),
          reason:
-           "#{Border.inspect(truncate_to)} is on the #{target} axis and this value is on the " <>
+           "#{Calendars.inspect(truncate_to)} is on the #{target} axis and this value is on the " <>
              "#{value} axis — truncating between axes is not a coarsening. Convert the " <>
              "value to the #{target} axis first."
        )}
@@ -3599,7 +3604,7 @@ defmodule Tempo do
          unit: round_to,
          value: tempo,
          reason:
-           "Cannot round #{Border.inspect(tempo)}: it holds several values (a set, a range, a " <>
+           "Cannot round #{Calendars.inspect(tempo)}: it holds several values (a set, a range, a " <>
              "group or unspecified digits), and one value is rounded."
        )}
     end
@@ -3744,8 +3749,8 @@ defmodule Tempo do
       value: from,
       target: calendar,
       reason:
-        "#{Border.name(calendar)} is a calendar of weeks, with no months, so #{Border.inspect(from)} " <>
-          "cannot be placed on #{Border.inspect(base)}; place a week (W) and a day of the week (K) " <>
+        "#{Calendars.name(calendar)} is a calendar of weeks, with no months, so #{Calendars.inspect(from)} " <>
+          "cannot be placed on #{Calendars.inspect(base)}; place a week (W) and a day of the week (K) " <>
           "read in that calendar, or write the whole date, which is read as the Gregorian " <>
           "day and converted."
     )
@@ -3857,7 +3862,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "at/2 and on/2 place a Tempo value on a value or an interval, not " <>
-         "#{Border.inspect(value)} on #{Border.inspect(other)}."
+         "#{Calendars.inspect(value)} on #{Calendars.inspect(other)}."
      )}
   end
 
@@ -3909,8 +3914,8 @@ defmodule Tempo do
           value: value,
           target: other.calendar,
           reason:
-            "#{Border.inspect(value)} is a value of #{Border.name(value.calendar)} and " <>
-              "#{Border.inspect(other)} one of #{Border.name(other.calendar)}, and a month, a " <>
+            "#{Calendars.inspect(value)} is a value of #{Calendars.name(value.calendar)} and " <>
+              "#{Calendars.inspect(other)} one of #{Calendars.name(other.calendar)}, and a month, a " <>
               "week and a day are numbered by their calendar: read both in one calendar to " <>
               "place one on the other."
         )
@@ -3960,7 +3965,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "at/2 and on/2 place a value without a year on one with a year, and both " <>
-         "#{Border.inspect(value)} and #{Border.inspect(other)} have one."
+         "#{Calendars.inspect(value)} and #{Calendars.inspect(other)} have one."
      )}
   end
 
@@ -4030,7 +4035,7 @@ defmodule Tempo do
   defp selected_on(high, low, false = _anchored?) do
     {:error,
      ArgumentError.exception(
-       "#{Border.inspect(low)} cannot be placed on #{Border.inspect(high)}: the two are written by " <>
+       "#{Calendars.inspect(low)} cannot be placed on #{Calendars.inspect(high)}: the two are written by " <>
          "different units of a date (a month and its day, a week and its day, a day of the " <>
          "year), which name one date only in a year. Place them on a value with a year."
      )}
@@ -4044,13 +4049,13 @@ defmodule Tempo do
       [] ->
         {:error,
          InvalidDateError.exception(
-           reason: "#{Border.inspect(low)} names no date on #{Border.inspect(high)}."
+           reason: "#{Calendars.inspect(low)} names no date on #{Calendars.inspect(high)}."
          )}
 
       _several_or_unending ->
         {:error,
          ArgumentError.exception(
-           "#{Border.inspect(low)} names more than one date on #{Border.inspect(high)}, and at/2 and " <>
+           "#{Calendars.inspect(low)} names more than one date on #{Calendars.inspect(high)}, and at/2 and " <>
              "on/2 place one. `Tempo.select/2` selects each of them."
          )}
     end
@@ -4130,7 +4135,7 @@ defmodule Tempo do
     case at(value, other) do
       {:ok, tempo} -> tempo
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, "at!/2 failed: #{Border.inspect(reason)}"
+      {:error, reason} -> raise ArgumentError, "at!/2 failed: #{Calendars.inspect(reason)}"
     end
   end
 
@@ -4206,8 +4211,8 @@ defmodule Tempo do
       _both_select ->
         {:error,
          ArgumentError.exception(
-           "at/2 and on/2 place one selection, and #{Border.inspect(high_source)} and " <>
-             "#{Border.inspect(low_value)} both hold one."
+           "at/2 and on/2 place one selection, and #{Calendars.inspect(high_source)} and " <>
+             "#{Calendars.inspect(low_value)} both hold one."
          )}
     end
   end
@@ -4302,7 +4307,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "Tempo.extend/2 writes a value by the unit below its own: its second argument is " <>
-         "reserved and must be nil, got #{Border.inspect(unit)}."
+         "reserved and must be nil, got #{Calendars.inspect(unit)}."
      )}
   end
 
@@ -4310,7 +4315,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "Tempo.extend/2 writes one date or time value by its next finer unit, and " <>
-         "#{Border.inspect(value)} is not one."
+         "#{Calendars.inspect(value)} is not one."
      )}
   end
 
@@ -4346,7 +4351,7 @@ defmodule Tempo do
          ConversionError.exception(
            value: extended,
            reason:
-             "Cannot write #{Border.inspect(%{extended | time: time})} by its next finer unit: the " <>
+             "Cannot write #{Calendars.inspect(%{extended | time: time})} by its next finer unit: the " <>
                "clock of its zone skips some of the values, and not the same ones under each " <>
                "value it names."
          )}
@@ -4394,15 +4399,15 @@ defmodule Tempo do
   end
 
   defp no_finer_unit(tempo, :none),
-    do: "Cannot extend #{Border.inspect(tempo)}: it names no unit."
+    do: "Cannot extend #{Calendars.inspect(tempo)}: it names no unit."
 
   defp no_finer_unit(tempo, :microsecond) do
-    "Cannot extend #{Border.inspect(tempo)}: a microsecond is the finest unit there is, so it has " <>
+    "Cannot extend #{Calendars.inspect(tempo)}: a microsecond is the finest unit there is, so it has " <>
       "no finer one to be written in."
   end
 
   defp no_finer_unit(tempo, unit),
-    do: "Cannot extend #{Border.inspect(tempo)}: no unit finer than its #{unit} is defined."
+    do: "Cannot extend #{Calendars.inspect(tempo)}: no unit finer than its #{unit} is defined."
 
   @doc """
   Bang variant of `extend/2`: the extended value, or a raised exception.
@@ -4575,7 +4580,7 @@ defmodule Tempo do
   # `FunctionClauseError`: the function takes whatever a caller holds, and
   # says which of it is none of Elixir's dates and times.
   def from_elixir(value, _options) do
-    written = Border.inspect(value, limit: 5, printable_limit: 60)
+    written = Calendars.inspect(value, limit: 5, printable_limit: 60)
 
     {:error,
      ConversionError.exception(
@@ -5307,7 +5312,7 @@ defmodule Tempo do
       value: value,
       target: calendar,
       reason:
-        "Cannot convert #{Border.inspect(value)} to #{Border.name(calendar)}, which is not a calendar " <>
+        "Cannot convert #{Calendars.inspect(value)} to #{Calendars.name(calendar)}, which is not a calendar " <>
           "module. A calendar is a module such as `Calendrical.Hebrew`."
     )
   end
@@ -5393,7 +5398,7 @@ defmodule Tempo do
        value: value,
        target: calendar,
        reason:
-         "Cannot convert #{Border.inspect(value)} to #{Border.name(calendar)}: a date, an interval of " <>
+         "Cannot convert #{Calendars.inspect(value)} to #{Calendars.name(calendar)}: a date, an interval of " <>
            "dates or an interval set converts."
      )}
   end
@@ -5488,7 +5493,7 @@ defmodule Tempo do
     case to_calendar(value, calendar) do
       {:ok, converted} -> converted
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
     end
   end
 
@@ -5550,7 +5555,8 @@ defmodule Tempo do
          ConversionError.exception(
            value: duration,
            target: Elixir.Duration,
-           reason: "duration component #{Border.inspect(unit)} has no Elixir Duration equivalent"
+           reason:
+             "duration component #{Calendars.inspect(unit)} has no Elixir Duration equivalent"
          )}
     end
   end
@@ -5579,7 +5585,7 @@ defmodule Tempo do
      ConversionError.exception(
        value: value,
        reason:
-         "Cannot convert #{Border.inspect(value)} to a native Elixir value: only one date or " <>
+         "Cannot convert #{Calendars.inspect(value)} to a native Elixir value: only one date or " <>
            "time value, or a duration, has one."
      )}
   end
@@ -5692,7 +5698,7 @@ defmodule Tempo do
     Clock.utc_now() |> DateTime.truncate(:second) |> zoned_now(zone)
   end
 
-  def now(zone), do: {:error, UnknownZoneError.exception(zone_id: Border.inspect(zone))}
+  def now(zone), do: {:error, UnknownZoneError.exception(zone_id: Calendars.inspect(zone))}
 
   # The current UTC instant read in `zone`.
   defp zoned_now(utc, "Etc/UTC"), do: from_datetime(utc)
@@ -6069,7 +6075,7 @@ defmodule Tempo do
     ConversionError.exception(
       value: tempo,
       reason:
-        "Cannot move #{Border.inspect(tempo)} to another zone: it names more than one moment (a " <>
+        "Cannot move #{Calendars.inspect(tempo)} to another zone: it names more than one moment (a " <>
           "set, a mask or a group), and each has its own wall time there. Move each value " <>
           "it names."
     )
@@ -6410,7 +6416,9 @@ defmodule Tempo do
 
   def metadata(value) do
     {:error,
-     ArgumentError.exception("Tempo.metadata/1 takes a Tempo value, got #{Border.inspect(value)}")}
+     ArgumentError.exception(
+       "Tempo.metadata/1 takes a Tempo value, got #{Calendars.inspect(value)}"
+     )}
   end
 
   @doc """
@@ -6454,7 +6462,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "Tempo.put_metadata/2 takes a Tempo value and a map, got " <>
-         "#{Border.inspect(value)} and #{Border.inspect(metadata)}"
+         "#{Calendars.inspect(value)} and #{Calendars.inspect(metadata)}"
      )}
   end
 
@@ -6716,11 +6724,11 @@ defmodule Tempo do
 
       nil ->
         raise ArgumentError,
-              "Tempo.#{function}/1 requires a #{unit} component. Got: #{Border.inspect(tempo)}"
+              "Tempo.#{function}/1 requires a #{unit} component. Got: #{Calendars.inspect(tempo)}"
 
       _several ->
         raise ArgumentError,
-              "Tempo.#{function}/1 reads one #{unit}, and #{Border.inspect(tempo)} holds several."
+              "Tempo.#{function}/1 reads one #{unit}, and #{Calendars.inspect(tempo)} holds several."
     end
   end
 
@@ -6733,7 +6741,8 @@ defmodule Tempo do
         {date.year, date.month, date.day}
 
       {:error, _reason} ->
-        raise ArgumentError, "Tempo.#{function}/1 cannot place #{Border.inspect(tempo)} on a day."
+        raise ArgumentError,
+              "Tempo.#{function}/1 cannot place #{Calendars.inspect(tempo)} on a day."
     end
   end
 
@@ -6997,7 +7006,7 @@ defmodule Tempo do
            value: duration_string,
            target: Duration,
            reason:
-             "the string parsed as #{Border.inspect(other)}, not a duration — " <>
+             "the string parsed as #{Calendars.inspect(other)}, not a duration — " <>
                "`Tempo.shift/2` takes an ISO 8601 duration such as \"PT30M\" or \"-P1D\""
          )}
 
@@ -7034,7 +7043,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "Tempo.shift/3 shifts a Tempo value or an interval by a duration or by keyword " <>
-         "units, not #{Border.inspect(tempo)} by #{Border.inspect(shift)}."
+         "units, not #{Calendars.inspect(tempo)} by #{Calendars.inspect(shift)}."
      )}
   end
 
@@ -7046,7 +7055,7 @@ defmodule Tempo do
   defp skipping_an_interval(interval) do
     ArgumentError.exception(
       "Tempo.shift/3 with :skipping walks free time from one moment, and " <>
-        "#{Border.inspect(interval)} has two ends: shift its start, and count its length from there."
+        "#{Calendars.inspect(interval)} has two ends: shift its start, and count its length from there."
     )
   end
 
@@ -7167,8 +7176,8 @@ defmodule Tempo do
 
   defp shift_unit_error(other) do
     ArgumentError.exception(
-      "Tempo.shift/3 shifts by a number of #{Border.inspect(@shift_units)}, or by " <>
-        "`microsecond: {microseconds, digits}`, and #{Border.inspect(other)} is neither."
+      "Tempo.shift/3 shifts by a number of #{Calendars.inspect(@shift_units)}, or by " <>
+        "`microsecond: {microseconds, digits}`, and #{Calendars.inspect(other)} is neither."
     )
   end
 
@@ -7700,7 +7709,7 @@ defmodule Tempo do
      ConversionError.exception(
        value: interval,
        reason:
-         "A recurrence has a number of occurrences, none or more, and #{Border.inspect(interval)} " <>
+         "A recurrence has a number of occurrences, none or more, and #{Calendars.inspect(interval)} " <>
            "has #{recurrence}."
      )}
   end
@@ -7724,7 +7733,7 @@ defmodule Tempo do
       value: interval,
       reason:
         "A recurrence steps by its cadence from one occurrence to the next, and " <>
-          "#{Border.inspect(cadence)} is no length of time."
+          "#{Calendars.inspect(cadence)} is no length of time."
     )
   end
 
@@ -8102,7 +8111,7 @@ defmodule Tempo do
     ConversionError.exception(
       value: from,
       reason:
-        "#{Border.inspect(cadence)} brings #{Border.inspect(from)}, which has no year, back to itself, so " <>
+        "#{Calendars.inspect(cadence)} brings #{Calendars.inspect(from)}, which has no year, back to itself, so " <>
           "each occurrence would be the same whole turn of its axis. Place the start on a " <>
           "date first with `Tempo.at/2` or `Tempo.on/2`."
     )
@@ -8130,8 +8139,8 @@ defmodule Tempo do
        ConversionError.exception(
          value: interval,
          reason:
-           "#{Border.name(rule.calendar)} is a calendar of weeks, with no months, so " <>
-             "#{Border.inspect(interval)} cannot select by a month, a day of one or a day of the year."
+           "#{Calendars.name(rule.calendar)} is a calendar of weeks, with no months, so " <>
+             "#{Calendars.inspect(interval)} cannot select by a month, a day of one or a day of the year."
        )}
     else
       Selection.calendar_week_in_its_year(time, interval)
@@ -8217,7 +8226,7 @@ defmodule Tempo do
         {:error,
          ArgumentError.exception(
            "an open-ended :within window must start at a point in time; " <>
-             "#{Border.inspect(from)} names none"
+             "#{Calendars.inspect(from)} names none"
          )}
     end
   end
@@ -8229,7 +8238,7 @@ defmodule Tempo do
        when from in [nil, :undefined] do
     {:error,
      ArgumentError.exception(
-       "a :within window needs a start, and #{Border.inspect(within)} has none: a window is the " <>
+       "a :within window needs a start, and #{Calendars.inspect(within)} has none: a window is the " <>
          "time from one moment to another, or from one moment on"
      )}
   end
@@ -10116,7 +10125,7 @@ defmodule Tempo do
          ConversionError.exception(
            value: anchor,
            reason:
-             "Stepping #{Border.inspect(anchor)} back by #{Border.inspect(back)} gives #{Border.inspect(start)}, not one value."
+             "Stepping #{Calendars.inspect(anchor)} back by #{Calendars.inspect(back)} gives #{Calendars.inspect(start)}, not one value."
          )}
     end
   end
@@ -10209,7 +10218,7 @@ defmodule Tempo do
          ConversionError.exception(
            value: to,
            reason:
-             "Stepping #{Border.inspect(to)} back by #{Border.inspect(back)} gives #{Border.inspect(start)}, not one value."
+             "Stepping #{Calendars.inspect(to)} back by #{Calendars.inspect(back)} gives #{Calendars.inspect(start)}, not one value."
          )}
     end
   end
@@ -12494,7 +12503,7 @@ defmodule Tempo do
     case to_interval_set(value) do
       {:ok, set} -> set
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
     end
   end
 
@@ -12542,7 +12551,7 @@ defmodule Tempo do
         raise exception
 
       {:error, reason} ->
-        raise ArgumentError, "Tempo.map/2 could not build the set: #{Border.inspect(reason)}"
+        raise ArgumentError, "Tempo.map/2 could not build the set: #{Calendars.inspect(reason)}"
     end
   end
 
@@ -12604,7 +12613,7 @@ defmodule Tempo do
   # value at all.
   defp not_one_value(function, value) do
     ArgumentError.exception(
-      "Tempo.#{function} takes one date or time value, and #{Border.inspect(value)} is not one."
+      "Tempo.#{function} takes one date or time value, and #{Calendars.inspect(value)} is not one."
     )
   end
 
@@ -12752,7 +12761,7 @@ defmodule Tempo do
     {:error,
      UnboundedRecurrenceError.exception(
        reason:
-         "#{Border.inspect(tempo)} selects in every year, so it needs a :within window — " <>
+         "#{Calendars.inspect(tempo)} selects in every year, so it needs a :within window — " <>
            "any Tempo value that limits the years."
      )}
   end
@@ -12953,7 +12962,7 @@ defmodule Tempo do
       ConversionError.exception(
         value: tempo,
         reason:
-          "Cannot convert #{Border.inspect(tempo)}: its #{unit} group counts from the end of a " <>
+          "Cannot convert #{Calendars.inspect(tempo)}: its #{unit} group counts from the end of a " <>
             "span the units before it do not fix."
       )
     else
@@ -13800,7 +13809,9 @@ defmodule Tempo do
 
   def duration(value) do
     {:error,
-     ArgumentError.exception("Tempo.duration/1 takes a Tempo value, got #{Border.inspect(value)}")}
+     ArgumentError.exception(
+       "Tempo.duration/1 takes a Tempo value, got #{Calendars.inspect(value)}"
+     )}
   end
 
   # A value with no year that has no length (a month, whose days are its
@@ -13913,7 +13924,7 @@ defmodule Tempo do
         raise exception
 
       {:error, reason} ->
-        raise ArgumentError, "Tempo.duration!/2 failed: #{Border.inspect(reason)}"
+        raise ArgumentError, "Tempo.duration!/2 failed: #{Calendars.inspect(reason)}"
     end
   end
 
@@ -14701,7 +14712,7 @@ defmodule Tempo do
     case select(base, selector) do
       {:ok, set} -> set
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
     end
   end
 
@@ -14799,7 +14810,7 @@ defmodule Tempo do
         {:error,
          ArgumentError.exception(
            "Tempo.workdays/2 takes one option, :except, a Tempo value, interval, " <>
-             "interval set or recurrence set, not #{Border.inspect(options)}."
+             "interval set or recurrence set, not #{Calendars.inspect(options)}."
          )}
     end
   end
@@ -14975,7 +14986,7 @@ defmodule Tempo do
   # answer raises.
   defp predicate_answer!({:ok, answer}), do: answer
   defp predicate_answer!({:error, exception}) when is_exception(exception), do: raise(exception)
-  defp predicate_answer!({:error, reason}), do: raise(ArgumentError, Border.inspect(reason))
+  defp predicate_answer!({:error, reason}), do: raise(ArgumentError, Calendars.inspect(reason))
 
   @doc """
   Shift `tempo` by `count` workdays, stepping over the territory's
@@ -15233,7 +15244,7 @@ defmodule Tempo do
         {:error,
          ArgumentError.exception(
            "Tempo.roll_to_workday/3 takes one option, :roll, one of " <>
-             "#{Enum.map_join(@rolls, ", ", &Border.inspect/1)}, not #{Border.inspect(options)}."
+             "#{Enum.map_join(@rolls, ", ", &Calendars.inspect/1)}, not #{Calendars.inspect(options)}."
          )}
     end
   end
@@ -15280,7 +15291,7 @@ defmodule Tempo do
            target: :month,
            calendar: day.calendar,
            reason:
-             "A modified roll keeps a day in its month, and #{Border.inspect(day)} is in a calendar " <>
+             "A modified roll keeps a day in its month, and #{Calendars.inspect(day)} is in a calendar " <>
                "of weeks, which has none. Roll it with `roll: :following` or `roll: :preceding`."
          )}
     end
@@ -15417,7 +15428,9 @@ defmodule Tempo do
 
   defp workdays_from(%Tempo{}, count, _territory, function) do
     {:error,
-     ArgumentError.exception("`#{function}` counts whole workdays, not #{Border.inspect(count)}.")}
+     ArgumentError.exception(
+       "`#{function}` counts whole workdays, not #{Calendars.inspect(count)}."
+     )}
   end
 
   defp workdays_from(value, _count, _territory, function),
@@ -15446,7 +15459,7 @@ defmodule Tempo do
        when run > @most_days_off_in_a_row do
     {:error,
      ArgumentError.exception(
-       "No workday follows #{Border.inspect(tempo)} within #{@most_days_off_in_a_row} days off."
+       "No workday follows #{Calendars.inspect(tempo)} within #{@most_days_off_in_a_row} days off."
      )}
   end
 
@@ -15478,7 +15491,7 @@ defmodule Tempo do
   defp nearest_workday_from(tempo, _days_off, _distance) do
     {:error,
      ArgumentError.exception(
-       "No workday falls within #{@most_days_off_in_a_row} days of #{Border.inspect(tempo)}."
+       "No workday falls within #{@most_days_off_in_a_row} days of #{Calendars.inspect(tempo)}."
      )}
   end
 
@@ -15563,7 +15576,7 @@ defmodule Tempo do
         target: :day,
         reason:
           "`#{function}` needs a value that denotes a day, such as a date or a datetime; " <>
-            "#{Border.inspect(tempo)} does not."
+            "#{Calendars.inspect(tempo)} does not."
       )
     else
       UnanchoredError.exception(operation: function, value: tempo)
@@ -15572,7 +15585,7 @@ defmodule Tempo do
 
   defp not_a_day(value, function) do
     ArgumentError.exception(
-      "`#{function}` needs a Tempo value that denotes a day, not #{Border.inspect(value)}."
+      "`#{function}` needs a Tempo value that denotes a day, not #{Calendars.inspect(value)}."
     )
   end
 

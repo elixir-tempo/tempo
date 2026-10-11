@@ -1,7 +1,6 @@
 defmodule Tempo.RRule.Encoder do
   @moduledoc false
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.NotBuilt
@@ -83,7 +82,7 @@ defmodule Tempo.RRule.Encoder do
     {:error,
      ConversionError.exception(
        reason:
-         "An RRULE runs forward from its first occurrence, and #{Border.inspect(interval)} runs " <>
+         "An RRULE runs forward from its first occurrence, and #{Calendars.inspect(interval)} runs " <>
            "back from its end without one.",
        value: interval,
        target: :rrule
@@ -136,7 +135,7 @@ defmodule Tempo.RRule.Encoder do
      ConversionError.exception(
        reason:
          "Only a %Tempo.Interval{} with a duration can be converted to an RRULE. " <>
-           "Got: #{Border.inspect(other)}",
+           "Got: #{Calendars.inspect(other)}",
        value: other,
        target: :rrule
      )}
@@ -295,7 +294,7 @@ defmodule Tempo.RRule.Encoder do
   defp no_one_rule(interval, why) do
     ConversionError.exception(
       reason:
-        "RRULE has no one rule for #{Border.inspect(interval)}, which keeps the last day of a month " <>
+        "RRULE has no one rule for #{Calendars.inspect(interval)}, which keeps the last day of a month " <>
           "that lacks its start's day: #{why}.",
       value: interval,
       target: :rrule
@@ -348,7 +347,7 @@ defmodule Tempo.RRule.Encoder do
         {:error,
          ConversionError.exception(
            reason:
-             "Duration unit #{Border.inspect(unit)} has no RRULE equivalent. " <>
+             "Duration unit #{Calendars.inspect(unit)} has no RRULE equivalent. " <>
                "RRULE supports second/minute/hour/day/week/month/year.",
            value: interval,
            target: :rrule
@@ -371,7 +370,7 @@ defmodule Tempo.RRule.Encoder do
      ConversionError.exception(
        reason:
          "An RRULE duration must be a single {unit, count} pair; " <>
-           "got: #{Border.inspect(time)}",
+           "got: #{Calendars.inspect(time)}",
        value: interval,
        target: :rrule
      )}
@@ -441,7 +440,7 @@ defmodule Tempo.RRule.Encoder do
          ConversionError.exception(
            reason:
              "RRULE UNTIL requires a bare date or UTC datetime; " <>
-               "got #{Border.inspect(time)}.",
+               "got #{Calendars.inspect(time)}.",
            value: value,
            target: :rrule
          )}
@@ -485,7 +484,7 @@ defmodule Tempo.RRule.Encoder do
          ConversionError.exception(
            reason:
              "RRULE has no form for #{Enum.map_join(tokens, ", ", &token_description/1)}: " <>
-               Border.inspect(selection),
+               Calendars.inspect(selection),
            value: interval,
            target: :rrule
          )}
@@ -497,7 +496,7 @@ defmodule Tempo.RRule.Encoder do
      ConversionError.exception(
        reason:
          "Interval repeat_rule shape is not expressible as RRULE BY* parts: " <>
-           "#{Border.inspect(rule.time)}",
+           "#{Calendars.inspect(rule.time)}",
        value: interval,
        target: :rrule
      )}
@@ -508,7 +507,7 @@ defmodule Tempo.RRule.Encoder do
      ConversionError.exception(
        reason:
          "Interval repeat_rule must be a %Tempo{} with a single :selection entry; " <>
-           "got #{Border.inspect(other)}",
+           "got #{Calendars.inspect(other)}",
        value: interval,
        target: :rrule
      )}
@@ -595,7 +594,8 @@ defmodule Tempo.RRule.Encoder do
 
   defp no_such_weekday({:day_of_week, days}, interval) do
     ConversionError.exception(
-      reason: "RRULE has no form for a day of the week that no week has: #{Border.inspect(days)}",
+      reason:
+        "RRULE has no form for a day of the week that no week has: #{Calendars.inspect(days)}",
       value: interval,
       target: :rrule
     )
@@ -689,7 +689,7 @@ defmodule Tempo.RRule.Encoder do
       unit == :month -> nil
       unit == :year and not Keyword.has_key?(parts, :week) -> nil
       unit == :year -> "a numbered BYDAY beside BYWEEKNO"
-      true -> "a numbered BYDAY in a #{Map.get(@freq_for, unit, Border.inspect(unit))} rule"
+      true -> "a numbered BYDAY in a #{Map.get(@freq_for, unit, Calendars.inspect(unit))} rule"
     end
   end
 
@@ -710,7 +710,7 @@ defmodule Tempo.RRule.Encoder do
 
   defp not_allowed(why, interval) do
     ConversionError.exception(
-      reason: "RFC 5545 does not allow #{why}: #{Border.inspect(interval)}",
+      reason: "RFC 5545 does not allow #{why}: #{Calendars.inspect(interval)}",
       value: interval,
       target: :rrule
     )
@@ -754,7 +754,7 @@ defmodule Tempo.RRule.Encoder do
   defp token_description(:or_day),
     do: "a day of the month or of the week (cron), since RRULE BY-parts all hold at once"
 
-  defp token_description(token), do: Border.inspect(token)
+  defp token_description(token), do: Calendars.inspect(token)
 
   ## BYDAY helpers
 

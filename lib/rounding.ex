@@ -15,7 +15,7 @@ defmodule Tempo.Rounding do
   # zone's own days are read from where they are kept, and nothing here
   # counts a month or a year.
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Iso8601.Unit
   alias Tempo.RoundingError
@@ -182,7 +182,7 @@ defmodule Tempo.Rounding do
       unit: unit,
       value: tempo,
       reason:
-        "#{Border.inspect(tempo)} is written to the #{resolution}, so it cannot be rounded to " <>
+        "#{Calendars.inspect(tempo)} is written to the #{resolution}, so it cannot be rounded to " <>
           "the #{unit}, which is finer."
     )
   end

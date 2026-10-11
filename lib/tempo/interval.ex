@@ -50,7 +50,6 @@ defmodule Tempo.Interval do
 
   """
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
@@ -255,7 +254,7 @@ defmodule Tempo.Interval do
     {:error,
      ArgumentError.exception(
        "Tempo.Interval.new/1 takes :recurrence as a number of occurrences, 0 or more, " <>
-         "or :infinity; got #{Border.inspect(other)}"
+         "or :infinity; got #{Calendars.inspect(other)}"
      )}
   end
 
@@ -289,7 +288,7 @@ defmodule Tempo.Interval do
   defp span_end(last) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.new/1's :through is a Tempo value or interval, not #{Border.inspect(last)}."
+       "Tempo.Interval.new/1's :through is a Tempo value or interval, not #{Calendars.inspect(last)}."
      )}
   end
 
@@ -316,7 +315,7 @@ defmodule Tempo.Interval do
         raise exception
 
       {:error, reason} ->
-        raise ArgumentError, "Tempo.Interval.new!/1 failed: #{Border.inspect(reason)}"
+        raise ArgumentError, "Tempo.Interval.new!/1 failed: #{Calendars.inspect(reason)}"
     end
   end
 
@@ -376,14 +375,14 @@ defmodule Tempo.Interval do
       not Keyword.keyword?(options) ->
         {:error,
          ArgumentError.exception(
-           "Tempo.Interval.new/1 expects a keyword list; got #{Border.inspect(options)}"
+           "Tempo.Interval.new/1 expects a keyword list; got #{Calendars.inspect(options)}"
          )}
 
       unknown = Enum.find(Keyword.keys(options), &(&1 not in @public_new_options)) ->
         {:error,
          ArgumentError.exception(
-           "Tempo.Interval.new/1 does not recognise option #{Border.inspect(unknown)}. " <>
-             "Valid options: #{Border.inspect(@public_new_options)}"
+           "Tempo.Interval.new/1 does not recognise option #{Calendars.inspect(unknown)}. " <>
+             "Valid options: #{Calendars.inspect(@public_new_options)}"
          )}
 
       true ->
@@ -408,13 +407,13 @@ defmodule Tempo.Interval do
       not valid_endpoint?(from) ->
         {:error,
          ArgumentError.exception(
-           ":from must be a %Tempo{} or :undefined, got #{Border.inspect(from)}"
+           ":from must be a %Tempo{} or :undefined, got #{Calendars.inspect(from)}"
          )}
 
       not valid_endpoint?(to) ->
         {:error,
          ArgumentError.exception(
-           ":to must be a %Tempo{} or :undefined, got #{Border.inspect(to)}"
+           ":to must be a %Tempo{} or :undefined, got #{Calendars.inspect(to)}"
          )}
 
       true ->
@@ -604,7 +603,7 @@ defmodule Tempo.Interval do
   defp coarser_unit_error(unit, resolution_unit) do
     ArgumentError.exception(
       ":unit must be equal to or finer than the resolution of :from " <>
-        "(#{Border.inspect(resolution_unit)}), got #{Border.inspect(unit)}"
+        "(#{Calendars.inspect(resolution_unit)}), got #{Calendars.inspect(unit)}"
     )
   end
 
@@ -1505,8 +1504,8 @@ defmodule Tempo.Interval do
   defp to_single_interval(other, label) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.relation/2 cannot classify operand #{Border.inspect(label)}: " <>
-         "#{Border.inspect(other)}"
+       "Tempo.Interval.relation/2 cannot classify operand #{Calendars.inspect(label)}: " <>
+         "#{Calendars.inspect(other)}"
      )}
   end
 
@@ -1571,7 +1570,7 @@ defmodule Tempo.Interval do
     IntervalEndpointsError.exception(
       interval: interval,
       reason:
-        "#{Border.inspect(interval)} has no one #{end_name}: #{Border.inspect(endpoint)} names several " <>
+        "#{Calendars.inspect(interval)} has no one #{end_name}: #{Calendars.inspect(endpoint)} names several " <>
           "spans (a set, a selection, or a mask whose values do not run together)."
     )
   end
@@ -1589,7 +1588,7 @@ defmodule Tempo.Interval do
     {:error,
      ArgumentError.exception(
        "Tempo.Interval.relation/2 needs bounded intervals on both sides. " <>
-         "Operand #{Border.inspect(label)} has an open-ended endpoint (`:undefined`)."
+         "Operand #{Calendars.inspect(label)} has an open-ended endpoint (`:undefined`)."
      )}
   end
 
@@ -1597,7 +1596,7 @@ defmodule Tempo.Interval do
     {:error,
      ArgumentError.exception(
        "Tempo.Interval.relation/2 requires a single bounded interval on each side. " <>
-         "Operand #{Border.inspect(label)} is an IntervalSet with #{length(ivs)} members. " <>
+         "Operand #{Calendars.inspect(label)} is an IntervalSet with #{length(ivs)} members. " <>
          "For set-level questions use `Tempo.overlaps?/2`, `Tempo.disjoint?/2`, " <>
          "`Tempo.intersection/2`, or `Tempo.IntervalSet.relation_matrix/2`."
      )}
@@ -1855,13 +1854,13 @@ defmodule Tempo.Interval do
 
   defp no_span_error(value) do
     ArgumentError.exception(
-      "#{Border.inspect(value)} names no span: its selection picks nothing."
+      "#{Calendars.inspect(value)} names no span: its selection picks nothing."
     )
   end
 
   defp several_spans_error(value) do
     ArgumentError.exception(
-      "#{Border.inspect(value)} names several spans, so it has no single start or end: " <>
+      "#{Calendars.inspect(value)} names several spans, so it has no single start or end: " <>
         "take them from its interval set with Tempo.to_interval_set/1."
     )
   end
@@ -2141,7 +2140,7 @@ defmodule Tempo.Interval do
   def duration(value, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.duration/2 measures an interval, not #{Border.inspect(value)}: " <>
+       "Tempo.Interval.duration/2 measures an interval, not #{Calendars.inspect(value)}: " <>
          "Tempo.duration/1 measures the span a value names."
      )}
   end
@@ -2156,7 +2155,7 @@ defmodule Tempo.Interval do
         {:error,
          ArgumentError.exception(
            "Tempo.Interval.duration/2 takes one option, :leap_seconds, true or false, " <>
-             "not #{Border.inspect(options)}."
+             "not #{Calendars.inspect(options)}."
          )}
     end
   end
@@ -2199,7 +2198,7 @@ defmodule Tempo.Interval do
 
     {:error,
      ArgumentError.exception(
-       "An interval's endpoints are Tempo values, and #{Border.inspect(endpoint)} is not one, " <>
+       "An interval's endpoints are Tempo values, and #{Calendars.inspect(endpoint)} is not one, " <>
          "so the interval has no length."
      )}
   end
@@ -2273,7 +2272,7 @@ defmodule Tempo.Interval do
       _open ->
         {:error,
          ArgumentError.exception(
-           "#{Border.inspect(interval)} has an endpoint whose span has no start."
+           "#{Calendars.inspect(interval)} has an endpoint whose span has no start."
          )}
     end
   end
@@ -2313,7 +2312,7 @@ defmodule Tempo.Interval do
   defp different_calendars_error(from, to, operation) do
     ArgumentError.exception(
       "`Tempo.Interval.#{operation}` requires both endpoints in the same calendar. " <>
-        "Got #{Border.name(from.calendar)} and #{Border.name(to.calendar)}. " <>
+        "Got #{Calendars.name(from.calendar)} and #{Calendars.name(to.calendar)}. " <>
         "Convert one endpoint first — set operations such as " <>
         "`Tempo.intersection/2` and `Tempo.difference/2` handle " <>
         "cross-calendar inputs automatically."
@@ -2632,7 +2631,7 @@ defmodule Tempo.Interval do
   def leap_seconds_spanned(value) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.leap_seconds_spanned/1 reads an interval, not #{Border.inspect(value)}."
+       "Tempo.Interval.leap_seconds_spanned/1 reads an interval, not #{Calendars.inspect(value)}."
      )}
   end
 
@@ -2774,7 +2773,7 @@ defmodule Tempo.Interval do
 
   defp measurable!(other) do
     raise ArgumentError,
-          "A length is measured of an interval, and #{Border.inspect(other)} is not one."
+          "A length is measured of an interval, and #{Calendars.inspect(other)} is not one."
   end
 
   # How a duration from an interval's start compares with its end: `:earlier`
@@ -3683,7 +3682,7 @@ defmodule Tempo.Interval do
     ConversionError.exception(
       value: operand,
       reason:
-        "#{Border.inspect(operand)} names several spans, so it has no one span whose place is " <>
+        "#{Calendars.inspect(operand)} names several spans, so it has no one span whose place is " <>
           "uncertain: ask of each span in `Tempo.to_interval_set/1`."
     )
   end

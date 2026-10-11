@@ -52,7 +52,6 @@ defmodule Tempo.RRule do
 
   import Kernel, except: [to_string: 1]
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.RRule.Encoder
@@ -179,7 +178,7 @@ defmodule Tempo.RRule do
   def parse!(rrule, options \\ []) do
     case parse(rrule, options) do
       {:ok, interval} -> interval
-      {:error, reason} -> raise ArgumentError, "Invalid RRULE: #{Border.inspect(reason)}"
+      {:error, reason} -> raise ArgumentError, "Invalid RRULE: #{Calendars.inspect(reason)}"
     end
   end
 

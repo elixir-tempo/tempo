@@ -10,7 +10,7 @@ defmodule Tempo.IntervalEndpointsError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:operation, :interval, :reason]
 
@@ -25,7 +25,7 @@ defmodule Tempo.IntervalEndpointsError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true

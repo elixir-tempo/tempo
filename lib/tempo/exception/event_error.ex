@@ -20,7 +20,7 @@ defmodule Tempo.EventError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:event, :year, :reason]
 
@@ -32,32 +32,32 @@ defmodule Tempo.EventError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{event: event, reason: :unknown_event}) do
-    "No computed event is named #{Border.inspect(event)}. `Tempo.Event.known/0` lists the names " <>
+    "No computed event is named #{Calendars.inspect(event)}. `Tempo.Event.known/0` lists the names " <>
       "that are, the built-in events and those a registered `Tempo.Event.Resolver` claims."
   end
 
   def message(%__MODULE__{event: event, year: year, reason: :year_out_of_range}) do
-    "The event #{Border.inspect(event)} cannot be computed for the year #{year}, which is outside " <>
+    "The event #{Calendars.inspect(event)} cannot be computed for the year #{year}, which is outside " <>
       "the years it is computed for."
   end
 
   def message(%__MODULE__{event: event, reason: :unzoned_event}) do
-    "The event #{Border.inspect(event)} names a zone, and it has no instant of its own to take a " <>
+    "The event #{Calendars.inspect(event)} names a zone, and it has no instant of its own to take a " <>
       "date in one: an equinox or a solstice does."
   end
 
   def message(%__MODULE__{event: event, reason: {:no_solar_terms, calendar}}) do
-    "The event #{Border.inspect(event)} is a solar term, and #{Border.name(calendar)} reckons none. A value of " <>
+    "The event #{Calendars.inspect(event)} is a solar term, and #{Calendars.name(calendar)} reckons none. A value of " <>
       "a calendar that reckons them has it: one written with `[u-ca=gregory]`, or with a " <>
       "lunisolar calendar such as `[u-ca=chinese]`."
   end
 
   def message(%__MODULE__{event: event, year: year, reason: reason}) do
-    "The event #{Border.inspect(event)} cannot be computed for the year #{year}: #{Border.inspect(reason)}"
+    "The event #{Calendars.inspect(event)} cannot be computed for the year #{year}: #{Calendars.inspect(reason)}"
   end
 end

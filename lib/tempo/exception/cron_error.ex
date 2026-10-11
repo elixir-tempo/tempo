@@ -6,7 +6,7 @@ defmodule Tempo.CronError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:input, :field, :value, :reason]
 
@@ -19,18 +19,18 @@ defmodule Tempo.CronError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
 
   def message(%__MODULE__{field: field, value: value}) when not is_nil(field) do
-    "Invalid cron #{field} field: #{Border.inspect(value)}"
+    "Invalid cron #{field} field: #{Calendars.inspect(value)}"
   end
 
   def message(%__MODULE__{input: input}) when is_binary(input) do
-    "Could not parse cron expression #{Border.inspect(input)}"
+    "Could not parse cron expression #{Calendars.inspect(input)}"
   end
 
   def message(%__MODULE__{}), do: "Invalid cron expression"

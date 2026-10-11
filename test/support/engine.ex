@@ -1,20 +1,20 @@
 defmodule Tempo.Test.Engine do
   @moduledoc false
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   # The engine, as a public function calls it.
   #
   # A caller holds a value that names no calendar in `Calendar.ISO`. A
-  # public function replaces that with the module Tempo works with as the
-  # call comes in, and back as it returns (`Tempo.Border`), so the engine's
-  # modules are only ever given values already entered. They are no part of
-  # the public API and do not cross the border themselves.
+  # public function replaces that with the module Tempo works with in its
+  # first clause, and back in what it answers (`Tempo.Calendars.inside/1`
+  # and `outside/1`), so the engine's modules are only ever given values
+  # already replaced. They are no part of the public API and replace
+  # nothing themselves.
   #
   # A test that calls one directly holds a caller's values, as every test
   # does. Each module below is the engine's module of the same name with
-  # that one step added: its arguments are entered and its answer is left,
-  # as the public function above it would have done. A test aliases
+  # that one step added, as the public function above it would have done. A test aliases
   # `Tempo.Test.Engine.Math` where it would alias `Tempo.Math`.
 
   engine = [
@@ -63,11 +63,11 @@ defmodule Tempo.Test.Engine do
         # `:erlang.apply/3`, since an engine function may have the name of
         # one that `Kernel` imports (`Tempo.RRule.Selection.apply/4`).
         def unquote(function)(unquote_splicing(arguments)) do
-          Border.leave(
+          Calendars.outside(
             :erlang.apply(
               unquote(module),
               unquote(function),
-              Border.enter([unquote_splicing(arguments)])
+              Calendars.inside([unquote_splicing(arguments)])
             )
           )
         end

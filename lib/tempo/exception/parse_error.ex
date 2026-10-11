@@ -10,7 +10,7 @@ defmodule Tempo.ParseError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:input, :reason, :offset]
 
@@ -22,7 +22,7 @@ defmodule Tempo.ParseError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   def exception(message) when is_binary(message) do
@@ -38,11 +38,11 @@ defmodule Tempo.ParseError do
 
   def message(%__MODULE__{input: input, reason: reason, offset: offset})
       when is_binary(input) and is_integer(offset) do
-    "Could not parse #{Border.inspect(input)} at offset #{offset}: #{format_reason(reason)}"
+    "Could not parse #{Calendars.inspect(input)} at offset #{offset}: #{format_reason(reason)}"
   end
 
   def message(%__MODULE__{input: input, reason: reason}) when is_binary(input) do
-    "Could not parse #{Border.inspect(input)}: #{format_reason(reason)}"
+    "Could not parse #{Calendars.inspect(input)}: #{format_reason(reason)}"
   end
 
   def message(%__MODULE__{reason: reason}) do

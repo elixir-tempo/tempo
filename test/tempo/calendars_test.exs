@@ -1,16 +1,16 @@
-defmodule Tempo.BorderTest do
+defmodule Tempo.CalendarsTest do
   use ExUnit.Case, async: true
 
-  # The border replaces `Calendar.ISO` by the module Tempo works with, and
-  # back, wherever a term holds it. It reads a value by the fields that can
-  # hold a calendar and no others, so every shape of value is held here to
-  # what a reading of the whole term finds: nothing of the one calendar
-  # left on the way in, nothing of the other on the way out, and the value
-  # as it was.
+  # A public function replaces `Calendar.ISO` by the module Tempo works with
+  # in what it is given (`Tempo.Calendars.inside/1`), and back in what it
+  # answers (`outside/1`), wherever a term holds it. Every shape of value is
+  # held here to what a reading of the whole term finds: nothing of the one
+  # calendar left on the way in, nothing of the other on the way out, and
+  # the value as it was.
 
   import Tempo.Sigils
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.Matrix.Corpus
@@ -29,12 +29,12 @@ defmodule Tempo.BorderTest do
 
   # What is wrong with a term's crossing, if anything.
   defp crossing(term) do
-    entered = Border.enter(term)
-    left = Border.leave(entered)
+    entered = Calendars.inside(term)
+    left = Calendars.outside(entered)
 
     cond do
-      holds?(entered, Border.outside()) -> :the_outside_calendar_is_left_inside
-      holds?(left, Border.inside()) -> :the_inside_calendar_is_left_outside
+      holds?(entered, Calendar.ISO) -> :the_outside_calendar_is_left_inside
+      holds?(left, Calendars.default()) -> :the_inside_calendar_is_left_outside
       left != term -> :the_term_is_not_as_it_was
       true -> :ok
     end
@@ -57,7 +57,7 @@ defmodule Tempo.BorderTest do
         end
 
       assert Enum.count(values) > 500
-      assert Enum.any?(values, fn {_text, value} -> holds?(value, Border.outside()) end)
+      assert Enum.any?(values, fn {_text, value} -> holds?(value, Calendar.ISO) end)
       assert wrong(values) == []
       assert wrong(intervals) == []
     end
@@ -75,8 +75,8 @@ defmodule Tempo.BorderTest do
       value = Tempo.put_metadata(hebrew, %{due: ~D[2026-06-15], calendar: Calendar.ISO})
 
       assert crossing(value) == :ok
-      assert Border.enter(value).metadata.due.calendar == Border.inside()
-      assert Border.enter(hebrew) == hebrew
+      assert Calendars.inside(value).metadata.due.calendar == Calendars.default()
+      assert Calendars.inside(hebrew) == hebrew
     end
 
     test "an interval, a set, a rule and a network" do
@@ -123,8 +123,8 @@ defmodule Tempo.BorderTest do
     test "a value written by hand with no calendar is read as Calendar.ISO" do
       by_hand = %Tempo{time: [year: 2026, month: 6, day: 15], calendar: nil}
 
-      assert Border.enter(by_hand).calendar == Border.inside()
-      assert Border.leave(Border.enter(by_hand)) == ~o"2026-06-15"
+      assert Calendars.inside(by_hand).calendar == Calendars.default()
+      assert Calendars.outside(Calendars.inside(by_hand)) == ~o"2026-06-15"
     end
   end
 
@@ -150,12 +150,12 @@ defmodule Tempo.BorderTest do
     end
 
     # A message is written inside Tempo, of what Tempo holds, so every one
-    # is written with `Tempo.Border.inspect/2`, which writes a term as the
-    # caller holds it. The modules that write a value's own text define an
-    # `inspect/1` of their own, and the border is where the plain one is
-    # called.
+    # is written with `Tempo.Calendars.inspect/2`, which writes a term as
+    # the caller holds it. The modules that write a value's own text define
+    # an `inspect/1` of their own, and that function is where the plain one
+    # is called.
     test "no module of the library calls the plain inspect/2" do
-      own_writers = ["lib/tempo/border.ex", "lib/inspect.ex", "lib/protocol/inspect.ex"]
+      own_writers = ["lib/tempo/calendars.ex", "lib/inspect.ex", "lib/protocol/inspect.ex"]
 
       plain =
         for path <- Path.wildcard("lib/**/*.ex"),
@@ -194,11 +194,11 @@ defmodule Tempo.BorderTest do
 
   describe "an exception holds its values as a caller holds them" do
     test "from where it is built" do
-      inside = Border.enter(~o"2026-06-15")
+      inside = Calendars.inside(~o"2026-06-15")
 
-      error = ConversionError.exception(value: inside, target: Border.inside())
+      error = ConversionError.exception(value: inside, target: Calendars.default())
 
-      refute holds?(error, Border.inside())
+      refute holds?(error, Calendars.default())
       assert error.value == ~o"2026-06-15"
       assert error.target == Calendar.ISO
     end

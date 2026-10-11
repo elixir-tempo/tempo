@@ -32,7 +32,7 @@ defmodule Tempo.IntervalSet.Backend.Tree do
 
   use Tempo.IntervalSet.Backend
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Interval
 
@@ -104,7 +104,7 @@ defmodule Tempo.IntervalSet.Backend.Tree do
 
   defp tree_requires_anchored(interval) do
     "the Tree backend requires anchored, bounded members so their " <>
-      "timeline positions can be indexed; got #{Border.inspect(interval)}. " <>
+      "timeline positions can be indexed; got #{Calendars.inspect(interval)}. " <>
       "Use the default list backend for unanchored or open-ended sets."
   end
 

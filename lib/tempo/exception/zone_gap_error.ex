@@ -13,7 +13,7 @@ defmodule Tempo.ZoneGapError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:wall_time, :zone_id, :reason, :detail]
 
@@ -26,18 +26,18 @@ defmodule Tempo.ZoneGapError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{wall_time: wall, zone_id: zone, detail: detail})
       when is_binary(wall) and is_binary(zone) and is_binary(detail) do
-    "Wall time #{wall} does not exist in #{Border.inspect(zone)} (#{detail})."
+    "Wall time #{wall} does not exist in #{Calendars.inspect(zone)} (#{detail})."
   end
 
   def message(%__MODULE__{wall_time: wall, zone_id: zone})
       when is_binary(wall) and is_binary(zone) do
-    "Wall time #{wall} does not exist in #{Border.inspect(zone)}"
+    "Wall time #{wall} does not exist in #{Calendars.inspect(zone)}"
   end
 
   def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason

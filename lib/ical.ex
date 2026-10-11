@@ -87,7 +87,6 @@ if Code.ensure_loaded?(ICal) do
 
     """
 
-    alias Tempo.Border
     alias Tempo.Calendars
     alias Tempo.Compare
     alias Tempo.ConversionError
@@ -568,7 +567,7 @@ if Code.ensure_loaded?(ICal) do
         {:error,
          UnboundedRecurrenceError.exception(
            reason:
-             "Event #{Border.inspect(event.uid)} has an unbounded recurrence rule " <>
+             "Event #{Calendars.inspect(event.uid)} has an unbounded recurrence rule " <>
                "(no COUNT, no UNTIL). Provide a `:within` option — the " <>
                "window whose occurrences you want."
          )}
@@ -787,7 +786,7 @@ if Code.ensure_loaded?(ICal) do
        ConversionError.exception(
          value: other,
          target: Tempo,
-         reason: "Unsupported DTSTART type: #{Border.inspect(other)}"
+         reason: "Unsupported DTSTART type: #{Calendars.inspect(other)}"
        )}
     end
 
@@ -839,7 +838,7 @@ if Code.ensure_loaded?(ICal) do
        ConversionError.exception(
          value: other,
          target: Tempo,
-         reason: "Unsupported DTEND type: #{Border.inspect(other)}"
+         reason: "Unsupported DTEND type: #{Calendars.inspect(other)}"
        )}
     end
 
@@ -899,14 +898,14 @@ if Code.ensure_loaded?(ICal) do
     defp stringify_organizer(%{__struct__: _, cname: cname}) when is_binary(cname),
       do: cname
 
-    defp stringify_organizer(other), do: Border.inspect(other)
+    defp stringify_organizer(other), do: Calendars.inspect(other)
 
     defp stringify_attendees([]), do: []
 
     defp stringify_attendees(attendees) when is_list(attendees) do
       Enum.map(attendees, fn
         %{cname: cname} when is_binary(cname) -> cname
-        other -> Border.inspect(other)
+        other -> Calendars.inspect(other)
       end)
     end
   end

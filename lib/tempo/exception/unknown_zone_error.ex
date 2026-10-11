@@ -6,7 +6,7 @@ defmodule Tempo.UnknownZoneError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:zone_id]
 
@@ -16,18 +16,18 @@ defmodule Tempo.UnknownZoneError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{zone_id: zone_id}) when is_binary(zone_id) do
-    "Unknown IANA time zone: #{Border.inspect(zone_id)}"
+    "Unknown IANA time zone: #{Calendars.inspect(zone_id)}"
   end
 
   def message(%__MODULE__{zone_id: nil}), do: "Unknown IANA time zone"
 
   def message(%__MODULE__{zone_id: zone_id}) do
-    "Unknown IANA time zone: #{Border.inspect(zone_id)}. A zone is named by a string, " <>
+    "Unknown IANA time zone: #{Calendars.inspect(zone_id)}. A zone is named by a string, " <>
       "such as \"Europe/Paris\"."
   end
 end

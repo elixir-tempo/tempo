@@ -23,7 +23,7 @@ defmodule Tempo.AbstractSeasonError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:value, :operation, :territory]
 
@@ -35,24 +35,24 @@ defmodule Tempo.AbstractSeasonError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{territory: territory, value: value}) when not is_nil(territory) do
-    "The season in #{Border.inspect(value)} has no one span of dates in #{Border.inspect(territory)}, which " <>
+    "The season in #{Calendars.inspect(value)} has no one span of dates in #{Calendars.inspect(territory)}, which " <>
       "lies on both sides of the equator. Write the season of a hemisphere (25 to 28 are the " <>
       "northern seasons, 29 to 32 the southern), or give a territory on one side of the equator."
   end
 
   def message(%__MODULE__{operation: operation, value: value}) when not is_nil(operation) do
-    "Cannot #{operation} #{Border.inspect(value)}: a season of 21 to 24 is " <>
+    "Cannot #{operation} #{Calendars.inspect(value)}: a season of 21 to 24 is " <>
       "spring, summer, autumn or winter wherever it is read, and has no dates until it is " <>
       how_it_is_given_one()
   end
 
   def message(%__MODULE__{value: value}) do
-    "#{Border.inspect(value)} holds a season of 21 to 24, which has no dates until it is " <>
+    "#{Calendars.inspect(value)} holds a season of 21 to 24, which has no dates until it is " <>
       how_it_is_given_one()
   end
 

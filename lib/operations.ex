@@ -27,7 +27,7 @@ defmodule Tempo.Operations do
   # should prefer `Tempo.union/2`, `Tempo.intersection/2`, etc. over
   # calling `Tempo.Operations` directly.
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Interval
@@ -364,7 +364,7 @@ defmodule Tempo.Operations do
       {:error,
        UnanchoredError.exception(
          operation:
-           "place a value led by #{Border.inspect(leading_unit(value))} on each day of a " <>
+           "place a value led by #{Calendars.inspect(leading_unit(value))} on each day of a " <>
              ":within window, which takes a time of day only (write a recurring " <>
              "date as a selection or an RRULE)"
        )}
@@ -558,8 +558,8 @@ defmodule Tempo.Operations do
         {:error,
          UnanchoredError.exception(
            operation:
-             "combine values on different axes (led by #{Border.inspect(leading_unit(a))} " <>
-               "and #{Border.inspect(leading_unit(b))}) in a set operation; give both the " <>
+             "combine values on different axes (led by #{Calendars.inspect(leading_unit(a))} " <>
+               "and #{Calendars.inspect(leading_unit(b))}) in a set operation; give both the " <>
                "same leading unit"
          )}
 
@@ -856,8 +856,8 @@ defmodule Tempo.Operations do
          operation: :align,
          calendar: tempo.calendar,
          reason:
-           "Cannot express #{Border.inspect(tempo)} as a month-axis calendar date " <>
-             "under #{Border.name(tempo.calendar)}"
+           "Cannot express #{Calendars.inspect(tempo)} as a month-axis calendar date " <>
+             "under #{Calendars.name(tempo.calendar)}"
        )}
     else
       {:ok, %{tempo | time: resolved}}
@@ -1252,7 +1252,7 @@ defmodule Tempo.Operations do
 
   defp metadata_resolver(other) do
     {:error,
-     "Invalid :metadata option #{Border.inspect(other)}. " <>
+     "Invalid :metadata option #{Calendars.inspect(other)}. " <>
        "Valid options are :left, :merge, or {:merge, fun/2}"}
   end
 

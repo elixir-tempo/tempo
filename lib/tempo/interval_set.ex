@@ -92,7 +92,7 @@ defmodule Tempo.IntervalSet do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -282,7 +282,7 @@ defmodule Tempo.IntervalSet do
   def new!(intervals, opts \\ []) do
     case new(intervals, opts) do
       {:ok, set} -> set
-      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
     end
   end
 
@@ -884,7 +884,8 @@ defmodule Tempo.IntervalSet do
      ConversionError.exception(
        value: other,
        target: Interval,
-       reason: "IntervalSet members must be Tempo.Interval structs, got: #{Border.inspect(other)}"
+       reason:
+         "IntervalSet members must be Tempo.Interval structs, got: #{Calendars.inspect(other)}"
      )}
   end
 
@@ -1136,7 +1137,7 @@ defmodule Tempo.IntervalSet do
   def covered(value, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.IntervalSet.covered/2 takes a Tempo.IntervalSet, not #{Border.inspect(value)}."
+       "Tempo.IntervalSet.covered/2 takes a Tempo.IntervalSet, not #{Calendars.inspect(value)}."
      )}
   end
 
@@ -1151,7 +1152,7 @@ defmodule Tempo.IntervalSet do
         {:error,
          ArgumentError.exception(
            "Tempo.IntervalSet.covered/2 takes one option, :at_least, a positive " <>
-             "integer, not #{Border.inspect(options)}."
+             "integer, not #{Calendars.inspect(options)}."
          )}
     end
   end

@@ -35,7 +35,6 @@ defmodule Tempo.RRule.Expander do
   #
   # See `plans/rrule-full-expansion.md` for the roadmap.
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Interval
   alias Tempo.IntervalSet
@@ -317,7 +316,7 @@ defmodule Tempo.RRule.Expander do
         :error ->
           {:error,
            RRuleError.exception(
-             reason: "Unsupported ical frequency: #{Border.inspect(r.frequency)}",
+             reason: "Unsupported ical frequency: #{Calendars.inspect(r.frequency)}",
              rule: r
            )}
       end

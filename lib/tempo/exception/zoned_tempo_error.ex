@@ -12,7 +12,7 @@ defmodule Tempo.ZonedTempoError do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
 
   defexception [:operation, :value]
 
@@ -23,12 +23,12 @@ defmodule Tempo.ZonedTempoError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    Border.leave(struct!(__MODULE__, bindings))
+    Calendars.outside(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{operation: :in_zone, value: %Tempo{} = value}) do
-    "Cannot place #{Border.inspect(value)} in a zone: it already has a zone or an offset. " <>
+    "Cannot place #{Calendars.inspect(value)} in a zone: it already has a zone or an offset. " <>
       "Use `Tempo.shift_zone/2` to move it to another zone."
   end
 

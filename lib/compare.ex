@@ -26,7 +26,6 @@ defmodule Tempo.Compare do
   # by their raw numeric components. Same-calendar comparison keeps
   # the fast structural path on the `:time` lists.
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -347,7 +346,7 @@ defmodule Tempo.Compare do
     ConversionError.exception(
       value: value,
       reason:
-        "#{Border.inspect(value)} has no one moment its span starts at, so it has no place " <>
+        "#{Calendars.inspect(value)} has no one moment its span starts at, so it has no place " <>
           "in an order."
     )
   end
@@ -434,8 +433,8 @@ defmodule Tempo.Compare do
   defp no_line_error(%Tempo{} = a, %Tempo{} = b) do
     UnanchoredError.exception(
       operation:
-        "order values on different axes (#{Border.inspect(a)} is led by #{Border.inspect(leading_unit(a))} " <>
-          "and #{Border.inspect(b)} by #{Border.inspect(leading_unit(b))}); give both the same leading unit",
+        "order values on different axes (#{Calendars.inspect(a)} is led by #{Calendars.inspect(leading_unit(a))} " <>
+          "and #{Calendars.inspect(b)} by #{Calendars.inspect(leading_unit(b))}); give both the same leading unit",
       reason: :comparison
     )
   end
@@ -523,7 +522,7 @@ defmodule Tempo.Compare do
   defp no_frame_error(%Tempo{} = a, %Tempo{} = b) do
     UnanchoredError.exception(
       operation:
-        "order #{Border.inspect(a)} and #{Border.inspect(b)}, which differ in zone or calendar and " <>
+        "order #{Calendars.inspect(a)} and #{Calendars.inspect(b)}, which differ in zone or calendar and " <>
           "have no year to be placed by",
       reason: :comparison
     )
@@ -757,7 +756,7 @@ defmodule Tempo.Compare do
   defp kind_of(%Tempo.Duration{}), do: "a Tempo.Duration"
   defp kind_of(%Interval{}), do: "a Tempo.Interval"
   defp kind_of(%IntervalSet{}), do: "a Tempo.IntervalSet"
-  defp kind_of(other), do: Border.inspect(other)
+  defp kind_of(other), do: Calendars.inspect(other)
 
   @doc """
   Drop the `margin_of_error` annotation from every component of a time

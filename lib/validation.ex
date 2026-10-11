@@ -419,8 +419,8 @@ defmodule Tempo.Validation do
        value: month_or_day_alone,
        target: calendar,
        reason:
-         "#{Border.name(calendar)} has no month or day of a month of its own. A date written " <>
-           "with them is read in #{Border.name(written)} and converted, which takes a whole " <>
+         "#{Calendars.name(calendar)} has no month or day of a month of its own. A date written " <>
+           "with them is read in #{Calendars.name(written)} and converted, which takes a whole " <>
            "date: a year with a month and a day, or with a day of the year."
      )}
   end
@@ -1204,7 +1204,7 @@ defmodule Tempo.Validation do
       end
     else
       {:error,
-       ParseError.exception(reason: "Invalid microsecond enumeration #{Border.inspect(list)}")}
+       ParseError.exception(reason: "Invalid microsecond enumeration #{Calendars.inspect(list)}")}
     end
   end
 
@@ -1222,7 +1222,7 @@ defmodule Tempo.Validation do
     else
       {:error,
        ParseError.exception(
-         reason: "Invalid microsecond component #{Border.inspect({value, precision})}"
+         reason: "Invalid microsecond component #{Calendars.inspect({value, precision})}"
        )}
     end
   end
@@ -1273,7 +1273,7 @@ defmodule Tempo.Validation do
     {:error,
      ParseError.exception(
        reason:
-         "A fraction of #{fraction_of(unit)} is not read: #{Border.inspect(fraction)}. A fraction is " <>
+         "A fraction of #{fraction_of(unit)} is not read: #{Calendars.inspect(fraction)}. A fraction is " <>
            "read of a year, of a month written with its year, of a day, an hour, a minute " <>
            "and a second"
      )}
@@ -1467,7 +1467,7 @@ defmodule Tempo.Validation do
          InvalidDateError.exception(
            year: year,
            month: month,
-           reason: "month #{month} does not exist in #{Border.name(calendar)} year #{year}"
+           reason: "month #{month} does not exist in #{Calendars.name(calendar)} year #{year}"
          )}
     end
   end
@@ -1487,7 +1487,7 @@ defmodule Tempo.Validation do
            unit: unit,
            calendar: calendar,
            reason:
-             "#{Border.name(calendar)} does not count the values of #{unit} in #{Border.inspect(context)}"
+             "#{Calendars.name(calendar)} does not count the values of #{unit} in #{Calendars.inspect(context)}"
          )}
     end
   end
@@ -1528,7 +1528,7 @@ defmodule Tempo.Validation do
      InvalidDateError.exception(
        year: year,
        calendar: calendar,
-       reason: "#{Border.name(calendar)} year #{year} has no #{kind_of_month(read_as[:unit])}"
+       reason: "#{Calendars.name(calendar)} year #{year} has no #{kind_of_month(read_as[:unit])}"
      )}
   end
 
@@ -1641,7 +1641,7 @@ defmodule Tempo.Validation do
            year: year,
            month: month,
            reason:
-             "#{Border.name(calendar)} year #{year} has no leap month following traditional month #{month}"
+             "#{Calendars.name(calendar)} year #{year} has no leap month following traditional month #{month}"
          )}
     end
   end
@@ -1759,7 +1759,7 @@ defmodule Tempo.Validation do
     ParseError.exception(
       reason:
         "A fraction of #{counted_back(unit)} counted from the end is not read: " <>
-          "#{Border.inspect(fraction)}. A unit below zero is counted back from the end of what holds " <>
+          "#{Calendars.inspect(fraction)}. A unit below zero is counted back from the end of what holds " <>
           "it, and a fraction is so much of a unit elapsed"
     )
   end
@@ -1877,8 +1877,8 @@ defmodule Tempo.Validation do
         {:error,
          InvalidDateError.exception(
            reason:
-             "Day #{Border.inspect(day)} of week #{Border.inspect(week)} of #{Border.inspect(year)} " <>
-               "is not a date in #{Border.name(calendar)}."
+             "Day #{Calendars.inspect(day)} of week #{Calendars.inspect(week)} of #{Calendars.inspect(year)} " <>
+               "is not a date in #{Calendars.name(calendar)}."
          )}
     end
   end
@@ -2083,7 +2083,7 @@ defmodule Tempo.Validation do
   # calendar that is the notation's is not named.
   defp calendar_text(calendar) when is_nil(calendar) or is_notation(calendar), do: ""
 
-  defp calendar_text(calendar), do: " in #{Border.name(calendar)}"
+  defp calendar_text(calendar), do: " in #{Calendars.name(calendar)}"
 
   defp last_value(%Range{last: last}), do: last
   defp last_value(ranges) when is_list(ranges), do: ranges |> List.last() |> last_value()
@@ -2099,12 +2099,12 @@ defmodule Tempo.Validation do
 
   # The values a unit takes, as an error names them: a range, or the ranges
   # of a month with days missing in it (`1..2 and 14..30`).
-  defp values_text(%Range{} = range), do: Border.inspect(range)
+  defp values_text(%Range{} = range), do: Calendars.inspect(range)
 
   defp values_text([%Range{} | _] = ranges),
-    do: Enum.map_join(ranges, " and ", &Border.inspect/1)
+    do: Enum.map_join(ranges, " and ", &Calendars.inspect/1)
 
-  defp values_text(other), do: Border.inspect(other)
+  defp values_text(other), do: Calendars.inspect(other)
 
   # A set that held a count from the end is, once the count is taken, the
   # set written with the numbers: in order, its neighbours joined and none
@@ -2129,7 +2129,7 @@ defmodule Tempo.Validation do
        value: range,
        valid_range: valid,
        reason:
-         "#{Border.inspect(range)} is a range written backwards, from #{first} down to #{last}: " <>
+         "#{Calendars.inspect(range)} is a range written backwards, from #{first} down to #{last}: " <>
            "a range runs from its first value up to its last"
      )}
   end
@@ -2164,7 +2164,7 @@ defmodule Tempo.Validation do
          value: value,
          valid_range: valid_range,
          reason:
-           "#{Border.inspect(value)} is not valid#{read_as_text(read_as)}. " <>
+           "#{Calendars.inspect(value)} is not valid#{read_as_text(read_as)}. " <>
              valid_values_text(valid)
        )},
       read_as
@@ -2178,8 +2178,8 @@ defmodule Tempo.Validation do
          value: value,
          valid_range: range,
          reason:
-           "#{Border.inspect(value)} is not valid#{read_as_text(read_as)}. The normalized value of " <>
-             "#{Border.inspect(normalized)} is outside the range #{values_text(range)}"
+           "#{Calendars.inspect(value)} is not valid#{read_as_text(read_as)}. The normalized value of " <>
+             "#{Calendars.inspect(normalized)} is outside the range #{values_text(range)}"
        )},
       read_as
     )
@@ -2311,12 +2311,12 @@ defmodule Tempo.Validation do
 
   defp shift_units_reason(shift) do
     "A time shift is hours, minutes and seconds from the hour down, each a whole number " <>
-      "and any of them left out, such as [hour: 5, minute: 30]; got #{Border.inspect(shift)}."
+      "and any of them left out, such as [hour: 5, minute: 30]; got #{Calendars.inspect(shift)}."
   end
 
   defp shift_sign_reason(shift) do
     "A time shift behind UTC carries its sign on its first unit that is not zero, " <>
-      "such as [hour: -5, minute: 30] or [hour: 0, minute: -30]; got #{Border.inspect(shift)}."
+      "such as [hour: -5, minute: 30] or [hour: 0, minute: -30]; got #{Calendars.inspect(shift)}."
   end
 
   # A shift's minutes are those of an hour and its seconds those of a
@@ -2334,7 +2334,7 @@ defmodule Tempo.Validation do
          ParseError.exception(
            reason:
              "Time-zone offset out of range. An offset's minutes and seconds are " <>
-               "from 0 to 59; got #{Border.inspect(shift)}."
+               "from 0 to 59; got #{Calendars.inspect(shift)}."
          )}
 
       magnitude > @max_offset_minutes * 60 ->
@@ -2342,7 +2342,7 @@ defmodule Tempo.Validation do
          ParseError.exception(
            reason:
              "Time-zone offset out of range. Offsets must be within ±24h; " <>
-               "got #{Border.inspect(shift)}."
+               "got #{Calendars.inspect(shift)}."
          )}
 
       true ->

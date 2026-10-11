@@ -1,7 +1,6 @@
 defmodule Tempo.Iso8601.Group do
   @moduledoc false
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.IntervalEndpointsError
@@ -91,7 +90,7 @@ defmodule Tempo.Iso8601.Group do
      ParseError.exception(
        reason:
          "A week of a month is one week of one month of one year, each written as a whole " <>
-           "number, and #{Border.inspect(several)} is not one. Select the weeks from the month with " <>
+           "number, and #{Calendars.inspect(several)} is not one. Select the weeks from the month with " <>
            "`Tempo.select/2`."
      )}
   end
@@ -134,7 +133,7 @@ defmodule Tempo.Iso8601.Group do
      ParseError.exception(
        reason:
          "A season is written as a year and the season alone (ISO 8601-2 §4.8), and " <>
-           "#{Border.inspect(unit)} follows season #{season}. A season of 21 to 24 has no dates until " <>
+           "#{Calendars.inspect(unit)} follows season #{season}. A season of 21 to 24 has no dates until " <>
            "it is given a hemisphere (`Tempo.in_territory/2`); write a date of it as a date."
      )}
   end
@@ -188,14 +187,14 @@ defmodule Tempo.Iso8601.Group do
       when is_integer(year) do
     {:error,
      InvalidDateError.exception(
-       reason: "A calendar week is a single week, not #{Border.inspect(week)}"
+       reason: "A calendar week is a single week, not #{Calendars.inspect(week)}"
      )}
   end
 
   def expand_groups([{:year, _year}, {:calendar_week, week} | _rest], _calendar) do
     {:error,
      InvalidDateError.exception(
-       reason: "Calendar week #{Border.inspect(week)} needs a year with no unspecified digits"
+       reason: "Calendar week #{Calendars.inspect(week)} needs a year with no unspecified digits"
      )}
   end
 
@@ -203,7 +202,7 @@ defmodule Tempo.Iso8601.Group do
     {:error,
      InvalidDateError.exception(
        reason:
-         "Calendar week #{Border.inspect(week)} needs a year: the calendar numbers each year's weeks"
+         "Calendar week #{Calendars.inspect(week)} needs a year: the calendar numbers each year's weeks"
      )}
   end
 
@@ -230,7 +229,7 @@ defmodule Tempo.Iso8601.Group do
   def expand_groups([{:group, group} | _rest], _calendar) do
     {:error,
      ParseError.exception(
-       reason: "Complex groupings not yet supported. Found #{Border.inspect(group)}"
+       reason: "Complex groupings not yet supported. Found #{Calendars.inspect(group)}"
      )}
   end
 
@@ -312,8 +311,8 @@ defmodule Tempo.Iso8601.Group do
       interval: written,
       operation: :in_territory,
       reason:
-        "#{Border.inspect(written)} is no interval in the #{hemisphere} hemisphere, where it " <>
-          "would run from #{Border.inspect(from)} to #{Border.inspect(to)}: a year's autumn and winter " <>
+        "#{Calendars.inspect(written)} is no interval in the #{hemisphere} hemisphere, where it " <>
+          "would run from #{Calendars.inspect(from)} to #{Calendars.inspect(to)}: a year's autumn and winter " <>
           "come before its spring and summer south of the equator, and after them north of it."
     )
   end
@@ -367,7 +366,7 @@ defmodule Tempo.Iso8601.Group do
         {:error,
          InvalidDateError.exception(
            reason:
-             "#{Border.inspect(written)} cannot be placed in the #{hemisphere} hemisphere: with " <>
+             "#{Calendars.inspect(written)} cannot be placed in the #{hemisphere} hemisphere: with " <>
                "unspecified digits in its year a season is placed where it lies within one " <>
                "Gregorian year."
          )}
@@ -579,7 +578,7 @@ defmodule Tempo.Iso8601.Group do
   end
 
   defp shown(:undefined), do: "an open end"
-  defp shown(value), do: Border.inspect(value)
+  defp shown(value), do: Calendars.inspect(value)
 
   defp reversed({:ok, members}), do: {:ok, Enum.reverse(members)}
   defp reversed({:error, _reason} = error), do: error
@@ -614,13 +613,13 @@ defmodule Tempo.Iso8601.Group do
   @spec year_division_error(atom(), integer(), atom(), integer(), module()) :: Exception.t()
   def year_division_error(:not_defined, _year, division, _number, calendar) do
     InvalidDateError.exception(
-      reason: "#{Border.name(calendar)} does not divide its year into #{division}s"
+      reason: "#{Calendars.name(calendar)} does not divide its year into #{division}s"
     )
   end
 
   def year_division_error(_reason, year, division, number, calendar) do
     InvalidDateError.exception(
-      reason: "#{number} is not a #{division} of #{year} in #{Border.name(calendar)}"
+      reason: "#{number} is not a #{division} of #{year} in #{Calendars.name(calendar)}"
     )
   end
 
@@ -910,7 +909,7 @@ defmodule Tempo.Iso8601.Group do
   defp season_day_error(day, end_date) do
     {:error,
      InvalidDateError.exception(
-       reason: "Day #{Border.inspect(day)} of the season is not before its end, #{end_date}"
+       reason: "Day #{Calendars.inspect(day)} of the season is not before its end, #{end_date}"
      )}
   end
 
@@ -948,7 +947,7 @@ defmodule Tempo.Iso8601.Group do
      ParseError.exception(
        reason:
          "The #{boundary_name(event)} of #{year}, which bounds this season, " <>
-           "cannot be computed (#{Border.inspect(reason)})"
+           "cannot be computed (#{Calendars.inspect(reason)})"
      )}
   end
 
@@ -989,7 +988,7 @@ defmodule Tempo.Iso8601.Group do
     {:error,
      InvalidDateError.exception(
        reason:
-         "Day #{Border.inspect(day)} of season #{code} cannot be placed in a year with unspecified digits"
+         "Day #{Calendars.inspect(day)} of season #{code} cannot be placed in a year with unspecified digits"
      )}
   end
 
@@ -1008,7 +1007,7 @@ defmodule Tempo.Iso8601.Group do
     {:error,
      InvalidDateError.exception(
        reason:
-         "Season #{code} cannot be placed in a year with unspecified digits in #{Border.name(calendar)}"
+         "Season #{code} cannot be placed in a year with unspecified digits in #{Calendars.name(calendar)}"
      )}
   end
 
@@ -1044,7 +1043,7 @@ defmodule Tempo.Iso8601.Group do
       _other ->
         {:error,
          InvalidDateError.exception(
-           reason: "#{Border.name(calendar)} has no year #{year} to place a season in"
+           reason: "#{Calendars.name(calendar)} has no year #{year} to place a season in"
          )}
     end
   end
@@ -1074,7 +1073,7 @@ defmodule Tempo.Iso8601.Group do
   defp season_found(:none, code, year, calendar) do
     {:error,
      InvalidDateError.exception(
-       reason: "No season #{code} starts in #{year} of #{Border.name(calendar)}"
+       reason: "No season #{code} starts in #{year} of #{Calendars.name(calendar)}"
      )}
   end
 
@@ -1105,7 +1104,7 @@ defmodule Tempo.Iso8601.Group do
 
       {:error, _reason} ->
         {:error,
-         InvalidDateError.exception(reason: "#{date} has no date in #{Border.name(calendar)}")}
+         InvalidDateError.exception(reason: "#{date} has no date in #{Calendars.name(calendar)}")}
     end
   end
 
@@ -1135,7 +1134,7 @@ defmodule Tempo.Iso8601.Group do
       year: year,
       month: month,
       calendar: calendar,
-      reason: "#{Border.name(calendar)} numbers no week #{week} in month #{month} of #{year}"
+      reason: "#{Calendars.name(calendar)} numbers no week #{week} in month #{month} of #{year}"
     )
   end
 
@@ -1159,7 +1158,7 @@ defmodule Tempo.Iso8601.Group do
      ParseError.exception(
        reason:
          "Week #{week} of month #{month} of #{year} takes a single day of the week, " <>
-           "not #{Border.inspect(day)}. Select the days from the month with `Tempo.select/2`."
+           "not #{Calendars.inspect(day)}. Select the days from the month with `Tempo.select/2`."
      )}
   end
 
@@ -1189,7 +1188,7 @@ defmodule Tempo.Iso8601.Group do
     {:error,
      ParseError.exception(
        reason:
-         "Week #{week} of month #{month} of #{year} is followed by #{Border.inspect(unit)}, and a " <>
+         "Week #{week} of month #{month} of #{year} is followed by #{Calendars.inspect(unit)}, and a " <>
            "week of a month takes a day of the week (`K`) and a time of day after it"
      )}
   end
@@ -1203,8 +1202,8 @@ defmodule Tempo.Iso8601.Group do
        month: month,
        calendar: calendar,
        reason:
-         "Day #{Border.inspect(day)} of week #{week} of month #{month} of #{year} " <>
-           "is not a date in #{Border.name(calendar)}"
+         "Day #{Calendars.inspect(day)} of week #{week} of month #{month} of #{year} " <>
+           "is not a date in #{Calendars.name(calendar)}"
      )}
   end
 
@@ -1225,7 +1224,7 @@ defmodule Tempo.Iso8601.Group do
       {:error, _reason} ->
         {:error,
          InvalidDateError.exception(
-           reason: "#{Border.name(calendar)} numbers no week #{week} in #{year}"
+           reason: "#{Calendars.name(calendar)} numbers no week #{week} in #{year}"
          )}
     end
   end
@@ -1247,7 +1246,7 @@ defmodule Tempo.Iso8601.Group do
     {:error,
      InvalidDateError.exception(
        reason:
-         "Calendar week #{week} of #{year} takes a single day of the week, not #{Border.inspect(day)}"
+         "Calendar week #{week} of #{year} takes a single day of the week, not #{Calendars.inspect(day)}"
      )}
   end
 
@@ -1270,7 +1269,7 @@ defmodule Tempo.Iso8601.Group do
       {:error, _reason} ->
         {:error,
          InvalidDateError.exception(
-           reason: "Calendar week #{week} of #{year} is not a week of #{Border.name(calendar)}"
+           reason: "Calendar week #{week} of #{year} is not a week of #{Calendars.name(calendar)}"
          )}
     end
   end
@@ -1279,8 +1278,8 @@ defmodule Tempo.Iso8601.Group do
     {:error,
      InvalidDateError.exception(
        reason:
-         "Day #{Border.inspect(day)} of calendar week #{week} of #{year} " <>
-           "is not a date in #{Border.name(calendar)}"
+         "Day #{Calendars.inspect(day)} of calendar week #{week} of #{year} " <>
+           "is not a date in #{Calendars.name(calendar)}"
      )}
   end
 end

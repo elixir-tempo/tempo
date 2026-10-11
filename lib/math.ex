@@ -2,7 +2,7 @@ defmodule Tempo.Math do
   @moduledoc false
 
   alias Tempo.AbstractSeasonError
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -185,7 +185,7 @@ defmodule Tempo.Math do
 
   def add_unit(_time, unit, _calendar) do
     raise ArgumentError,
-          "Cannot increment a Tempo at #{Border.inspect(unit)} resolution — " <>
+          "Cannot increment a Tempo at #{Calendars.inspect(unit)} resolution — " <>
             "no increment rule is defined for this unit."
   end
 
@@ -733,7 +733,7 @@ defmodule Tempo.Math do
 
   def subtract_unit(_time, unit, _calendar) do
     raise ArgumentError,
-          "Cannot decrement a Tempo at #{Border.inspect(unit)} resolution — " <>
+          "Cannot decrement a Tempo at #{Calendars.inspect(unit)} resolution — " <>
             "no decrement rule is defined for this unit."
   end
 
@@ -939,7 +939,7 @@ defmodule Tempo.Math do
     {:error,
      ArgumentError.exception(
        "Tempo.Math.add/2 adds a Tempo.Duration to a Tempo value, not " <>
-         "#{Border.inspect(duration)} to #{Border.inspect(tempo)}."
+         "#{Calendars.inspect(duration)} to #{Calendars.inspect(tempo)}."
      )}
   end
 
@@ -983,7 +983,7 @@ defmodule Tempo.Math do
 
   defp rule_unit_error(tempo, unit) do
     ArgumentError.exception(
-      "#{Border.inspect(tempo)} is a rule that selects within the units it carries, and has no " <>
+      "#{Calendars.inspect(tempo)} is a rule that selects within the units it carries, and has no " <>
         "#{unit} to step: shift the span it names, Tempo.Interval.from/1 of it, instead."
     )
   end
@@ -1754,7 +1754,7 @@ defmodule Tempo.Math do
          target: :month,
          operation: :shift,
          calendar: tempo.calendar,
-         reason: "#{Border.inspect(tempo)} is a week date, with no month to add months to"
+         reason: "#{Calendars.inspect(tempo)} is a week date, with no month to add months to"
        )}
     else
       add_crisp_units(tempo, duration)
@@ -2462,7 +2462,7 @@ defmodule Tempo.Math do
     {:error,
      ArgumentError.exception(
        "Tempo.Math.subtract/2 takes a Tempo.Duration from a Tempo value, not " <>
-         "#{Border.inspect(duration)} from #{Border.inspect(tempo)}."
+         "#{Calendars.inspect(duration)} from #{Calendars.inspect(tempo)}."
      )}
   end
 

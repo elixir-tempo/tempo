@@ -45,7 +45,7 @@ defmodule Tempo.Schedule do
 
   """
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
@@ -292,7 +292,7 @@ defmodule Tempo.Schedule do
       |> Enum.find(&(&1 not in @task_options))
       |> unknown_task_option(options)
     else
-      {:error, invalid("takes a keyword list of options, not #{Border.inspect(options)}")}
+      {:error, invalid("takes a keyword list of options, not #{Calendars.inspect(options)}")}
     end
   end
 
@@ -305,7 +305,7 @@ defmodule Tempo.Schedule do
     do:
       {:error,
        invalid(
-         "does not take #{Border.inspect(key)}; its options are #{Border.inspect(@task_options)}"
+         "does not take #{Calendars.inspect(key)}; its options are #{Calendars.inspect(@task_options)}"
        )}
 
   # A window is a value or an interval with both its ends, as it is
@@ -329,7 +329,7 @@ defmodule Tempo.Schedule do
         {:error,
          invalid(
            "takes :within as a window with a start and an end, a Tempo value or an " <>
-             "interval, not #{Border.inspect(within)}"
+             "interval, not #{Calendars.inspect(within)}"
          )}
     end
   end

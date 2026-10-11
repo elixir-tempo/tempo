@@ -17,7 +17,6 @@ defmodule Tempo.Duration do
 
   """
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Microsecond
@@ -160,7 +159,7 @@ defmodule Tempo.Duration do
         raise exception
 
       {:error, reason} ->
-        raise ArgumentError, "Tempo.Duration.new!/1 failed: #{Border.inspect(reason)}"
+        raise ArgumentError, "Tempo.Duration.new!/1 failed: #{Calendars.inspect(reason)}"
     end
   end
 
@@ -577,8 +576,8 @@ defmodule Tempo.Duration do
   def to_unit(%__MODULE__{}, unit, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Duration.to_unit/3 target #{Border.inspect(unit)} is not a fixed-length unit. Use " <>
-         "one of #{Border.inspect(Enum.sort(@fixed_units))} — a :month or :year has no fixed " <>
+       "Tempo.Duration.to_unit/3 target #{Calendars.inspect(unit)} is not a fixed-length unit. Use " <>
+         "one of #{Calendars.inspect(Enum.sort(@fixed_units))} — a :month or :year has no fixed " <>
          "magnitude, so a duration cannot be expressed *in* them."
      )}
   end
@@ -602,7 +601,7 @@ defmodule Tempo.Duration do
         raise exception
 
       {:error, reason} ->
-        raise ArgumentError, "Tempo.Duration.to_unit!/3 failed: #{Border.inspect(reason)}"
+        raise ArgumentError, "Tempo.Duration.to_unit!/3 failed: #{Calendars.inspect(reason)}"
     end
   end
 
@@ -617,8 +616,8 @@ defmodule Tempo.Duration do
       {:error, offending} ->
         {:error,
          ArgumentError.exception(
-           "a duration containing #{Border.inspect(offending)} has no fixed length, so it cannot be " <>
-             "converted to #{Border.inspect(unit)} without a reference date — pass " <>
+           "a duration containing #{Calendars.inspect(offending)} has no fixed length, so it cannot be " <>
+             "converted to #{Calendars.inspect(unit)} without a reference date — pass " <>
              "`relative_to: some_tempo` to resolve it against the calendar."
          )}
     end
@@ -657,13 +656,13 @@ defmodule Tempo.Duration do
       not is_struct(reference, Tempo) ->
         {:error,
          ArgumentError.exception(
-           ":relative_to must be a Tempo value; got #{Border.inspect(reference)}"
+           ":relative_to must be a Tempo value; got #{Calendars.inspect(reference)}"
          )}
 
       not Tempo.anchored?(reference) ->
         {:error,
          ArgumentError.exception(
-           ":relative_to must be anchored (carry a year); got #{Border.inspect(reference)}"
+           ":relative_to must be anchored (carry a year); got #{Calendars.inspect(reference)}"
          )}
 
       true ->
@@ -719,7 +718,7 @@ defmodule Tempo.Duration do
     else
       {:error,
        ArgumentError.exception(
-         "Tempo.Duration.new/1 expects a keyword list. Got: #{Border.inspect(components)}"
+         "Tempo.Duration.new/1 expects a keyword list. Got: #{Calendars.inspect(components)}"
        )}
     end
   end
@@ -735,22 +734,22 @@ defmodule Tempo.Duration do
           {:halt,
            {:error,
             ArgumentError.exception(
-              "Tempo.Duration.new/1 does not recognise component #{Border.inspect(unit)}. " <>
-                "Valid components: #{Border.inspect(@valid_units)}"
+              "Tempo.Duration.new/1 does not recognise component #{Calendars.inspect(unit)}. " <>
+                "Valid components: #{Calendars.inspect(@valid_units)}"
             )}}
 
         unit == :microsecond and not Microsecond.valid?(value) ->
           {:halt,
            {:error,
             ArgumentError.exception(
-              "Tempo.Duration :microsecond must be a {value, precision} tuple, got #{Border.inspect(value)}"
+              "Tempo.Duration :microsecond must be a {value, precision} tuple, got #{Calendars.inspect(value)}"
             )}}
 
         unit != :microsecond and not is_integer(value) ->
           {:halt,
            {:error,
             ArgumentError.exception(
-              "Tempo.Duration component #{Border.inspect(unit)} must be an integer, got #{Border.inspect(value)}"
+              "Tempo.Duration component #{Calendars.inspect(unit)} must be an integer, got #{Calendars.inspect(value)}"
             )}}
 
         true ->

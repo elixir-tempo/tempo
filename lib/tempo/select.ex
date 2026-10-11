@@ -338,7 +338,6 @@ defmodule Tempo.Select do
 
   """
 
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
@@ -446,7 +445,7 @@ defmodule Tempo.Select do
   def select(base, _selector) do
     {:error,
      ArgumentError.exception(
-       "Tempo.select/2 cannot select from #{Border.inspect(base)}: the base is a Tempo value, " <>
+       "Tempo.select/2 cannot select from #{Calendars.inspect(base)}: the base is a Tempo value, " <>
          "an interval or an interval set."
      )}
   end
@@ -831,7 +830,7 @@ defmodule Tempo.Select do
       value: start,
       target: Interval,
       reason:
-        "`Tempo.select/2` walks a span from its start, and #{Border.inspect(start)} is not one span."
+        "`Tempo.select/2` walks a span from its start, and #{Calendars.inspect(start)} is not one span."
     )
   end
 
@@ -1285,7 +1284,7 @@ defmodule Tempo.Select do
   defp week_of_month_built(%Tempo{time: [selection: selection]}, :month, %Tempo{} = from) do
     with {:error, %ConversionError{} = refusal} <-
            Selection.calendar_week_in_its_year(selection, from) do
-      asked = "the selection of #{Border.inspect(selection)} from #{Border.inspect(from)}"
+      asked = "the selection of #{Calendars.inspect(selection)} from #{Calendars.inspect(from)}"
       {:error, %{refusal | value: asked}}
     end
   end
@@ -1352,7 +1351,7 @@ defmodule Tempo.Select do
 
   defp unrecognised_selector(selector) do
     ArgumentError.exception(
-      "Tempo.select/2 does not recognise selector #{Border.inspect(selector)}. See `Tempo.Select` " <>
+      "Tempo.select/2 does not recognise selector #{Calendars.inspect(selector)}. See `Tempo.Select` " <>
         "for the selector vocabulary."
     )
   end
@@ -1501,7 +1500,7 @@ defmodule Tempo.Select do
          ConversionError.exception(
            value: source,
            reason:
-             "Cannot select indices under #{Border.inspect(base_unit)} — no finer unit is " <>
+             "Cannot select indices under #{Calendars.inspect(base_unit)} — no finer unit is " <>
                "defined for that resolution."
          )}
 
@@ -1805,7 +1804,7 @@ defmodule Tempo.Select do
       interval: selector,
       operation: :select,
       reason:
-        "#{Border.inspect(selector)} does not run within one day of the week: a span selected by a " <>
+        "#{Calendars.inspect(selector)} does not run within one day of the week: a span selected by a " <>
           "weekday starts on that day and ends by a time of day (`1KT9H/T17H`). Select the " <>
           "days, and then the times within them."
     )
@@ -1984,7 +1983,7 @@ defmodule Tempo.Select do
       interval: selector,
       operation: :select,
       reason:
-        "#{Border.inspect(selector)} has no one #{end_name} to select a span by: #{Border.inspect(value)} " <>
+        "#{Calendars.inspect(selector)} has no one #{end_name} to select a span by: #{Calendars.inspect(value)} " <>
           "names several values. Select by each of them, or by the values themselves."
     )
   end
@@ -2189,8 +2188,8 @@ defmodule Tempo.Select do
         value: selector,
         target: span_calendar,
         reason:
-          "#{Border.inspect(selector)} is a selector written in #{Border.name(written)}, and the span it " <>
-            "selects from is in #{Border.name(span_calendar)}. A month, a week and a day are " <>
+          "#{Calendars.inspect(selector)} is a selector written in #{Calendars.name(written)}, and the span it " <>
+            "selects from is in #{Calendars.name(span_calendar)}. A month, a week and a day are " <>
             "numbered by their calendar, so a selector that holds one selects only from a " <>
             "span of its own: write it in the span's calendar, which `Tempo.from_iso8601/2` " <>
             "takes and a `[u-ca=…]` suffix names. A time of day and a day of the week select " <>
@@ -2214,7 +2213,7 @@ defmodule Tempo.Select do
       value: c_time,
       target: calendar,
       reason:
-        "#{Border.name(calendar)} is a calendar of weeks, with no months, so a selection in it " <>
+        "#{Calendars.name(calendar)} is a calendar of weeks, with no months, so a selection in it " <>
           "cannot be by a month, a day of one or a day of the year; select by week (W) " <>
           "and day of the week (K)."
     )

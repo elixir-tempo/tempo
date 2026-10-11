@@ -1,7 +1,7 @@
 defmodule Tempo.Enumeration do
   @moduledoc false
 
-  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.Enumeration.Zone
   alias Tempo.InvalidDateError
@@ -924,7 +924,7 @@ defmodule Tempo.Enumeration do
       ConversionError.exception(
         value: tempo,
         reason:
-          "Cannot list #{Border.inspect(tempo)}: its #{unit} counts from the end of a span " <>
+          "Cannot list #{Calendars.inspect(tempo)}: its #{unit} counts from the end of a span " <>
             "the units before it do not fix."
       )
     else
@@ -935,7 +935,7 @@ defmodule Tempo.Enumeration do
   defp exception(_tempo, {:significant_digits, value, digits, size}) do
     ArgumentError.exception(
       "Cannot enumerate a significant-digits block of #{size} candidates " <>
-        "(limit: #{@significant_digits_limit}). Source: #{Border.inspect(value)}S#{digits}"
+        "(limit: #{@significant_digits_limit}). Source: #{Calendars.inspect(value)}S#{digits}"
     )
   end
 
@@ -943,7 +943,7 @@ defmodule Tempo.Enumeration do
     ConversionError.exception(
       value: tempo,
       reason:
-        "Cannot write #{Border.inspect(tempo)} by the values its group names: the group names " <>
+        "Cannot write #{Calendars.inspect(tempo)} by the values its group names: the group names " <>
           "other values in each of the periods it is counted in."
     )
   end
@@ -952,7 +952,7 @@ defmodule Tempo.Enumeration do
   defp exception(tempo, :no_members) do
     InvalidDateError.exception(
       reason:
-        "#{Border.inspect(tempo)} names no date: none of the values it is written with exists."
+        "#{Calendars.inspect(tempo)} names no date: none of the values it is written with exists."
     )
   end
 
@@ -991,7 +991,7 @@ defmodule Tempo.Enumeration do
       {:finest, :microsecond} ->
         raise ArgumentError,
               "Cannot enumerate a Tempo at microsecond precision 6 " <>
-                "— that is the finest representable ulp. Got: #{Border.inspect(tempo)}"
+                "— that is the finest representable ulp. Got: #{Calendars.inspect(tempo)}"
 
       # A season of 21 to 24 has no dates to walk until it has a hemisphere.
       {:finest, :season} ->
@@ -999,8 +999,8 @@ defmodule Tempo.Enumeration do
 
       {:finest, unit} ->
         raise ArgumentError,
-              "Cannot enumerate a Tempo at #{Border.inspect(unit)} resolution " <>
-                "— no finer unit is defined. Got: #{Border.inspect(tempo)}"
+              "Cannot enumerate a Tempo at #{Calendars.inspect(unit)} resolution " <>
+                "— no finer unit is defined. Got: #{Calendars.inspect(tempo)}"
     end
   end
 

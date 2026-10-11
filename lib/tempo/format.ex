@@ -41,7 +41,6 @@ defmodule Tempo.Format do
   """
 
   alias Localize.DateTime.Relative
-  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Clock
   alias Tempo.Compare
@@ -113,7 +112,7 @@ defmodule Tempo.Format do
   defp iso8601_or_inspect(value) do
     case Tempo.to_iso8601(value) do
       {:ok, iso8601} -> iso8601
-      {:error, _reason} -> Border.inspect(value)
+      {:error, _reason} -> Calendars.inspect(value)
     end
   end
 
@@ -182,7 +181,7 @@ defmodule Tempo.Format do
     {:error,
      ArgumentError.exception(
        "Tempo.to_string/2 formats a Tempo, Tempo.Interval, Tempo.IntervalSet, Tempo.Set, " <>
-         "Tempo.RecurrenceSet or Tempo.Duration, got #{Border.inspect(value)}."
+         "Tempo.RecurrenceSet or Tempo.Duration, got #{Calendars.inspect(value)}."
      )}
   end
 
@@ -412,7 +411,7 @@ defmodule Tempo.Format do
   defp relative_string(value, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.to_relative_string/2 formats a Tempo or Tempo.Interval, got #{Border.inspect(value)}."
+       "Tempo.to_relative_string/2 formats a Tempo or Tempo.Interval, got #{Calendars.inspect(value)}."
      )}
   end
 
@@ -424,7 +423,7 @@ defmodule Tempo.Format do
 
   defp options_error(function, options) do
     ArgumentError.exception(
-      "Tempo.#{function} takes a keyword list of options, got #{Border.inspect(options)}."
+      "Tempo.#{function} takes a keyword list of options, got #{Calendars.inspect(options)}."
     )
   end
 
@@ -457,7 +456,7 @@ defmodule Tempo.Format do
       interval: interval,
       reason:
         "Tempo.to_relative_string/2 counts to where an interval starts, and " <>
-          "#{Border.inspect(interval)} has no start."
+          "#{Calendars.inspect(interval)} has no start."
     )
   end
 
@@ -519,7 +518,7 @@ defmodule Tempo.Format do
 
   defp anchored(other) do
     {:error,
-     ArgumentError.exception("`:from` must be a Tempo value, got #{Border.inspect(other)}.")}
+     ArgumentError.exception("`:from` must be a Tempo value, got #{Calendars.inspect(other)}.")}
   end
 
   # Where a value's span starts. A value naming several spans has no one
@@ -536,7 +535,7 @@ defmodule Tempo.Format do
         {:error,
          IntervalEndpointsError.exception(
            operation: "to_relative_string/2",
-           reason: "#{Border.inspect(value)} has no start to count from."
+           reason: "#{Calendars.inspect(value)} has no start to count from."
          )}
     end
   end
@@ -1112,7 +1111,7 @@ defmodule Tempo.Format do
            interval: interval,
            reason:
              "Tempo.to_string/2 shows an interval from its start to its end, and " <>
-               "#{Border.inspect(interval)} has no #{open_end(from)}."
+               "#{Calendars.inspect(interval)} has no #{open_end(from)}."
          )}
     end
   end
