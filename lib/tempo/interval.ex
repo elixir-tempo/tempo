@@ -1,6 +1,4 @@
 defmodule Tempo.Interval do
-  use Tempo.Border
-
   @moduledoc """
   An explicit bounded span on the time line.
 
@@ -74,6 +72,8 @@ defmodule Tempo.Interval do
   alias Tempo.TimeZoneDatabase
   alias Tempo.UnanchoredError
   alias Tempo.UnitValues
+
+  import Tempo.Calendars, only: [is_outside: 1]
 
   @type t :: %__MODULE__{
           recurrence: non_neg_integer() | :infinity,
@@ -210,6 +210,14 @@ defmodule Tempo.Interval do
   """
   @spec new(keyword()) :: {:ok, t()} | {:error, Exception.t()}
   def new(options) when is_list(options) do
+    if Calendars.outside?(options) do
+      options |> Calendars.inside() |> new() |> Calendars.outside()
+    else
+      built(options)
+    end
+  end
+
+  defp built(options) do
     with :ok <- ensure_keyword_options(options),
          {:ok, options} <- resolve_through(options),
          :ok <- ensure_describes_span(options),
@@ -1720,6 +1728,10 @@ defmodule Tempo.Interval do
 
   """
   @spec empty?(t()) :: boolean()
+  def empty?(interval) when is_outside(interval) do
+    empty?(Calendars.inside(interval))
+  end
+
   def empty?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
     case Compare.compare_endpoints(from, to) do
       :earlier -> false
@@ -1775,6 +1787,10 @@ defmodule Tempo.Interval do
 
   """
   @spec from(t() | Tempo.t()) :: Tempo.t() | :undefined | {:error, Exception.t()}
+  def from(value) when is_outside(value) do
+    value |> Calendars.inside() |> from() |> Calendars.outside()
+  end
+
   def from(%__MODULE__{} = interval), do: resolve_duration_form(interval).from
   def from(%Tempo{} = value), do: with_span(value, &from/1)
 
@@ -1811,6 +1827,10 @@ defmodule Tempo.Interval do
 
   """
   @spec to(t() | Tempo.t()) :: Tempo.t() | :undefined | {:error, Exception.t()}
+  def to(value) when is_outside(value) do
+    value |> Calendars.inside() |> to() |> Calendars.outside()
+  end
+
   def to(%__MODULE__{} = interval), do: resolve_duration_form(interval).to
   def to(%Tempo{} = value), do: with_span(value, &to/1)
 
@@ -1870,6 +1890,10 @@ defmodule Tempo.Interval do
 
   """
   @spec endpoints(t()) :: {Tempo.t() | :undefined, Tempo.t() | :undefined}
+  def endpoints(interval) when is_outside(interval) do
+    interval |> Calendars.inside() |> endpoints() |> Calendars.outside()
+  end
+
   def endpoints(%__MODULE__{} = interval) do
     %__MODULE__{from: from, to: to} = resolve_duration_form(interval)
     {from, to}
@@ -2102,6 +2126,10 @@ defmodule Tempo.Interval do
   """
   @spec duration(t(), keyword()) :: Duration.t() | :infinity | {:error, Exception.t()}
   def duration(interval, options \\ [])
+
+  def duration(interval, options) when is_outside(interval) do
+    duration(Calendars.inside(interval), options)
+  end
 
   def duration(%__MODULE__{} = interval, options) do
     with {:ok, leap_seconds?} <- leap_seconds_option(options),
@@ -2544,6 +2572,10 @@ defmodule Tempo.Interval do
 
   """
   @spec spans_leap_second?(t()) :: boolean()
+  def spans_leap_second?(interval) when is_outside(interval) do
+    spans_leap_second?(Calendars.inside(interval))
+  end
+
   def spans_leap_second?(%__MODULE__{} = interval) do
     # A predicate has only true and false to give, so an interval it
     # cannot measure raises.
@@ -2580,6 +2612,10 @@ defmodule Tempo.Interval do
 
   """
   @spec leap_seconds_spanned(t()) :: [{integer(), 1..12, 1..31}] | {:error, Exception.t()}
+  def leap_seconds_spanned(interval) when is_outside(interval) do
+    leap_seconds_spanned(Calendars.inside(interval))
+  end
+
   def leap_seconds_spanned(%__MODULE__{from: %Tempo{}, to: %Tempo{}} = interval) do
     # Union of positive insertions and (reserved) negative
     # removals, in chronological order.
@@ -2857,6 +2893,10 @@ defmodule Tempo.Interval do
 
   """
   @spec within?(interval_like(), interval_like()) :: boolean()
+  def within?(a, b) when is_outside(a) or is_outside(b) do
+    within?(Calendars.inside(a), Calendars.inside(b))
+  end
+
   def within?(a, b), do: match_relation(a, b, [:equals, :starts, :during, :finishes])
 
   # A relation error must surface, not read as `false` — a silent false

@@ -37,6 +37,127 @@ defmodule Tempo.Calendars do
   # The calendar of ISO 8601's week dates.
   @weeks Calendrical.ISOWeek
 
+  # The calendar a caller holds for a value that names none. `Calendar.ISO`
+  # keeps Elixir's `Calendar` behaviour alone, so a public function works
+  # with the module that answers Calendrical's behaviour for it (`@notation`)
+  # and hands back `Calendar.ISO`: its first clause takes a value in
+  # `Calendar.ISO`, calls itself with `inside/1` of it, and answers with
+  # `outside/1` of what that gives.
+  @outside Calendar.ISO
+
+  @doc false
+  # Whether a value is as a caller holds it, for the first clause of a
+  # public function: a value in `Calendar.ISO` (or written by hand with no
+  # calendar), an interval either end of which is one, or a set whose first
+  # member is.
+  defguard is_outside(value)
+           when (is_struct(value, Tempo) and :erlang.map_get(:calendar, value) in [@outside, nil]) or
+                  (is_struct(value, Tempo.Interval) and
+                     ((is_struct(:erlang.map_get(:from, value), Tempo) and
+                         :erlang.map_get(:calendar, :erlang.map_get(:from, value)) in [
+                           @outside,
+                           nil
+                         ]) or
+                        (is_struct(:erlang.map_get(:to, value), Tempo) and
+                           :erlang.map_get(:calendar, :erlang.map_get(:to, value)) in [
+                             @outside,
+                             nil
+                           ])))
+
+  @doc false
+  # A value as Tempo works with it: `Calendar.ISO` replaced by the module
+  # that answers for it, in a value, in each end of an interval and in each
+  # member of a set. A list or a tuple is one of such (a list of options is
+  # a list of pairs), and anything else is as it was.
+  @spec inside(term()) :: term()
+  def inside(@outside) do
+    @notation
+  end
+
+  def inside(%{__struct__: Tempo, calendar: calendar} = tempo) when calendar in [@outside, nil] do
+    %{tempo | calendar: @notation}
+  end
+
+  def inside(%{__struct__: Tempo.Interval, from: from, to: to} = interval) do
+    %{interval | from: inside(from), to: inside(to)}
+  end
+
+  def inside(%{__struct__: Tempo.IntervalSet, intervals: intervals} = set)
+      when is_list(intervals) do
+    %{set | intervals: inside(intervals)}
+  end
+
+  def inside(values) when is_list(values) do
+    Enum.map(values, &inside/1)
+  end
+
+  def inside({key, value}) do
+    {key, inside(value)}
+  end
+
+  def inside(other) do
+    other
+  end
+
+  @doc false
+  # What a public function answers, as a caller holds it: `Calendar.ISO` put
+  # back, in a value, an interval, a set, a list of them, or a tuple that
+  # holds one (`{:ok, value}`, the two ends of an interval).
+  @spec outside(term()) :: term()
+  def outside(@notation) do
+    @outside
+  end
+
+  def outside(%{__struct__: Tempo, calendar: @notation} = tempo) do
+    %{tempo | calendar: @outside}
+  end
+
+  def outside(%{__struct__: Tempo.Interval, from: from, to: to} = interval) do
+    %{interval | from: outside(from), to: outside(to)}
+  end
+
+  def outside(%{__struct__: Tempo.IntervalSet, intervals: intervals} = set)
+      when is_list(intervals) do
+    %{set | intervals: outside(intervals)}
+  end
+
+  def outside(values) when is_list(values) do
+    Enum.map(values, &outside/1)
+  end
+
+  def outside({first, second}) do
+    {outside(first), outside(second)}
+  end
+
+  def outside(other) do
+    other
+  end
+
+  @doc false
+  # Whether anything in what a public function was given is as a caller
+  # holds it, where that cannot be seen in the function's head: a list of
+  # options whose values are values.
+  @spec outside?(term()) :: boolean()
+  def outside?(value) when is_outside(value) do
+    true
+  end
+
+  def outside?(@outside) do
+    true
+  end
+
+  def outside?(values) when is_list(values) do
+    Enum.any?(values, &outside?/1)
+  end
+
+  def outside?({_key, value}) do
+    outside?(value)
+  end
+
+  def outside?(_other) do
+    false
+  end
+
   @doc false
   # The calendar a value is in where none is given: the notation's. ISO
   # 8601-2's seasons are the seasons of its months, and an event of the sky
