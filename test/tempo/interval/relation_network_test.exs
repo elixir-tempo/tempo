@@ -13,7 +13,6 @@ defmodule Tempo.Interval.RelationNetworkTest do
   import Tempo.Sigils
 
   alias Tempo.Allen
-  alias Tempo.Interval
   alias Tempo.Interval.RelationNetwork, as: Net
   alias Tempo.Interval.Relations
 

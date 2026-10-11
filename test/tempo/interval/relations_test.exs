@@ -13,7 +13,6 @@ defmodule Tempo.Interval.RelationsTest do
   import Tempo.Sigils
 
   alias Tempo.Allen
-  alias Tempo.Interval
   alias Tempo.Interval.Relations
 
   doctest Tempo.Interval.Relations

@@ -19,7 +19,6 @@ defmodule Tempo.RRule.StartPartsTest do
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
-  alias Tempo.RRule.Rule
 
   # Ten years, with three leap years.
   @window ~o"2024Y/2034Y"

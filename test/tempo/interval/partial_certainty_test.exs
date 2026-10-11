@@ -9,7 +9,6 @@ defmodule Tempo.Interval.PartialCertaintyTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Interval
   alias Tempo.UnanchoredError
 
   describe "masked (unspecified-digit) operands read as a grounding set" do

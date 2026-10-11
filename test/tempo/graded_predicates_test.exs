@@ -13,8 +13,6 @@ defmodule Tempo.GradedPredicatesTest do
   """
   use ExUnit.Case, async: true
 
-  alias Tempo.Interval
-
   # What is asked of two placed spans of years, each `{first, after_last}`.
   @holds %{
     overlaps: {&Tempo.certainly_overlaps?/2, &Tempo.possibly_overlaps?/2},
