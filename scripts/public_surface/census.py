@@ -128,16 +128,29 @@ def area(module, name):
 
 functions, generated = [], collections.Counter()
 for line in open(f"{work}/exports.tsv"):
-    source, module, moduledoc, kind, name, arity, defaults, doc, crosses, callback = line.rstrip("\n").split("\t")
+    source, module, moduledoc, kind, name, arity, defaults, doc, callback = line.rstrip("\n").split("\t")
     # The steps NimbleParsec generates for a combinator another module calls.
     if re.search(r"__\d+$", name):
         generated[module] += 1
         continue
     functions.append(dict(
         source=source, module=module, moduledoc=moduledoc, kind=kind, name=name, arity=int(arity),
-        defaults=int(defaults), doc=doc, crosses=crosses == "true",
+        defaults=int(defaults), doc=doc,
         callback=callback == "true" or name in CALLBACKS,
         own=0, lib=0, lib_modules=set(), tests=0, guides=0))
+
+# The places a public function replaces `Calendar.ISO`, read from the source:
+# a clause guarded by `is_outside/1`, and a body that asks `outside?/1`.
+guarded = asked = 0
+for path in sorted(glob.glob("lib/**/*.ex", recursive=True)):
+    if path == "lib/tempo/calendars.ex":
+        continue
+    for source_line in open(path).read().split("\n"):
+        code = source_line.strip()
+        if code.startswith("#") or code.startswith("import "):
+            continue
+        guarded += 1 if "is_outside(" in code else 0
+        asked += 1 if re.search(r"\bif Calendars\.outside\?\(", code) else 0
 
 index = collections.defaultdict(list)
 for function in functions:
@@ -216,7 +229,8 @@ for kind in ["documented", "`@doc false`", "no `@doc`", "hidden module"]:
     counts = collections.Counter(use_of(f) for f in of_kind)
     lines.append(f"| {kind} | {len(of_kind)} | " + " | ".join(str(counts[use]) for use in uses) + " |")
 
-lines += ["", f"{sum(1 for f in functions if f['crosses'])} functions cross the border (`Tempo.Border`): the documented ones, and those of the protocol implementations.", "",
+lines += ["", f"{guarded} clauses take a value in `Calendar.ISO` by the guard `Tempo.Calendars.is_outside/1`, and "
+          f"at {asked} places a function asks `Tempo.Calendars.outside?/1` of what a head cannot see (the members of a set, a list of options).", "",
           "## Documented functions, by area", "",
           "| Area | Functions | Named in a guide | Called in a test | Called by another module |", "|---|---|---|---|---|"]
 by_area = collections.defaultdict(list)

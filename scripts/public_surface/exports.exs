@@ -30,10 +30,7 @@ rows =
       {:docs_v1, _anno, _language, _format, moduledoc, _meta, docs} = Code.fetch_docs(module),
       implemented = callbacks.(module),
       {{kind, name, arity}, _anno, _signature, doc, meta} <- docs,
-      kind in [:function, :macro],
-      name != :__border__ do
-    crosses? = function_exported?(module, :__border__, 0) and {name, arity} in module.__border__()
-
+      kind in [:function, :macro] do
     Enum.join(
       [
         source,
@@ -44,7 +41,6 @@ rows =
         arity,
         Map.get(meta, :defaults, 0),
         status.(doc),
-        crosses?,
         {name, arity} in implemented
       ],
       "\t"

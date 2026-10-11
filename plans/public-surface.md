@@ -1,10 +1,10 @@
 # Public surface
 
-**Status:** in progress, 2026-10-11
+**Status:** in progress, 2026-10-12
 
 Tempo's primary API is construction, enumeration, selection, set operations and networks, and those need a clear and open public surface. Everything else the library exports is to be evaluated: whether it should be public at all (the user, 2026-10-11: "As you go through these functions, evaluate if they should really be public functions. … Everything else needs careful evaluation as to what the public API surface should be."). This document is that evaluation. It rests on a census of every exported function, [public-surface-census.md](public-surface-census.md), written by `zsh scripts/public_surface/run.sh`.
 
-It goes with [calendar-surface.md](calendar-surface.md), "The border": the public functions are the ones that cross the border between `Calendar.ISO`, which a caller holds, and the module Tempo works with inside. What is public decides what crosses, so the two are settled together.
+It goes with [calendar-surface.md](calendar-surface.md), "The border": the public functions are the ones that replace `Calendar.ISO`, which a caller holds, by the module Tempo works with, and back. What is public decides which functions do, so the two are settled together.
 
 The counts below are of the library as it stood before the decisions, on 2026-10-11; "Decisions" and "As built" say what changed, and the census itself is regenerated from the code.
 
@@ -95,9 +95,9 @@ About 160 functions outside the primary API and outside the two groups above: re
 
 ## What the border needs of it
 
-* **Documented means it crosses** — every documented function of a module that uses `Tempo.Border` crosses the border, and nothing else does; a protocol's implementation crosses in every function. `__border__/0` lists a module's crossings, and the census checks them against the documentation.
+* **Documented means it takes a caller's value** — a documented function that asks a calendar anything takes a value in `Calendar.ISO` and answers in it, by a first clause or by asking `Tempo.Calendars.outside?/1` of its arguments ([calendar-surface.md](calendar-surface.md), "As built"). A function that is not documented does not: it is given values as Tempo works with them.
 
-* **The library calls its own API with a calendar in hand** — a public function called from inside is known by its arguments, which hold the inside calendar. One that makes a value from arguments that hold no calendar (`Tempo.from_iso8601/1`, `Tempo.utc_now/0`) is called from inside with the calendar named, or not at all: the library has its own readers.
+* **The library calls its own API with a calendar in hand** — a documented function called from inside is given values that hold the inside calendar, which its first clause does not match. One that makes a value from arguments that hold no calendar (`Tempo.from_iso8601/2`, `Tempo.utc_now/0`) is the caller's and always answers as a caller holds a value, and the library has its own readers.
 
 * **A date from another library is made a date of a calendar Tempo holds where it arrives** — the clock's, the zone database's, the `ical` library's, a resolver's.
 
@@ -107,13 +107,13 @@ The user, 2026-10-11, each asked with the census in hand:
 
 * **The names of the second forms go** — "Remove the names": a 1.x call of a function that is no longer documented fails by name, where it failed inside the engine.
 
-* **A message says of a term what a caller holds** — "Every message site": `Tempo.Border.inspect/2` at every call of `inspect/1,2` in the library.
+* **A message says of a term what a caller holds** — "Every message site": `Tempo.Calendars.inspect/2` at every call of `inspect/1,2` in the library.
 
-* **A hidden module behind each documented one** — "Hidden module per public one": a documented module is what a caller calls and no more, its implementation is a hidden module the engine calls under the same function names, and the engine calls no documented function. Done after the border is committed ("After the border commit").
+* **A hidden module behind each documented one, withdrawn** — "Hidden module per public one" was decided on 2026-10-11, built, and withdrawn by the user on 2026-10-12: "I'm very unconfortable that our primary public API is just `defdelegates`. This makes it very hard for someone reading our code to navigate. … I would expect the basic function body to be in the same module as the documentation." A documented function's body stays in the module that documents it, and its clause for a caller's value is written there.
 
 * **Tempo is the home** — `@doc false` for the 42 second forms no guide names, and for the 11 functions the library alone calls.
 
-* **The engine is hidden** — the eleven modules take `@moduledoc false`, their prose kept as comments and their function docs kept for whoever works on them. They do not cross the border, and the tests that call them give them values as the engine holds them.
+* **The engine is hidden** — the eleven modules take `@moduledoc false`, their prose kept as comments and their function docs kept for whoever works on them. They take values as Tempo works with them, and the tests that call them give them such values.
 
 ## As built
 
@@ -123,15 +123,15 @@ The user, 2026-10-11, each asked with the census in hand:
 
 * **A public name for a part of a second** — `t:Tempo.microsecond/0`, which `t:Tempo.t/0` and `t:Tempo.Duration.t/0` hold, where they named a type of a hidden module.
 
-* **The engine's tests** — `Tempo.Test.Engine.<Module>` is a module of the engine as a test calls it, its arguments entered and its answer left, and `Tempo.Test.Inside` a sigil for a value as the engine holds it. The engine's doctests run in `test/tempo/engine_doctest_test.exs`.
+* **The engine's tests** — `Tempo.Test.Engine.<Module>` is a module of the engine as a test calls it, its arguments given `Tempo.Calendars.inside/1` and its answer `outside/1`, and `Tempo.Test.Inside` a sigil for a value as the engine holds it. The engine's doctests run in `test/tempo/engine_doctest_test.exs`.
 
 * **No doc names what is hidden** — `mix docs` warned of 43 references to a hidden function, module or type after the decisions, and of none now.
 
-* **The surface now** — of 975 exported functions that NimbleParsec did not generate, 265 are documented (384 before), 139 of them the primary API; 235 are `@doc false` in a documented module (160 callbacks), 475 in a hidden module, and none is without a `@doc`. 288 cross the border, in 40 modules. No documented function is called by the library alone, and none is in the engine.
+* **The surface now** — of 970 exported functions that NimbleParsec did not generate, 265 are documented (384 before), 139 of them the primary API; 235 are `@doc false` in a documented module (160 callbacks), 470 in a hidden module, and none is without a `@doc`. A documented function takes a caller's value by the guard `Tempo.Calendars.is_outside/1` (57 places) or by asking `Tempo.Calendars.outside?/1` (70). No documented function is called by the library alone, and none is in the engine.
 
 ## Tasks
 
-* [ ] **The names of the second forms go** — a function that is no longer documented no longer crosses the border, so a 1.x caller of one with a value of `Calendar.ISO` fails inside the engine (`Tempo.Interval.at_least?/2` raises `UndefinedFunctionError` for `Calendar.ISO.calendar_base/0`, where `Tempo.Interval.before?/2` still answers). The user, 2026-10-11, of what such a caller is to get: "Remove the names", so the engine's forms are renamed, a stale call is a compile warning and an error that names the function called, and the migration guide maps each to `Tempo` (its rows are written). 53 names: 22 on `Tempo.Interval`, 14 on `Tempo.Operations`, 7 on `Tempo.TimeZoneDatabase`, 2 each on `Tempo.Format`, `Tempo.IntervalSet` and `Tempo.Compare`, and `Tempo.Select.select/2`, `Tempo.Clock.utc_now/0`, `Tempo.validate_zone_offset/1` and `Tempo.ZoneOffsetMismatchError.format_offset/1`. The user, 2026-10-11, of where the engine's forms live: "Hidden module per public one", so each documented module keeps only what a caller calls and its implementation moves to a hidden module the engine calls, the function names unchanged; and of when: "After the border commit", as an item and a commit of its own. The same split is how the engine comes to call no documented function (77 today), a task of [calendar-surface.md](calendar-surface.md). Not started.
+* [ ] **The names of the second forms go** — a function that is no longer documented has no clause for a caller's value, so a 1.x caller of one with a value of `Calendar.ISO` fails inside the engine (`Tempo.Interval.at_least?/2` raises `UndefinedFunctionError` for `Calendar.ISO.calendar_base/0`). The user, 2026-10-11, of what such a caller is to get: "Remove the names", so that a stale call is a compile warning and an error that names the function called; the migration guide maps each to `Tempo` (its rows are written). 53 names: 22 on `Tempo.Interval`, 14 on `Tempo.Operations`, 7 on `Tempo.TimeZoneDatabase`, 2 each on `Tempo.Format`, `Tempo.IntervalSet` and `Tempo.Compare`, and `Tempo.Select.select/2`, `Tempo.Clock.utc_now/0`, `Tempo.validate_zone_offset/1` and `Tempo.ZoneOffsetMismatchError.format_offset/1`. How they go is to be asked again: the way decided with it, a hidden module behind each documented one, was built and withdrawn on 2026-10-12, and a rename of each in the module it is in is what is left of it. Not started.
 
 * [ ] **Exports only their own module calls** — 67 functions become `defp` (2 in documented modules, 65 in hidden ones).
 
