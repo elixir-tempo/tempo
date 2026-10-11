@@ -223,6 +223,46 @@ Taken by the user on 2026-10-10.
 
 * **The rest as recommended** — "Implement the plan until completion", so each is taken as it was recommended: a calendar of weeks stays a second shape of date, known in one function; no fast path is keyed on a calendar's name, each being removed and measured; a period's values are two new callbacks; and what only the Gregorian has is decided case by case (`SKIP` asks `days_in_month/1`, the seasons are the notation's, and the cycle of 400 years is still to decide).
 
+## The border
+
+The user, 2026-10-11, of what still decided by a calendar's answer:
+
+> For Calendar.ISO: 1. At the border (public API) we replace it with the Calendar.ISO implementation in Localize that implements the full Calendrical.Behaviour 2. At the end of the function, we replace it back to Calendar.ISO 3. Therefore, apart from this shim at the start/end of a public API call, all calendars should be treated identically. All calls go directly to `calendar.function`. This need to be 100% true, no exceptions. 4. There must be NO calendar-specific functions, there must be no path that is determined by calendar type. There must be no place in which we check for a particular calendar or calendar class.
+
+This replaces the one accessor (`Tempo.Calendars.effective/1`), which the user had kept on 2026-10-10, and it reaches every decider counted below.
+
+### Decided with it
+
+* **`Calendar.ISO` is the default calendar** — a value that names no calendar holds `Calendar.ISO` in public (`(~o"2026-06-15").calendar`, where it was `Calendrical.Gregorian`) and `Localize.Calendar.ISO` inside a call. No mapping between the Gregorian and `Calendar.ISO` is left anywhere, and `Calendrical.Gregorian` is one more calendar a caller can name, written with its identifier.
+
+* **`nil` is read as `Calendar.ISO`** — by the same shim, for a struct written by hand.
+
+* **Week dates are callbacks** — a week-based calendar is held and stepped as any other, by its own year, month and day fields, and the notation's week dates (`2026-W10-1`) are turned into dates and back by callbacks every calendar answers, ISO 8601's rule over the calendar's own year. This is the item parked on 2026-10-10; the three callbacks built then are a patch in Calendrical's `tmp/week_dates/`.
+
+### What stands against it, counted on 2026-10-11
+
+* **The shim is not at the border** — `nil` and `Calendar.ISO` are settled where a calendar is used: `Tempo.Calendars.effective/1` at 86 places, `of/1` at 4, `settled/1` at 2 and the guard `is_notation/1` at 22, in 21 files. It has holes: `Tempo.shift(%Tempo{time: [year: 2026, month: 6, day: 15], calendar: Calendar.ISO}, day: 1)` raises `UndefinedFunctionError` for `Calendar.ISO.plus/6`.
+
+* **Handing a date back checks for a calendar** — `Tempo.Calendars.native/1` (3 places) asks whether a value's calendar is the Gregorian to answer in `Calendar.ISO`.
+
+* **A class of calendar is checked** — `Tempo.week_based_calendar?/1` at 47 places, and 7 lines pair the Gregorian with `Calendrical.ISOWeek` by name.
+
+* **A calendar is computed with by name** — `Tempo.Calendars.default/0` at 37 places, `zone/0` at 8 and `rule/0` at 3, each to be read: the calendar of what is outside Tempo (the zone database, RFC 5545) is a use and no check, and a fallback that counts in the default calendar for a value of another is neither.
+
+* **The other deciders** — a month or a day named otherwise than by its field (6 functions), the calendar's name left out of what is written (6), a calendar whose months are numbered by the year (1, by `months_in_year/0`), a calendar with a year 0 (1).
+
+* **The border itself** — some 250 public functions in `Tempo`, `Tempo.Interval`, `Tempo.IntervalSet`, `Tempo.Duration`, `Tempo.RRule`, `Tempo.ICal`, `Tempo.JSCalendar`, `Tempo.Network` and `Tempo.Schedule`, and 7 files of protocol implementations.
+
+### What `Localize.Calendar.ISO` is, measured
+
+It answers every callback of `Calendar` and every required callback of `Calendrical`, and works for years beyond 9999. Asked 2,828 questions of valid dates beside `Calendrical.Gregorian`, it differs in its weeks alone (116 answers, and 32 more beyond year 9999): its weeks are ISO 8601's, where the Gregorian's week 1 is the week that holds 1 January. So the default calendar's own weeks, and a week of a month in it, become ISO 8601's. Three things to know: it declares neither behaviour (`Calendrical.validate_calendar/1` says it is no calendar), its `year/1`, `month/2` and `week/2` answer with dates of `Calendar.ISO`, and it raises for a month a year has not in `days_in_month/2`, `day_of_week/4`, `day_of_year/3`, `quarter_of_year/3`, `day_of_era/3` and `date_to_iso_days/3`, where `Calendrical.Gregorian` answers an error.
+
+A first measure of the change: with the default calendar switched and nothing else, 319 of 8,036 tests fail, in 48 test modules (the text a value is written as, events, weeks, rules).
+
+### The shape
+
+One hidden module holds the shim and is the only place that knows `Calendar.ISO` and `Localize.Calendar.ISO` are one calendar. A public function given a value in `Calendar.ISO` (or `nil`) replaces it on the way in and, having done so, replaces it back in what it returns; one given a value already in a calendar that keeps the behaviour changes nothing, so a public function called from inside Tempo is the inside. A value is read from text with no calendar into `Calendar.ISO`, and one in `Calendar.ISO` is written with no calendar named: reading and writing are the border too.
+
 ## What still decides by a calendar's answer
 
 After the last task the census counts 53 functions that decide by something a calendar answers, at 369 places. None asks what kind a calendar is by a callback made for it. They are: whether a calendar is of weeks or of months (`calendar_base/0`: 16 functions, 96 places, since a value of a calendar of weeks has a week and a day of it where another has a month and a day); the accessor for no calendar given and `Calendar.ISO` (14 functions, 216 places, kept by the user's decision); where a year or a month starts, each of which now asks (7); a month or a day named otherwise than by its field (6); the calendar's name left out of what is written for the notation's own (6); a calendar with a year 0 (1); a calendar whose months are numbered by the year, asked by `months_in_year/0` for a set of months a year on (1); and ISO 8601's week dates (2, deferred).
@@ -246,6 +286,14 @@ After the last task the census counts 53 functions that decide by something a ca
 Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 ## Tasks
+
+* [ ] **The default calendar is `Calendar.ISO`** — a value that names none holds it, and `Localize.Calendar.ISO` inside; `Calendrical.Gregorian` is written with its identifier; the default calendar's weeks are ISO 8601's. The answers of every operation are dumped before and after, and each difference read.
+
+* [ ] **The shim at the border, and nowhere else** — every public function and protocol implementation replaces `Calendar.ISO` and `nil` on the way in and back on the way out; `effective/1`, `of/1`, `settled/1`, `native/1` and `is_notation/1` are removed from the 117 places that use them.
+
+* [ ] **Week dates by callbacks, and no class of calendar** — Calendrical's three week-date callbacks, answered by Localize for `Calendar.ISO`; a week-based calendar held by its own fields; `week_based_calendar?/1` gone from its 47 places and the 7 lines that name a calendar for week dates with it.
+
+* [ ] **The deciders that are left** — each of `default/0`, `zone/0` and `rule/0` read, and the 14 functions that decide by a named month or day, the calendar's name in text, the months numbered by the year and a year 0, until the census counts none.
 
 ### Deferred
 
