@@ -18,9 +18,9 @@ defmodule Tempo.MaskedConstraintTest do
   import Tempo.Sigils
 
   alias Calendrical.Julian.March25
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   ## The measure
 

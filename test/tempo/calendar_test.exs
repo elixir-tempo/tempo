@@ -47,7 +47,7 @@ defmodule Tempo.CalendarTest do
       # not CLDR's internal calendar-type names. An unknown, non-critical
       # suffix is ignored per IXDTF §3.3, so the calendar stays the default.
       {:ok, tempo} = Tempo.from_iso8601("2019-05-10[u-ca=ethiopic-amete-alem]")
-      assert tempo.calendar == Calendrical.Gregorian
+      assert tempo.calendar == Calendar.ISO
     end
 
     test "the ethioaa BCP 47 alias works" do
@@ -55,11 +55,14 @@ defmodule Tempo.CalendarTest do
       assert tempo.calendar == Calendrical.Ethiopic.AmeteAlem
     end
 
-    test "[u-ca=gregory] names the Gregorian calendar, and the value is the one written without it" do
+    # A value that names no calendar is in `Calendar.ISO`. Calendrical's
+    # Gregorian calendar is a calendar like any other, read from its
+    # identifier and written with it (user, 2026-10-11).
+    test "[u-ca=gregory] names Calendrical's Gregorian calendar, the same day as the value written without it" do
       {:ok, tempo} = Tempo.from_iso8601("2026-06-15[u-ca=gregory]")
       assert tempo.calendar == Calendrical.Gregorian
-      assert tempo == Tempo.from_iso8601!("2026-06-15")
-      assert inspect(tempo) == ~s(~o"2026Y6M15D")
+      assert Tempo.to_iso8601!(tempo) == "2026Y6M15D[u-ca=gregory]"
+      assert Tempo.compare(tempo, Tempo.from_iso8601!("2026-06-15")) == :eq
     end
 
     test "Persian, Buddhist, and other simple calendars resolve directly" do
@@ -89,10 +92,13 @@ defmodule Tempo.CalendarTest do
       assert {:ok, ^tempo} = Tempo.from_iso8601("R/2025Y12M25D[u-ca=julian]/P1Y")
     end
 
-    test "[u-ca=iso8601] is the Gregorian calendar with ISO 8601's weeks" do
+    # `iso8601` names the calendar ISO 8601's own text is in: `Calendar.ISO`,
+    # the calendar of a value that names none (user, 2026-10-11).
+    test "[u-ca=iso8601] names Calendar.ISO, and the value is the one written without it" do
       {:ok, tempo} = Tempo.from_iso8601("2026-05-15[u-ca=iso8601]")
-      assert tempo.calendar == Calendrical.ISO
-      assert Tempo.to_iso8601!(tempo) == "2026Y5M15D[u-ca=iso8601]"
+      assert tempo.calendar == Calendar.ISO
+      assert tempo == Tempo.from_iso8601!("2026-05-15")
+      assert Tempo.to_iso8601!(tempo) == "2026Y5M15D"
 
       # Its own weeks are ISO 8601's, so a calendar week (w) is an ISO week (W).
       assert Tempo.from_iso8601!("2027Y1w1K[u-ca=iso8601]") ==
@@ -108,7 +114,9 @@ defmodule Tempo.CalendarTest do
     end
 
     test "every calendar Calendrical registers apart round-trips through its [u-ca=…] identifier" do
-      for {identifier, calendar} <- Calendrical.additional_calendars() do
+      # `iso8601` is not among them here: it names `Calendar.ISO`, the test
+      # above, where Calendrical registers its own `Calendrical.ISO` for it.
+      for {identifier, calendar} <- Calendrical.additional_calendars(), identifier != :iso8601 do
         suffix = "[u-ca=#{identifier |> Atom.to_string() |> String.replace("_", "-")}]"
         {:ok, tempo} = Tempo.from_iso8601("2026" <> suffix)
 
@@ -119,13 +127,13 @@ defmodule Tempo.CalendarTest do
 
     test "every calendar CLDR knows round-trips through the identifier Localize writes it with" do
       # The identifier is Localize's own (`:ethiopic_amete_alem` is `ethioaa`,
-      # `:islamic_civil` is `islamic-civil`), and the Gregorian calendar, the
-      # default, is written with none.
+      # `:islamic_civil` is `islamic-civil`, `:gregorian` is `gregory`). Each
+      # is written with it: the calendar written with none is `Calendar.ISO`.
       for cldr_calendar <- Localize.known_calendars() do
         {"ca", identifier} = U.encode(:ca, cldr_calendar)
         {:ok, tempo} = Tempo.from_iso8601("5000[u-ca=#{identifier}]")
 
-        written = if cldr_calendar == :gregorian, do: "5000Y", else: "5000Y[u-ca=#{identifier}]"
+        written = "5000Y[u-ca=#{identifier}]"
 
         assert {cldr_calendar, tempo.calendar.cldr_calendar_type()} ==
                  {cldr_calendar, cldr_calendar}
@@ -142,9 +150,9 @@ defmodule Tempo.CalendarTest do
       assert gregorian_days(set) == ["2026-01-07"]
     end
 
-    test "without a u-ca tag the default calendar is Gregorian" do
+    test "without a u-ca tag the calendar is Calendar.ISO" do
       {:ok, tempo} = Tempo.from_iso8601("2026-06-15")
-      assert tempo.calendar == Calendrical.Gregorian
+      assert tempo.calendar == Calendar.ISO
     end
 
     test "critical [!u-ca=fake] fails with a clear error" do
@@ -160,7 +168,7 @@ defmodule Tempo.CalendarTest do
       assert {:ok, tempo} =
                Tempo.from_iso8601("2026-06-15[u-ca=fakecalendar]")
 
-      assert tempo.calendar == Calendrical.Gregorian
+      assert tempo.calendar == Calendar.ISO
     end
   end
 
@@ -278,7 +286,7 @@ defmodule Tempo.CalendarTest do
       assert {:error, message} = Tempo.from_iso8601("2026Y6+m1D")
 
       assert Exception.message(message) ==
-               "Calendrical.Gregorian year 2026 has no leap month following traditional month 6"
+               "Calendar.ISO year 2026 has no leap month following traditional month 6"
     end
 
     test "a leap-year calendar without leap months (Islamic) is rejected" do
@@ -477,11 +485,14 @@ defmodule Tempo.CalendarTest do
       {:ok, tempo} = Tempo.from_iso8601("2020-06-15[u-ca-islamicc]")
       assert Tempo.to_iso8601!(tempo) == "2020Y6M15D[u-ca=islamic-civil]"
 
-      # `:gregorian` encodes to the preferred `gregory`, not a naive spelling.
-      {:ok, gregory} = Tempo.from_iso8601("2020-06-15[u-ca=gregorian]")
+      # `:gregorian` encodes to the preferred `gregory`, not a naive spelling,
+      # which is no identifier and names no calendar.
+      {:ok, gregory} = Tempo.from_iso8601("2020-06-15[u-ca=gregory]")
+      {:ok, naive} = Tempo.from_iso8601("2020-06-15[u-ca=gregorian]")
       {:ok, hebrew} = Tempo.from_iso8601("2020-06-15[u-ca-hebrew]")
       assert Tempo.to_iso8601!(hebrew) == "2020Y6M15D[u-ca=hebrew]"
-      assert gregory.calendar == Calendrical.Gregorian
+      assert Tempo.to_iso8601!(gregory) == "2020Y6M15D[u-ca=gregory]"
+      assert naive.calendar == Calendar.ISO
     end
 
     test "the hyphen form round-trips through generation" do
@@ -493,8 +504,8 @@ defmodule Tempo.CalendarTest do
 
   describe "Tempo.from_iso8601/2 precedence: explicit calendar wins over IXDTF" do
     test "explicit Gregorian overrides [u-ca=hebrew]" do
-      {:ok, tempo} = Tempo.from_iso8601("2022-06-15[u-ca=hebrew]", Calendrical.Gregorian)
-      assert tempo.calendar == Calendrical.Gregorian
+      {:ok, tempo} = Tempo.from_iso8601("2022-06-15[u-ca=hebrew]", Calendar.ISO)
+      assert tempo.calendar == Calendar.ISO
       # The name the argument overrides is not kept: the value is the
       # Gregorian day, as written without a suffix.
       assert tempo == Tempo.from_iso8601!("2022-06-15")
@@ -608,7 +619,7 @@ defmodule Tempo.CalendarTest do
   describe "Tempo.from_iso8601/2 with an unusable calendar module" do
     test "a concrete Islamic calendar parses" do
       assert {:ok, _} = Tempo.from_iso8601("1446-09", Calendrical.Islamic.Civil)
-      assert {:ok, _} = Tempo.from_iso8601("2025-06-15", Calendrical.Gregorian)
+      assert {:ok, _} = Tempo.from_iso8601("2025-06-15", Calendar.ISO)
     end
 
     test "a namespace module returns an error rather than raising" do

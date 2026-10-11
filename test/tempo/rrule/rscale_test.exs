@@ -27,8 +27,8 @@ defmodule Tempo.RRule.RscaleTest do
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
+  alias Tempo.Test.Engine.RRule.Expander
 
   ## The measure
 
@@ -50,7 +50,7 @@ defmodule Tempo.RRule.RscaleTest do
     {:ok, set} = Tempo.to_interval(rule, options)
 
     for occurrence <- IntervalSet.members(set) do
-      {:ok, date} = occurrence |> Interval.from() |> Tempo.to_calendar(Calendrical.Gregorian)
+      {:ok, date} = occurrence |> Interval.from() |> Tempo.to_calendar(Calendar.ISO)
       Date.new!(Tempo.year(date), Tempo.month(date), Tempo.day(date))
     end
   end
@@ -111,7 +111,7 @@ defmodule Tempo.RRule.RscaleTest do
       {:ok, set} = Tempo.to_interval(rule)
 
       for {occurrence, date} <- Enum.zip(IntervalSet.members(set), @passover) do
-        {:ok, start} = Tempo.to_calendar(Interval.from(occurrence), Calendrical.Gregorian)
+        {:ok, start} = Tempo.to_calendar(Interval.from(occurrence), Calendar.ISO)
         {:ok, expected} = Tempo.from_iso8601("#{date}T19:30[Asia/Jerusalem]")
 
         assert start == expected
@@ -222,7 +222,10 @@ defmodule Tempo.RRule.RscaleTest do
       assert Rule.calendar_from_rscale("HEBREW") == {:ok, Hebrew}
       assert Rule.calendar_from_rscale("Hebrew") == {:ok, Hebrew}
       assert Rule.calendar_from_rscale("ISLAMIC-CIVIL") == {:ok, Civil}
-      assert Rule.calendar_from_rscale("gregorian") == {:ok, Calendrical.Gregorian}
+      # RFC 7529 names the calendar every rule is counted in GREGORIAN: a rule
+      # that says so is counted as one that names none, in the calendar a
+      # value that names no calendar is in.
+      assert Tempo.Test.Engine.RRule.Rule.calendar_from_rscale("gregorian") == {:ok, Calendar.ISO}
       assert Rule.calendar_from_rscale(nil) == {:ok, nil}
     end
 
@@ -240,7 +243,7 @@ defmodule Tempo.RRule.RscaleTest do
 
       dates =
         for occurrence <- occurrences do
-          {:ok, date} = Tempo.to_calendar(Interval.from(occurrence), Calendrical.Gregorian)
+          {:ok, date} = Tempo.to_calendar(Interval.from(occurrence), Calendar.ISO)
           Date.new!(Tempo.year(date), Tempo.month(date), Tempo.day(date))
         end
 

@@ -3,10 +3,8 @@ defmodule Tempo.RRule.ExpanderTest do
   import Tempo.Sigils
 
   alias Tempo.RRule
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
-
-  doctest Tempo.RRule.Expander
+  alias Tempo.Test.Engine.RRule.Expander
 
   # The Expander is a thin adapter, not a parallel engine. These
   # tests lock in that architecture:

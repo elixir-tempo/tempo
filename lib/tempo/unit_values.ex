@@ -1,17 +1,35 @@
 defmodule Tempo.UnitValues do
-  @moduledoc """
-  The values a unit takes, and the values a written value names among them.
+  @moduledoc false
 
-  A date or a time is counted in units, and each unit takes a run of values that the units before it and the calendar decide: the months of a year, the days of a month, the hours of a day. A value is written against that run as a number, as a count from its end (`-1`, the last), as a range from one of its values to another (`{28..-1}`), or as several of these.
-
-  This module is the one place where either is worked out, so that there is one place to verify. It is also where a calendar is asked how a year begins: in a year that begins on another day than the first of its first month, as the year a composite calendar changes its new year's day in does, the year's and a month's first date are the calendar's to say (`year_begins_with_first_month?/2`, `first_date/2`). `in_period/3` gives the run, and `in_any_year/3` the run a unit takes with no year to count it in; `first/3`, `last/3`, `following/4`, `preceding/4` and `at_or_before/4` are what a step asks of it; `named/2` lists the values a written value names in it, and `resolve/2` reads a written value against it in the shape it is written in; `from_end/2` is the count from the end that all rest on. How many values a unit takes is always asked of the calendar, which is Calendrical's to answer: nothing here is calendar arithmetic.
-
-  A selection's resolver (`Tempo.RRule.Selection`), `Tempo.select/2`, the walk, the reading of a value and of its masks, a step from a value and `Tempo.explain/1` count through it. What stays with the calendar's own counts is the arithmetic of a group and of a fraction (the nth day of a group of months, half of a year), which counts a period's units.
-
-  """
+  # The values a unit takes, and the values a written value names among them.
+  #
+  # A date or a time is counted in units, and each unit takes a run of values
+  # that the units before it and the calendar decide: the months of a year,
+  # the days of a month, the hours of a day. A value is written against that
+  # run as a number, as a count from its end (`-1`, the last), as a range from
+  # one of its values to another (`{28..-1}`), or as several of these.
+  #
+  # This module is the one place where either is worked out, so that there is
+  # one place to verify. It is also where a calendar is asked how a year
+  # begins: in a year that begins on another day than the first of its first
+  # month, as the year a composite calendar changes its new year's day in
+  # does, the year's and a month's first date are the calendar's to say
+  # (`year_begins_with_first_month?/2`, `first_date/2`). `in_period/3` gives
+  # the run, and `in_any_year/3` the run a unit takes with no year to count it
+  # in; `first/3`, `last/3`, `following/4`, `preceding/4` and `at_or_before/4`
+  # are what a step asks of it; `named/2` lists the values a written value
+  # names in it, and `resolve/2` reads a written value against it in the shape
+  # it is written in; `from_end/2` is the count from the end that all rest on.
+  # How many values a unit takes is always asked of the calendar, which is
+  # Calendrical's to answer: nothing here is calendar arithmetic.
+  #
+  # A selection's resolver (`Tempo.RRule.Selection`), `Tempo.select/2`, the
+  # walk, the reading of a value and of its masks, a step from a value and
+  # `Tempo.explain/1` count through it. What stays with the calendar's own
+  # counts is the arithmetic of a group and of a fraction (the nth day of a
+  # group of months, half of a year), which counts a period's units.
 
   alias Calendrical.Kday
-  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Iso8601.Unit
   alias Tempo.Mask
@@ -188,7 +206,7 @@ defmodule Tempo.UnitValues do
   @doc false
   # Whether a calendar has the year. Every year but 0 is taken to be one.
   @spec year?(term(), module()) :: boolean()
-  def year?(0, calendar), do: Calendars.effective(calendar).valid_date?(0, 1, 1)
+  def year?(0, calendar), do: calendar.valid_date?(0, 1, 1)
 
   def year?(_year, _calendar), do: true
 
@@ -1762,9 +1780,9 @@ defmodule Tempo.UnitValues do
   # to another, as their calendar counts them, and `:two_calendars` for
   # dates that are not of one calendar.
   def counted_between(%Date{} = from, %Date{} = to, part) do
-    calendar = Calendars.effective(from.calendar)
+    calendar = from.calendar
 
-    if Calendars.effective(to.calendar) == calendar,
+    if to.calendar == calendar,
       do: calendar.diff({from.year, from.month, from.day}, {to.year, to.month, to.day}, part),
       else: :two_calendars
   end
@@ -1781,7 +1799,7 @@ defmodule Tempo.UnitValues do
   def week_after(%Date{} = date), do: stepped(date, :weeks, 1)
 
   defp stepped(%Date{year: year, month: month, day: day} = date, unit, count) do
-    calendar = Calendars.effective(date.calendar)
+    calendar = date.calendar
     {year, month, day} = calendar.plus(year, month, day, unit, count, [])
     %{date | year: year, month: month, day: day}
   end

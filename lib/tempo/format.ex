@@ -41,7 +41,9 @@ defmodule Tempo.Format do
   """
 
   alias Localize.DateTime.Relative
+  alias Tempo.Border
   alias Tempo.Calendars
+  alias Tempo.Clock
   alias Tempo.Compare
   alias Tempo.FloatingTempoError
   alias Tempo.Interval
@@ -59,12 +61,8 @@ defmodule Tempo.Format do
   # Localize's relative-time units, coarsest first.
   @relative_units [:year, :quarter, :month, :week, :day, :hour, :minute, :second]
 
-  @doc """
-  Format a Tempo value, interval, set or duration as a locale-aware string.
-
-  Delegated from `Tempo.to_string/1,2`, which describes what it returns.
-
-  """
+  @doc false
+  # What `Tempo.to_string/2` does, where it is documented.
   @spec to_string(
           Tempo.t()
           | Tempo.Interval.t()
@@ -115,7 +113,7 @@ defmodule Tempo.Format do
   defp iso8601_or_inspect(value) do
     case Tempo.to_iso8601(value) do
       {:ok, iso8601} -> iso8601
-      {:error, _reason} -> inspect(value)
+      {:error, _reason} -> Border.inspect(value)
     end
   end
 
@@ -184,7 +182,7 @@ defmodule Tempo.Format do
     {:error,
      ArgumentError.exception(
        "Tempo.to_string/2 formats a Tempo, Tempo.Interval, Tempo.IntervalSet, Tempo.Set, " <>
-         "Tempo.RecurrenceSet or Tempo.Duration, got #{inspect(value)}."
+         "Tempo.RecurrenceSet or Tempo.Duration, got #{Border.inspect(value)}."
      )}
   end
 
@@ -391,14 +389,8 @@ defmodule Tempo.Format do
   ## Relative-time formatting — "3 hours ago", "in 2 days"
   ## ---------------------------------------------------------
 
-  @doc """
-  Format a Tempo or Tempo.Interval as a locale-aware relative
-  time string, like `"3 hours ago"` or `"in 2 days"`.
-
-  Delegated from `Tempo.to_relative_string/1,2`, which describes what it
-  returns.
-
-  """
+  @doc false
+  # What `Tempo.to_relative_string/2` does, where it is documented.
   @spec to_relative_string(Tempo.t() | Tempo.Interval.t(), keyword()) ::
           {:ok, String.t()} | {:error, Exception.t()}
   def to_relative_string(value, options \\ [])
@@ -420,7 +412,7 @@ defmodule Tempo.Format do
   defp relative_string(value, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.to_relative_string/2 formats a Tempo or Tempo.Interval, got #{inspect(value)}."
+       "Tempo.to_relative_string/2 formats a Tempo or Tempo.Interval, got #{Border.inspect(value)}."
      )}
   end
 
@@ -432,7 +424,7 @@ defmodule Tempo.Format do
 
   defp options_error(function, options) do
     ArgumentError.exception(
-      "Tempo.#{function} takes a keyword list of options, got #{inspect(options)}."
+      "Tempo.#{function} takes a keyword list of options, got #{Border.inspect(options)}."
     )
   end
 
@@ -465,12 +457,16 @@ defmodule Tempo.Format do
       interval: interval,
       reason:
         "Tempo.to_relative_string/2 counts to where an interval starts, and " <>
-          "#{inspect(interval)} has no start."
+          "#{Border.inspect(interval)} has no start."
     )
   end
 
+  # The moment a value is told from where no other is given: the clock's
+  # reading to the second, as `Tempo.utc_now/0` answers a caller with it.
+  defp now, do: Clock.utc_now() |> DateTime.truncate(:second) |> Tempo.from_datetime()
+
   defp render_relative(%Tempo{} = tempo, options) do
-    {from, options} = Keyword.pop_lazy(options, :from, &Tempo.utc_now/0)
+    {from, options} = Keyword.pop_lazy(options, :from, &now/0)
     {unit, options} = Keyword.pop(options, :unit)
 
     # Localize counts the unit's calendar periods from the baseline to the
@@ -522,7 +518,8 @@ defmodule Tempo.Format do
   end
 
   defp anchored(other) do
-    {:error, ArgumentError.exception("`:from` must be a Tempo value, got #{inspect(other)}.")}
+    {:error,
+     ArgumentError.exception("`:from` must be a Tempo value, got #{Border.inspect(other)}.")}
   end
 
   # Where a value's span starts. A value naming several spans has no one
@@ -539,7 +536,7 @@ defmodule Tempo.Format do
         {:error,
          IntervalEndpointsError.exception(
            operation: "to_relative_string/2",
-           reason: "#{inspect(value)} has no start to count from."
+           reason: "#{Border.inspect(value)} has no start to count from."
          )}
     end
   end
@@ -599,7 +596,7 @@ defmodule Tempo.Format do
     |> Compare.to_wall_seconds()
     |> floor()
     |> NaiveDateTime.from_gregorian_seconds()
-    |> NaiveDateTime.convert(Calendars.effective(calendar))
+    |> NaiveDateTime.convert(calendar)
   end
 
   defp wall_date(value) do
@@ -611,7 +608,7 @@ defmodule Tempo.Format do
     utc = DateTime.from_gregorian_seconds(utc_seconds(value))
 
     case DateTime.shift_zone(utc, zone, TimeZoneDatabase.database()) do
-      {:ok, zoned} -> DateTime.convert(zoned, Calendars.effective(calendar))
+      {:ok, zoned} -> DateTime.convert(zoned, calendar)
       {:error, _reason} -> {:error, UnknownZoneError.exception(zone_id: zone)}
     end
   end
@@ -666,7 +663,7 @@ defmodule Tempo.Format do
         # The rendered range spans the implicit sub-units ("Jan – Dec
         # 2026" for a year), so fill the own-resolution bounds down to
         # the interval's iteration unit before truncating.
-        calendar = Calendars.effective(from.calendar)
+        calendar = from.calendar
         unit = named_unit(unit, tempo)
         from = Steps.fill_to_unit(from, unit, calendar)
         to = Steps.fill_to_unit(to, unit, calendar)
@@ -700,7 +697,7 @@ defmodule Tempo.Format do
   # months are shown by their days: by its months it was "Mar 1750".
   defp named_unit(:month, %Tempo{time: [{:year, year} | _rest], calendar: calendar})
        when is_integer(year) do
-    if UnitValues.year_named_by_its_months?(year, Calendars.effective(calendar)),
+    if UnitValues.year_named_by_its_months?(year, calendar),
       do: :month,
       else: :day
   end
@@ -845,8 +842,6 @@ defmodule Tempo.Format do
   # Convert a Tempo to the map shape Localize accepts: flatten the
   # time keyword list into map keys and append the :calendar field.
   defp to_locale_map(%Tempo{time: time, calendar: calendar}) do
-    calendar = Calendars.effective(calendar)
-
     time
     |> week_date_as_day(calendar)
     |> Enum.reduce(%{}, fn
@@ -917,8 +912,6 @@ defmodule Tempo.Format do
   # the era CLDR's formats for a date take as read is the one today is in.
   defp before_the_era?(%Tempo{time: [{:year, year} | _units], calendar: calendar})
        when is_integer(year) do
-    calendar = Calendars.effective(calendar)
-
     worded_as_gregorian?(calendar) and in_the_era_before?(year, calendar)
   end
 
@@ -1107,7 +1100,7 @@ defmodule Tempo.Format do
   defp interval_endpoints_for_format(%Tempo.Interval{} = interval) do
     case Tempo.Interval.endpoints(interval) do
       {%Tempo{} = from, %Tempo{} = to} ->
-        calendar = Calendars.effective(from.calendar)
+        calendar = from.calendar
         {from, to} = on_one_axis(from, to, calendar)
         unit = %Tempo.Interval{interval | from: from, to: to} |> shown_unit() |> named_unit(from)
         {:ok, Steps.fill_to_unit(from, unit, calendar), Steps.fill_to_unit(to, unit, calendar)}
@@ -1119,7 +1112,7 @@ defmodule Tempo.Format do
            interval: interval,
            reason:
              "Tempo.to_string/2 shows an interval from its start to its end, and " <>
-               "#{inspect(interval)} has no #{open_end(from)}."
+               "#{Border.inspect(interval)} has no #{open_end(from)}."
          )}
     end
   end

@@ -4,6 +4,14 @@
 
 ### Breaking changes
 
+* A value that names no calendar is in `Calendar.ISO`, Elixir's own, where it was in `Calendrical.Gregorian`: `(~o"2026-06-15").calendar` is `Calendar.ISO`, and one written by hand with `calendar: nil` is read as it. `Calendrical.Gregorian` is a calendar like any other, read from `[u-ca=gregory]` and written with it, and `[u-ca=iso8601]` names `Calendar.ISO` and is written with no suffix.
+
+* `Calendar.ISO`'s own weeks are ISO 8601's, and its weeks of a month TR35's, the first the one that holds four or more of the month's days: `~o"2023Y1w1K"` is 2 January 2023 and `~o"2026Y8M1W"` is 3 to 10 August. A value written `[u-ca=gregory]` keeps the Gregorian calendar's rules, which gave 26 December 2022 and 27 July to 3 August.
+
+* A solar term is the calendar's to answer, and `Calendar.ISO` reckons none: `(qingming)e` on a value that names no calendar is a `Tempo.EventError` whose reason is `{:no_solar_terms, Calendar.ISO}`, as `Tempo.Event.date("qingming", 2026)` is. A value of `[u-ca=gregory]` or of a lunisolar calendar has its solar terms, and `Tempo.Event.date/3` takes the calendar to ask.
+
+* An operation on any value is documented on `Tempo` alone: a relation, a certainty and a length predicate (`Tempo.before?/2`, `Tempo.at_least?/2`) are no longer documented on `Tempo.Interval` as well, nor a set operation, a selection and a formatted string in modules of their own. The engine's modules, which the documentation grouped as Internals, are no longer documented either.
+
 * A season of 21 to 24 is kept as it is written, spring wherever it is read (`~o"2026-21"` is `~o"2026Y21M"`), and is given its dates by a territory or a locale: it was read as the northern months everywhere. A day or a time of day after one (`2026-21-15`) is a `Tempo.ParseError`, and an interval of seasons is read whatever their order (`2026-24/2026-21`, June to September south of the equator).
 
 * A period of a rule gives at most 10,000 occurrences, and a rule whose period gives more is refused with a `Tempo.ConversionError` (`:too_many_values`), whatever its count or its window. `FREQ=YEARLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9,…,17;BYMINUTE=0,…,59;COUNT=10` made the 140,940 minutes of a year's working hours for its ten, and is written with `FREQ=MINUTELY`.
@@ -454,6 +462,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 * The week-start selection designator is now lowercase `q` (was `Q`), following the convention that every Tempo extension is lowercase. `Q` is still accepted on input and re-emitted as `q`; support for the uppercase form will be removed in a future major version.
 
 ### Fixed
+
+* `Tempo.new/1` and `Tempo.Duration.new/1` return an `ArgumentError` for an argument that is no list of components (a tuple, a date, a string), where they raised `FunctionClauseError`.
 
 * A month that a change of calendar begins after its first day starts on the first day it has, and is ordered as that day is: February 1918 in Russia's reform calendar (`Calendrical.Reform.calendar_for(:RU)`) starts on the 14th, where it started on a 1 February the calendar does not have. A calendar is asked the months of a year and the days of a month wherever a value is extended, compared or stepped.
 

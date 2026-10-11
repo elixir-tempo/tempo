@@ -25,6 +25,8 @@ defmodule Tempo.UnanchoredError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:operation, :value, :duration, :reason]
 
   @type t :: %__MODULE__{
@@ -36,13 +38,13 @@ defmodule Tempo.UnanchoredError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{value: value, duration: %Tempo.Duration{} = duration})
       when not is_nil(value) do
-    "Cannot shift #{inspect(value)} by #{inspect(duration)}: the answer depends on " <>
+    "Cannot shift #{Border.inspect(value)} by #{Border.inspect(duration)}: the answer depends on " <>
       "the year, and the value has none. " <> placement(value)
   end
 
@@ -60,10 +62,10 @@ defmodule Tempo.UnanchoredError do
   end
 
   defp named(nil), do: ""
-  defp named(value), do: ": #{inspect(value)} has none"
+  defp named(value), do: ": #{Border.inspect(value)} has none"
 
   defp without_year(nil), do: ""
-  defp without_year(value), do: ": #{inspect(value)} has no year"
+  defp without_year(value), do: ": #{Border.inspect(value)} has no year"
 
   defp placement(nil),
     do: "Place a value without a year on a date first with `Tempo.at/2` or `Tempo.on/2`."

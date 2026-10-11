@@ -16,10 +16,10 @@ defmodule Tempo.GeneratedSets.Check do
   # * `:written` — what `inspect/1` or `Tempo.to_iso8601/1` writes does not
   #   read back as the same value.
 
-  alias Tempo.Compare
-  alias Tempo.Enumeration
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
+  alias Tempo.Test.Engine.Enumeration
 
   @spec findings([map()]) :: [{atom(), String.t(), term()}]
   def findings(texts) do

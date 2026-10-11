@@ -38,7 +38,7 @@ defmodule Tempo.JSCalendarTest do
 
       assert [interval] = IntervalSet.members(set)
       assert interval.metadata.punctual == true
-      refute Tempo.Compare.compare_endpoints(interval.from, interval.to) == :same
+      refute Tempo.Test.Engine.Compare.compare_endpoints(interval.from, interval.to) == :same
     end
 
     test "a multi-part duration is applied whole" do
@@ -311,7 +311,7 @@ defmodule Tempo.JSCalendarTest do
 
       dates =
         for occurrence <- Tempo.IntervalSet.members(set) do
-          {:ok, start} = Tempo.to_calendar(Tempo.Interval.from(occurrence), Calendrical.Gregorian)
+          {:ok, start} = Tempo.to_calendar(Tempo.Interval.from(occurrence), Calendar.ISO)
           Date.new!(Tempo.year(start), Tempo.month(start), Tempo.day(start))
         end
 
@@ -323,7 +323,7 @@ defmodule Tempo.JSCalendarTest do
       # has not.
       for rscale <- ["", ~s(,"rscale":"gregorian")] do
         assert yearly.(rscale <> ~s(,"byMonth":["3L"])) ==
-                 {:error, {:calendar_has_no_leap_month, {{3, :leap}, Calendrical.Gregorian}}}
+                 {:error, {:calendar_has_no_leap_month, {{3, :leap}, Calendar.ISO}}}
       end
 
       assert yearly.(~s(,"rscale":"hebrew","byMonth":["L3"])) ==

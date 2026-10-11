@@ -26,11 +26,11 @@ defmodule Tempo.RRule.SparseWalkTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
-  alias Tempo.RRule.Selection
+  alias Tempo.Test.Engine.Compare
+  alias Tempo.Test.Engine.RRule.Selection
 
   @weekdays ~w(MO TU WE TH FR SA SU)
   @frequencies %{day: "DAILY", hour: "HOURLY", minute: "MINUTELY", second: "SECONDLY"}

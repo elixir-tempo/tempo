@@ -1,4 +1,6 @@
 defmodule Tempo.RecurrenceSet do
+  use Tempo.Border
+
   @moduledoc """
   A collection of recurrence rules whose occurrences form one interval set.
 
@@ -30,6 +32,7 @@ defmodule Tempo.RecurrenceSet do
 
   """
 
+  alias Tempo.Border
   alias Tempo.ConversionError
   alias Tempo.RecurrenceSet.Conditional
 
@@ -92,7 +95,7 @@ defmodule Tempo.RecurrenceSet do
   def new(members, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.RecurrenceSet.new/2 takes a list of members, not #{inspect(members)}."
+       "Tempo.RecurrenceSet.new/2 takes a list of members, not #{Border.inspect(members)}."
      )}
   end
 
@@ -136,7 +139,7 @@ defmodule Tempo.RecurrenceSet do
         {:error,
          ArgumentError.exception(
            "Tempo.RecurrenceSet.new/2 takes one option, :metadata, a map, not " <>
-             "#{inspect(options)}."
+             "#{Border.inspect(options)}."
          )}
     end
   end

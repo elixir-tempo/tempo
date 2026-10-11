@@ -171,12 +171,12 @@ Events with an `RRULE` expand through a single pipeline:
 ```
 RRULE string ──────────► Tempo.RRule.parse/2 ──┐
                                                 ├──► %Tempo.Interval{}
-%ICal.Recurrence{} ─► %Tempo.RRule.Rule{} ──────┘            │
+%ICal.Recurrence{} ─► the rule it holds ────────┘            │
                                                              ▼
                                                    Tempo.to_interval/2
                                                              │
                                                              ▼
-                                                  Tempo.RRule.Selection
+                                                  the rule's selection
                                                              │
                                                              ▼
                                                    [%Tempo.Interval{}]

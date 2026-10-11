@@ -17,12 +17,12 @@ defmodule Tempo.RRule.SelectionCountedTest do
   use ExUnit.Case, async: true
 
   alias Tempo.ConversionError
-  alias Tempo.Enumeration
   alias Tempo.Interval
   alias Tempo.IntervalSet
-  alias Tempo.Limit
   alias Tempo.RRule
-  alias Tempo.RRule.Selection
+  alias Tempo.Test.Engine.Enumeration
+  alias Tempo.Test.Engine.Limit
+  alias Tempo.Test.Engine.RRule.Selection
 
   @most 10_000
 

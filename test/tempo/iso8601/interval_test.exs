@@ -1,10 +1,10 @@
 defmodule Tempo.Parser.Interval.Test do
   use ExUnit.Case, async: true
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.Iso8601.Tokenizer
+  alias Tempo.Test.Engine.Compare
 
   test "Intervals" do
     assert Tokenizer.tokenize("2018-01-15/02-20") ==

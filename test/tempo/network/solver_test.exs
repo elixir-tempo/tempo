@@ -8,8 +8,6 @@ defmodule Tempo.Network.SolverTest do
   alias Tempo.Network.{Solver, TimePeriod}
 
   doctest Tempo.Network.Solver
-  doctest Tempo.Network.Normalize
-
   # Read the integer year of a tightened bound.
   defp years(period) do
     %{

@@ -62,13 +62,13 @@ defmodule Tempo.AllenAxiomsTest do
               a <- interval_gen(),
               b <- interval_gen()
             ) do
-        assert Interval.relation(a, b) in @relations
+        assert Tempo.relation(a, b) in @relations
       end
     end
 
     property "self-relation is :equals" do
       check all(a <- interval_gen()) do
-        assert Interval.relation(a, a) == :equals
+        assert Tempo.relation(a, a) == :equals
       end
     end
 
@@ -77,8 +77,8 @@ defmodule Tempo.AllenAxiomsTest do
               a <- interval_gen(),
               b <- interval_gen()
             ) do
-        forward = Interval.relation(a, b)
-        backward = Interval.relation(b, a)
+        forward = Tempo.relation(a, b)
+        backward = Tempo.relation(b, a)
         assert Allen.inverse(forward) == backward
       end
     end
@@ -88,11 +88,11 @@ defmodule Tempo.AllenAxiomsTest do
               a <- interval_gen(),
               b <- interval_gen()
             ) do
-        if Interval.relation(a, b) == :meets do
+        if Tempo.relation(a, b) == :meets do
           # Asymmetry: if A meets B then B does not meet A.
           # Under the inverse correspondence, B's relation to A is :met_by.
-          assert Interval.relation(b, a) == :met_by
-          refute Interval.relation(b, a) == :meets
+          assert Tempo.relation(b, a) == :met_by
+          refute Tempo.relation(b, a) == :meets
         end
       end
     end
@@ -107,9 +107,9 @@ defmodule Tempo.AllenAxiomsTest do
         c = Interval.new!(from: t2, to: t3)
         d = Interval.new!(from: t3, to: t4)
 
-        assert Interval.relation(a, b) == :meets
-        assert Interval.relation(b, c) == :meets
-        assert Interval.relation(c, d) == :meets
+        assert Tempo.relation(a, b) == :meets
+        assert Tempo.relation(b, c) == :meets
+        assert Tempo.relation(c, d) == :meets
 
         # Sum Axiom: there exists a single interval n such that
         # meets(a, n) ∧ meets(n, d). In Tempo, the canonical
@@ -131,7 +131,7 @@ defmodule Tempo.AllenAxiomsTest do
               a <- interval_gen(),
               b <- interval_gen()
             ) do
-        assert Interval.before?(a, b) == Interval.relation(a, b) in [:precedes, :meets]
+        assert Tempo.before?(a, b) == Tempo.relation(a, b) in [:precedes, :meets]
       end
     end
 
@@ -140,7 +140,7 @@ defmodule Tempo.AllenAxiomsTest do
               a <- interval_gen(),
               b <- interval_gen()
             ) do
-        assert Interval.after?(a, b) == Interval.relation(a, b) in [:preceded_by, :met_by]
+        assert Tempo.after?(a, b) == Tempo.relation(a, b) in [:preceded_by, :met_by]
       end
     end
 
@@ -149,7 +149,7 @@ defmodule Tempo.AllenAxiomsTest do
               a <- interval_gen(),
               b <- interval_gen()
             ) do
-        held = Interval.relation(a, b)
+        held = Tempo.relation(a, b)
 
         for relation <- @relations do
           assert apply(Allen, :"#{relation}?", [a, b]) == (held == relation)
@@ -162,8 +162,8 @@ defmodule Tempo.AllenAxiomsTest do
               a <- interval_gen(),
               b <- interval_gen()
             ) do
-        assert Interval.adjacent?(a, b) ==
-                 Interval.relation(a, b) in [:meets, :met_by]
+        assert Tempo.adjacent?(a, b) ==
+                 Tempo.relation(a, b) in [:meets, :met_by]
       end
     end
 
@@ -173,7 +173,7 @@ defmodule Tempo.AllenAxiomsTest do
               b <- interval_gen()
             ) do
         assert Interval.within?(a, b) ==
-                 Interval.relation(a, b) in [:equals, :starts, :during, :finishes]
+                 Tempo.relation(a, b) in [:equals, :starts, :during, :finishes]
       end
     end
 
@@ -190,7 +190,7 @@ defmodule Tempo.AllenAxiomsTest do
               a <- microsecond_interval_gen(),
               b <- microsecond_interval_gen()
             ) do
-        assert Interval.relation(a, b) in @relations
+        assert Tempo.relation(a, b) in @relations
       end
     end
 
@@ -199,13 +199,13 @@ defmodule Tempo.AllenAxiomsTest do
               a <- microsecond_interval_gen(),
               b <- microsecond_interval_gen()
             ) do
-        assert Allen.inverse(Interval.relation(a, b)) == Interval.relation(b, a)
+        assert Allen.inverse(Tempo.relation(a, b)) == Tempo.relation(b, a)
       end
     end
 
     property "self-relation is :equals" do
       check all(a <- microsecond_interval_gen()) do
-        assert Interval.relation(a, a) == :equals
+        assert Tempo.relation(a, a) == :equals
       end
     end
   end

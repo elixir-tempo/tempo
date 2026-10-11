@@ -38,6 +38,8 @@ defmodule Tempo.Explanation do
 end
 
 defmodule Tempo.Explain do
+  use Tempo.Border
+
   import Kernel, except: [to_string: 1]
 
   @moduledoc """
@@ -66,6 +68,7 @@ defmodule Tempo.Explain do
 
   """
 
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Enumeration
   alias Tempo.Event
@@ -87,8 +90,6 @@ defmodule Tempo.Explain do
   raising.
   """
   @spec explain(term()) :: Explanation.t()
-  def explain(%Tempo{calendar: nil} = value), do: explain(Tempo.with_a_calendar(value))
-
   def explain(value) do
     value = as_resolved(value)
     %Explanation{kind: classify(value), parts: explain_parts(value)}
@@ -233,7 +234,7 @@ defmodule Tempo.Explain do
   defp explain_parts(%Conditional{} = conditional), do: conditional_parts(conditional)
 
   defp explain_parts(other) do
-    [{:headline, "A value Tempo doesn't know how to describe: #{inspect(other)}."}]
+    [{:headline, "A value Tempo doesn't know how to describe: #{Border.inspect(other)}."}]
   end
 
   ## ------------------------------------------------------------
@@ -433,7 +434,7 @@ defmodule Tempo.Explain do
     year = find_unit(time, :year)
 
     case named_month(tempo) do
-      {:ok, name} -> "#{name} #{named_day(year, month, day, calendar_of(tempo))}, #{year}"
+      {:ok, name} -> "#{name} #{named_day(year, month, day, tempo.calendar)}, #{year}"
       :error -> "day #{day} of month #{month} of #{year}"
     end
   end
@@ -453,7 +454,7 @@ defmodule Tempo.Explain do
     year = find_unit(time, :year)
     month = find_unit(time, :month)
 
-    case named_once?(year, month, calendar_of(tempo)) and named_month(tempo) do
+    case named_once?(year, month, tempo.calendar) and named_month(tempo) do
       {:ok, name} -> "#{name} #{year}"
       _no_name -> "month #{month} of #{year}"
     end
@@ -529,8 +530,8 @@ defmodule Tempo.Explain do
   # What names a month: its calendar and, when the value states one, its year.
   defp naming(%Tempo{time: time} = tempo) do
     case find_unit(time, :year) do
-      year when is_integer(year) -> {calendar_of(tempo), year}
-      _no_one_year -> {calendar_of(tempo), nil}
+      year when is_integer(year) -> {tempo.calendar, year}
+      _no_one_year -> {tempo.calendar, nil}
     end
   end
 
@@ -540,7 +541,7 @@ defmodule Tempo.Explain do
     week = find_unit(time, :week)
     day = find_unit(time, :day_of_week)
 
-    "#{weekday_of(year, week, day, calendar_of(tempo))} of week #{week} of #{year}"
+    "#{weekday_of(year, week, day, tempo.calendar)} of week #{week} of #{year}"
   end
 
   # The weekday a week date names, asked of the date itself: a calendar of
@@ -614,7 +615,7 @@ defmodule Tempo.Explain do
 
   defp yearless_headline(:none, %Tempo{} = tempo) do
     {unit, _scale} = Tempo.resolution(tempo)
-    "A Tempo value at #{inspect(unit)} resolution."
+    "A Tempo value at #{Border.inspect(unit)} resolution."
   end
 
   # The time of day a value with a day is written to, as the words that
@@ -640,13 +641,10 @@ defmodule Tempo.Explain do
   defp yearless_weekday(%Tempo{time: time} = tempo) do
     day = find_unit(time, :day_of_week)
 
-    if Tempo.week_based_calendar?(calendar_of(tempo)),
+    if Tempo.week_based_calendar?(tempo.calendar),
       do: "Day #{day}",
       else: weekday_name(day)
   end
-
-  # A value built without a calendar is Gregorian, as it is everywhere else.
-  defp calendar_of(%Tempo{} = value), do: Calendars.of(value)
 
   # The precision a value states, the first whose units it has. Those with no
   # year at all — a recurring day-and-month (a birthday), a month, a bare day,
@@ -840,7 +838,7 @@ defmodule Tempo.Explain do
   defp weekdays_phrase(%Tempo{time: time} = tempo) do
     days = find_unit(time, :day_of_week)
 
-    if Tempo.week_based_calendar?(calendar_of(tempo)),
+    if Tempo.week_based_calendar?(tempo.calendar),
       do: numbered("day", days),
       else: component_phrase(days, &weekday_name/1)
   end
@@ -1096,7 +1094,7 @@ defmodule Tempo.Explain do
   end
 
   defp calendar_text(%Tempo{calendar: calendar}) when is_notation(calendar), do: nil
-  defp calendar_text(%Tempo{calendar: cal}), do: "Calendar: #{inspect(cal)}."
+  defp calendar_text(%Tempo{calendar: cal}), do: "Calendar: #{Border.inspect(cal)}."
 
   # A value with no components has no resolution to report — `resolution/1`
   # takes the last unit and there is none.
@@ -1124,7 +1122,7 @@ defmodule Tempo.Explain do
   # The unit is the one the value's interval says it is walked by: a week
   # of a calendar of months by days, the dates its walk yields.
   defp describe_enumerator({next_unit, _range}, calendar),
-    do: "Iterates at #{inspect(Unit.walked_by(next_unit, calendar))} granularity."
+    do: "Iterates at #{Border.inspect(Unit.walked_by(next_unit, calendar))} granularity."
 
   ## ------------------------------------------------------------
   ## Tempo.Interval
@@ -1328,7 +1326,7 @@ defmodule Tempo.Explain do
       {:headline, recurrence_headline(recurrence)},
       {:span, "First occurrence: #{told_endpoint(from)} to #{told_endpoint(to, "exclusive")}."},
       {:span, "Each occurrence starts where the one before ends and is as long."},
-      selection && {:span, "Selects: #{selection_prose(selection, {calendar_of(rule), nil})}."},
+      selection && {:span, "Selects: #{selection_prose(selection, {rule.calendar, nil})}."},
       {:hint, recurrence_hint(recurrence, from)}
     ]
     |> Enum.reject(&is_nil/1)
@@ -1483,9 +1481,9 @@ defmodule Tempo.Explain do
   # A set/domain member as prose. A range renders `first..last`; anything else
   # falls back to `inspect/1` (the `~o"…"` sigil form).
   defp member_phrase(%Tempo.Range{first: first, last: last}),
-    do: "#{inspect(first)}..#{inspect(last)}"
+    do: "#{Border.inspect(first)}..#{Border.inspect(last)}"
 
-  defp member_phrase(other), do: inspect(other)
+  defp member_phrase(other), do: Border.inspect(other)
 
   defp filter_phrase(:even), do: ["even years only"]
   defp filter_phrase(:odd), do: ["odd years only"]
@@ -1656,7 +1654,7 @@ defmodule Tempo.Explain do
     do:
       "#{rule_phrase(member)}, kept only when the days around it fall on other members' occurrences"
 
-  defp rule_phrase(other), do: inspect(other)
+  defp rule_phrase(other), do: Border.inspect(other)
 
   defp cadence_phrase([{unit, 1}]), do: "every #{unit}"
   defp cadence_phrase(cadence), do: "every #{duration_prose(cadence)}"
@@ -1750,12 +1748,12 @@ defmodule Tempo.Explain do
   defp render_endpoint(%Tempo{time: time} = tempo) do
     cond do
       holds_a_group?(time) -> group_phrase(tempo)
-      names_each_value?(tempo) -> inspect(tempo)
+      names_each_value?(tempo) -> Border.inspect(tempo)
       true -> render_moment(tempo, time)
     end
   end
 
-  defp render_endpoint(other), do: inspect(other)
+  defp render_endpoint(other), do: Border.inspect(other)
 
   # An end that holds a group (`2026Y1Q`, a quarter) is told as the value
   # alone is, by the months it names: "January to March 2026". It was shown
@@ -1768,7 +1766,7 @@ defmodule Tempo.Explain do
          {:ok, phrase} <- shape_phrase(date_shape(time), tempo) do
       phrase
     else
-      _no_words_for_it -> inspect(tempo)
+      _no_words_for_it -> Border.inspect(tempo)
     end
   end
 
@@ -1791,7 +1789,7 @@ defmodule Tempo.Explain do
     do: "the #{Map.fetch!(@season_names, season)} of #{year}, in no hemisphere"
 
   defp season_phrase(%Tempo{time: [{:year, _several}, {:season, season}]} = tempo),
-    do: "the #{Map.fetch!(@season_names, season)} of #{inspect(tempo)}, in no hemisphere"
+    do: "the #{Map.fetch!(@season_names, season)} of #{Border.inspect(tempo)}, in no hemisphere"
 
   # An end as it is written, with the day it starts on where its writing
   # does not say (`starts_on/1`), and with what else is to be said of it:
@@ -1830,7 +1828,7 @@ defmodule Tempo.Explain do
     with [_ | _] <- time,
          true <- Enum.all?(time, &plain_date_unit?/1),
          year when is_integer(year) <- find_unit(time, :year),
-         calendar = calendar_of(tempo),
+         calendar = tempo.calendar,
          false <- Tempo.week_based_calendar?(calendar) do
       start_not_written(year, find_unit(time, :month), find_unit(time, :week), calendar)
     else
@@ -1881,12 +1879,12 @@ defmodule Tempo.Explain do
       # component has no plain calendar spelling, so show the value's own
       # rendering rather than `?`. `Inspect` is total — it falls back to a
       # labelled struct view for anything it cannot encode.
-      {nil, nil} -> inspect(tempo)
+      {nil, nil} -> Border.inspect(tempo)
       {{:in_words, words}, nil} -> words
       # A day of the year and a day of the week with no year have no ISO
       # spelling for a time to follow: the words were run into it ("day 166
       # of the yearT10").
-      {{:in_words, _words}, _time} -> inspect(tempo)
+      {{:in_words, _words}, _time} -> Border.inspect(tempo)
       {date, nil} -> date
       {nil, time} -> "T#{time}#{render_shift(tempo)}"
       {date, time} -> "#{date}T#{time}#{render_shift(tempo)}"
@@ -2057,7 +2055,7 @@ defmodule Tempo.Explain do
   defp month_name(month, naming) do
     case fetch_month_name(month, naming) do
       {:ok, name} -> name
-      :error -> "month #{inspect(month)}"
+      :error -> "month #{Border.inspect(month)}"
     end
   end
 
@@ -2096,7 +2094,7 @@ defmodule Tempo.Explain do
 
   # What names the months of a rule's selection: its calendar and no year,
   # since it selects in each.
-  defp rule_naming(%Tempo.Interval{repeat_rule: %Tempo{} = rule}), do: {calendar_of(rule), nil}
+  defp rule_naming(%Tempo.Interval{repeat_rule: %Tempo{} = rule}), do: {rule.calendar, nil}
   defp rule_naming(%Tempo.Interval{}), do: {Calendars.default(), nil}
 
   defp two_digit(n) when is_integer(n) and n >= 0 and n < 10, do: "0#{n}"
@@ -2557,7 +2555,7 @@ defmodule Tempo.Explain do
   defp written_phrase(%Range{first: first, last: last, step: step}),
     do: "#{first} to #{last} by #{step}"
 
-  defp written_phrase(other), do: inspect(other)
+  defp written_phrase(other), do: Border.inspect(other)
 
   # Ordinal-list phrase — a contiguous run collapses to a range:
   defp masked_unit_phrase(:month), do: "in a month"
@@ -2579,7 +2577,7 @@ defmodule Tempo.Explain do
   defp mask_digit(:negative), do: "-"
   defp mask_digit(digit) when is_integer(digit), do: Integer.to_string(digit)
   defp mask_digit(digits) when is_list(digits), do: "{" <> Enum.join(digits, ",") <> "}"
-  defp mask_digit(other), do: inspect(other)
+  defp mask_digit(other), do: Border.inspect(other)
 
   # `[2..8]` → "the 2nd–8th"; `[1, 15]` → "the 1st and 15th". Those counted
   # from the end follow those counted from the start ("the 1st, 15th, and
@@ -2648,7 +2646,7 @@ defmodule Tempo.Explain do
     end
   end
 
-  defp weekday_name(other), do: "weekday #{inspect(other)}"
+  defp weekday_name(other), do: "weekday #{Border.inspect(other)}"
 
   defp or_join([]), do: "nothing"
   defp or_join([one]), do: one

@@ -8,8 +8,8 @@ defmodule Tempo.WithinWindowTest do
   alias Tempo.JSCalendar
   alias Tempo.RecurrenceSet
   alias Tempo.RRule
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
+  alias Tempo.Test.Engine.RRule.Expander
 
   # `:within` is the window whose occurrences a caller wants, with one rule
   # for every recurrence and every calendar format: an occurrence is kept when

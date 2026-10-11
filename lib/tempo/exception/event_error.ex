@@ -12,11 +12,15 @@ defmodule Tempo.EventError do
 
   * `:unzoned_event` — a zone is written after the `@` of an event with no instant of its own, such as `(easter@+09:00)e`.
 
+  * `{:no_solar_terms, calendar}` — the event is a solar term (`(qingming)e`) and the value's calendar reckons none. `Calendar.ISO`, which a value that names no calendar is in, reckons none: a value of a calendar that does has the term, as one written `[u-ca=gregory]` or `[u-ca=chinese]` is.
+
   * `{:invalid_zone, zone}` and `{:time_zone_database_required, zone}` — the zone is neither an IANA zone nor a `±HH:MM` offset, or it is an IANA zone and no time zone database is configured.
 
   * Any other term is the reason a registered resolver gave, or the reason a date it returned could not be read as one.
 
   """
+
+  alias Tempo.Border
 
   defexception [:event, :year, :reason]
 
@@ -28,26 +32,32 @@ defmodule Tempo.EventError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{event: event, reason: :unknown_event}) do
-    "No computed event is named #{inspect(event)}. `Tempo.Event.known/0` lists the names " <>
+    "No computed event is named #{Border.inspect(event)}. `Tempo.Event.known/0` lists the names " <>
       "that are, the built-in events and those a registered `Tempo.Event.Resolver` claims."
   end
 
   def message(%__MODULE__{event: event, year: year, reason: :year_out_of_range}) do
-    "The event #{inspect(event)} cannot be computed for the year #{year}, which is outside " <>
+    "The event #{Border.inspect(event)} cannot be computed for the year #{year}, which is outside " <>
       "the years it is computed for."
   end
 
   def message(%__MODULE__{event: event, reason: :unzoned_event}) do
-    "The event #{inspect(event)} names a zone, and it has no instant of its own to take a " <>
+    "The event #{Border.inspect(event)} names a zone, and it has no instant of its own to take a " <>
       "date in one: an equinox or a solstice does."
   end
 
+  def message(%__MODULE__{event: event, reason: {:no_solar_terms, calendar}}) do
+    "The event #{Border.inspect(event)} is a solar term, and #{Border.name(calendar)} reckons none. A value of " <>
+      "a calendar that reckons them has it: one written with `[u-ca=gregory]`, or with a " <>
+      "lunisolar calendar such as `[u-ca=chinese]`."
+  end
+
   def message(%__MODULE__{event: event, year: year, reason: reason}) do
-    "The event #{inspect(event)} cannot be computed for the year #{year}: #{inspect(reason)}"
+    "The event #{Border.inspect(event)} cannot be computed for the year #{year}: #{Border.inspect(reason)}"
   end
 end

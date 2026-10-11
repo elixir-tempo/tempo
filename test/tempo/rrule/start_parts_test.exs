@@ -21,8 +21,6 @@ defmodule Tempo.RRule.StartPartsTest do
   alias Tempo.RRule
   alias Tempo.RRule.Rule
 
-  doctest Rule
-
   # Ten years, with three leap years.
   @window ~o"2024Y/2034Y"
   @first ~D[2024-01-01]

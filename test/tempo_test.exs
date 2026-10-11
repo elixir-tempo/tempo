@@ -1,20 +1,20 @@
 defmodule TempoTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
+  import Tempo.Test.Inside, only: [inside: 1, outside: 1]
 
   doctest Tempo
 
   test "times with groups that can be expanded and resolved" do
     assert Tempo.from_iso8601("2018Y1G6MU") ==
-             {:ok,
-              %Tempo{calendar: Calendrical.Gregorian, time: [year: 2018, month: {:group, 1..6}]}}
+             {:ok, %Tempo{calendar: Calendar.ISO, time: [year: 2018, month: {:group, 1..6}]}}
 
     assert Tempo.from_iso8601("2018Y1G2MU30D") ==
-             {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [year: 2018, month: 1, day: 30]}}
+             {:ok, %Tempo{calendar: Calendar.ISO, time: [year: 2018, month: 1, day: 30]}}
 
     # 5.4.2 Group Example 7
     assert Tempo.from_iso8601("2018Y2G3MU50D") ==
-             {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [year: 2018, month: 5, day: 20]}}
+             {:ok, %Tempo{calendar: Calendar.ISO, time: [year: 2018, month: 5, day: 20]}}
   end
 
   test "times with invalid groups" do
@@ -45,7 +45,7 @@ defmodule TempoTest do
     assert Tempo.from_iso8601("201J2G5YU3DT10H0S") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [year: [2015..2019], day: 3, hour: 10, minute: 0, second: 0]
               }}
   end
@@ -60,15 +60,17 @@ defmodule TempoTest do
              Tempo.trunc(~o"12M31DT1H10M59S", :date)
   end
 
+  # `Tempo.merge/2` is the engine's, and is given values as it holds them.
   test "tempo merging" do
-    assert {:error, %Tempo.InvalidDateError{value: 29} = e} =
-             Tempo.merge(~o"2M29D", ~o"2026Y")
+    merge = fn base, from -> outside(Tempo.merge(inside(base), inside(from))) end
+
+    assert {:error, %Tempo.InvalidDateError{value: 29} = e} = merge.(~o"2M29D", ~o"2026Y")
 
     assert Exception.message(e) =~ "29 is not valid"
-    assert Tempo.merge(~o"2M29D", ~o"2024Y") == ~o"2024Y2M29D"
+    assert merge.(~o"2M29D", ~o"2024Y") == ~o"2024Y2M29D"
 
-    assert Tempo.merge(~o"12M", ~o"2022Y") == ~o"2022Y12M"
-    assert Tempo.merge(~o"12M", ~o"2022Y1M") == ~o"2022Y1M"
+    assert merge.(~o"12M", ~o"2022Y") == ~o"2022Y12M"
+    assert merge.(~o"12M", ~o"2022Y1M") == ~o"2022Y1M"
   end
 
   test "to_date/1" do

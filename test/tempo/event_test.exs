@@ -20,12 +20,36 @@ defmodule Tempo.EventTest do
     end
 
     test "resolves the 24 solar terms via Calendrical (Chinese meridian)" do
-      assert Event.date("qingming", 2026) == {:ok, ~D[2026-04-05]}
-      assert Event.date("lichun", 2026) == {:ok, ~D[2026-02-04]}
-      assert Event.date("dongzhi", 2026) == {:ok, ~D[2026-12-22]}
+      gregorian = Calendrical.Gregorian
+
+      assert Event.date("qingming", 2026, gregorian) == {:ok, ~D[2026-04-05]}
+      assert Event.date("lichun", 2026, gregorian) == {:ok, ~D[2026-02-04]}
+      assert Event.date("dongzhi", 2026, gregorian) == {:ok, ~D[2026-12-22]}
       # The cardinal terms coincide with the equinoxes and solstices.
-      assert Event.date("chunfen", 2026) == {:ok, ~D[2026-03-20]}
-      assert Event.date("chunfen", 2026) == Event.date("march-equinox", 2026)
+      assert Event.date("chunfen", 2026, gregorian) == {:ok, ~D[2026-03-20]}
+      assert Event.date("chunfen", 2026, gregorian) == Event.date("march-equinox", 2026)
+    end
+
+    # A solar term is the calendar's to answer. `Calendar.ISO`, which a value
+    # that names no calendar is in, reckons none (user, 2026-10-11: "No solar
+    # terms for Calendar.ISO").
+    test "has no solar term for a calendar that reckons none" do
+      assert Event.date("qingming", 2026) == {:error, {:no_solar_terms, Calendar.ISO}}
+
+      assert Event.date("qingming", 2026, Calendar.ISO) ==
+               {:error, {:no_solar_terms, Calendar.ISO}}
+
+      error = %EventError{
+        event: "qingming",
+        year: 2026,
+        reason: {:no_solar_terms, Calendar.ISO}
+      }
+
+      assert Tempo.select(~o"2026Y", ~o"L(qingming)eN") == {:error, error}
+      assert Exception.message(error) =~ "is a solar term, and Calendar.ISO reckons none"
+
+      assert {:ok, _qingming} =
+               Tempo.select(~o"2026Y[u-ca=gregory]", ~o"L(qingming)eN[u-ca=gregory]")
     end
 
     # A solar term is the day the sun reaches a longitude, at a meridian, so
@@ -70,7 +94,9 @@ defmodule Tempo.EventTest do
       # `date/3` picks the meridian; Chinese is the default. The four resolve
       # (they coincide for Qingming 2026, differing only when a term falls near
       # local midnight).
-      assert Event.date("qingming", 2026, Calendrical.Chinese) == Event.date("qingming", 2026)
+      assert Event.date("qingming", 2026, Calendrical.Chinese) ==
+               Event.date("qingming", 2026, Calendrical.Gregorian)
+
       assert {:ok, %Date{}} = Event.date("qingming", 2026, Calendrical.Vietnamese)
       assert {:ok, %Date{}} = Event.date("qingming", 2026, Calendrical.Korean)
       assert {:ok, %Date{}} = Event.date("qingming", 2026, Calendrical.LunarJapanese)
@@ -288,7 +314,10 @@ defmodule Tempo.EventTest do
     test "keeps the event only in the years it falls on the weekday" do
       # Qingming falls on 2021-04-04 and 2026-04-05, both Sundays; 2022–2025 and
       # 2027 fall on other weekdays.
-      assert event_dates("R/../P1Y/FL(qingming)e7KN", ~o"{2021..2027}Y") ==
+      assert event_dates(
+               "R/../P1Y/FL(qingming)e7KN[u-ca=gregory]",
+               ~o"{2021..2027}Y[u-ca=gregory]"
+             ) ==
                ["2021-04-04", "2026-04-05"]
     end
 
@@ -302,8 +331,10 @@ defmodule Tempo.EventTest do
     end
 
     test "a weekday set limits to any of its weekdays" do
-      assert event_dates("R/../P1Y/FL(qingming)e{6,7}KN", ~o"{2021..2027}Y") ==
-               ["2021-04-04", "2026-04-05"]
+      assert event_dates(
+               "R/../P1Y/FL(qingming)e{6,7}KN[u-ca=gregory]",
+               ~o"{2021..2027}Y[u-ca=gregory]"
+             ) == ["2021-04-04", "2026-04-05"]
     end
 
     test "a day of month after an event is an ordering error, not a raise" do
@@ -316,7 +347,7 @@ defmodule Tempo.EventTest do
     # or a week. The measure is the event's date in each year, from
     # `Tempo.Event.date/2`, placed in its month by its own fields and in its
     # ISO 8601 week by `:calendar.iso_week_number/1`.
-    @in_periods ~w(easter orthodox-easter new-moon december-solstice qingming)
+    @in_periods ~w(easter orthodox-easter new-moon december-solstice)
 
     defp selected(span, event) do
       {:ok, set} = Tempo.select(span, Tempo.from_iso8601!("L(#{event})eN"))

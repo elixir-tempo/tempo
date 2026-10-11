@@ -78,7 +78,7 @@ defmodule Tempo.Iso8601.TimeShiftTest do
 
     test "is read alone and after a date" do
       assert Tempo.from_iso8601("Z0S") ==
-               {:ok, %Tempo{calendar: Calendrical.Gregorian, time: [], shift: [second: 0]}}
+               {:ok, %Tempo{calendar: Calendar.ISO, time: [], shift: [second: 0]}}
 
       assert Tempo.from_iso8601!("1985Y4M12DZ30M").shift == [minute: 30]
     end

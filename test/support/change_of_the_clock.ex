@@ -27,8 +27,8 @@ defmodule Tempo.ChangeOfTheClock do
   # between them, which an hour held once for each time the clock comes to
   # its start does not name.
 
-  alias Tempo.Compare
   alias Tempo.Interval
+  alias Tempo.Test.Engine.Compare
 
   @unix_epoch :calendar.datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}})
   @minute 60

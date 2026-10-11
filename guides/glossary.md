@@ -50,7 +50,7 @@ The tables are grouped by subject, and within a table the terms a later one buil
 | covered | The time at least one member of an interval set holds. | `Tempo.duration/1`, `Tempo.IntervalSet.covered/2` |
 | slot | A bookable piece of free time. | `Tempo.IntervalSet.slots/3` |
 | unspecified digits | Digits written as `X`: `202X` is some year of the 2020s. | ISO 8601-2 §4.6 |
-| mask | A unit that holds unspecified digits. | `Tempo.Mask` |
+| mask | A unit that holds unspecified digits. | ISO 8601-2 §4.6 |
 | group | A run of a unit's values counted in equal parts: `2G3MU` is the second group of three months. | ISO 8601-2 §5 |
 | qualification | A mark that a value is uncertain (`?`), approximate (`~`) or both (`%`). | ISO 8601-2 §4.5 |
 | margin of error | A value with a stated error (`2018±2Y`). | `guides/uncertain-dates.md` |

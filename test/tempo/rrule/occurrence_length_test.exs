@@ -23,8 +23,8 @@ defmodule Tempo.RRule.OccurrenceLengthTest do
   alias Tempo.JSCalendar
   alias Tempo.Matrix.Extent
   alias Tempo.RRule
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
+  alias Tempo.Test.Engine.RRule.Expander
 
   @epoch ~N[0000-01-01 00:00:00]
 

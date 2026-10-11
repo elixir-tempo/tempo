@@ -27,10 +27,8 @@ defmodule Tempo.RRule.LeapMonthTest do
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
-
-  doctest Tempo.RRule.Rule
+  alias Tempo.Test.Engine.RRule.Expander
 
   ## The measure
 
@@ -66,7 +64,7 @@ defmodule Tempo.RRule.LeapMonthTest do
     {:ok, set} = Tempo.to_interval(rule, within: @window)
 
     for occurrence <- IntervalSet.members(set) do
-      {:ok, date} = occurrence |> Interval.from() |> Tempo.to_calendar(Calendrical.Gregorian)
+      {:ok, date} = occurrence |> Interval.from() |> Tempo.to_calendar(Calendar.ISO)
       Date.new!(Tempo.year(date), Tempo.month(date), Tempo.day(date))
     end
   end
@@ -278,7 +276,7 @@ defmodule Tempo.RRule.LeapMonthTest do
 
     test "a leap month in a calendar whose years all have the same months" do
       for {name, calendar} <- [
-            {"GREGORIAN", Calendrical.Gregorian},
+            {"GREGORIAN", Calendar.ISO},
             {"PERSIAN", Calendrical.Persian},
             {"ISLAMIC-CIVIL", Calendrical.Islamic.Civil}
           ] do

@@ -242,11 +242,12 @@ defmodule Tempo.Select do
   Tempo.select(~o"2026-06-15", ~o"100O") # nothing: the 100th day is 10 April
   ```
 
-  A week selected from a year is an ISO 8601 week of the year. A week
-  selected from a month is a week of that month, which the calendar
-  numbers: in the Gregorian calendar a whole week from a Monday, the
-  first of a month the one that holds its first day, so it is not
-  always within its month.
+  A week selected from a year is a week of the year as the base's
+  calendar numbers it: ISO 8601's in `Calendar.ISO`. A week selected from
+  a month is a week of that month, which the calendar numbers too: in
+  `Calendar.ISO` a whole week from a Monday, the first of a month the one
+  that holds at least four of its days, so it is not always within its
+  month.
 
   ```elixir
   Tempo.select(~o"2026-06", ~o"2W")      # 8 to 14 June
@@ -314,7 +315,7 @@ defmodule Tempo.Select do
   A day of the week is a day of the week of the value that holds it: the
   calendar's own week in a calendar of weeks, and ISO 8601's, which starts
   on Monday, in a calendar of months. So a selector is read in the calendar
-  it is written in. `~o"3K"`, written in the Gregorian calendar, selects
+  it is written in. `~o"3K"`, written in `Calendar.ISO`, selects
   Wednesdays from a base in any calendar, as `Tempo.workdays/1` selects
   the weekdays it names; `~o"3K[u-ca=nrf]"`, written in a calendar whose
   weeks start on Sunday, selects Tuesdays.
@@ -332,11 +333,12 @@ defmodule Tempo.Select do
 
   A time of day and a day of the week select from a base in any calendar,
   and what they select are values of the base's calendar. ISO 8601's weeks
-  are the Gregorian calendar's and the ISO week calendar's alike, so a week
-  written in either selects from a base in the other.
+  are `Calendar.ISO`'s and the ISO week calendar's alike, so a week written
+  in either selects from a base in the other.
 
   """
 
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
@@ -384,96 +386,8 @@ defmodule Tempo.Select do
     :second
   ]
 
-  @doc """
-  Narrow `base` by `selector`, returning the selected intervals
-  as a `t:Tempo.IntervalSet.t/0`.
-
-  See the module doc for the selector vocabulary and runtime-
-  resolution caveats.
-
-  ### Supported base shapes
-
-  `base` can be any Tempo value that converts to an Interval
-  or IntervalSet. Grouped and masked forms have their endpoints
-  resolved to concrete values before the selector runs, so every
-  ISO 8601-2 shape composes with every selector:
-
-  | Base shape | Example | Converts to |
-  |---|---|---|
-  | Scalar `%Tempo{}` | `~o"2026-06"` | single Interval |
-  | Explicit Interval | `~o"2026-07/2026-10"` | single Interval |
-  | IntervalSet | output of `Tempo.union/2` etc. | IntervalSet (flat-mapped) |
-  | Quarter (`NQ`) | `~o"2026Y3Q"` | single Interval (group resolved) |
-  | Season (codes 25–32) | `~o"2026Y26M"` | Interval bounded by equinox/solstice |
-  | Month/day range in a slot | `~o"2026Y{6..8}M"` | IntervalSet of three members |
-  | Stepped range | `~o"2026Y{1..-1//3}M"` | IntervalSet of disjoint members |
-  | Set of intervals | `~o"{2026-01-05/2026-01-12,2026-02-02/2026-02-09}"` | IntervalSet (flat-mapped) |
-  | Archaeological mask | `~o"156X"` | decade-long Interval |
-  | Open-ended span | `~o"2026-06-15/.."` | lazy IntervalSet, selected as it is walked |
-  | Duration form or recurrence | `~o"2026-06-15/P14D"` | the span or occurrences it converts to |
-
-  A span is selected period by period at its start's resolution, so
-  the quarter `~o"2026Y3Q"` selects in July, August and September.
-
-  What is selected keeps the metadata of what it is selected from:
-  each school day of a term tagged `%{term: 3}` is tagged `%{term: 3}`
-  too, and a set's own metadata stays with the set.
-
-  In a named zone, what is selected is what the zone's clock shows of
-  it. A time of day the clock skips on some day is not selected on
-  that day, nor is a day the zone left out: `~o"T02"` selects nothing
-  on the night New York's clocks go from 02:00 to 03:00. A window is
-  the part of it the clock shows, so `~o"T02/T04"` is 03:00 to 04:00
-  on that night, and one written with a duration (`~o"T02/PT2H"`) runs
-  that long from 03:00.
-
-  Example with a quarter base:
-
-      Tempo.select(~o"2026Y3Q", Tempo.workdays(:US))
-      #=> {:ok, IntervalSet with 66 members — workdays of Q3 2026}
-
-  ### Examples
-
-      iex> {:ok, set} = Tempo.Select.select(~o"2026-02", [1, 15])
-      iex> Enum.map(Tempo.IntervalSet.members(set), &Tempo.day(Tempo.Interval.from(&1)))
-      [1, 15]
-
-      iex> {:ok, set} = Tempo.Select.select(~o"2026", ~o"12-25")
-      iex> [xmas] = Tempo.IntervalSet.members(set)
-      iex> xmas.from.time
-      [year: 2026, month: 12, day: 25]
-
-      iex> {:ok, set} = Tempo.Select.select(~o"2026", ~o"10O")
-      iex> [day10] = Tempo.IntervalSet.members(set)
-      iex> from = Tempo.Interval.from(day10)
-      iex> {Tempo.month(from), Tempo.day(from)}
-      {1, 10}
-
-      iex> {:ok, set} = Tempo.Select.select(~o"2026-06", ~o"5K")
-      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
-      [5, 12, 19, 26]
-
-      iex> {:ok, set} = Tempo.Select.select(~o"2026-02", Tempo.workdays(:US))
-      iex> Tempo.IntervalSet.count(set)
-      20
-
-      iex> {:ok, set} = Tempo.Select.select(~o"2026/2029", ~o"12-25")
-      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.year(Tempo.Interval.from(&1)))
-      [2026, 2027, 2028]
-
-      iex> {:ok, weekends} = Tempo.Select.select(~o"2026-06-15/..", Tempo.weekends(:US))
-      iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
-      [20, 21]
-
-      iex> clocks_go_forward = ~o"2024-03-10[America/New_York]"
-      iex> {:ok, skipped} = Tempo.Select.select(clocks_go_forward, ~o"T02")
-      iex> Tempo.IntervalSet.count(skipped)
-      0
-      iex> {:ok, quiet_hours} = Tempo.Select.select(clocks_go_forward, ~o"T02/T04")
-      iex> Tempo.IntervalSet.members(quiet_hours)
-      [~o"2024Y3M10DT3H/T4H[America/New_York]"]
-
-  """
+  @doc false
+  # What `Tempo.select/2` does, where it is documented.
   @spec select(base(), selector() | {:error, term()}) ::
           {:ok, IntervalSet.t()} | {:error, term()}
 
@@ -508,9 +422,6 @@ defmodule Tempo.Select do
   # ---- Tempo and Tempo.Set bases: select across the span they
   # convert to ----
 
-  def select(%Tempo{calendar: nil} = tempo, selector),
-    do: select(Tempo.with_a_calendar(tempo), selector)
-
   def select(%Tempo{} = tempo, selector), do: select_converted(tempo, selector)
   def select(%Tempo.Set{} = set, selector), do: select_converted(set, selector)
 
@@ -535,7 +446,7 @@ defmodule Tempo.Select do
   def select(base, _selector) do
     {:error,
      ArgumentError.exception(
-       "Tempo.select/2 cannot select from #{inspect(base)}: the base is a Tempo value, " <>
+       "Tempo.select/2 cannot select from #{Border.inspect(base)}: the base is a Tempo value, " <>
          "an interval or an interval set."
      )}
   end
@@ -659,7 +570,7 @@ defmodule Tempo.Select do
        set
        |> IntervalSet.walk()
        |> Stream.flat_map(fun)
-       |> IntervalSet.from_stream(metadata: metadata)}
+       |> IntervalSet.lazy(metadata: metadata)}
     end
   end
 
@@ -681,7 +592,7 @@ defmodule Tempo.Select do
        set
        |> IntervalSet.walk()
        |> Stream.map(tagged)
-       |> IntervalSet.from_stream(metadata: IntervalSet.metadata(set))}
+       |> IntervalSet.lazy(metadata: IntervalSet.metadata(set))}
     end
   end
 
@@ -712,7 +623,7 @@ defmodule Tempo.Select do
        days
        |> IntervalSet.walk()
        |> Stream.transform(0, &kept_or_passed(&1, &2, except))
-       |> IntervalSet.from_stream()}
+       |> IntervalSet.lazy()}
     else
       nil -> {:ok, days}
       {:error, _reason} = error -> error
@@ -852,7 +763,7 @@ defmodule Tempo.Select do
   defp lazy_weekdays(%Interval{from: %Tempo{calendar: calendar} = from} = span, weekdays) do
     with [_ | _] <- weekdays,
          {:ok, _first_day} <- tempo_to_date(from, calendar) do
-      {:ok, span |> weekdays_in(weekdays) |> IntervalSet.from_stream()}
+      {:ok, span |> weekdays_in(weekdays) |> IntervalSet.lazy()}
     else
       _nothing_to_select -> IntervalSet.new([], coalesce: false)
     end
@@ -920,7 +831,7 @@ defmodule Tempo.Select do
       value: start,
       target: Interval,
       reason:
-        "`Tempo.select/2` walks a span from its start, and #{inspect(start)} is not one span."
+        "`Tempo.select/2` walks a span from its start, and #{Border.inspect(start)} is not one span."
     )
   end
 
@@ -990,7 +901,7 @@ defmodule Tempo.Select do
        )
        when is_integer(year) do
     with true <- names_week?(selector),
-         false <- Tempo.week_based_calendar?(Calendars.effective(calendar)),
+         false <- Tempo.week_based_calendar?(calendar),
          {:ok, first} <- week_time_to_date([year: year, week: 1], calendar),
          {:ok, next} <- week_time_to_date([year: year + 1, week: 1], calendar) do
       %Interval{
@@ -1016,7 +927,7 @@ defmodule Tempo.Select do
        when is_integer(year) and is_integer(month) do
     with true <- names_week?(selector),
          {:ok, [%Date.Range{first: first} | _weeks] = weeks} <-
-           UnitValues.weeks_of_month(year, month, Calendars.effective(calendar)),
+           UnitValues.weeks_of_month(year, month, calendar),
          %Date.Range{last: last} <- List.last(weeks),
          %Date{} = next <- UnitValues.day_after(last) do
       %Interval{
@@ -1094,7 +1005,7 @@ defmodule Tempo.Select do
         |> Stream.drop(1)
         |> Stream.transform(limits, &walk_base(&1, &2, selector, select_one))
 
-      {:ok, IntervalSet.from_stream(Stream.concat(found, later))}
+      {:ok, IntervalSet.lazy(Stream.concat(found, later))}
     end
   end
 
@@ -1374,7 +1285,7 @@ defmodule Tempo.Select do
   defp week_of_month_built(%Tempo{time: [selection: selection]}, :month, %Tempo{} = from) do
     with {:error, %ConversionError{} = refusal} <-
            Selection.calendar_week_in_its_year(selection, from) do
-      asked = "the selection of #{inspect(selection)} from #{inspect(from)}"
+      asked = "the selection of #{Border.inspect(selection)} from #{Border.inspect(from)}"
       {:error, %{refusal | value: asked}}
     end
   end
@@ -1390,8 +1301,8 @@ defmodule Tempo.Select do
          %Tempo{time: [selection: selection], calendar: written} = rule,
          %Tempo{calendar: calendar}
        ) do
-    from = Calendars.effective(written)
-    to = Calendars.effective(calendar)
+    from = written
+    to = calendar
 
     if from == to do
       rule
@@ -1441,7 +1352,7 @@ defmodule Tempo.Select do
 
   defp unrecognised_selector(selector) do
     ArgumentError.exception(
-      "Tempo.select/2 does not recognise selector #{inspect(selector)}. See `Tempo.Select` " <>
+      "Tempo.select/2 does not recognise selector #{Border.inspect(selector)}. See `Tempo.Select` " <>
         "for the selector vocabulary."
     )
   end
@@ -1590,7 +1501,7 @@ defmodule Tempo.Select do
          ConversionError.exception(
            value: source,
            reason:
-             "Cannot select indices under #{inspect(base_unit)} — no finer unit is " <>
+             "Cannot select indices under #{Border.inspect(base_unit)} — no finer unit is " <>
                "defined for that resolution."
          )}
 
@@ -1894,7 +1805,7 @@ defmodule Tempo.Select do
       interval: selector,
       operation: :select,
       reason:
-        "#{inspect(selector)} does not run within one day of the week: a span selected by a " <>
+        "#{Border.inspect(selector)} does not run within one day of the week: a span selected by a " <>
           "weekday starts on that day and ends by a time of day (`1KT9H/T17H`). Select the " <>
           "days, and then the times within them."
     )
@@ -1916,7 +1827,7 @@ defmodule Tempo.Select do
   # 45th is 14 February and the last 31 December. A calendar of weeks has no
   # months, and refuses a day of one where it is merged.
   defp read_in(c_time, %Interval{from: %Tempo{time: [{:year, _year}], calendar: calendar}}) do
-    if Tempo.week_based_calendar?(Calendars.effective(calendar)),
+    if Tempo.week_based_calendar?(calendar),
       do: c_time,
       else: Selection.days_of_year_where_no_month(c_time)
   end
@@ -1973,7 +1884,7 @@ defmodule Tempo.Select do
   defp each_once({:error, _reason} = error), do: error
 
   defp periods_on_axis(%Interval{from: %Tempo{time: time, calendar: calendar}} = base, c_time) do
-    if Tempo.week_based_calendar?(Calendars.effective(calendar)),
+    if Tempo.week_based_calendar?(calendar),
       do: {:ok, [base]},
       else: periods_on_axis(written_on(c_time), written_on(time), base, c_time)
   end
@@ -2073,7 +1984,7 @@ defmodule Tempo.Select do
       interval: selector,
       operation: :select,
       reason:
-        "#{inspect(selector)} has no one #{end_name} to select a span by: #{inspect(value)} " <>
+        "#{Border.inspect(selector)} has no one #{end_name} to select a span by: #{Border.inspect(value)} " <>
           "names several values. Select by each of them, or by the values themselves."
     )
   end
@@ -2186,11 +2097,11 @@ defmodule Tempo.Select do
   # read in the span's: the sixth month of a Hebrew year is not June, as
   # `Tempo.at/2` and `Tempo.on/2` have it. A time of day is the same in every
   # calendar and a day of the week names a weekday (`day_of_week_only/2`), so
-  # both select from any span. ISO 8601's weeks are the Gregorian calendar's
+  # both select from any span. ISO 8601's weeks are the notation's calendar's
   # and the ISO week calendar's alike, so a week written in one selects from
   # the other.
   defp one_calendar(%Interval{from: %Tempo{calendar: calendar}}, selectors) do
-    span_calendar = Calendars.effective(calendar)
+    span_calendar = calendar
 
     selectors
     |> List.wrap()
@@ -2203,8 +2114,6 @@ defmodule Tempo.Select do
   # than the span's, and `nil` for one that selects from the span.
   defp of_another_calendar(%Tempo{time: time, calendar: written} = selector, span_calendar)
        when is_list(time) do
-    written = Calendars.effective(written)
-
     if written != span_calendar and numbered_by_calendar?(time, written, span_calendar),
       do: {:error, another_calendar_error(selector, written, span_calendar)}
   end
@@ -2223,8 +2132,6 @@ defmodule Tempo.Select do
 
   defp counted_in_another_calendar(from, %Tempo{calendar: written} = rule, span_calendar)
        when from in [nil, :undefined] do
-    written = Calendars.effective(written)
-
     if written != span_calendar,
       do: {:error, another_calendar_error(rule, written, span_calendar)}
   end
@@ -2282,8 +2189,8 @@ defmodule Tempo.Select do
         value: selector,
         target: span_calendar,
         reason:
-          "#{inspect(selector)} is a selector written in #{inspect(written)}, and the span it " <>
-            "selects from is in #{inspect(span_calendar)}. A month, a week and a day are " <>
+          "#{Border.inspect(selector)} is a selector written in #{Border.name(written)}, and the span it " <>
+            "selects from is in #{Border.name(span_calendar)}. A month, a week and a day are " <>
             "numbered by their calendar, so a selector that holds one selects only from a " <>
             "span of its own: write it in the span's calendar, which `Tempo.from_iso8601/2` " <>
             "takes and a `[u-ca=…]` suffix names. A time of day and a day of the week select " <>
@@ -2307,7 +2214,7 @@ defmodule Tempo.Select do
       value: c_time,
       target: calendar,
       reason:
-        "#{inspect(calendar)} is a calendar of weeks, with no months, so a selection in it " <>
+        "#{Border.name(calendar)} is a calendar of weeks, with no months, so a selection in it " <>
           "cannot be by a month, a day of one or a day of the year; select by week (W) " <>
           "and day of the week (K)."
     )
@@ -2370,8 +2277,6 @@ defmodule Tempo.Select do
          c_time
        )
        when is_integer(year) and is_integer(month) do
-    calendar = Calendars.effective(calendar)
-
     c_time
     |> each_named(:week, fn -> weeks_in(year, month, calendar) end)
     |> Enum.flat_map(&each_named(&1, :day_of_week, fn -> days_of_week_in(&1, calendar) end))
@@ -2424,7 +2329,7 @@ defmodule Tempo.Select do
   # week cut short does not have, select nothing, as a day a month does not
   # have does.
   defp week_of_month(%Tempo{time: time, calendar: calendar} = from, c_time) do
-    case Group.expand_groups(%{from | time: time ++ c_time}, Calendars.effective(calendar)) do
+    case Group.expand_groups(%{from | time: time ++ c_time}, calendar) do
       {:ok, selected} -> selected
       {:error, %InvalidDateError{unit: unit}} when unit in [:week, :day_of_week] -> nil
       {:error, _reason} = error -> error
@@ -2695,7 +2600,7 @@ defmodule Tempo.Select do
         if Enum.any?([:year, :month, :day, :week], &Keyword.has_key?(c_time, &1)) do
           :no
         else
-          {:ok, weekdays_named(dow, Calendars.effective(selector_calendar))}
+          {:ok, weekdays_named(dow, selector_calendar)}
         end
     end
   end

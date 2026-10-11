@@ -1,7 +1,6 @@
 defmodule Tempo.Enumeration.Zone do
   @moduledoc false
 
-  alias Calendrical.Gregorian
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Interval.Steps
@@ -86,8 +85,6 @@ defmodule Tempo.Enumeration.Zone do
         } = value
       )
       when is_integer(year) and is_integer(week) and is_integer(day) do
-    calendar = Calendars.effective(calendar)
-
     with {:ok, %Date{} = date} <- UnitValues.date_from_iso_week(year, week, day, calendar),
          {:ok, date} <- gregorian_units(date) do
       %{value | time: date ++ clock, calendar: Calendars.zone()}
@@ -131,9 +128,11 @@ defmodule Tempo.Enumeration.Zone do
         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock]} = gregorian,
         %Tempo{time: [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _clock]} = written
       ) do
-    with {:ok, weeks} <- calendar_of_weeks(Calendars.effective(written.calendar)),
-         {:ok, %Date{} = date} <- Date.new(year, month, day, Calendars.zone()),
-         {:ok, %Date{year: year, month: week, day: day}} <- Date.convert(date, weeks) do
+    calendar = written.calendar
+
+    with {:ok, %Date{} = date} <- Date.new(year, month, day, Calendars.zone()),
+         {:ok, %Date{} = date} <- Date.convert(date, calendar),
+         {:ok, year, week, day} <- day_of_a_week(date, calendar) do
       {:ok,
        %{
          gregorian
@@ -164,12 +163,24 @@ defmodule Tempo.Enumeration.Zone do
 
   def in_calendar_of(%Tempo{}, %Tempo{}), do: :error
 
-  # The calendar a day of a week is a date of: the calendar itself where it
-  # is one of weeks, and ISO 8601's weeks for the Gregorian calendar.
-  defp calendar_of_weeks(Gregorian), do: {:ok, Calendrical.ISOWeek}
+  # A date of a calendar as a day of a week: the fields of the date itself
+  # in a calendar of weeks, and in any other its ISO 8601 week, which the
+  # calendar answers over its own year (`iso_week_of_year/3`), with the day
+  # of that week counted from Monday.
+  defp day_of_a_week(%Date{year: year, month: month, day: day}, calendar) do
+    if Tempo.week_based_calendar?(calendar),
+      do: {:ok, year, month, day},
+      else: day_of_an_iso_week(year, month, day, calendar)
+  end
 
-  defp calendar_of_weeks(calendar),
-    do: if(Tempo.week_based_calendar?(calendar), do: {:ok, calendar}, else: :error)
+  defp day_of_an_iso_week(year, month, day, calendar) do
+    with {week_year, week} when is_integer(week) <- calendar.iso_week_of_year(year, month, day),
+         {day_of_week, _first, _last} <- calendar.day_of_week(year, month, day, :monday) do
+      {:ok, week_year, week, day_of_week}
+    else
+      _no_week -> :error
+    end
+  end
 
   defp status({:gap, _before, shown}, tempo, naive),
     do: if(shown_in_part?(tempo, naive, shown), do: :ok, else: :gap)

@@ -1,5 +1,7 @@
 if Code.ensure_loaded?(JSCalendar) do
   defmodule Tempo.JSCalendar do
+    use Tempo.Border
+
     @moduledoc """
     Import JSCalendar ([RFC 8984](https://www.rfc-editor.org/rfc/rfc8984.html))
     data into `%Tempo.IntervalSet{}`.
@@ -88,6 +90,7 @@ if Code.ensure_loaded?(JSCalendar) do
     alias JSCalendar.Occurrence
     alias JSCalendar.RecurrenceRule
     alias JSCalendar.Task
+    alias Tempo.Calendars
     alias Tempo.Compare
     alias Tempo.Interval
     alias Tempo.IntervalSet
@@ -426,13 +429,14 @@ if Code.ensure_loaded?(JSCalendar) do
     ## Wall clock → instant
     ## ------------------------------------------------------------
 
-    defp at_zone(%NaiveDateTime{} = naive, nil), do: {:ok, Tempo.from_elixir(naive)}
+    defp at_zone(%NaiveDateTime{} = naive, nil),
+      do: {:ok, Tempo.from_elixir(Calendars.in_rule(naive))}
 
     defp at_zone(%NaiveDateTime{} = naive, zone) when is_binary(zone) do
       case DateTime.from_naive(naive, zone) do
-        {:ok, datetime} -> {:ok, Tempo.from_elixir(datetime)}
-        {:ambiguous, earlier, _later} -> {:ok, Tempo.from_elixir(earlier)}
-        {:gap, _before, after_gap} -> {:ok, Tempo.from_elixir(after_gap)}
+        {:ok, datetime} -> {:ok, Tempo.from_elixir(Calendars.in_rule(datetime))}
+        {:ambiguous, earlier, _later} -> {:ok, Tempo.from_elixir(Calendars.in_rule(earlier))}
+        {:gap, _before, after_gap} -> {:ok, Tempo.from_elixir(Calendars.in_rule(after_gap))}
         {:error, reason} -> {:error, {:invalid_time_zone, zone, reason}}
       end
     end
@@ -453,7 +457,7 @@ if Code.ensure_loaded?(JSCalendar) do
            freq: freq,
            interval: rule.interval || 1,
            count: rule.count,
-           until: rule.until && Tempo.from_elixir(rule.until),
+           until: rule.until && Tempo.from_elixir(Calendars.in_rule(rule.until)),
            wkst: week_start,
            skip: skip,
            rscale: calendar,

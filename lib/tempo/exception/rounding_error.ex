@@ -6,6 +6,8 @@ defmodule Tempo.RoundingError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:unit, :value, :reason]
 
   @type t :: %__MODULE__{
@@ -16,7 +18,7 @@ defmodule Tempo.RoundingError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   def exception(message) when is_binary(message) do
@@ -27,7 +29,7 @@ defmodule Tempo.RoundingError do
   def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
 
   def message(%__MODULE__{unit: unit}) when not is_nil(unit) do
-    "Cannot round to #{inspect(unit)}"
+    "Cannot round to #{Border.inspect(unit)}"
   end
 
   def message(%__MODULE__{}), do: "Rounding operation failed"

@@ -12,7 +12,7 @@ defmodule Tempo.IntervalSet.Backend.Tree do
   the tree is built perfectly balanced with no rebalancing.
 
   Endpoint positions are precomputed once at construction as gregorian
-  UTC seconds (`Tempo.Compare.to_utc_seconds/1`), so tree comparisons
+  UTC seconds, so tree comparisons
   are integer comparisons and remain correct across calendars and
   zones.
 
@@ -32,6 +32,7 @@ defmodule Tempo.IntervalSet.Backend.Tree do
 
   use Tempo.IntervalSet.Backend
 
+  alias Tempo.Border
   alias Tempo.Compare
   alias Tempo.Interval
 
@@ -103,7 +104,7 @@ defmodule Tempo.IntervalSet.Backend.Tree do
 
   defp tree_requires_anchored(interval) do
     "the Tree backend requires anchored, bounded members so their " <>
-      "timeline positions can be indexed; got #{inspect(interval)}. " <>
+      "timeline positions can be indexed; got #{Border.inspect(interval)}. " <>
       "Use the default list backend for unanchored or open-ended sets."
   end
 

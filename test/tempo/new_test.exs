@@ -5,8 +5,8 @@ defmodule Tempo.NewTest do
   alias Tempo.Duration
   alias Tempo.Interval
   alias Tempo.IntervalSet
-  alias Tempo.Math
   alias Tempo.RecurrenceSet
+  alias Tempo.Test.Engine.Math
 
   # `Tempo.new/1` is the developer-facing constructor for
   # `%Tempo{}`. Unlike the `~o` sigil (compile-time literal) and
@@ -18,7 +18,7 @@ defmodule Tempo.NewTest do
     test "year-only" do
       {:ok, t} = Tempo.new(year: 2026)
       assert t.time == [year: 2026]
-      assert t.calendar == Calendrical.Gregorian
+      assert t.calendar == Calendar.ISO
     end
 
     test "year and month" do
@@ -242,6 +242,17 @@ defmodule Tempo.NewTest do
   describe "Tempo.new/1 — validation errors" do
     test "empty keyword list is rejected" do
       assert {:error, %ArgumentError{}} = Tempo.new([])
+    end
+
+    test "what is no list of components is an error, said as it was given" do
+      for given <- [{:year, 2026}, ~D[2026-06-15], "2026", nil, 2026] do
+        assert {:error, %ArgumentError{message: message}} = Tempo.new(given)
+        assert message =~ inspect(given)
+      end
+
+      assert {:error, %ArgumentError{message: message}} = Duration.new({:day, 1})
+      assert message =~ "{:day, 1}"
+      assert {:error, %ArgumentError{}} = Duration.new(~D[2026-06-15])
     end
 
     test "unknown component key is rejected" do
@@ -643,10 +654,10 @@ defmodule Tempo.NewTest do
       assert {:ok, %Tempo{calendar: Calendrical.Hebrew}} =
                Tempo.new(year: 5787, month: 6, day: 15, calendar: Calendrical.Hebrew)
 
-      assert {:ok, %Tempo{calendar: Calendrical.Gregorian}} =
+      assert {:ok, %Tempo{calendar: Calendar.ISO}} =
                Tempo.new(year: 2026, calendar: Calendar.ISO)
 
-      assert {:ok, %Tempo{calendar: Calendrical.Gregorian}} = Tempo.new(year: 2026, calendar: nil)
+      assert {:ok, %Tempo{calendar: Calendar.ISO}} = Tempo.new(year: 2026, calendar: nil)
     end
   end
 
@@ -675,7 +686,7 @@ defmodule Tempo.NewTest do
       assert {:ok, %Tempo{calendar: Calendrical.Hebrew}} =
                Tempo.from_iso8601("5787-06-15", Calendrical.Hebrew)
 
-      assert {:ok, %Tempo{calendar: Calendrical.Gregorian}} =
+      assert {:ok, %Tempo{calendar: Calendar.ISO}} =
                Tempo.from_iso8601("2026-06-15", Calendar.ISO)
     end
   end

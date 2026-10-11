@@ -1,62 +1,116 @@
 defmodule Tempo.RRule.Selection do
-  @moduledoc """
-  Resolve RRULE `BY*` selection tokens during recurrence expansion.
+  @moduledoc false
 
-  Called from `Tempo.to_interval/2`'s recurrence loop. Given a
-  candidate occurrence and a `repeat_rule` whose `:time` carries
-  a `[{:selection, [...]}]` keyword list (the shared AST produced
-  by `Tempo.RRule.parse/2` and `Tempo.RRule.Expander.to_ast/3`),
-  decide whether the candidate is kept, dropped, or expanded into
-  multiple occurrences.
-
-  ## Implemented rules
-
-  Per RFC 5545 §3.3.10's EXPAND/LIMIT table:
-
-  | Part | Role |
-  |---|---|
-  | `BYMONTH` | EXPAND for `YEARLY`, LIMIT otherwise. |
-  | `BYWEEKNO` | EXPAND for `YEARLY`, LIMIT otherwise. |
-  | `BYYEARDAY` | EXPAND for `YEARLY`, LIMIT otherwise. |
-  | `BYMONTHDAY` | EXPAND for `MONTHLY` and `YEARLY`, LIMIT otherwise. |
-  | `BYDAY` (no ordinal) | EXPAND within the week, month or year; LIMIT for finer FREQs. |
-  | `BYDAY` (with ordinal) | EXPAND to the nth weekday of the month or year. |
-  | `BYHOUR`, `BYMINUTE`, `BYSECOND` | EXPAND when FREQ is coarser, LIMIT otherwise. |
-  | `BYSETPOS` | LIMIT, applied last to each period's occurrences. |
-
-  `BYWEEKNO` numbers weeks as RFC 5545 defines them: each starts on
-  `WKST`, and week 1 is the first with at least four days in the year.
-  A week keeps all seven of its days, including any in the year before
-  or after. Once `BYWEEKNO` has expanded a `YEARLY` rule into those
-  days, the parts after it apply to them as they would to a `DAILY`
-  rule, so `BYDAY` picks weekdays within each week. A calendar-week
-  selection (`w`, Tempo's extension) expands and limits as `BYWEEKNO`
-  does, in the weeks the calendar numbers itself.
-
-  In a `YEARLY` rule the parts that name a day all hold at once, so the days selected are those that satisfy every one. `BYYEARDAY`, a computed event (`e`, Tempo's extension) and `BYMONTHDAY` apply in that order: the first of them the rule holds names the days, and each after it keeps those it names too. `BYMONTH` keeps a day of the year and an event to the months it lists, each day listed once: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, and `3M(easter)e` is Easter in the years it falls in March.
-
-  A computed event is each of its days that falls in the period it is selected in: it expands a `YEARLY`, a `MONTHLY` and a `WEEKLY` rule, so the Easter of April 2026 and of its fourteenth week are both 5 April, and it limits a `DAILY` rule and a finer one to the candidates on its day. A weekday or a day of the month beside it limits that day.
-
-  RFC 5545's candidate at every frequency is a day, and its table gives a weekly rule no `BYMONTHDAY` and no `BYYEARDAY`, and a monthly rule no `BYYEARDAY`. A selection made in a whole week or month (`Tempo.select/2` from one, a value such as `2026Y25WL15DN`, a recurrence that starts at its cadence's resolution or has no start) has that period for its candidate, and such a part is then each day of the period it names: `L15DN` in a week is the day of the week that is the 15th of its month, and `L166ON` in June is 15 June 2026. A part that names a day after it keeps the days it names too, and a weekday beside one keeps or drops them. Where the candidate is a day, as in a rule read from an RRULE, the period is the week (from `WKST`) or the month that holds it. A week resolved in a month is a week of the month, which the calendar numbers (`Tempo.UnitValues.weeks_of_month/3`): `L2WN` in June 2026 is 8 to 14 June, the span of its dates, and `L1WN` in July starts on 29 June. Beside a part that picks within the week it hands that part its days, as a week does in a year: `L2W3KN` in June 2026 is Wednesday the 10th, `L2WT10HN` ten o'clock on each of the week's seven days and `L2W1IN` its first day. `read_in_its_period/1` says which a week is, of its month or of the year: in a rule that steps by months from a date, as one read from an RRULE does, each candidate is a day, which the week keeps or drops by its week of the year. A week beside the month it is written with is a week of that month wherever it is resolved (`L6M2WN` in a year is the second week of June), and a week asked of a day or a time of day, which are written with their month, keeps it where that week of the month holds it. A week after a §12.10 window is asked of the window's days, by the week of the year each is in.
-
-  A day with no month (`D`) in a rule that is resolved in a year, and that nothing gives a month, is a day of the year, as the value `2026Y45D` is: `2026YL45DN` and `R/2026/P1Y/FL45DN` are 14 February, and `L-1DN` there is 31 December. A recurrence's start that names a month gives the day that month (ISO 8601-2 §13.6.3), a rule read from an RRULE with a start states it (`L3M15DN`), and a month, a week, a day of the year or a computed event beside the day places it already. `read_in_its_period/1` is that reading, which the conversion, the RRULE writer and `Tempo.explain/1` all ask.
-
-  A year (`Y`), which RFC 5545 has no part for and ISO 8601-2 §12.2 no
-  selection rule, limits the periods a selection resolves in, as a
-  recurrence domain's years (`R/{2027Y}/…`) do: a period that starts in
-  a listed year keeps every occurrence it selects, and a period in any
-  other year selects nothing. The Monday of ISO 8601 week 1 of 2026 is
-  2026's occurrence although it falls on 29 December 2025, and a
-  position (`I`) picks among a listed year's occurrences.
-
-  An expansion picks its points in the calendar period of the enclosing frequency that holds the candidate's start, as RFC 5545 evaluates `BY*` rules: a daily candidate that starts at noon has its `BYHOUR=9` at 09:00 that day, three hours before it. A cadence of mixed units (`P1DT12H`) takes its frequency from its first unit.
-
-  A value counted from the end is counted in the period its part resolves in: `-1` is the last day of the candidate's month, the last month of its year (the thirteenth of a Hebrew leap year), the last day of its week, 23:00. A range is resolved end by end, so `{1..-1}` is every value and `{28..-1}` the 28th to the last, and a value the period lacks (the 31st of June, hour 25) is passed over. The values a part names are taken in the order of time and once each, however they are written, which is the order a position (`I`, `BYSETPOS`) and a recurrence's count take the occurrences in.
-
-  Tokens this module doesn't interpret pass through unchanged
-  so partial support is correct for the partial inputs.
-
-  """
+  # Resolve RRULE `BY*` selection tokens during recurrence expansion.
+  #
+  # Called from `Tempo.to_interval/2`'s recurrence loop. Given a
+  # candidate occurrence and a `repeat_rule` whose `:time` carries
+  # a `[{:selection, [...]}]` keyword list (the shared AST produced
+  # by `Tempo.RRule.parse/2` and `Tempo.RRule.Expander.to_ast/3`),
+  # decide whether the candidate is kept, dropped, or expanded into
+  # multiple occurrences.
+  #
+  # ## Implemented rules
+  #
+  # Per RFC 5545 §3.3.10's EXPAND/LIMIT table:
+  #
+  # | Part | Role |
+  # |---|---|
+  # | `BYMONTH` | EXPAND for `YEARLY`, LIMIT otherwise. |
+  # | `BYWEEKNO` | EXPAND for `YEARLY`, LIMIT otherwise. |
+  # | `BYYEARDAY` | EXPAND for `YEARLY`, LIMIT otherwise. |
+  # | `BYMONTHDAY` | EXPAND for `MONTHLY` and `YEARLY`, LIMIT otherwise. |
+  # | `BYDAY` (no ordinal) | EXPAND within the week, month or year; LIMIT for finer FREQs. |
+  # | `BYDAY` (with ordinal) | EXPAND to the nth weekday of the month or year. |
+  # | `BYHOUR`, `BYMINUTE`, `BYSECOND` | EXPAND when FREQ is coarser, LIMIT otherwise. |
+  # | `BYSETPOS` | LIMIT, applied last to each period's occurrences. |
+  #
+  # `BYWEEKNO` numbers weeks as RFC 5545 defines them: each starts on
+  # `WKST`, and week 1 is the first with at least four days in the year.
+  # A week keeps all seven of its days, including any in the year before
+  # or after. Once `BYWEEKNO` has expanded a `YEARLY` rule into those
+  # days, the parts after it apply to them as they would to a `DAILY`
+  # rule, so `BYDAY` picks weekdays within each week. A calendar-week
+  # selection (`w`, Tempo's extension) expands and limits as `BYWEEKNO`
+  # does, in the weeks the calendar numbers itself.
+  #
+  # In a `YEARLY` rule the parts that name a day all hold at once, so the days
+  # selected are those that satisfy every one. `BYYEARDAY`, a computed event
+  # (`e`, Tempo's extension) and `BYMONTHDAY` apply in that order: the first
+  # of them the rule holds names the days, and each after it keeps those it
+  # names too. `BYMONTH` keeps a day of the year and an event to the months it
+  # lists, each day listed once: `BYMONTH=3;BYYEARDAY=100` selects nothing,
+  # day 100 being 10 April, and `3M(easter)e` is Easter in the years it falls
+  # in March.
+  #
+  # A computed event is each of its days that falls in the period it is
+  # selected in: it expands a `YEARLY`, a `MONTHLY` and a `WEEKLY` rule, so
+  # the Easter of April 2026 and of its fourteenth week are both 5 April, and
+  # it limits a `DAILY` rule and a finer one to the candidates on its day. A
+  # weekday or a day of the month beside it limits that day.
+  #
+  # RFC 5545's candidate at every frequency is a day, and its table gives a
+  # weekly rule no `BYMONTHDAY` and no `BYYEARDAY`, and a monthly rule no
+  # `BYYEARDAY`. A selection made in a whole week or month (`Tempo.select/2`
+  # from one, a value such as `2026Y25WL15DN`, a recurrence that starts at its
+  # cadence's resolution or has no start) has that period for its candidate,
+  # and such a part is then each day of the period it names: `L15DN` in a week
+  # is the day of the week that is the 15th of its month, and `L166ON` in June
+  # is 15 June 2026. A part that names a day after it keeps the days it names
+  # too, and a weekday beside one keeps or drops them. Where the candidate is
+  # a day, as in a rule read from an RRULE, the period is the week (from
+  # `WKST`) or the month that holds it. A week resolved in a month is a week
+  # of the month, which the calendar numbers
+  # (`Tempo.UnitValues.weeks_of_month/3`): `L2WN` in June 2026 is 8 to 14
+  # June, the span of its dates, and `L1WN` in July starts on 29 June. Beside
+  # a part that picks within the week it hands that part its days, as a week
+  # does in a year: `L2W3KN` in June 2026 is Wednesday the 10th, `L2WT10HN`
+  # ten o'clock on each of the week's seven days and `L2W1IN` its first day.
+  # `read_in_its_period/1` says which a week is, of its month or of the year:
+  # in a rule that steps by months from a date, as one read from an RRULE
+  # does, each candidate is a day, which the week keeps or drops by its week
+  # of the year. A week beside the month it is written with is a week of that
+  # month wherever it is resolved (`L6M2WN` in a year is the second week of
+  # June), and a week asked of a day or a time of day, which are written with
+  # their month, keeps it where that week of the month holds it. A week after
+  # a §12.10 window is asked of the window's days, by the week of the year
+  # each is in.
+  #
+  # A day with no month (`D`) in a rule that is resolved in a year, and that
+  # nothing gives a month, is a day of the year, as the value `2026Y45D` is:
+  # `2026YL45DN` and `R/2026/P1Y/FL45DN` are 14 February, and `L-1DN` there is
+  # 31 December. A recurrence's start that names a month gives the day that
+  # month (ISO 8601-2 §13.6.3), a rule read from an RRULE with a start states
+  # it (`L3M15DN`), and a month, a week, a day of the year or a computed event
+  # beside the day places it already. `read_in_its_period/1` is that reading,
+  # which the conversion, the RRULE writer and `Tempo.explain/1` all ask.
+  #
+  # A year (`Y`), which RFC 5545 has no part for and ISO 8601-2 §12.2 no
+  # selection rule, limits the periods a selection resolves in, as a
+  # recurrence domain's years (`R/{2027Y}/…`) do: a period that starts in
+  # a listed year keeps every occurrence it selects, and a period in any
+  # other year selects nothing. The Monday of ISO 8601 week 1 of 2026 is
+  # 2026's occurrence although it falls on 29 December 2025, and a
+  # position (`I`) picks among a listed year's occurrences.
+  #
+  # An expansion picks its points in the calendar period of the enclosing
+  # frequency that holds the candidate's start, as RFC 5545 evaluates `BY*`
+  # rules: a daily candidate that starts at noon has its `BYHOUR=9` at 09:00
+  # that day, three hours before it. A cadence of mixed units (`P1DT12H`)
+  # takes its frequency from its first unit.
+  #
+  # A value counted from the end is counted in the period its part resolves
+  # in: `-1` is the last day of the candidate's month, the last month of its
+  # year (the thirteenth of a Hebrew leap year), the last day of its week,
+  # 23:00. A range is resolved end by end, so `{1..-1}` is every value and
+  # `{28..-1}` the 28th to the last, and a value the period lacks (the 31st of
+  # June, hour 25) is passed over. The values a part names are taken in the
+  # order of time and once each, however they are written, which is the order
+  # a position (`I`, `BYSETPOS`) and a recurrence's count take the occurrences
+  # in.
+  #
+  # Tokens this module doesn't interpret pass through unchanged
+  # so partial support is correct for the partial inputs.
 
   alias Calendrical.Kday
   alias Tempo.Calendars
@@ -719,8 +773,8 @@ defmodule Tempo.RRule.Selection do
        ) do
     days_of_week_in_calendar(
       selection,
-      Calendars.effective(rule_calendar),
-      Calendars.effective(calendar)
+      rule_calendar,
+      calendar
     )
   end
 
@@ -3017,8 +3071,6 @@ defmodule Tempo.RRule.Selection do
   # in, as the calendar gives the year (`year/1`), in the calendar an event
   # is dated in.
   defp gregorian_years(year, calendar) do
-    calendar = Calendars.effective(calendar)
-
     with %Date.Range{first: first, last: last} <- calendar.year(year),
          {:ok, %Date{year: first_year}} <- Date.convert(first, Calendars.default()),
          {:ok, %Date{year: last_year}} <- Date.convert(last, Calendars.default()) do
@@ -3033,7 +3085,7 @@ defmodule Tempo.RRule.Selection do
   # would say that the year has no equinox, or that a name no resolver
   # knows is an event that never happens.
   defp event_date(name, gregorian_year, calendar) do
-    with {:ok, %Date{} = date} <- Event.date(name, gregorian_year, calendar),
+    with {:ok, %Date{} = date} <- Event.dated(name, gregorian_year, calendar),
          {:ok, %Date{} = date} <- Date.convert(date, calendar) do
       {:ok, date}
     else

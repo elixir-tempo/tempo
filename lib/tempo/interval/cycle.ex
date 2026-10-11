@@ -1,32 +1,31 @@
 defmodule Tempo.Interval.Cycle do
-  @moduledoc """
-  The cycle a span with no year lies on.
+  @moduledoc false
 
-  A value with no year, or with an unspecified one, is on a cycle: the
-  day for a time of day, the year for a month and a day, the week for a
-  day of the week. A span on a cycle is written from its start to its
-  end as any span is, and an end that is not after the start is in the
-  cycle's next turn: `~o"T23H"` is the span `T23H/T0H`, the last hour of
-  the day, `T22H/T2H` runs through midnight, and `T0H/T0H` is the whole
-  day, a span that ends where it starts being once round. ISO 8601-1:2019
-  has no hour 24, so the end of the day is written as the start of the
-  next.
+  # The cycle a span with no year lies on.
+  #
+  # A value with no year, or with an unspecified one, is on a cycle: the
+  # day for a time of day, the year for a month and a day, the week for a
+  # day of the week. A span on a cycle is written from its start to its
+  # end as any span is, and an end that is not after the start is in the
+  # cycle's next turn: `~o"T23H"` is the span `T23H/T0H`, the last hour of
+  # the day, `T22H/T2H` runs through midnight, and `T0H/T0H` is the whole
+  # day, a span that ends where it starts being once round. ISO 8601-1:2019
+  # has no hour 24, so the end of the day is written as the start of the
+  # next.
+  #
+  # Anything that orders a span's ends cannot read that, so this module
+  # cuts such a span where its cycle ends (`parts/1`), measures it
+  # (`microseconds/1`), and writes a part that ends at the cycle's end as
+  # the span it came from (`wrapped/1`). It is the one place the reading
+  # lives: `Tempo.relation/2`, the set operations, the length predicates,
+  # `Tempo.Interval.empty?/1` and `Tempo.IntervalSet.coalesce/1` all read
+  # a span with no year through it.
+  #
+  # Inside a turn the cycle's end is one past the last value its leading
+  # unit takes: hour 24, month 13, day of the week 8. No value is written
+  # with it, and it is not returned to a caller.
 
-  Anything that orders a span's ends cannot read that, so this module
-  cuts such a span where its cycle ends (`parts/1`), measures it
-  (`microseconds/1`), and writes a part that ends at the cycle's end as
-  the span it came from (`wrapped/1`). It is the one place the reading
-  lives: `Tempo.relation/2`, the set operations, the length predicates,
-  `Tempo.Interval.empty?/1` and `Tempo.IntervalSet.coalesce/1` all read
-  a span with no year through it.
-
-  Inside a turn the cycle's end is one past the last value its leading
-  unit takes: hour 24, month 13, day of the week 8. No value is written
-  with it, and it is not returned to a caller.
-
-  """
-
-  alias Tempo.Calendars
+  alias Tempo.Border
   alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
@@ -119,7 +118,7 @@ defmodule Tempo.Interval.Cycle do
     {from_year, from_time} = split_unspecified_year(from.time)
     {to_year, to_time} = split_unspecified_year(to.time)
 
-    case end_of_cycle(from_time, Calendars.effective(from.calendar)) do
+    case end_of_cycle(from_time, from.calendar) do
       {:ok, end_time} ->
         first = %{interval | to: %{from | time: from_year ++ end_time}}
 
@@ -255,7 +254,7 @@ defmodule Tempo.Interval.Cycle do
 
   def ends_turn?(%Interval{from: %Tempo{} = from, to: %Tempo{time: to_time}}) do
     {_year, to_units} = split_unspecified_year(to_time)
-    at_end?(to_units, Calendars.effective(from.calendar))
+    at_end?(to_units, from.calendar)
   end
 
   def ends_turn?(%Interval{}), do: false
@@ -390,7 +389,7 @@ defmodule Tempo.Interval.Cycle do
   defp no_cycle_error(interval) do
     UnanchoredError.exception(
       operation:
-        "read where #{inspect(interval)} ends: it runs past the last value of its " <>
+        "read where #{Border.inspect(interval)} ends: it runs past the last value of its " <>
           "leading unit, whose count depends on a year or a month the span does not have",
       reason: :comparison
     )
@@ -399,7 +398,7 @@ defmodule Tempo.Interval.Cycle do
   defp no_length_error(interval) do
     UnanchoredError.exception(
       operation:
-        "measure #{inspect(interval)}: the length of a span of months and days depends " <>
+        "measure #{Border.inspect(interval)}: the length of a span of months and days depends " <>
           "on the year",
       reason: :measure
     )
@@ -410,7 +409,7 @@ defmodule Tempo.Interval.Cycle do
       interval: interval,
       operation: :compare,
       reason:
-        "#{inspect(interval)} has no year and does not end after it starts, so it runs " <>
+        "#{Border.inspect(interval)} has no year and does not end after it starts, so it runs " <>
           "through the end of its cycle and is two spans in any one turn of it: ask of both with " <>
           "the set operations (`Tempo.overlaps?/2`, `Tempo.intersection/2`)."
     )

@@ -21,9 +21,9 @@ defmodule Tempo.SpanFromEachValueTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   ## The measure
 

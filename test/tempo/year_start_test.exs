@@ -9,7 +9,7 @@ defmodule Tempo.YearStartTest do
   alias Calendrical.Julian.Sept1
   alias Tempo.Interval
   alias Tempo.IntervalSet
-  alias Tempo.UnitValues
+  alias Tempo.Test.Engine.UnitValues
 
   # A year that begins on another day than 1 January.
   #

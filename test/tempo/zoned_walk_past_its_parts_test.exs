@@ -15,10 +15,10 @@ defmodule Tempo.ZonedWalkPastItsPartsTest do
   """
   use ExUnit.Case, async: true
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
+  alias Tempo.Test.Engine.Compare
   alias Tempo.TimeZoneDatabase
 
   # About eleven years of days, across twenty-two changes of a clock that

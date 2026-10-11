@@ -4,8 +4,8 @@ defmodule Tempo.Duration.NegateTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Duration
+  alias Tempo.Test.Engine.Compare
 
   doctest Tempo.Duration, only: [negate: 1]
 

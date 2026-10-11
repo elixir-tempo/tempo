@@ -14,7 +14,7 @@ defmodule Tempo.SelectionFromEndTest do
   # range Elixir takes it for, so the selection selected nothing.
 
   # The start of each span a value converts to, as ISO 8601 text.
-  defp starts(text, calendar \\ Calendrical.Gregorian) do
+  defp starts(text, calendar \\ Calendar.ISO) do
     {:ok, value} = Tempo.from_iso8601(text, calendar)
     {:ok, %IntervalSet{} = spans} = Tempo.to_interval(value)
 

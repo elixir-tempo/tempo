@@ -5,6 +5,8 @@ defmodule Tempo.InvalidTimeError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:unit, :value, :valid_range, :hour, :minute, :second, :reason]
 
   @type t :: %__MODULE__{
@@ -19,7 +21,7 @@ defmodule Tempo.InvalidTimeError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true
@@ -27,11 +29,11 @@ defmodule Tempo.InvalidTimeError do
 
   def message(%__MODULE__{unit: unit, value: value, valid_range: range})
       when not is_nil(unit) and not is_nil(value) and not is_nil(range) do
-    "#{inspect(value)} is not valid for #{unit} (valid range #{inspect(range)})"
+    "#{Border.inspect(value)} is not valid for #{unit} (valid range #{Border.inspect(range)})"
   end
 
   def message(%__MODULE__{unit: unit, value: value}) when not is_nil(unit) do
-    "Invalid #{unit}: #{inspect(value)}"
+    "Invalid #{unit}: #{Border.inspect(value)}"
   end
 
   def message(%__MODULE__{}), do: "Invalid time"

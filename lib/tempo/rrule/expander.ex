@@ -1,41 +1,42 @@
 defmodule Tempo.RRule.Expander do
-  @moduledoc """
-  Materialise an RFC 5545 RRULE into concrete occurrences by
-  forming the right AST and handing it to Tempo's interpreter.
+  @moduledoc false
 
-  ## Design — adapter, not engine
+  # Materialise an RFC 5545 RRULE into concrete occurrences by
+  # forming the right AST and handing it to Tempo's interpreter.
+  #
+  # ## Design — adapter, not engine
+  #
+  # The iCalendar `RRULE`, ISO 8601-2 recurring intervals
+  # (`R5/DTSTART/P1D`), and hand-built `Tempo.RRule.Rule` structs
+  # all express the same thing: a recurrence that starts at a point
+  # in time, repeated at a cadence, optionally filtered by BY-rule
+  # selections. Tempo's `%Tempo.Interval{}` struct already has
+  # every field needed to represent this shape: `recurrence`,
+  # `duration`, `from`, `to` (for UNTIL), and `repeat_rule`
+  # (carrying BY-rule filters as selection tokens).
+  #
+  # Rather than build a parallel engine, this module is a thin
+  # adapter:
+  #
+  # 1. **Input normalisation** — any of `%Tempo.RRule.Rule{}`,
+  #    `%ICal.Recurrence{}`, or (in future) parsed AST get
+  #    canonicalised into `%Tempo.RRule.Rule{}`.
+  #
+  # 2. **AST projection** — `to_ast/3` builds the canonical
+  #    `%Tempo.Interval{}` that Tempo's interpreter understands.
+  #
+  # 3. **Delegation** — `Tempo.to_interval/2` materialises the
+  #    AST into the occurrence set.
+  #
+  # Extending RRULE support (BY* rules, BYSETPOS, RDATE, EXDATE)
+  # happens by extending the interpreter — selection-resolution
+  # in the enumeration module and `Tempo.to_interval/2` — never by
+  # adding expansion logic here.
+  #
+  # See `plans/rrule-full-expansion.md` for the roadmap.
 
-  The iCalendar `RRULE`, ISO 8601-2 recurring intervals
-  (`R5/DTSTART/P1D`), and hand-built `Tempo.RRule.Rule` structs
-  all express the same thing: a recurrence that starts at a point
-  in time, repeated at a cadence, optionally filtered by BY-rule
-  selections. Tempo's `%Tempo.Interval{}` struct already has
-  every field needed to represent this shape: `recurrence`,
-  `duration`, `from`, `to` (for UNTIL), and `repeat_rule`
-  (carrying BY-rule filters as selection tokens).
-
-  Rather than build a parallel engine, this module is a thin
-  adapter:
-
-  1. **Input normalisation** — any of `%Tempo.RRule.Rule{}`,
-     `%ICal.Recurrence{}`, or (in future) parsed AST get
-     canonicalised into `%Tempo.RRule.Rule{}`.
-
-  2. **AST projection** — `to_ast/3` builds the canonical
-     `%Tempo.Interval{}` that Tempo's interpreter understands.
-
-  3. **Delegation** — `Tempo.to_interval/2` materialises the
-     AST into the occurrence set.
-
-  Extending RRULE support (BY* rules, BYSETPOS, RDATE, EXDATE)
-  happens by extending the interpreter — selection-resolution
-  in the enumeration module and `Tempo.to_interval/2` — never by
-  adding expansion logic here.
-
-  See `plans/rrule-full-expansion.md` for the roadmap.
-
-  """
-
+  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule.Rule
@@ -316,7 +317,7 @@ defmodule Tempo.RRule.Expander do
         :error ->
           {:error,
            RRuleError.exception(
-             reason: "Unsupported ical frequency: #{inspect(r.frequency)}",
+             reason: "Unsupported ical frequency: #{Border.inspect(r.frequency)}",
              rule: r
            )}
       end
@@ -332,9 +333,9 @@ defmodule Tempo.RRule.Expander do
     defp map_freq(_), do: :error
 
     defp convert_until(nil), do: nil
-    defp convert_until(%DateTime{} = dt), do: Tempo.from_elixir(dt)
-    defp convert_until(%Date{} = d), do: Tempo.from_elixir(d)
-    defp convert_until(%NaiveDateTime{} = ndt), do: Tempo.from_elixir(ndt)
+    defp convert_until(%DateTime{} = dt), do: Tempo.from_elixir(Calendars.in_rule(dt))
+    defp convert_until(%Date{} = d), do: Tempo.from_elixir(Calendars.in_rule(d))
+    defp convert_until(%NaiveDateTime{} = ndt), do: Tempo.from_elixir(Calendars.in_rule(ndt))
     defp convert_until(_), do: nil
 
     defp map_weekday(nil), do: nil

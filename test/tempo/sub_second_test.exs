@@ -10,10 +10,10 @@ defmodule Tempo.SubSecondTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
-  alias Tempo.Math
+  alias Tempo.Test.Engine.Compare
+  alias Tempo.Test.Engine.Math
 
   defp time(iso) do
     {:ok, tempo} = Tempo.from_iso8601(iso)
@@ -137,7 +137,7 @@ defmodule Tempo.SubSecondTest do
     test "adjacent sub-second intervals meet" do
       {:ok, a} = Tempo.to_interval(~o"2026Y6M15DT10H30M45.123S")
       {:ok, b} = Tempo.to_interval(~o"2026Y6M15DT10H30M45.124S")
-      assert Interval.relation(a, b) == :meets
+      assert Tempo.relation(a, b) == :meets
     end
 
     test "cross-zone comparison breaks ties on the sub-second value" do

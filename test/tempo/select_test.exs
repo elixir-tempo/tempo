@@ -10,8 +10,6 @@ defmodule Tempo.Select.Test do
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
 
-  doctest Tempo.Select
-
   # `Tempo.select/2` narrows a base span by a selector, returning
   # an `{:ok, %Tempo.IntervalSet{}}` tuple. The tests below cover
   # every selector shape, every base shape (Tempo / Interval /
@@ -839,7 +837,7 @@ defmodule Tempo.Select.Test do
     end
 
     test "a selector that names no day of the week selects nothing" do
-      no_days = %Tempo{time: [day_of_week: []], calendar: Calendrical.Gregorian}
+      no_days = %Tempo{time: [day_of_week: []], calendar: Calendar.ISO}
       assert {:ok, set} = Tempo.select(~o"2026-06-15/..", no_days)
       assert IntervalSet.count(set) == 0
     end
@@ -1317,8 +1315,9 @@ defmodule Tempo.Select.Test do
 
     test "a week from a month is the week of the month" do
       # No month has a twenty-fifth week, and each month of a span has a
-      # first: the one that holds its first day, which for July 2026 starts
-      # on 29 June.
+      # first: the one that holds four or more of its days, as Calendar.ISO
+      # counts a month's weeks, which for July 2026 starts on 29 June and
+      # for August, which begins on a Saturday, on the 3rd.
       for base <- [~o"2026-06", ~o"2026-06/2026-09"],
           selector <- [~o"25W", ~o"25W1K", ~o"L25WN"] do
         assert spans(base, selector) == []
@@ -1327,7 +1326,7 @@ defmodule Tempo.Select.Test do
       assert spans(~o"2026-06", [~o"15D", ~o"1W"]) == [{~D[2026-06-01], 7}, {~D[2026-06-15], 1}]
 
       assert spans(~o"2026-06/2026-09", ~o"1W") ==
-               [{~D[2026-06-01], 7}, {~D[2026-06-29], 7}, {~D[2026-07-27], 7}]
+               [{~D[2026-06-01], 7}, {~D[2026-06-29], 7}, {~D[2026-08-03], 7}]
 
       # A span of months with no end is walked, a week at a time.
       {:ok, weeks} = Tempo.select(~o"2026-06/..", ~o"1W")
@@ -1624,7 +1623,7 @@ defmodule Tempo.Select.Test do
                text
 
         message = Exception.message(error)
-        assert message =~ "Calendrical.Gregorian", text
+        assert message =~ "Calendar.ISO", text
         assert message =~ "Calendrical.Hebrew", text
       end
     end
@@ -1639,10 +1638,10 @@ defmodule Tempo.Select.Test do
     end
 
     test "is refused whichever of the two calendars the span is in" do
-      assert {:error, %ConversionError{target: Calendrical.Gregorian}} =
+      assert {:error, %ConversionError{target: Calendar.ISO}} =
                Tempo.select(~o"2026", read("6M15D", Hebrew))
 
-      assert {:error, %ConversionError{target: Calendrical.Gregorian}} =
+      assert {:error, %ConversionError{target: Calendar.ISO}} =
                Tempo.select(~o"2026", read("L6M15DN", Hebrew))
     end
 
@@ -1682,7 +1681,7 @@ defmodule Tempo.Select.Test do
 
       assert {:error, %ConversionError{target: NRF}} = Tempo.select(read("2026Y", NRF), ~o"25W")
 
-      assert {:error, %ConversionError{target: Calendrical.Gregorian}} =
+      assert {:error, %ConversionError{target: Calendar.ISO}} =
                Tempo.select(~o"2026Y", read("25W", NRF))
     end
 

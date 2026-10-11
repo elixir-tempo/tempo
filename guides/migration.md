@@ -27,6 +27,15 @@ Tempo 2.0 gives each word in its API one meaning, the one it has in everyday Eng
 | `Tempo.to_rrule/1`, `to_rrule!/1` | `Tempo.RRule.to_string/1`, `to_string!/1` |
 | `Tempo.MaterialisationError` | `Tempo.ConversionError` |
 | `Tempo.RRule.Expander.expand/3` | `Tempo.RRule.parse/2`, then `Tempo.to_interval_set/2` |
+| `relation/2`, `before?/2`, `after?/2`, `adjacent?/2` on `Tempo.Interval` | The same names on `Tempo` |
+| The `certainly_` and `possibly_` predicates and the `_certainty` functions on `Tempo.Interval` | The same names on `Tempo` |
+| `at_least?/2`, `at_most?/2`, `exactly?/2`, `longer_than?/2`, `shorter_than?/2` on `Tempo.Interval` | The same names on `Tempo` |
+| `bounded?/1` on `Tempo.Interval` and `Tempo.IntervalSet`, `Tempo.IntervalSet.empty?/1` | `Tempo.bounded?/1`, `Tempo.empty?/1` |
+| `Tempo.Operations.union/3` and the other set operations and predicates | The same names on `Tempo` |
+| `Tempo.Select.select/2` | `Tempo.select/2` |
+| `Tempo.Format.to_string/2`, `to_relative_string/2` | `Tempo.to_string/2`, `Tempo.to_relative_string/2` |
+| `Tempo.Compare.compare/3` | `Tempo.compare/3` |
+| `Tempo.Clock.utc_now/0` | `Tempo.utc_now/0` |
 | `Tempo.add_working_days/3` | `Tempo.add_workdays/3` |
 | `Tempo.next_working_day/2`, `previous_working_day/2` | `Tempo.next_workday/2`, `previous_workday/2` |
 | `Tempo.nearest_working_day/2` | `Tempo.nearest_workday/2` |
@@ -72,7 +81,7 @@ These keep their names and change their meaning:
 
 * **The network and schedule builders** — record an option or a value they cannot read, which the solver then returns, where 1.x ignored an unknown option and raised on a bad value.
 
-* **`Tempo.Network.Normalize.normalize/1`** — returns `{:ok, normalized}`, or an error for a unit finer than a second, floating and zoned bounds in one network of hours, or a fraction of the axis unit, where 1.x returned the map and raised; a duration in a coarser unit than the axis is in its new `:measures`, not its `:edges`.
+* **One home for an operation, and no engine** — an operation on any value is documented on `Tempo` and nowhere else, as the table above maps it, and the modules 1.x documented as its engine are no part of the API: the comparison of values, the tokenizer, the RRULE expander, the network's normaliser, the set operations' own module. `Tempo.validate_zone_offset/1`, `Tempo.Interval.next_unit_boundary/1` and the readers of the zone database on `Tempo.TimeZoneDatabase` other than `database/0` and `zone_exists?/1` go with them. A function that is not documented is given values as the library holds them, so a call of one from outside it is not supported.
 
 * **A network's lengths** — a year or a month in a network of days (or a year in one of months) is its actual length from where its period can start, in the period's calendar, where 1.x used a mean Gregorian year and month: a year from 1 January 2024 is 366 days, where it was 365.
 
@@ -133,6 +142,48 @@ grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(
 ```
 
 The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, every `:skipping` shift of a day by days or weeks, every `round/2`, every `shift_zone/2` of a value coarser than a second, every conversion to an Elixir time compared with a literal, every `Tempo.new/1` of a week and a weekday, every set operation on a value with no zone and one with a zone, and every `RecurrenceSet.new/2` and `to_iso8601/1`, which the search finds.
+
+## A value that names no calendar is in Calendar.ISO
+
+In 1.x a value written with no calendar was in `Calendrical.Gregorian`. In 2.0 it is in `Calendar.ISO`, Elixir's own, so its dates are the ones the standard library gives and takes. `Calendrical.Gregorian` is a calendar like any other: it is read from `[u-ca=gregory]` and written with it.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.x
+(~o"2026-06-15").calendar
+#=> Calendrical.Gregorian
+```
+
+```elixir
+iex> (~o"2026-06-15").calendar
+Calendar.ISO
+iex> (~o"2026-06-15[u-ca=gregory]").calendar
+Calendrical.Gregorian
+```
+
+> *"A date is in Elixir's calendar unless it says otherwise."*
+
+Two things follow. `Calendar.ISO`'s weeks are ISO 8601's, and its weeks of a month are counted as CLDR counts them: the first is the week that holds four or more of the month's days, where the Gregorian calendar's first week of a month is the one that holds its first day.
+
+```elixir
+iex> {:ok, weeks} = Tempo.select(~o"2026-08", ~o"1W")
+iex> Tempo.IntervalSet.members(weeks)
+[~o"2026Y8M3D/10D"]
+```
+
+> *"The first week of August 2026 is the 3rd to the 9th."*
+
+And a solar term is the calendar's to answer, and `Calendar.ISO` reckons none. `(qingming)e` on a value that names no calendar is a `Tempo.EventError`; a value of `[u-ca=gregory]` or of a lunisolar calendar has its solar terms, and `Tempo.Event.date/3` takes the calendar to ask.
+
+```elixir
+iex> Tempo.Event.date("qingming", 2026)
+{:error, {:no_solar_terms, Calendar.ISO}}
+iex> Tempo.Event.date("qingming", 2026, Calendrical.Gregorian)
+{:ok, ~D[2026-04-05]}
+```
+
+> *"Qingming of 2026 is 5 April, in a calendar that reckons the solar terms."*
 
 ## A set's duration is the time it covers
 
@@ -489,7 +540,7 @@ iex> Tempo.parse_date("15 June 2026", locale: :en)
 
 ## One conversion error
 
-`Tempo.ConversionError` replaces `Tempo.MaterialisationError`, keeping its reasons (`:bare_duration`, `:one_of_set`, `:open_range`, …), so `to_interval/2` and the other conversions share one error. The engine behind them — `Tempo.Compare`, the ISO 8601 tokenizer, the RRULE expander — is documented under Internals, and an RRULE's occurrences come from `Tempo.RRule.parse/2` and `Tempo.to_interval_set/2` rather than the expander:
+`Tempo.ConversionError` replaces `Tempo.MaterialisationError`, keeping its reasons (`:bare_duration`, `:one_of_set`, `:open_range`, …), so `to_interval/2` and the other conversions share one error. The engine behind them, the comparison of values, the ISO 8601 tokenizer and the RRULE expander among it, is no part of the documented API, and an RRULE's occurrences come from `Tempo.RRule.parse/2` and `Tempo.to_interval_set/2` rather than the expander:
 
 ```elixir
 iex> {:error, %Tempo.ConversionError{reason: :bare_duration}} = Tempo.to_interval(~o"P1D")

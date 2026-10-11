@@ -54,10 +54,11 @@ defmodule Tempo.EventCalendarTest do
   end
 
   # Each date an event falls on in the Gregorian years about `year`, as a date
-  # of `calendar`, earliest first.
+  # of `calendar`, earliest first. The calendar is asked: a solar term is the
+  # calendar's to answer, and the others are the same day in any.
   defp event_dates(event, year, calendar) do
     for gregorian_year <- gregorian_years_about(year, calendar),
-        {:ok, date} <- [Event.date(event, gregorian_year)],
+        {:ok, date} <- [Event.date(event, gregorian_year, calendar)],
         do: Date.convert!(date, calendar)
   end
 

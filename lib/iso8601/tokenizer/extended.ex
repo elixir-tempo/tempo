@@ -1,33 +1,33 @@
 defmodule Tempo.Iso8601.Tokenizer.Extended do
-  @moduledoc """
-  Tokenizer combinators and post-processing for the
-  Internet Extended Date/Time Format (IXDTF) defined in
-  [draft-ietf-sedate-datetime-extended-09](https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html).
+  @moduledoc false
 
-  An IXDTF suffix follows a normal RFC 3339 / ISO 8601 date-time
-  and consists of:
-
-  * An optional time zone in square brackets such as
-    `[Europe/Paris]` or `[+08:45]`.
-
-  * Zero or more tagged suffixes such as `[u-ca=hebrew]` or
-    `[_experimental=value]`.
-
-  Any bracketed segment may be prefixed with `!` to mark it as
-  **critical**.  Critical segments that are not recognised by
-  the parser cause the parse to fail.  Elective (non-critical)
-  segments that are not recognised are retained verbatim under
-  the `:tags` key of the extended map.
-
-  Calendar identifiers under the `u-ca` key are validated with
-  `Localize.validate_calendar/1`.  Time zone names are validated
-  with `Tempo.TimeZoneDatabase.zone_exists?/1`.
-
-  """
+  # Tokenizer combinators and post-processing for the
+  # Internet Extended Date/Time Format (IXDTF) defined in
+  # [draft-ietf-sedate-datetime-extended-09](https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html).
+  #
+  # An IXDTF suffix follows a normal RFC 3339 / ISO 8601 date-time
+  # and consists of:
+  #
+  # * An optional time zone in square brackets such as
+  #   `[Europe/Paris]` or `[+08:45]`.
+  #
+  # * Zero or more tagged suffixes such as `[u-ca=hebrew]` or
+  #   `[_experimental=value]`.
+  #
+  # Any bracketed segment may be prefixed with `!` to mark it as
+  # **critical**.  Critical segments that are not recognised by
+  # the parser cause the parse to fail.  Elective (non-critical)
+  # segments that are not recognised are retained verbatim under
+  # the `:tags` key of the extended map.
+  #
+  # Calendar identifiers under the `u-ca` key are validated with
+  # `Localize.validate_calendar/1`.  Time zone names are validated
+  # with `Tempo.TimeZoneDatabase.zone_exists?/1`.
 
   import NimbleParsec
   import Tempo.Iso8601.Tokenizer.Helpers, only: [digit: 0, colon: 0]
 
+  alias Tempo.Border
   alias Tempo.DuplicateZoneError
   alias Tempo.ParseError
   alias Tempo.TimeZoneDatabase
@@ -402,8 +402,8 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   defp two_values(key, first, second) do
     ParseError.exception(
       reason:
-        "The suffix key #{inspect(key)} is written twice, as #{inspect(Enum.join(first, "-"))} " <>
-          "and as #{inspect(Enum.join(second, "-"))}, and one of the two is critical"
+        "The suffix key #{Border.inspect(key)} is written twice, as #{Border.inspect(Enum.join(first, "-"))} " <>
+          "and as #{Border.inspect(Enum.join(second, "-"))}, and one of the two is critical"
     )
   end
 
@@ -498,7 +498,7 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
         {:error,
          ParseError.exception(
            input: raw,
-           reason: "Invalid u extension #{inspect(raw)} in extended suffix"
+           reason: "Invalid u extension #{Border.inspect(raw)} in extended suffix"
          )}
 
       {:error, _reason} ->
@@ -550,7 +550,7 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
         {:error,
          ParseError.exception(
            input: raw,
-           reason: "Unknown calendar identifier #{inspect(raw)} in extended suffix"
+           reason: "Unknown calendar identifier #{Border.inspect(raw)} in extended suffix"
          )}
 
       :error ->

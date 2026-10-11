@@ -1,4 +1,6 @@
 defmodule Tempo.ZoneOffsetMismatchError do
+  use Tempo.Border
+
   @moduledoc """
   Exception raised (or returned) when a value's numeric offset disagrees
   with the zone beside it at the value's reading.
@@ -12,10 +14,11 @@ defmodule Tempo.ZoneOffsetMismatchError do
   elective one; otherwise the offset gives the moment, and the value is
   that moment as the zone's clock shows it. `Tempo.new/1` returns it for
   a `:shift` and a `:zone` that disagree, where no text says which of
-  the two is meant, and `Tempo.validate_zone_offset/1` for a value that
-  holds a disagreement.
+  the two is meant.
 
   """
+
+  alias Tempo.Border
 
   defexception [:zone_id, :wall_time, :stated_offset, :zone_offsets]
 
@@ -28,7 +31,7 @@ defmodule Tempo.ZoneOffsetMismatchError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true
@@ -40,7 +43,7 @@ defmodule Tempo.ZoneOffsetMismatchError do
       }) do
     actual = Enum.map_join(zone_offsets, " or ", &format_offset/1)
 
-    "Stated offset #{format_offset(stated)} disagrees with #{inspect(zone_id)} " <>
+    "Stated offset #{format_offset(stated)} disagrees with #{Border.inspect(zone_id)} " <>
       "(#{actual})#{at_the_reading(wall_time)}."
   end
 
@@ -48,18 +51,8 @@ defmodule Tempo.ZoneOffsetMismatchError do
   defp at_the_reading(nil), do: ""
   defp at_the_reading(wall_time), do: " at #{wall_time}"
 
-  @doc """
-  Format an offset in seconds as a signed `±HH:MM` string.
-
-  ### Examples
-
-      iex> Tempo.ZoneOffsetMismatchError.format_offset(3600)
-      "+01:00"
-
-      iex> Tempo.ZoneOffsetMismatchError.format_offset(-18000)
-      "-05:00"
-
-  """
+  @doc false
+  # Format an offset in seconds as a signed `±HH:MM` string.
   @spec format_offset(integer()) :: String.t()
   def format_offset(seconds) when is_integer(seconds) do
     sign = if seconds < 0, do: "-", else: "+"

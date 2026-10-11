@@ -15,9 +15,9 @@ defmodule Tempo.ZonedStepClearOfChangesTest do
   """
   use ExUnit.Case, async: true
 
-  alias Tempo.Enumeration.Zone
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Enumeration.Zone
   alias Tempo.TimeZoneDatabase
 
   @zones ["Europe/Paris", "Australia/Lord_Howe", "Pacific/Chatham", "America/New_York"]

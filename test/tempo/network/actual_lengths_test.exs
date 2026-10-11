@@ -8,8 +8,9 @@ defmodule Tempo.Network.ActualLengthsTest do
   import Tempo.Sigils
 
   alias Tempo.Network
-  alias Tempo.Network.{Normalize, Solver}
+  alias Tempo.Network.Solver
   alias Tempo.Schedule
+  alias Tempo.Test.Engine.Network.Normalize
 
   defp solved(network, id) do
     {:ok, propagated} = Solver.propagate(network)

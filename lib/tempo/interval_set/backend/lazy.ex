@@ -1,7 +1,7 @@
 defmodule Tempo.IntervalSet.Backend.Lazy do
   @moduledoc """
   A lazy, potentially unbounded `Tempo.IntervalSet.Backend`: the state
-  is an ordered generator (any `Enumerable`, typically a `Stream`)
+  holds an ordered generator (any `Enumerable`, typically a `Stream`)
   yielding member intervals in time order, sorted by `from`, disjoint,
   each anchored and bounded.
 
@@ -25,11 +25,29 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
 
   use Tempo.IntervalSet.Backend
 
+  alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.UnboundedSetError
 
+  # The state: the generator, and the calendar a member that names no
+  # calendar is in. The members of a lazy set are not there to be looked at
+  # until they are read, so the set says beside them how they are held: a
+  # caller holds such a member in `Calendar.ISO`, and inside a call it holds
+  # the module Tempo works with (`Tempo.Border`, which reads the one field
+  # as it reads a value's).
+  @enforce_keys [:members, :calendar]
+  defstruct [:members, :calendar]
+
+  @typedoc false
+  @type t :: %__MODULE__{members: Enumerable.t(), calendar: module()}
+
+  @doc false
+  # The state of a lazy set of the members a generator gives.
+  @spec state(Enumerable.t()) :: t()
+  def state(members), do: %__MODULE__{members: members, calendar: Calendars.default()}
+
   @impl true
-  def from_list(intervals, _options), do: intervals
+  def from_list(intervals, _options), do: state(intervals)
 
   @impl true
   @spec to_list(term()) :: no_return()
@@ -38,7 +56,7 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   end
 
   @impl true
-  def walk(state), do: state
+  def walk(%__MODULE__{members: members}), do: members
 
   @impl true
   def bounded?(_state), do: false
@@ -50,17 +68,17 @@ defmodule Tempo.IntervalSet.Backend.Lazy do
   end
 
   @impl true
-  def empty?(state), do: Enum.take(state, 1) == []
+  def empty?(%__MODULE__{members: members}), do: Enum.take(members, 1) == []
 
   @impl true
-  def first(state), do: state |> Enum.take(1) |> List.first()
+  def first(%__MODULE__{members: members}), do: members |> Enum.take(1) |> List.first()
 
   # Walk only as far as the queried range reaches: members are in time
   # order, so once one starts at or beyond `hi` nothing later can
   # intersect `[lo, hi)`.
   @impl true
-  def overlapping(state, {lo, hi}) do
-    state
+  def overlapping(%__MODULE__{members: members}, {lo, hi}) do
+    members
     |> Stream.take_while(fn interval -> Compare.to_utc_seconds(interval.from) < hi end)
     |> Enum.filter(fn interval -> Compare.to_utc_seconds(interval.to) > lo end)
   end

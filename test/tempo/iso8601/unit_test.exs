@@ -7,9 +7,7 @@ defmodule Tempo.Iso8601.UnitTest do
   # finest, and what a walk steps on to the walk itself: the first value
   # `Enum` takes from a value of each resolution.
 
-  alias Tempo.Iso8601.Unit
-
-  doctest Tempo.Iso8601.Unit
+  alias Tempo.Test.Engine.Iso8601.Unit
 
   # From the coarsest to the finest. A month and a traditional month, and a
   # week and a calendar's own week, are of one scale.

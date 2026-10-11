@@ -18,8 +18,8 @@ defmodule Tempo.RecurrenceStepAndCountTest do
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
+  alias Tempo.Test.Engine.RRule.Expander
 
   defp starts({:ok, %IntervalSet{} = set}),
     do: Enum.map(IntervalSet.members(set), &Interval.from/1)

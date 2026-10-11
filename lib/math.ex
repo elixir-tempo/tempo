@@ -2,7 +2,7 @@ defmodule Tempo.Math do
   @moduledoc false
 
   alias Tempo.AbstractSeasonError
-  alias Tempo.Calendars
+  alias Tempo.Border
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -185,7 +185,7 @@ defmodule Tempo.Math do
 
   def add_unit(_time, unit, _calendar) do
     raise ArgumentError,
-          "Cannot increment a Tempo at #{inspect(unit)} resolution — " <>
+          "Cannot increment a Tempo at #{Border.inspect(unit)} resolution — " <>
             "no increment rule is defined for this unit."
   end
 
@@ -733,7 +733,7 @@ defmodule Tempo.Math do
 
   def subtract_unit(_time, unit, _calendar) do
     raise ArgumentError,
-          "Cannot decrement a Tempo at #{inspect(unit)} resolution — " <>
+          "Cannot decrement a Tempo at #{Border.inspect(unit)} resolution — " <>
             "no decrement rule is defined for this unit."
   end
 
@@ -939,7 +939,7 @@ defmodule Tempo.Math do
     {:error,
      ArgumentError.exception(
        "Tempo.Math.add/2 adds a Tempo.Duration to a Tempo value, not " <>
-         "#{inspect(duration)} to #{inspect(tempo)}."
+         "#{Border.inspect(duration)} to #{Border.inspect(tempo)}."
      )}
   end
 
@@ -983,7 +983,7 @@ defmodule Tempo.Math do
 
   defp rule_unit_error(tempo, unit) do
     ArgumentError.exception(
-      "#{inspect(tempo)} is a rule that selects within the units it carries, and has no " <>
+      "#{Border.inspect(tempo)} is a rule that selects within the units it carries, and has no " <>
         "#{unit} to step: shift the span it names, Tempo.Interval.from/1 of it, instead."
     )
   end
@@ -1607,7 +1607,7 @@ defmodule Tempo.Math do
   defp week_date_stepped_as_a_date?(%Tempo{time: time, calendar: calendar}, duration_time) do
     List.keymember?(time, :week, 0) and List.keymember?(time, :day_of_week, 0) and
       Enum.any?(duration_time, &month_or_year_step?/1) and
-      not Tempo.week_based_calendar?(Calendars.effective(calendar))
+      not Tempo.week_based_calendar?(calendar)
   end
 
   # Whether a step counts elapsed time for a value in a zone whose offset
@@ -1754,7 +1754,7 @@ defmodule Tempo.Math do
          target: :month,
          operation: :shift,
          calendar: tempo.calendar,
-         reason: "#{inspect(tempo)} is a week date, with no month to add months to"
+         reason: "#{Border.inspect(tempo)} is a week date, with no month to add months to"
        )}
     else
       add_crisp_units(tempo, duration)
@@ -1772,7 +1772,7 @@ defmodule Tempo.Math do
     # converting them to days would demand month/day keys the axis lacks.
     # A day of the week of no week (`7K`) is on that axis too: the day after
     # it is the next day of the week, and a week after it is the same one.
-    calendar = Calendars.effective(tempo.calendar)
+    calendar = tempo.calendar
 
     duration_time =
       if week_axis?(crisp_time, tempo.calendar) do
@@ -2184,7 +2184,7 @@ defmodule Tempo.Math do
   # unit then holds is those values and no others, each alike in everything
   # but its units, and as the set of their spans otherwise.
   defp gathered(landed, %Tempo{time: time, calendar: calendar}, annotations) do
-    axis = written_on(time, Calendars.effective(calendar))
+    axis = written_on(time, calendar)
 
     with [frame] <- landed |> Enum.map(&%{&1 | time: []}) |> Enum.uniq(),
          {:ok, time} <- landed |> Enum.map(&as_written(&1, axis)) |> one_value() do
@@ -2220,7 +2220,6 @@ defmodule Tempo.Math do
          :ordinal
        )
        when is_integer(year) and is_integer(month) and is_integer(day) do
-    calendar = Calendars.effective(calendar)
     [{:year, year}, {:day_of_year, calendar.day_of_year(year, month, day)} | rest]
   end
 
@@ -2234,7 +2233,7 @@ defmodule Tempo.Math do
          :week
        )
        when is_integer(year) and is_integer(month) and is_integer(day) do
-    calendar = Calendars.effective(date.calendar)
+    calendar = date.calendar
 
     with {week_year, week} when is_integer(week) <- calendar.iso_week_of_year(year, month, day),
          {weekday, _first, _last} <- calendar.day_of_week(year, month, day, :monday),
@@ -2463,7 +2462,7 @@ defmodule Tempo.Math do
     {:error,
      ArgumentError.exception(
        "Tempo.Math.subtract/2 takes a Tempo.Duration from a Tempo value, not " <>
-         "#{inspect(duration)} from #{inspect(tempo)}."
+         "#{Border.inspect(duration)} from #{Border.inspect(tempo)}."
      )}
   end
 
@@ -3193,7 +3192,7 @@ defmodule Tempo.Math do
   # steps from free day to free day, a calendar day at a time, and lands on
   # a day. Anything finer walks free time.
   defp free_days(origin, %Tempo.Duration{time: time}) do
-    case normalise_duration(time, Calendars.of(origin)) do
+    case normalise_duration(time, origin.calendar) do
       [day: days] when is_integer(days) ->
         if day_resolution?(origin), do: {:ok, days}, else: :error
 

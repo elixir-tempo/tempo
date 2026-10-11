@@ -21,8 +21,8 @@ defmodule Tempo.Iso8601.OffsetAndZoneTest do
   """
   use ExUnit.Case, async: true
 
-  alias Tempo.Compare
   alias Tempo.Interval
+  alias Tempo.Test.Engine.Compare
 
   @unix_epoch :calendar.datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}})
 

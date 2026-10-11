@@ -28,10 +28,10 @@ defmodule Tempo.BesideAGapTest do
   import Tempo.Sigils
 
   alias Tempo.BesideAGap
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
+  alias Tempo.Test.Engine.Compare
 
   setup_all do
     {:ok, harvest: BesideAGap.harvest()}

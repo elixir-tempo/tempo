@@ -1,4 +1,6 @@
 defmodule Tempo.IntervalSet do
+  use Tempo.Border
+
   @moduledoc """
   A sorted collection of `t:Tempo.Interval.t/0` values — the
   multi-interval counterpart to `Tempo.Interval`.
@@ -90,6 +92,7 @@ defmodule Tempo.IntervalSet do
 
   """
 
+  alias Tempo.Border
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -97,6 +100,7 @@ defmodule Tempo.IntervalSet do
   alias Tempo.Interval.Cycle
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet.Backend
+  alias Tempo.IntervalSet.Backend.Lazy
   alias Tempo.UnboundedSetError
 
   @typedoc """
@@ -255,9 +259,17 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec from_stream(Enumerable.t(), keyword()) :: t()
-  def from_stream(enumerable, options \\ []) do
+  def from_stream(enumerable, options \\ []), do: lazy(enumerable, options)
+
+  @doc false
+  # The lazy set of the members a generator gives, as `from_stream/2` builds
+  # it, for the library's own use. A public function crosses the border, and
+  # a generator shows no value by which a call from inside is known, so the
+  # library builds its own lazy sets through this.
+  @spec lazy(Enumerable.t(), keyword()) :: t()
+  def lazy(enumerable, options \\ []) do
     %__MODULE__{
-      intervals: enumerable,
+      intervals: Lazy.state(enumerable),
       metadata: Keyword.get(options, :metadata, %{}),
       backend: Backend.Lazy
     }
@@ -270,7 +282,7 @@ defmodule Tempo.IntervalSet do
   def new!(intervals, opts \\ []) do
     case new(intervals, opts) do
       {:ok, set} -> set
-      {:error, reason} -> raise ArgumentError, inspect(reason)
+      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
     end
   end
 
@@ -386,29 +398,16 @@ defmodule Tempo.IntervalSet do
     backend.count(state)
   end
 
-  @doc """
-  Whether the set has no member intervals.
-
-  ### Arguments
-
-  * `set` is a `t:t/0`.
-
-  ### Returns
-
-  * `true` when the set is empty, otherwise `false`.
-
-  ### Examples
-
-      iex> Tempo.IntervalSet.empty?(Tempo.IntervalSet.new!([]))
-      true
-
-      iex> set = Tempo.IntervalSet.new!([
-      ...>   %Tempo.Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"}
-      ...> ])
-      iex> Tempo.IntervalSet.empty?(set)
-      false
-
-  """
+  @doc false
+  # Whether the set has no member intervals.
+  #
+  # ### Arguments
+  #
+  # * `set` is a `t:t/0`.
+  #
+  # ### Returns
+  #
+  # * `true` when the set is empty, otherwise `false`.
   @spec empty?(t()) :: boolean()
   def empty?(%__MODULE__{backend: backend, intervals: state}), do: backend.empty?(state)
 
@@ -491,29 +490,22 @@ defmodule Tempo.IntervalSet do
     state |> backend.to_list() |> List.last()
   end
 
-  @doc """
-  Whether the set's backend holds a finite member list.
-
-  `true` on the list and tree backends; `false` on a lazy generator
-  backend, where aggregate operations (`members/1`, `count/1`,
-  `coalesce/1`, set algebra) raise `Tempo.UnboundedSetError` instead
-  of walking forever.
-
-  ### Arguments
-
-  * `set` is a `t:t/0`.
-
-  ### Returns
-
-  * `true` when the set is finite and every member can be listed,
-    otherwise `false`.
-
-  ### Examples
-
-      iex> Tempo.IntervalSet.bounded?(Tempo.IntervalSet.new!([]))
-      true
-
-  """
+  @doc false
+  # Whether the set's backend holds a finite member list.
+  #
+  # `true` on the list and tree backends; `false` on a lazy generator
+  # backend, where aggregate operations (`members/1`, `count/1`,
+  # `coalesce/1`, set algebra) raise `Tempo.UnboundedSetError` instead
+  # of walking forever.
+  #
+  # ### Arguments
+  #
+  # * `set` is a `t:t/0`.
+  #
+  # ### Returns
+  #
+  # * `true` when the set is finite and every member can be listed,
+  #   otherwise `false`.
   @spec bounded?(t()) :: boolean()
   def bounded?(%__MODULE__{backend: backend, intervals: state}), do: backend.bounded?(state)
 
@@ -892,7 +884,7 @@ defmodule Tempo.IntervalSet do
      ConversionError.exception(
        value: other,
        target: Interval,
-       reason: "IntervalSet members must be Tempo.Interval structs, got: #{inspect(other)}"
+       reason: "IntervalSet members must be Tempo.Interval structs, got: #{Border.inspect(other)}"
      )}
   end
 
@@ -1144,7 +1136,7 @@ defmodule Tempo.IntervalSet do
   def covered(value, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.IntervalSet.covered/2 takes a Tempo.IntervalSet, not #{inspect(value)}."
+       "Tempo.IntervalSet.covered/2 takes a Tempo.IntervalSet, not #{Border.inspect(value)}."
      )}
   end
 
@@ -1159,7 +1151,7 @@ defmodule Tempo.IntervalSet do
         {:error,
          ArgumentError.exception(
            "Tempo.IntervalSet.covered/2 takes one option, :at_least, a positive " <>
-             "integer, not #{inspect(options)}."
+             "integer, not #{Border.inspect(options)}."
          )}
     end
   end

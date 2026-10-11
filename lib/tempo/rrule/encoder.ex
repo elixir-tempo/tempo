@@ -1,6 +1,7 @@
 defmodule Tempo.RRule.Encoder do
   @moduledoc false
 
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.NotBuilt
@@ -82,7 +83,7 @@ defmodule Tempo.RRule.Encoder do
     {:error,
      ConversionError.exception(
        reason:
-         "An RRULE runs forward from its first occurrence, and #{inspect(interval)} runs " <>
+         "An RRULE runs forward from its first occurrence, and #{Border.inspect(interval)} runs " <>
            "back from its end without one.",
        value: interval,
        target: :rrule
@@ -135,7 +136,7 @@ defmodule Tempo.RRule.Encoder do
      ConversionError.exception(
        reason:
          "Only a %Tempo.Interval{} with a duration can be converted to an RRULE. " <>
-           "Got: #{inspect(other)}",
+           "Got: #{Border.inspect(other)}",
        value: other,
        target: :rrule
      )}
@@ -188,8 +189,6 @@ defmodule Tempo.RRule.Encoder do
          repeat_rule: rule
        })
        when unit in [:month, :year] and is_notation(calendar) do
-    calendar = Calendars.effective(calendar)
-
     with {:ok, selection} <- selection_of(rule),
          [year, month, day] when is_integer(year) and is_integer(month) and is_integer(day) <-
            Enum.map([:year, :month, :day], &Keyword.get(time, &1)),
@@ -296,7 +295,7 @@ defmodule Tempo.RRule.Encoder do
   defp no_one_rule(interval, why) do
     ConversionError.exception(
       reason:
-        "RRULE has no one rule for #{inspect(interval)}, which keeps the last day of a month " <>
+        "RRULE has no one rule for #{Border.inspect(interval)}, which keeps the last day of a month " <>
           "that lacks its start's day: #{why}.",
       value: interval,
       target: :rrule
@@ -349,7 +348,7 @@ defmodule Tempo.RRule.Encoder do
         {:error,
          ConversionError.exception(
            reason:
-             "Duration unit #{inspect(unit)} has no RRULE equivalent. " <>
+             "Duration unit #{Border.inspect(unit)} has no RRULE equivalent. " <>
                "RRULE supports second/minute/hour/day/week/month/year.",
            value: interval,
            target: :rrule
@@ -372,7 +371,7 @@ defmodule Tempo.RRule.Encoder do
      ConversionError.exception(
        reason:
          "An RRULE duration must be a single {unit, count} pair; " <>
-           "got: #{inspect(time)}",
+           "got: #{Border.inspect(time)}",
        value: interval,
        target: :rrule
      )}
@@ -442,7 +441,7 @@ defmodule Tempo.RRule.Encoder do
          ConversionError.exception(
            reason:
              "RRULE UNTIL requires a bare date or UTC datetime; " <>
-               "got #{inspect(time)}.",
+               "got #{Border.inspect(time)}.",
            value: value,
            target: :rrule
          )}
@@ -486,7 +485,7 @@ defmodule Tempo.RRule.Encoder do
          ConversionError.exception(
            reason:
              "RRULE has no form for #{Enum.map_join(tokens, ", ", &token_description/1)}: " <>
-               inspect(selection),
+               Border.inspect(selection),
            value: interval,
            target: :rrule
          )}
@@ -498,7 +497,7 @@ defmodule Tempo.RRule.Encoder do
      ConversionError.exception(
        reason:
          "Interval repeat_rule shape is not expressible as RRULE BY* parts: " <>
-           "#{inspect(rule.time)}",
+           "#{Border.inspect(rule.time)}",
        value: interval,
        target: :rrule
      )}
@@ -509,7 +508,7 @@ defmodule Tempo.RRule.Encoder do
      ConversionError.exception(
        reason:
          "Interval repeat_rule must be a %Tempo{} with a single :selection entry; " <>
-           "got #{inspect(other)}",
+           "got #{Border.inspect(other)}",
        value: interval,
        target: :rrule
      )}
@@ -558,10 +557,10 @@ defmodule Tempo.RRule.Encoder do
   # The calendar a recurrence's occurrences are counted in: that of its
   # start, and with no start that of its rule.
   defp counted_in(%Tempo.Interval{from: %Tempo{calendar: calendar}}),
-    do: Calendars.effective(calendar)
+    do: calendar
 
   defp counted_in(%Tempo.Interval{repeat_rule: %Tempo{calendar: calendar}}),
-    do: Calendars.effective(calendar)
+    do: calendar
 
   # BYDAY names weekdays, and a selection holds days of the week of its
   # rule's calendar, the last of them written `-1K`. Each is written as the
@@ -570,8 +569,6 @@ defmodule Tempo.RRule.Encoder do
   # calendar of weeks that start on Sunday. A day no week has is no weekday
   # for a BYDAY to name.
   defp weekdays_named(selection, calendar, interval) do
-    calendar = Calendars.effective(calendar)
-
     Enum.reduce_while(selection, {:ok, []}, fn entry, {:ok, named} ->
       case weekday_named(entry, calendar) do
         {:day_of_week, []} -> {:halt, {:error, no_such_weekday(entry, interval)}}
@@ -598,7 +595,7 @@ defmodule Tempo.RRule.Encoder do
 
   defp no_such_weekday({:day_of_week, days}, interval) do
     ConversionError.exception(
-      reason: "RRULE has no form for a day of the week that no week has: #{inspect(days)}",
+      reason: "RRULE has no form for a day of the week that no week has: #{Border.inspect(days)}",
       value: interval,
       target: :rrule
     )
@@ -692,7 +689,7 @@ defmodule Tempo.RRule.Encoder do
       unit == :month -> nil
       unit == :year and not Keyword.has_key?(parts, :week) -> nil
       unit == :year -> "a numbered BYDAY beside BYWEEKNO"
-      true -> "a numbered BYDAY in a #{Map.get(@freq_for, unit, inspect(unit))} rule"
+      true -> "a numbered BYDAY in a #{Map.get(@freq_for, unit, Border.inspect(unit))} rule"
     end
   end
 
@@ -713,7 +710,7 @@ defmodule Tempo.RRule.Encoder do
 
   defp not_allowed(why, interval) do
     ConversionError.exception(
-      reason: "RFC 5545 does not allow #{why}: #{inspect(interval)}",
+      reason: "RFC 5545 does not allow #{why}: #{Border.inspect(interval)}",
       value: interval,
       target: :rrule
     )
@@ -757,7 +754,7 @@ defmodule Tempo.RRule.Encoder do
   defp token_description(:or_day),
     do: "a day of the month or of the week (cron), since RRULE BY-parts all hold at once"
 
-  defp token_description(token), do: inspect(token)
+  defp token_description(token), do: Border.inspect(token)
 
   ## BYDAY helpers
 

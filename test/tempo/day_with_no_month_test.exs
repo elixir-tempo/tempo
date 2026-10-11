@@ -78,7 +78,7 @@ defmodule Tempo.DayWithNoMonthTest do
     end
   end
 
-  defp read(text, calendar \\ Calendrical.Gregorian), do: Tempo.from_iso8601!(text, calendar)
+  defp read(text, calendar \\ Calendar.ISO), do: Tempo.from_iso8601!(text, calendar)
 
   describe "a value's selection after a year" do
     test "is the days of the year it names" do

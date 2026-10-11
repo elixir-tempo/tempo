@@ -551,12 +551,12 @@ defmodule Tempo.RoundTripTest do
       start_only = Tempo.from_iso8601!("R/5786Y1M1D[u-ca=hebrew]/P1Y/FL7M1DN")
 
       assert Tempo.to_iso8601!(start_only) == "R/5786Y1M1D[u-ca=hebrew]/P1Y/FL7M1DN"
-      assert calendars(read_back(start_only)) == [Calendrical.Hebrew, Calendrical.Gregorian]
+      assert calendars(read_back(start_only)) == [Calendrical.Hebrew, Calendar.ISO]
     end
 
     test "a recurrence with a domain, whose years stay Gregorian" do
       gated = Tempo.from_iso8601!("R/{2026Y..2027Y}/P1Y/FL1M1DN[u-ca=hebrew]")
-      gregorian = Calendrical.Gregorian
+      gregorian = Calendar.ISO
 
       assert Tempo.to_iso8601!(gated) == "R/{2026Y..2027Y}/P1Y/FL1M1DN[u-ca=hebrew]"
       assert calendars(read_back(gated)) == [gregorian, gregorian, Calendrical.Hebrew]
@@ -565,10 +565,10 @@ defmodule Tempo.RoundTripTest do
     test "an annotation naming another calendar than the value's is not written" do
       # An explicit calendar wins over the parsed `[u-ca=hebrew]`, so the
       # value is the Gregorian year 5786.
-      value = Tempo.from_iso8601!("5786-09-30[u-ca=hebrew]", Calendrical.Gregorian)
+      value = Tempo.from_iso8601!("5786-09-30[u-ca=hebrew]", Calendar.ISO)
 
       assert Tempo.to_iso8601!(value) == "5786Y9M30D"
-      assert read_back(value).calendar == Calendrical.Gregorian
+      assert read_back(value).calendar == Calendar.ISO
     end
 
     test "a calendar that numbers its days as the Gregorian does needs no name" do

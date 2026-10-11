@@ -9,11 +9,14 @@ defmodule Tempo.WeekOfMonthTest do
   calendar week of a year (`w`) is, selected from a month by
   `Tempo.select/2`, and the occurrence of a rule that steps by months.
 
-  The measure for the Gregorian calendar is Elixir's own `Date`, by the
-  rule the decision states: whole weeks from a Monday, the first of a month
-  the one that holds its first day. For a calendar that cuts a month's
-  weeks at its ends the measure is the calendar's own answer for each date
-  of the span, and for the dates either side of it.
+  The rule is the calendar's (decided 2026-10-11). The measure is Elixir's
+  own `Date`: whole weeks from a Monday, the first of a month the one that
+  holds four or more of its days for `Calendar.ISO`, which a value that
+  names no calendar is in (TR35's rule, as its weeks of a year are ISO
+  8601's), and the one that holds its first day for `Calendrical.Gregorian`
+  (the rule of 2026-10-07). For a calendar that cuts a month's weeks at its
+  ends the measure is the calendar's own answer for each date of the span,
+  and for the dates either side of it.
   """
   use ExUnit.Case, async: true
 
@@ -23,14 +26,14 @@ defmodule Tempo.WeekOfMonthTest do
   alias Calendrical.Hebrew
   alias Calendrical.Julian.March25
   alias Calendrical.Persian
-  alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.InvalidDateError
   alias Tempo.ParseError
   alias Tempo.RRule
-  alias Tempo.UnitValues
+  alias Tempo.Test.Engine.Compare
+  alias Tempo.Test.Engine.UnitValues
 
   ## The measure
 
@@ -38,18 +41,31 @@ defmodule Tempo.WeekOfMonthTest do
 
   defp monday_of(date), do: Date.beginning_of_week(date, :monday)
 
-  # How many weeks a month has: those from the week that holds its first
-  # day up to the week that holds the first day of the next.
-  defp weeks_in(year, month) do
+  # The Monday a month's first week starts on. `Calendar.ISO`, which a value
+  # that names no calendar is in, counts by TR35's rule, as its weeks of a
+  # year are ISO 8601's: the first week is the one that holds four or more
+  # of the month's days, which is the one with its first Thursday.
+  # `Calendrical.Gregorian` counts by the rule decided on 2026-10-07: the
+  # first week is the one that holds the month's first day.
+  defp first_monday(first, :four_days) do
+    monday = monday_of(first)
+    if Date.diff(first, monday) <= 3, do: monday, else: Date.add(monday, 7)
+  end
+
+  defp first_monday(first, :first_day), do: monday_of(first)
+
+  # How many weeks a month has: those from its first week up to the first
+  # week of the next.
+  defp weeks_in(year, month, rule \\ :four_days) do
     first = Date.new!(year, month, 1)
     next = first |> Date.end_of_month() |> Date.add(1)
 
-    div(Date.diff(monday_of(next), monday_of(first)), 7)
+    div(Date.diff(first_monday(next, rule), first_monday(first, rule)), 7)
   end
 
   # A week of a month, from its Monday to the Monday after.
-  defp week(year, month, week) do
-    start = Date.new!(year, month, 1) |> monday_of() |> Date.add(7 * (week - 1))
+  defp week(year, month, week, rule \\ :four_days) do
+    start = Date.new!(year, month, 1) |> first_monday(rule) |> Date.add(7 * (week - 1))
     {start, Date.add(start, 7)}
   end
 
@@ -282,7 +298,10 @@ defmodule Tempo.WeekOfMonthTest do
                Enum.map(2..4, &seconds(week(2026, 6, &1)))
 
       assert spans(Tempo.select(~o"2026-06", ~o"-1W")) == [seconds(week(2026, 6, 4))]
-      assert spans(Tempo.select(~o"2027-01", ~o"-1W")) == [seconds(week(2027, 1, 5))]
+      # January 2027 begins on a Friday: its first week starts on the 4th,
+      # and it has four.
+      assert weeks_in(2027, 1) == 4
+      assert spans(Tempo.select(~o"2027-01", ~o"-1W")) == [seconds(week(2027, 1, 4))]
     end
 
     test "with a day of the week and a time of day is the day and the hour" do
@@ -469,7 +488,18 @@ defmodule Tempo.WeekOfMonthTest do
                   [seconds(week(year, month, 1)), seconds(week(next_year, next_month, 1))]}
       end
 
+      # July 2026 begins on a Wednesday, so its first week starts in June,
+      # and August on a Saturday, so its first week starts on the 3rd.
       assert spans(Tempo.to_interval_set(Tempo.from_iso8601!("R2/2026Y7M/P1M/FL1WN"))) ==
+               [
+                 seconds({~D[2026-06-29], ~D[2026-07-06]}),
+                 seconds({~D[2026-08-03], ~D[2026-08-10]})
+               ]
+
+      # In the Gregorian calendar a month's first week holds its first day.
+      assert spans(
+               Tempo.to_interval_set(Tempo.from_iso8601!("R2/2026Y7M/P1M/FL1WN[u-ca=gregory]"))
+             ) ==
                [
                  seconds({~D[2026-06-29], ~D[2026-07-06]}),
                  seconds({~D[2026-07-27], ~D[2026-08-03]})
@@ -679,16 +709,27 @@ defmodule Tempo.WeekOfMonthTest do
                  {text, Tempo.to_interval(Tempo.from_iso8601!(text), options)}
       end
 
-      # 8 June is in the calendar's week 24 of 2026 and of 2027, and the rule
-      # keeps the months whose 8th is.
+      # 8 June is in Calendrical.Gregorian's own week 24 of 2026 and of 2027,
+      # and the rule keeps the months whose 8th is.
       for year <- [2026, 2027] do
         assert Gregorian.week_of_year(year, 6, 8) == {year, 24}
       end
 
+      {:ok, kept} =
+        Tempo.to_interval(Tempo.from_iso8601!("R2/2026-06-08/P1M/FL24wN[u-ca=gregory]"))
+
+      assert Enum.map(IntervalSet.members(kept), &Tempo.to_iso8601!(Interval.from(&1))) ==
+               ["2026Y6M8D[u-ca=gregory]", "2027Y6M8D[u-ca=gregory]"]
+
+      # Calendar.ISO's own weeks are ISO 8601's: 8 June is in week 24 of 2026,
+      # and next of 2032.
+      weeks = for year <- 2026..2032, do: :calendar.iso_week_number({year, 6, 8})
+      assert Enum.filter(weeks, &match?({_year, 24}, &1)) == [{2026, 24}, {2032, 24}]
+
       {:ok, kept} = Tempo.to_interval(Tempo.from_iso8601!("R2/2026-06-08/P1M/FL24wN"))
 
       assert Enum.map(IntervalSet.members(kept), &Interval.from/1) ==
-               [~o"2026-06-08", ~o"2027-06-08"]
+               [~o"2026-06-08", ~o"2032-06-08"]
     end
 
     test "is answered in a rule of a calendar whose year begins within a month" do
@@ -739,12 +780,13 @@ defmodule Tempo.WeekOfMonthTest do
 
   describe "the weeks of a month, as the one place they are worked out gives them" do
     test "are the weeks the measure has, each from its first date to its last" do
-      for {year, month} <- @months do
-        {:ok, weeks} = UnitValues.weeks_of_month(year, month, Gregorian)
+      for {calendar, rule} <- [{Calendar.ISO, :four_days}, {Gregorian, :first_day}],
+          {year, month} <- @months do
+        {:ok, weeks} = UnitValues.weeks_of_month(year, month, calendar)
 
         expected =
-          for week <- 1..weeks_in(year, month) do
-            {monday, next} = week(year, month, week)
+          for week <- 1..weeks_in(year, month, rule) do
+            {monday, next} = week(year, month, week, rule)
             {monday, Date.add(next, -1)}
           end
 

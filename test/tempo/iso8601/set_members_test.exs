@@ -16,8 +16,8 @@ defmodule Tempo.Iso8601.SetMembersTest do
   import Tempo.Sigils
 
   alias Tempo.IntervalSet
-  alias Tempo.Iso8601.Parser
-  alias Tempo.UnitValues
+  alias Tempo.Test.Engine.Iso8601.Parser
+  alias Tempo.Test.Engine.UnitValues
 
   # A number or a range, from either end, the range by any step.
   defp members do

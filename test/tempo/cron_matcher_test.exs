@@ -14,10 +14,10 @@ defmodule Tempo.CronMatcherTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Cron
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   @months ~w(jan feb mar apr may jun jul aug sep oct nov dec)
   @days ~w(sun mon tue wed thu fri sat)

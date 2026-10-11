@@ -1,4 +1,6 @@
 defmodule Tempo.Territory do
+  use Tempo.Border
+
   @moduledoc """
   Territory resolution — the bridge between the CLDR/BCP 47
   territory world (`:US`, `:SA`, `:GB`) and Tempo's
@@ -43,6 +45,7 @@ defmodule Tempo.Territory do
 
   alias Localize.Territory
   alias Localize.Validity.U
+  alias Tempo.Border
 
   @type input ::
           atom()
@@ -106,7 +109,7 @@ defmodule Tempo.Territory do
          {:error, _} <- decode_region_override(value) do
       {:error,
        ArgumentError.exception(
-         "Tempo.Territory.resolve/1 does not recognise #{inspect(value)} as a " <>
+         "Tempo.Territory.resolve/1 does not recognise #{Border.inspect(value)} as a " <>
            "territory, locale, or region override."
        )}
     end
@@ -115,7 +118,7 @@ defmodule Tempo.Territory do
   def resolve(other) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Territory.resolve/1 does not recognise #{inspect(other)} — " <>
+       "Tempo.Territory.resolve/1 does not recognise #{Border.inspect(other)} — " <>
          "pass a territory atom, territory string, locale string, or " <>
          "%Localize.LanguageTag{}."
      )}

@@ -1,79 +1,98 @@
 defmodule Tempo.RRule.Rule do
-  @moduledoc """
-  A canonical, typed representation of an RFC 5545 RRULE.
+  @moduledoc false
 
-  This is the input to `Tempo.RRule.Expander.expand/3`. Every
-  parser (`Tempo.RRule.parse/2`, the `ical` library's
-  `%ICal.Recurrence{}`, hand-built rules for tests) converts to
-  this shape before expansion runs. Keeping a single struct means
-  the expander has one input vocabulary to match against, and all
-  `BY*` fields carry their RFC-typed form: lists of integers with
-  negative values permitted where the RFC allows.
-
-  ### Fields
-
-  * `:freq` — one of `:second`, `:minute`, `:hour`, `:day`,
-    `:week`, `:month`, `:year`. Required.
-
-  * `:interval` — positive integer multiplier for the frequency.
-    Default `1`.
-
-  * `:count` — terminate after this many occurrences. Mutually
-    exclusive with `:until` per RFC 5545.
-
-  * `:until` — terminate at or before this `t:Tempo.t/0`. Mutually
-    exclusive with `:count`.
-
-  * `:wkst` — week-start day as an integer 1–7 (Monday–Sunday, ISO
-    convention). Default `1`. Affects `:byweekno` calculations.
-
-  * `:skip` — what a monthly or a yearly rule does with a day of the month that a month lacks, its start's or one it writes (`BYMONTHDAY=31`), as RFC 7529's `SKIP` and JSCalendar's `skip` name it. `:omit`, the default and RFC 5545's rule, lists no occurrence there: the rule states its start's day (ISO 8601-2 Annex C.3), and a day a month lacks is passed over. `:backward` lists the month's last day, as an ISO 8601 recurrence does, and `:forward` the first day of the month after. A day counted from the end that a month lacks (`BYMONTHDAY=-31` in a month of thirty days) is the day before the month's first: `:forward` lists the first, and `:backward` the last day of the month before.
-
-  * `:rscale` — the calendar module the rule is counted in, where RFC 7529's `RSCALE` or JSCalendar's `rscale` names one (`calendar_from_rscale/1`), and `nil` where the rule names none and is counted in the calendar of its start. A start in another calendar is brought into it (`start_in_rscale/2`), and a `:bymonth` is then the month RFC 7529 numbers: Nisan is the seventh month of every Hebrew year, where it is the eighth in order in a year with a leap month.
-
-  * `:bymonth` — list of integers 1–12, and under an `:rscale` whose calendar has them, leap months, each as the month it follows: `{5, :leap}` is RFC 7529's `5L`, Adar I of a Hebrew year (`month_from_text/1`). Limit. In a year that has no such month it is passed over, or with `:skip` is the month before it (`:backward`) or after it (`:forward`).
-
-  * `:bymonthday` — list of integers -31..31 (negatives count from
-    the end of the month). Limit or expand per FREQ.
-
-  * `:byyearday` — list of integers -366..366. Limit or expand
-    per FREQ.
-
-  * `:byweekno` — list of integers -53..53. Used only with
-    `:yearly` FREQ. Limit or expand.
-
-  * `:byday` — list of `{ordinal_or_nil, weekday_1_to_7}` tuples.
-    With MONTHLY / YEARLY and no BYWEEKNO, ordinals select the
-    Nth/-Nth weekday within the period. With other FREQs,
-    ordinals are ignored (filter only).
-
-  * `:byhour` / `:byminute` / `:bysecond` — lists of integers.
-    Limit or expand per FREQ.
-
-  * `:bysetpos` — list of integers; applied last to pick the Nth
-    element of the per-period candidate set.
-
-  * `:byyear` — list of absolute years. A non-standard extension
-    (RFC 5545 has no `BYYEAR`); used by `Tempo.Cron` to honour a
-    cron year field such as `2025,2027,2029`. It becomes a year in
-    the selection, which keeps only the periods in a listed year.
-
-  * `:bymonthday_nearest` — list of `pos_integer()` days or the
-    atom `:last`. A non-standard extension carrying the cron `W`
-    (nearest-weekday) modifier: `15W` becomes `[15]`, `LW` becomes
-    `[:last]`. Each target snaps to the nearest weekday within the
-    same month (Saturday → Friday, Sunday → Monday), never crossing
-    a month boundary, so `1W` on a Saturday lands on the 3rd.
-
-  * `:bymonthday_or_byday` — a `{monthdays, byday_entries}` tuple. A
-    non-standard extension carrying POSIX cron's day-of-month **OR**
-    day-of-week union: when both fields are restricted (`13 * 5` —
-    "the 13th *or* any Friday"), a candidate is kept if its day is in
-    `monthdays` **or** its weekday matches `byday_entries`. Unlike the
-    AND-composing `:bymonthday` + `:byday`, which would select only
-    Friday-the-13ths.
-
-  """
+  # A canonical, typed representation of an RFC 5545 RRULE.
+  #
+  # This is the input to `Tempo.RRule.Expander.expand/3`. Every
+  # parser (`Tempo.RRule.parse/2`, the `ical` library's
+  # `%ICal.Recurrence{}`, hand-built rules for tests) converts to
+  # this shape before expansion runs. Keeping a single struct means
+  # the expander has one input vocabulary to match against, and all
+  # `BY*` fields carry their RFC-typed form: lists of integers with
+  # negative values permitted where the RFC allows.
+  #
+  # ### Fields
+  #
+  # * `:freq` — one of `:second`, `:minute`, `:hour`, `:day`,
+  #   `:week`, `:month`, `:year`. Required.
+  #
+  # * `:interval` — positive integer multiplier for the frequency.
+  #   Default `1`.
+  #
+  # * `:count` — terminate after this many occurrences. Mutually
+  #   exclusive with `:until` per RFC 5545.
+  #
+  # * `:until` — terminate at or before this `t:Tempo.t/0`. Mutually
+  #   exclusive with `:count`.
+  #
+  # * `:wkst` — week-start day as an integer 1–7 (Monday–Sunday, ISO
+  #   convention). Default `1`. Affects `:byweekno` calculations.
+  #
+  # * `:skip` — what a monthly or a yearly rule does with a day of the month
+  #   that a month lacks, its start's or one it writes (`BYMONTHDAY=31`), as
+  #   RFC 7529's `SKIP` and JSCalendar's `skip` name it. `:omit`, the default
+  #   and RFC 5545's rule, lists no occurrence there: the rule states its
+  #   start's day (ISO 8601-2 Annex C.3), and a day a month lacks is passed
+  #   over. `:backward` lists the month's last day, as an ISO 8601 recurrence
+  #   does, and `:forward` the first day of the month after. A day counted
+  #   from the end that a month lacks (`BYMONTHDAY=-31` in a month of thirty
+  #   days) is the day before the month's first: `:forward` lists the first,
+  #   and `:backward` the last day of the month before.
+  #
+  # * `:rscale` — the calendar module the rule is counted in, where RFC 7529's
+  #   `RSCALE` or JSCalendar's `rscale` names one (`calendar_from_rscale/1`),
+  #   and `nil` where the rule names none and is counted in the calendar of
+  #   its start. A start in another calendar is brought into it
+  #   (`start_in_rscale/2`), and a `:bymonth` is then the month RFC 7529
+  #   numbers: Nisan is the seventh month of every Hebrew year, where it is
+  #   the eighth in order in a year with a leap month.
+  #
+  # * `:bymonth` — list of integers 1–12, and under an `:rscale` whose
+  #   calendar has them, leap months, each as the month it follows: `{5,
+  #   :leap}` is RFC 7529's `5L`, Adar I of a Hebrew year
+  #   (`month_from_text/1`). Limit. In a year that has no such month it is
+  #   passed over, or with `:skip` is the month before it (`:backward`) or
+  #   after it (`:forward`).
+  #
+  # * `:bymonthday` — list of integers -31..31 (negatives count from
+  #   the end of the month). Limit or expand per FREQ.
+  #
+  # * `:byyearday` — list of integers -366..366. Limit or expand
+  #   per FREQ.
+  #
+  # * `:byweekno` — list of integers -53..53. Used only with
+  #   `:yearly` FREQ. Limit or expand.
+  #
+  # * `:byday` — list of `{ordinal_or_nil, weekday_1_to_7}` tuples.
+  #   With MONTHLY / YEARLY and no BYWEEKNO, ordinals select the
+  #   Nth/-Nth weekday within the period. With other FREQs,
+  #   ordinals are ignored (filter only).
+  #
+  # * `:byhour` / `:byminute` / `:bysecond` — lists of integers.
+  #   Limit or expand per FREQ.
+  #
+  # * `:bysetpos` — list of integers; applied last to pick the Nth
+  #   element of the per-period candidate set.
+  #
+  # * `:byyear` — list of absolute years. A non-standard extension
+  #   (RFC 5545 has no `BYYEAR`); used by `Tempo.Cron` to honour a
+  #   cron year field such as `2025,2027,2029`. It becomes a year in
+  #   the selection, which keeps only the periods in a listed year.
+  #
+  # * `:bymonthday_nearest` — list of `pos_integer()` days or the
+  #   atom `:last`. A non-standard extension carrying the cron `W`
+  #   (nearest-weekday) modifier: `15W` becomes `[15]`, `LW` becomes
+  #   `[:last]`. Each target snaps to the nearest weekday within the
+  #   same month (Saturday → Friday, Sunday → Monday), never crossing
+  #   a month boundary, so `1W` on a Saturday lands on the 3rd.
+  #
+  # * `:bymonthday_or_byday` — a `{monthdays, byday_entries}` tuple. A
+  #   non-standard extension carrying POSIX cron's day-of-month **OR**
+  #   day-of-week union: when both fields are restricted (`13 * 5` —
+  #   "the 13th *or* any Friday"), a candidate is kept if its day is in
+  #   `monthdays` **or** its weekday matches `byday_entries`. Unlike the
+  #   AND-composing `:bymonthday` + `:byday`, which would select only
+  #   Friday-the-13ths.
 
   alias Tempo.Calendars
   alias Tempo.Iso8601.Parser
@@ -319,12 +338,23 @@ defmodule Tempo.RRule.Rule do
 
   def calendar_from_rscale(name) when is_binary(name) do
     case Calendrical.calendar_from_cldr_calendar_type(String.downcase(name)) do
-      {:ok, calendar} -> {:ok, calendar}
+      {:ok, calendar} -> {:ok, named_by_rscale(calendar)}
       {:error, _unknown_calendar} -> {:error, {:unsupported_rscale, name}}
     end
   end
 
   def calendar_from_rscale(other), do: {:error, {:unsupported_rscale, other}}
+
+  # RFC 7529 names the calendar every RFC 5545 rule is counted in GREGORIAN,
+  # and a rule that says so is the rule that names none: its calendar is the
+  # one a rule counts in, which is of that CLDR type.
+  defp named_by_rscale(calendar) do
+    of_a_rule = Calendars.rule()
+
+    if calendar.cldr_calendar_type() == of_a_rule.cldr_calendar_type(),
+      do: of_a_rule,
+      else: calendar
+  end
 
   @doc """
   Brings a rule's start into the calendar the rule is counted in.
@@ -481,9 +511,10 @@ defmodule Tempo.RRule.Rule do
         |> Enum.reverse()
         |> Parser.consolidate_selection()
 
+      # A rule that names no calendar is counted in the one a rule counts in.
       %Tempo{
         time: [{:selection, selection} | units],
-        calendar: Calendars.effective(rule.rscale)
+        calendar: rule.rscale || Calendars.rule()
       }
     end
   end
@@ -771,7 +802,7 @@ defmodule Tempo.RRule.Rule do
   # month that has the day.
   defp moves_a_day?(%__MODULE__{freq: freq, bymonthday: days}, calendar)
        when freq in [:month, :year] do
-    case fewest_days_of_a_month(Calendars.effective(calendar)) do
+    case fewest_days_of_a_month(calendar) do
       {:ok, fewest} -> Enum.any?(List.wrap(days), &(abs(&1) > fewest))
       :error -> List.wrap(days) != []
     end

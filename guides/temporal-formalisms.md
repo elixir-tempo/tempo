@@ -64,7 +64,7 @@ Tempo.relation(~o"2022-W24", ~o"2022-W25")
 
 ### Computationally, Tempo is Vilain–Kautz
 
-Under the hood, comparison projects every endpoint to a real number on a single UTC frame (`Tempo.Compare.to_utc_seconds/1`) and orders intervals by those endpoints — *precisely* the point-algebra reduction, used as an engine beneath the interval ontology. The endpoints are points; the domain is intervals.
+Under the hood, comparison projects every endpoint to a real number on a single UTC frame and orders intervals by those endpoints — *precisely* the point-algebra reduction, used as an engine beneath the interval ontology. The endpoints are points; the domain is intervals.
 
 This buys two things:
 

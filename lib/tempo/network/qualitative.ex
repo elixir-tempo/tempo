@@ -1,4 +1,6 @@
 defmodule Tempo.Network.Qualitative do
+  use Tempo.Border
+
   @moduledoc """
   The bridge between Tempo's two constraint networks.
 

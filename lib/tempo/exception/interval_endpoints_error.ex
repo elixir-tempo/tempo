@@ -10,6 +10,8 @@ defmodule Tempo.IntervalEndpointsError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:operation, :interval, :reason]
 
   @type t :: %__MODULE__{
@@ -23,7 +25,7 @@ defmodule Tempo.IntervalEndpointsError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true

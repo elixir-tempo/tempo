@@ -2,8 +2,6 @@ defmodule Tempo.Iso8601.InspectTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
-  doctest Tempo.Inspect
-
   test "Inspect" do
     assert inspect(Tempo.from_iso8601!("2022Y12M31D")) == "~o\"2022Y12M31D\""
     assert inspect(Tempo.from_iso8601!("2022Y12M31D1H10M59S")) == "~o\"2022Y12M31DT1H10M59S\""
@@ -177,7 +175,7 @@ defmodule Tempo.Iso8601.InspectTest do
       iv = Tempo.from_iso8601!("1447Y9M1D[u-ca=islamic-civil]/2026Y6M1D")
 
       assert iv.from.calendar == Calendrical.Islamic.Civil
-      assert iv.to.calendar == Calendrical.Gregorian
+      assert iv.to.calendar == Calendar.ISO
       assert Tempo.to_iso8601!(iv) =~ "[u-ca=islamic-civil]/"
     end
 

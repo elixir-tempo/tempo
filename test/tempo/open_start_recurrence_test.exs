@@ -6,9 +6,9 @@ defmodule Tempo.OpenStartRecurrenceTest do
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
-  alias Tempo.Operations
   alias Tempo.RecurrenceSet
   alias Tempo.RRule
+  alias Tempo.Test.Engine.Operations
   alias Tempo.UnboundedRecurrenceError
 
   # `RRule.parse/2` without a `:from` start yields a recurrence

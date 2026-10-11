@@ -22,6 +22,8 @@ defmodule Tempo.Iso8601EncodeError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:construct, :value, :calendar]
 
   @type t :: %__MODULE__{
@@ -32,7 +34,7 @@ defmodule Tempo.Iso8601EncodeError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true
@@ -84,17 +86,17 @@ defmodule Tempo.Iso8601EncodeError do
   end
 
   def message(%__MODULE__{construct: :calendar, calendar: calendar}) do
-    "Cannot encode a value in #{inspect(calendar)} as ISO 8601 — IXDTF's " <>
+    "Cannot encode a value in #{Border.name(calendar)} as ISO 8601 — IXDTF's " <>
       "`[u-ca=…]` names no such calendar, so the value would read back in another. " <>
       "Convert it with `Tempo.to_calendar/2` first."
   end
 
   def message(%__MODULE__{construct: :value, value: value}) do
-    "Cannot encode #{inspect(value)} as ISO 8601 — `Tempo.to_iso8601/1` encodes " <>
+    "Cannot encode #{Border.inspect(value)} as ISO 8601 — `Tempo.to_iso8601/1` encodes " <>
       "a `Tempo`, a `Tempo.Interval`, a `Tempo.Duration` or a `Tempo.Set`."
   end
 
   def message(%__MODULE__{construct: construct}) do
-    "Cannot encode #{inspect(construct)} as ISO 8601 — it has no ISO 8601 representation."
+    "Cannot encode #{Border.inspect(construct)} as ISO 8601 — it has no ISO 8601 representation."
   end
 end

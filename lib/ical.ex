@@ -1,5 +1,7 @@
 if Code.ensure_loaded?(ICal) do
   defmodule Tempo.ICal do
+    use Tempo.Border
+
     @moduledoc """
     Import iCalendar (RFC 5545) data into `%Tempo.IntervalSet{}`.
 
@@ -85,6 +87,8 @@ if Code.ensure_loaded?(ICal) do
 
     """
 
+    alias Tempo.Border
+    alias Tempo.Calendars
     alias Tempo.Compare
     alias Tempo.ConversionError
     alias Tempo.Interval
@@ -564,7 +568,7 @@ if Code.ensure_loaded?(ICal) do
         {:error,
          UnboundedRecurrenceError.exception(
            reason:
-             "Event #{inspect(event.uid)} has an unbounded recurrence rule " <>
+             "Event #{Border.inspect(event.uid)} has an unbounded recurrence rule " <>
                "(no COUNT, no UNTIL). Provide a `:within` option — the " <>
                "window whose occurrences you want."
          )}
@@ -645,15 +649,15 @@ if Code.ensure_loaded?(ICal) do
     # event's span (`base.to - base.from`) is preserved — an
     # RDATE adds a matching-duration occurrence at a new start.
     defp rdate_to_interval(%DateTime{} = dt, %Interval{} = base) do
-      rdate_tempo(Tempo.from_elixir(dt), base)
+      rdate_tempo(Tempo.from_elixir(Calendars.in_rule(dt)), base)
     end
 
     defp rdate_to_interval(%NaiveDateTime{} = ndt, %Interval{} = base) do
-      rdate_tempo(Tempo.from_elixir(ndt), base)
+      rdate_tempo(Tempo.from_elixir(Calendars.in_rule(ndt)), base)
     end
 
     defp rdate_to_interval(%Date{} = d, %Interval{} = base) do
-      rdate_tempo(Tempo.from_elixir(d, resolution: :day), base)
+      rdate_tempo(Tempo.from_elixir(Calendars.in_rule(d), resolution: :day), base)
     end
 
     defp rdate_to_interval(_other, _base), do: nil
@@ -692,9 +696,12 @@ if Code.ensure_loaded?(ICal) do
       end)
     end
 
-    defp exdate_to_tempo(%DateTime{} = dt), do: Tempo.from_elixir(dt)
-    defp exdate_to_tempo(%NaiveDateTime{} = ndt), do: Tempo.from_elixir(ndt)
-    defp exdate_to_tempo(%Date{} = d), do: Tempo.from_elixir(d, resolution: :day)
+    defp exdate_to_tempo(%DateTime{} = dt), do: Tempo.from_elixir(Calendars.in_rule(dt))
+    defp exdate_to_tempo(%NaiveDateTime{} = ndt), do: Tempo.from_elixir(Calendars.in_rule(ndt))
+
+    defp exdate_to_tempo(%Date{} = d),
+      do: Tempo.from_elixir(Calendars.in_rule(d), resolution: :day)
+
     defp exdate_to_tempo(_other), do: nil
 
     defp same_moment?(%Tempo{} = a, %Tempo{} = b) do
@@ -764,15 +771,15 @@ if Code.ensure_loaded?(ICal) do
     # day-resolution Tempo; DTEND is typically the day after
     # (iCal all-day semantics are half-open).
     defp dtstart_to_tempo(%Date{} = date) do
-      {:ok, Tempo.from_elixir(date, resolution: :day)}
+      {:ok, Tempo.from_elixir(Calendars.in_rule(date), resolution: :day)}
     end
 
     defp dtstart_to_tempo(%DateTime{} = dt) do
-      {:ok, Tempo.from_elixir(dt)}
+      {:ok, Tempo.from_elixir(Calendars.in_rule(dt))}
     end
 
     defp dtstart_to_tempo(%NaiveDateTime{} = ndt) do
-      {:ok, Tempo.from_elixir(ndt)}
+      {:ok, Tempo.from_elixir(Calendars.in_rule(ndt))}
     end
 
     defp dtstart_to_tempo(other) do
@@ -780,7 +787,7 @@ if Code.ensure_loaded?(ICal) do
        ConversionError.exception(
          value: other,
          target: Tempo,
-         reason: "Unsupported DTSTART type: #{inspect(other)}"
+         reason: "Unsupported DTSTART type: #{Border.inspect(other)}"
        )}
     end
 
@@ -816,15 +823,15 @@ if Code.ensure_loaded?(ICal) do
     end
 
     defp dtend_to_tempo(%ICal.Event{dtend: %Date{} = date}, _from) do
-      {:ok, Tempo.from_elixir(date, resolution: :day)}
+      {:ok, Tempo.from_elixir(Calendars.in_rule(date), resolution: :day)}
     end
 
     defp dtend_to_tempo(%ICal.Event{dtend: %DateTime{} = dt}, _from) do
-      {:ok, Tempo.from_elixir(dt)}
+      {:ok, Tempo.from_elixir(Calendars.in_rule(dt))}
     end
 
     defp dtend_to_tempo(%ICal.Event{dtend: %NaiveDateTime{} = ndt}, _from) do
-      {:ok, Tempo.from_elixir(ndt)}
+      {:ok, Tempo.from_elixir(Calendars.in_rule(ndt))}
     end
 
     defp dtend_to_tempo(%ICal.Event{dtend: other}, _from) do
@@ -832,7 +839,7 @@ if Code.ensure_loaded?(ICal) do
        ConversionError.exception(
          value: other,
          target: Tempo,
-         reason: "Unsupported DTEND type: #{inspect(other)}"
+         reason: "Unsupported DTEND type: #{Border.inspect(other)}"
        )}
     end
 
@@ -892,14 +899,14 @@ if Code.ensure_loaded?(ICal) do
     defp stringify_organizer(%{__struct__: _, cname: cname}) when is_binary(cname),
       do: cname
 
-    defp stringify_organizer(other), do: inspect(other)
+    defp stringify_organizer(other), do: Border.inspect(other)
 
     defp stringify_attendees([]), do: []
 
     defp stringify_attendees(attendees) when is_list(attendees) do
       Enum.map(attendees, fn
         %{cname: cname} when is_binary(cname) -> cname
-        other -> inspect(other)
+        other -> Border.inspect(other)
       end)
     end
   end

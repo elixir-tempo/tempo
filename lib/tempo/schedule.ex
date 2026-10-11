@@ -1,4 +1,6 @@
 defmodule Tempo.Schedule do
+  use Tempo.Border
+
   @moduledoc """
   Constraint-based project scheduling over `Tempo.Network`.
 
@@ -43,6 +45,7 @@ defmodule Tempo.Schedule do
 
   """
 
+  alias Tempo.Border
   alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
@@ -289,7 +292,7 @@ defmodule Tempo.Schedule do
       |> Enum.find(&(&1 not in @task_options))
       |> unknown_task_option(options)
     else
-      {:error, invalid("takes a keyword list of options, not #{inspect(options)}")}
+      {:error, invalid("takes a keyword list of options, not #{Border.inspect(options)}")}
     end
   end
 
@@ -301,7 +304,9 @@ defmodule Tempo.Schedule do
   defp unknown_task_option(key, _options),
     do:
       {:error,
-       invalid("does not take #{inspect(key)}; its options are #{inspect(@task_options)}")}
+       invalid(
+         "does not take #{Border.inspect(key)}; its options are #{Border.inspect(@task_options)}"
+       )}
 
   # A window is a value or an interval with both its ends, as it is
   # wherever `:within` is taken. It was a `{from, to}` pair here alone.
@@ -324,7 +329,7 @@ defmodule Tempo.Schedule do
         {:error,
          invalid(
            "takes :within as a window with a start and an end, a Tempo value or an " <>
-             "interval, not #{inspect(within)}"
+             "interval, not #{Border.inspect(within)}"
          )}
     end
   end

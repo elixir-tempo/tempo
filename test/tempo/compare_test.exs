@@ -13,10 +13,8 @@ defmodule Tempo.CompareTest do
 
   # `Tempo.Compare` carried no `doctest` declaration, so its documented
   # examples had never been executed.
-  doctest Tempo.Compare
-
-  alias Tempo.Compare
   alias Tempo.Interval
+  alias Tempo.Test.Engine.Compare
 
   describe "Tempo values" do
     test "orders by start-moment on the time line" do
@@ -52,8 +50,10 @@ defmodule Tempo.CompareTest do
     end
 
     test "compare a calendar week (w) as the calendar's own" do
-      # Calendrical.Gregorian's week 1 of 2022 starts December 27.
-      assert Tempo.compare(~o"2022Y1w1K", ~o"2021-12-27") == :eq
+      # Calendar.ISO's weeks are ISO 8601's, and Calendrical.Gregorian's week 1
+      # of 2022 starts December 27.
+      assert Tempo.compare(~o"2022Y1w1K", ~o"2022-01-03") == :eq
+      assert Tempo.compare(~o"2022Y1w1K[u-ca=gregory]", ~o"2021-12-27") == :eq
     end
   end
 

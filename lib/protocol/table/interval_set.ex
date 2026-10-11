@@ -1,5 +1,7 @@
 if Code.ensure_loaded?(Table.Reader) do
   defimpl Table.Reader, for: Tempo.IntervalSet do
+    use Tempo.Border, every: true
+
     # A bounded set is a table of its members: each member's `from` and `to`,
     # then a column for every metadata key the members carry, in the order
     # they first appear, `nil` where a member has none. A lazy set is not

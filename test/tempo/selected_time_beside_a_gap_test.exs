@@ -18,10 +18,10 @@ defmodule Tempo.SelectedTimeBesideAGapTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
+  alias Tempo.Test.Engine.Compare
 
   @zone "Australia/Lord_Howe"
   @epoch :calendar.datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}})

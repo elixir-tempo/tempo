@@ -508,7 +508,7 @@ defmodule Tempo.ToInterval.Test do
     test "group at the finest unit carries at the unit boundary" do
       # Day group ending at the last day of February carries into March.
       tempo = %Tempo{
-        calendar: Calendrical.Gregorian,
+        calendar: Calendar.ISO,
         time: [year: 2018, month: 2, day: {:group, 15..28}]
       }
 
@@ -528,7 +528,7 @@ defmodule Tempo.ToInterval.Test do
     end
 
     test "a group of a year's days is the dates it covers" do
-      tempo = %Tempo{calendar: Calendrical.Gregorian, time: [year: 2022, day: {:group, 41..50}]}
+      tempo = %Tempo{calendar: Calendar.ISO, time: [year: 2022, day: {:group, 41..50}]}
 
       assert {:ok, interval} = Tempo.to_interval(tempo)
       assert interval.from.time == [year: 2022, month: 2, day: 10]
@@ -572,7 +572,7 @@ defmodule Tempo.ToInterval.Test do
   end
 
   describe "unanchored time-of-day groups materialise to a relative interval" do
-    defp group(time), do: %Tempo{calendar: Calendrical.Gregorian, time: time}
+    defp group(time), do: %Tempo{calendar: Calendar.ISO, time: time}
 
     test "a minute group materialises to its relative span" do
       {:ok, interval} = Tempo.to_interval(group(hour: 16, minute: {:group, 1..15}))
@@ -745,8 +745,8 @@ defmodule Tempo.ToInterval.Test do
     test "calendar propagates" do
       {:ok, tempo} = Tempo.from_iso8601("2022")
       {:ok, interval} = Tempo.to_interval(tempo)
-      assert interval.from.calendar == Calendrical.Gregorian
-      assert interval.to.calendar == Calendrical.Gregorian
+      assert interval.from.calendar == Calendar.ISO
+      assert interval.to.calendar == Calendar.ISO
     end
   end
 

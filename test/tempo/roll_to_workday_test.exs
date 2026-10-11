@@ -17,8 +17,8 @@ defmodule Tempo.RollToWorkdayTest do
   import Tempo.Sigils
 
   alias Calendrical.Hebrew
-  alias Tempo.Compare
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   @rolls [:following, :preceding, :modified_following, :modified_preceding]
 

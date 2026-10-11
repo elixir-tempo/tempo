@@ -6,11 +6,9 @@ defmodule Tempo.RRule.SelectionTest do
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
-  alias Tempo.RRule.Selection
-
-  doctest Selection
+  alias Tempo.Test.Engine.RRule.Expander
+  alias Tempo.Test.Engine.RRule.Selection
 
   # These tests exercise the Phase B pipeline:
   #
@@ -1206,17 +1204,25 @@ defmodule Tempo.RRule.SelectionTest do
   describe "week selections (ISO 8601-2 §12.2.2)" do
     # 2027 starts on a Friday, so ISO 8601's week 1 starts on Monday 4
     # January and Calendrical.Gregorian's own week 1 on Monday 28 December.
+    # Calendar.ISO's own weeks are ISO 8601's.
     test "W selects an ISO 8601 week and w the calendar's own" do
       {:ok, iso} = Tempo.to_interval(~o"R/../P1Y/FL10WN", within: ~o"2027")
-      {:ok, calendar} = Tempo.to_interval(~o"R/../P1Y/FL10wN", within: ~o"2027")
+      {:ok, own} = Tempo.to_interval(~o"R/../P1Y/FL10wN", within: ~o"2027")
+
+      {:ok, gregorian} =
+        Tempo.to_interval(~o"R/../P1Y/FL10wN[u-ca=gregory]", within: ~o"2027[u-ca=gregory]")
 
       assert Tempo.relation(iso, ~o"2027-03-08/2027-03-15") == :equals
-      assert Tempo.relation(calendar, ~o"2027-03-01/2027-03-08") == :equals
+      assert Tempo.relation(own, ~o"2027-03-08/2027-03-15") == :equals
+      assert Tempo.relation(gregorian, ~o"2027-03-01/2027-03-08") == :equals
     end
 
     test "a weekday within a week selection is in that week" do
       assert holiday_dates("R/../P1Y/FL10W3KN", ~o"2027Y") == ["2027-03-10"]
-      assert holiday_dates("R/../P1Y/FL10w3KN", ~o"2027Y") == ["2027-03-03"]
+      assert holiday_dates("R/../P1Y/FL10w3KN", ~o"2027Y") == ["2027-03-10"]
+
+      assert holiday_dates("R/../P1Y/FL10w3KN[u-ca=gregory]", ~o"2027Y[u-ca=gregory]") ==
+               ["2027-03-03"]
     end
 
     test "a calendar week cut short at the start of its year holds only its own days" do

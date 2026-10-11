@@ -1,4 +1,6 @@
 defmodule Tempo.Event do
+  use Tempo.Border
+
   @moduledoc """
   Resolves a named computed event to its date in a given year.
 
@@ -40,6 +42,7 @@ defmodule Tempo.Event do
 
   alias Calendrical.Ecclesiastical
   alias Calendrical.Lunisolar
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.TimeZoneDatabase
 
@@ -125,10 +128,13 @@ defmodule Tempo.Event do
 
   * `year` is the Gregorian year the event falls in.
 
-  * `calendar` (optional, `date/3`) is the calendar whose meridian a solar term
-    is computed for — `Calendrical.Chinese` (the default), `Calendrical.Vietnamese`,
-    `Calendrical.Korean` or `Calendrical.LunarJapanese`. It is ignored by the
-    events that are not meridian-dependent.
+  * `calendar` (optional, `date/3`) is the calendar a solar term is asked of.
+    A lunisolar calendar reckons its terms at a meridian of its own
+    (`Calendrical.Chinese`, `Calendrical.Vietnamese`, `Calendrical.Korean`,
+    `Calendrical.LunarJapanese`), and any other calendar that reckons them, such
+    as `Calendrical.Gregorian`, at the Chinese one. The default is
+    `Calendar.ISO`, which reckons none. It is ignored by the events that are
+    not a calendar's to answer.
 
   ### Returns
 
@@ -151,6 +157,9 @@ defmodule Tempo.Event do
   * `{:error, {:not_a_date, given}}` when a registered resolver gives what is
     neither `{:ok, date}` nor an error.
 
+  * `{:error, {:no_solar_terms, calendar}}` when a solar term is asked of a
+    calendar that reckons none, as `Calendar.ISO` does not.
+
   ### Examples
 
       iex> Tempo.Event.date("easter", 2026)
@@ -159,8 +168,11 @@ defmodule Tempo.Event do
       iex> Tempo.Event.date("orthodox-easter", 2026)
       {:ok, ~D[2026-04-12]}
 
-      iex> Tempo.Event.date("qingming", 2026)
+      iex> Tempo.Event.date("qingming", 2026, Calendrical.Gregorian)
       {:ok, ~D[2026-04-05]}
+
+      iex> Tempo.Event.date("qingming", 2026)
+      {:error, {:no_solar_terms, Calendar.ISO}}
 
       iex> Tempo.Event.date("december-solstice", 2026)
       {:ok, ~D[2026-12-21]}
@@ -175,9 +187,18 @@ defmodule Tempo.Event do
       {:error, {:unknown_event, "brigadoon"}}
 
   """
-  @spec date(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, term()}
-  def date(name, year, calendar \\ Calendars.default())
-      when is_binary(name) and is_integer(year) do
+  @spec date(String.t(), integer(), module() | nil) :: {:ok, Date.t()} | {:error, term()}
+  def date(name, year, calendar \\ nil)
+      when is_binary(name) and is_integer(year),
+      do: dated(name, year, calendar || Calendars.default())
+
+  @doc false
+  # The date of an event in a year, asked of a calendar, for the library's
+  # own use: `date/3` with no crossing of the border (`Tempo.Border`), which
+  # a call from inside is not known to make where its calendar is not the
+  # one a value that names none is in.
+  @spec dated(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, term()}
+  def dated(name, year, calendar) when is_binary(name) and is_integer(year) do
     case String.split(name, "@", parts: 2) do
       [event, zone] -> zoned_date(event, zone, year)
       [event] -> event_date(event, year, calendar)
@@ -200,7 +221,7 @@ defmodule Tempo.Event do
     with {:ok, spec} <- instant_event(name),
          {:ok, %DateTime{} = instant} <- instant(spec, year),
          {:ok, %DateTime{} = local} <- in_zone(instant, zone) do
-      {:ok, DateTime.to_date(local)}
+      from_datetime({:ok, local})
     end
   end
 
@@ -252,41 +273,55 @@ defmodule Tempo.Event do
   defp resolve({:solar_term, number}, year, calendar),
     do: solar_term_date(number, year, calendar)
 
-  defp from_datetime({:ok, %DateTime{} = datetime}), do: {:ok, DateTime.to_date(datetime)}
+  # The day of an instant Astro gives, which it gives in Elixir's own
+  # calendar, as a date of the calendar a value that names none is in.
+  defp from_datetime({:ok, %DateTime{} = datetime}),
+    do: datetime |> DateTime.to_date() |> Date.convert(Calendars.default())
+
   defp from_datetime({:error, _reason} = error), do: error
 
-  # The first new moon on or after the year's start, as a `Calendar.ISO` date.
+  # The first new moon on or after the year's start. Astro is asked from 1
+  # January of the year in Elixir's own calendar, which is the one it reads.
   defp new_moon_date(year) do
     with {:ok, %Date{} = start} <- Date.new(year, 1, 1),
-         {:ok, %DateTime{} = datetime} <- Astro.date_time_new_moon_at_or_after(start) do
-      {:ok, DateTime.to_date(datetime)}
+         {:ok, %DateTime{} = datetime} <- Astro.date_time_new_moon_at_or_after(start),
+         {:ok, %Date{} = date} <- from_datetime({:ok, datetime}) do
+      {:ok, date}
     else
       _other -> {:error, {:uncomputable_event, :new_moon}}
     end
   end
 
   # `Calendrical.Ecclesiastical` returns a `Calendrical.Gregorian` (Western) or
-  # `Calendrical.Julian` (Orthodox) date; normalise both to `Calendar.ISO`.
+  # `Calendrical.Julian` (Orthodox) date; both are answered as the date of the
+  # same day in the calendar a value that names none is in.
   defp ecclesiastical_date(%Date{} = date) do
-    case Date.convert(date, Calendars.native()) do
-      {:ok, %Date{} = iso} -> {:ok, iso}
+    case Date.convert(date, Calendars.default()) do
+      {:ok, %Date{} = converted} -> {:ok, converted}
       _error -> {:error, {:uncomputable_event, :easter}}
     end
   end
 
-  # The day of a solar term in a Gregorian year, as a `Calendar.ISO` date.
-  # The day is the calendar's to say (`solar_term/2`): a lunisolar calendar
-  # is reckoned at a place of its own (the Chinese, the Korean, the
-  # Vietnamese and the Japanese each at theirs), and the day of a term can
-  # differ between them, so the calendar of the value is asked, whichever
-  # it is. One that is reckoned at no place answers at the traditional
-  # reference for the jié-qì.
+  # The day of a solar term in a Gregorian year. The day is the calendar's
+  # to say (`solar_term/2`): a lunisolar calendar is reckoned at a place of
+  # its own (the Chinese, the Korean, the Vietnamese and the Japanese each
+  # at theirs), and the day of a term can differ between them, so the
+  # calendar of the value is asked, whichever it is. One that is reckoned
+  # at no place answers at the traditional reference for the jié-qì, and
+  # one that reckons no solar terms has none (`:no_solar_terms`): Elixir's
+  # `Calendar.ISO`, which a value that names no calendar is in, is one.
   defp solar_term_date(number, year, calendar) do
-    with {:ok, %Date{} = date} <- calendar.solar_term(number, year),
-         {:ok, %Date{} = iso} <- Date.convert(date, Calendars.native()) do
-      {:ok, iso}
-    else
+    case calendar.solar_term(number, year) do
+      {:ok, %Date{} = date} -> solar_term_in_default(date, number)
+      {:error, :undefined} -> {:error, {:no_solar_terms, calendar}}
       _other -> {:error, {:uncomputable_event, {:solar_term, number}}}
+    end
+  end
+
+  defp solar_term_in_default(%Date{} = date, number) do
+    case Date.convert(date, Calendars.default()) do
+      {:ok, %Date{} = converted} -> {:ok, converted}
+      _error -> {:error, {:uncomputable_event, {:solar_term, number}}}
     end
   end
 
@@ -296,13 +331,14 @@ defmodule Tempo.Event do
   # which the selection resolver returns as a `Tempo.EventError`.
   defp resolve_via_resolvers(name, year, calendar) do
     Enum.find_value(registered_resolvers(), {:error, {:unknown_event, name}}, fn resolver ->
-      if name in resolver.known(), do: a_date_or_an_error(resolver.date(name, year, calendar))
+      if name in resolver.known(),
+        do: a_date_or_an_error(Border.call_out(resolver, :date, [name, year, calendar]))
     end)
   end
 
-  # A resolver is a consumer's module, and what it gives is a date or an
-  # error. Anything else is an error that says so, where it was handed on as
-  # the answer.
+  # A resolver is a consumer's module, called as one is (`Tempo.Border`), and
+  # what it gives is a date or an error. Anything else is an error that says
+  # so, where it was handed on as the answer.
   defp a_date_or_an_error({:ok, %Date{}} = date), do: date
   defp a_date_or_an_error({:error, _reason} = error), do: error
   defp a_date_or_an_error(given), do: {:error, {:not_a_date, given}}

@@ -9,10 +9,11 @@ defmodule Tempo.InvalidDateErrorTest do
   use ExUnit.Case, async: true
 
   import Tempo.Sigils
+  import Tempo.Test.Inside, only: [inside: 1, outside: 1]
 
   alias Tempo.InvalidDateError
 
-  defp refused(text, calendar \\ Calendrical.Gregorian) do
+  defp refused(text, calendar \\ Calendar.ISO) do
     assert {:error, %InvalidDateError{} = error} = Tempo.from_iso8601(text, calendar)
     error
   end
@@ -30,7 +31,7 @@ defmodule Tempo.InvalidDateErrorTest do
                year: 2027,
                month: 2,
                valid_range: 1..28,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              } = error
     end
 
@@ -41,7 +42,7 @@ defmodule Tempo.InvalidDateErrorTest do
             Tempo.new(year: 2027, month: 2, day: 29),
             Tempo.on(~o"2M29D", ~o"2027"),
             Tempo.at(~o"2027", ~o"2M29D"),
-            Tempo.merge(~o"2M29D", ~o"2027Y")
+            outside(Tempo.merge(inside(~o"2M29D"), inside(~o"2027Y")))
           ] do
         assert Exception.message(error) == message
       end

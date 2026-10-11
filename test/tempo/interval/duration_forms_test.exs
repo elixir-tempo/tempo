@@ -26,21 +26,21 @@ defmodule Tempo.Interval.DurationFormsTest do
   ]
 
   @pair_functions [
-    {Interval, :relation},
-    {Interval, :before?},
-    {Interval, :after?},
+    {Tempo, :relation},
+    {Tempo, :before?},
+    {Tempo, :after?},
     {Allen, :meets?},
     {Allen, :during?},
     {Interval, :within?},
-    {Interval, :adjacent?},
-    {Interval, :possibly_before?},
-    {Interval, :possibly_after?},
-    {Interval, :possibly_overlaps?},
-    {Interval, :possibly_within?},
-    {Interval, :certainly_before?},
-    {Interval, :certainly_after?},
-    {Interval, :certainly_overlaps?},
-    {Interval, :certainly_within?}
+    {Tempo, :adjacent?},
+    {Tempo, :possibly_before?},
+    {Tempo, :possibly_after?},
+    {Tempo, :possibly_overlaps?},
+    {Tempo, :possibly_within?},
+    {Tempo, :certainly_before?},
+    {Tempo, :certainly_after?},
+    {Tempo, :certainly_overlaps?},
+    {Tempo, :certainly_within?}
   ]
 
   @duration_functions [:at_least?, :at_most?, :exactly?, :longer_than?, :shorter_than?]
@@ -67,8 +67,8 @@ defmodule Tempo.Interval.DurationFormsTest do
         length = Interval.duration(@explicit)
 
         for function <- @duration_functions, spelling <- @spelled do
-          assert apply(Interval, function, [spelling, length]) ==
-                   apply(Interval, function, [@explicit, length]),
+          assert apply(Tempo, function, [spelling, length]) ==
+                   apply(Tempo, function, [@explicit, length]),
                  "#{function}(#{inspect(spelling)}, #{inspect(length)})"
         end
       end
@@ -79,7 +79,7 @@ defmodule Tempo.Interval.DurationFormsTest do
           assert Interval.from(spelling) == Interval.from(@explicit)
           assert Interval.to(spelling) == Interval.to(@explicit)
           assert Interval.duration(spelling) == Interval.duration(@explicit)
-          assert Interval.bounded?(spelling)
+          assert Tempo.bounded?(spelling)
         end
       end
 
@@ -138,7 +138,7 @@ defmodule Tempo.Interval.DurationFormsTest do
     end
 
     test "an open interval stays unbounded" do
-      refute Interval.bounded?(~o"2026-01-01/..")
+      refute Tempo.bounded?(~o"2026-01-01/..")
       assert Interval.duration(~o"2026-01-01/..") == :infinity
       assert Interval.from(~o"../2026-01-02") == :undefined
     end

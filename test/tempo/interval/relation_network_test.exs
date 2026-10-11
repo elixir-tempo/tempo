@@ -176,14 +176,14 @@ defmodule Tempo.Interval.RelationNetworkTest do
 
         net =
           Enum.reduce(pairs, Net.new(labels), fn {la, lb, a, b}, net ->
-            truth = Interval.relation(a, b)
+            truth = Tempo.relation(a, b)
             Net.constrain(net, la, Relations.canonical([truth, decoy]), lb)
           end)
 
         assert {:ok, solved} = Net.propagate(net)
 
         for {la, lb, a, b} <- pairs do
-          truth = Interval.relation(a, b)
+          truth = Tempo.relation(a, b)
 
           assert truth in Net.between(solved, la, lb),
                  "propagation removed the true relation #{inspect(truth)} " <>
@@ -196,9 +196,9 @@ defmodule Tempo.Interval.RelationNetworkTest do
       for x <- @intervals, y <- @intervals, z <- @intervals, x != y, y != z, x != z do
         net =
           Net.new([:x, :y, :z])
-          |> Net.constrain(:x, [Interval.relation(x, y)], :y)
-          |> Net.constrain(:y, [Interval.relation(y, z)], :z)
-          |> Net.constrain(:x, [Interval.relation(x, z)], :z)
+          |> Net.constrain(:x, [Tempo.relation(x, y)], :y)
+          |> Net.constrain(:y, [Tempo.relation(y, z)], :z)
+          |> Net.constrain(:x, [Tempo.relation(x, z)], :z)
 
         assert Net.consistent?(net),
                "a network built from relations that genuinely hold was reported inconsistent"

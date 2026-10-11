@@ -158,7 +158,7 @@ defmodule Tempo.WeekCalendarTest do
       # A week and a day read in the Gregorian calendar are not those of a
       # calendar of weeks, and are placed on no year of one (decided
       # 2026-10-04).
-      assert {:error, %ConversionError{target: Calendrical.Gregorian}} =
+      assert {:error, %ConversionError{target: Calendar.ISO}} =
                Tempo.at(~o"2026"W, ~o"25W2K")
 
       {:ok, tuesdays} = Tempo.select(~o"2026-W25"W, ~o"2K")

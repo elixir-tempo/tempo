@@ -3,12 +3,10 @@ defmodule Tempo.Operations.Test do
   use ExUnitProperties
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
-  alias Tempo.Operations
-
-  doctest Tempo.Operations
+  alias Tempo.Test.Engine.Compare
+  alias Tempo.Test.Engine.Operations
 
   # Tests for `Tempo.Operations` — the set-operations module.
   # Organised by concern:
@@ -906,7 +904,7 @@ defmodule Tempo.Operations.Test do
       assert IntervalSet.count(r) == 1
 
       [iv] = r.intervals
-      assert iv.from.calendar == Calendrical.Gregorian
+      assert iv.from.calendar == Calendar.ISO
       assert iv.from.time[:year] == 2022
       assert iv.from.time[:month] == 6
     end
@@ -954,7 +952,7 @@ defmodule Tempo.Operations.Test do
       {:ok, result} = Tempo.intersection(~o"2026", ~o"1447-09[u-ca=islamic-civil]")
 
       [interval] = IntervalSet.members(result)
-      assert interval.from.calendar == Calendrical.Gregorian
+      assert interval.from.calendar == Calendar.ISO
       assert interval.from.extended == nil
       refute Tempo.to_iso8601!(interval) =~ "u-ca"
 
@@ -996,11 +994,11 @@ defmodule Tempo.Operations.Test do
       {:ok, interval} =
         Tempo.from_iso8601(
           "1447Y9M1D[u-ca=islamic-civil]/10M1D[u-ca=islamic-civil]",
-          Calendrical.Gregorian
+          Calendar.ISO
         )
 
-      assert interval.from.calendar == Calendrical.Gregorian
-      assert interval.to.calendar == Calendrical.Gregorian
+      assert interval.from.calendar == Calendar.ISO
+      assert interval.to.calendar == Calendar.ISO
       # The name the argument overrides is not kept.
       assert interval.from.extended == nil
       assert interval.to.extended == nil
@@ -1282,7 +1280,7 @@ defmodule Tempo.Operations.Test do
   defp naive_filter(a_set, b_set, mode) do
     overlaps? = fn a_int ->
       Enum.any?(b_set.intervals, fn b_int ->
-        Interval.relation(a_int, b_int) not in [:precedes, :preceded_by, :meets, :met_by]
+        Tempo.relation(a_int, b_int) not in [:precedes, :preceded_by, :meets, :met_by]
       end)
     end
 

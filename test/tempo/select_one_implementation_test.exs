@@ -20,9 +20,9 @@ defmodule Tempo.SelectOneImplementationTest do
 
   alias Calendrical.Hebrew
   alias Calendrical.ISOWeek
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   ## The measure
 

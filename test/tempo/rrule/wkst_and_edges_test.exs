@@ -3,8 +3,8 @@ defmodule Tempo.RRule.WkstAndEdgesTest do
   import Tempo.Sigils
 
   alias Tempo.RRule
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
+  alias Tempo.Test.Engine.RRule.Expander
 
   # Phase E — WKST, leap year, DST, and other edges.
   #

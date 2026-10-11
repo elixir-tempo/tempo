@@ -649,7 +649,7 @@ defmodule Tempo.NotBuiltTest do
   describe "a week selected from within a month" do
     test "is answered, in a calendar whose year begins within a month among them" do
       for {base, calendar} <- [
-            {"2026Y6M", Calendrical.Gregorian},
+            {"2026Y6M", Calendar.ISO},
             {"5787Y6M", Hebrew},
             {"1750Y6M", March25}
           ],
@@ -670,8 +670,8 @@ defmodule Tempo.NotBuiltTest do
       # 15 June 2026 is a Monday, in the third week of June (decided
       # 2026-10-08: it was kept by its week of the year, the 25th).
       for base <- ["2026Y6M15D", "2026Y6M15DT10H"] do
-        {:ok, kept} = Tempo.select(read(base, Calendrical.Gregorian), ~o"3W")
-        {:ok, dropped} = Tempo.select(read(base, Calendrical.Gregorian), ~o"25W")
+        {:ok, kept} = Tempo.select(read(base, Calendar.ISO), ~o"3W")
+        {:ok, dropped} = Tempo.select(read(base, Calendar.ISO), ~o"25W")
 
         assert {base, IntervalSet.count(kept), IntervalSet.count(dropped)} == {base, 1, 0}
       end
@@ -706,12 +706,12 @@ defmodule Tempo.NotBuiltTest do
     test "is refused, whatever its count" do
       for {text, options} <- @to_an_end do
         answer = Tempo.to_interval(Tempo.from_iso8601!(text), options)
-        assert refused?(answer, :rule_to_an_end, Calendrical.Gregorian), text
+        assert refused?(answer, :rule_to_an_end, Calendar.ISO), text
       end
 
       built = Tempo.from_iso8601!("R2/P1Y/2026-06-01/FL11MLL1K1IN/P7DN45W1KN")
 
-      assert refused?(Tempo.to_string(built), :rule_to_an_end, Calendrical.Gregorian)
+      assert refused?(Tempo.to_string(built), :rule_to_an_end, Calendar.ISO)
       assert_raise ConversionError, fn -> Enum.to_list(built) end
     end
 
@@ -727,7 +727,7 @@ defmodule Tempo.NotBuiltTest do
 
       assert Exception.message(error) =~
                "a rule that holds a window, on a recurrence written to its end, whose " <>
-                 "occurrences run back from it, is not built for Calendrical.Gregorian, " <>
+                 "occurrences run back from it, is not built for Calendar.ISO, " <>
                  "as for every calendar"
     end
 

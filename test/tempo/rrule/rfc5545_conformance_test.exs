@@ -2,8 +2,8 @@ defmodule Tempo.RRule.Rfc5545ConformanceTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
+  alias Tempo.Test.Engine.RRule.Expander
 
   doctest Tempo.RRule
 

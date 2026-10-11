@@ -1,9 +1,9 @@
 defmodule Tempo.Iso8601.Extended.Test do
   use ExUnit.Case, async: true
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.Iso8601.Tokenizer
+  alias Tempo.Test.Engine.Compare
 
   doctest Tempo.Iso8601.Tokenizer.Extended
 
@@ -632,7 +632,7 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert interval.from.extended.zone_id == "Europe/Paris"
       assert interval.from.calendar == Calendrical.Hebrew
       assert interval.to.extended.zone_id == "Europe/Paris"
-      assert interval.to.calendar == Calendrical.Gregorian
+      assert interval.to.calendar == Calendar.ISO
 
       # Regression (OTP ≤ 28): the Hebrew-read units resolve to a
       # pre-common-era Gregorian instant (year −1738), which used to

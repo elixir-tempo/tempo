@@ -15,10 +15,10 @@ defmodule Tempo.MaskInSelectionTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
+  alias Tempo.Test.Engine.Compare
 
   ## The measure
 

@@ -1,4 +1,6 @@
 defmodule Tempo.Range do
+  use Tempo.Border
+
   @moduledoc """
   A pair of Tempo values denoting an inclusive range, produced by the
   ISO 8601-2 range operator (`..`) **inside a set** — `[1667,1670..1672]`

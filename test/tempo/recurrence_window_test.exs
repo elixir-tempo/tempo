@@ -20,10 +20,10 @@ defmodule Tempo.RecurrenceWindowTest do
   # the recurrence's start which overlap it, where the window is near enough
   # for that walk to be made.
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
+  alias Tempo.Test.Engine.Compare
   alias Tempo.UnboundedRecurrenceError
 
   defp read(text), do: Tempo.from_iso8601!(text)

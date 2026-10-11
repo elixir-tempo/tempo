@@ -148,7 +148,7 @@ defmodule Tempo.Enumeration.SkippedReadings do
 
   defp skipped(%{date: [years | _rest]}, zone, %Tempo{calendar: calendar}) do
     if years |> Enum.map(&Range.size/1) |> Enum.sum() <= @years_asked,
-      do: skipped_in(years, zone, Calendars.effective(calendar)),
+      do: skipped_in(years, zone, calendar),
       else: []
   end
 
@@ -209,8 +209,6 @@ defmodule Tempo.Enumeration.SkippedReadings do
   end
 
   defp units_named?(:day_of_year, [year, month, day], [years, days], %Tempo{calendar: calendar}) do
-    calendar = Calendars.effective(calendar)
-
     among?(year, years) and among?(calendar.day_of_year(year, month, day), days)
   end
 

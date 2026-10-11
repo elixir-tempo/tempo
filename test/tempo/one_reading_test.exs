@@ -10,9 +10,9 @@ defmodule Tempo.OneReadingTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   # A mask is a tuple, and a tuple sorts after every number: the comparison
   # ordered the terms as they were written.
@@ -286,7 +286,7 @@ defmodule Tempo.OneReadingTest do
       {:ok, mixed} = Interval.new(~o"2025-01-01", hebrew)
 
       assert {mixed.from.calendar, mixed.to.calendar} ==
-               {Calendrical.Gregorian, Calendrical.Hebrew}
+               {Calendar.ISO, Calendrical.Hebrew}
 
       {:ok, text} = Tempo.to_iso8601(mixed)
       again = Tempo.from_iso8601!(text)

@@ -3,7 +3,7 @@ defmodule Tempo.ShiftTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Math
+  alias Tempo.Test.Engine.Math
 
   describe "Tempo.shift/2" do
     test "mixed units apply largest-to-smallest" do

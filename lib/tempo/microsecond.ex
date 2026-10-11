@@ -1,29 +1,28 @@
 defmodule Tempo.Microsecond do
-  @moduledoc """
-  Conversions for Tempo's sub-second component.
+  @moduledoc false
 
-  Tempo represents sub-second resolution with a `:microsecond` time
-  component carrying the same `{value, precision}` shape used by
-  Elixir's `Time`, `NaiveDateTime`, and `DateTime` structs:
-
-  * `value` is an absolute microsecond count in the range `0..999_999`.
-
-  * `precision` is the number of significant fractional digits, in the
-    range `0..6`. It records the declared resolution and therefore the
-    width of the implied interval — `{120_000, 2}` is the centisecond
-    interval `[.12, .13)` whereas `{120_000, 3}` is the millisecond
-    interval `[.120, .121)`.
-
-  Because `value` is always normalised to microseconds, ordering two
-  sub-second parts is a direct integer comparison of their values;
-  `precision` plays no role in comparison, only in interval width and
-  formatting.
-
-  The maximum precision is 6 (microsecond), matching Elixir. Fractional
-  input carrying more than 6 digits is truncated to microsecond
-  resolution.
-
-  """
+  # Conversions for Tempo's sub-second component.
+  #
+  # Tempo represents sub-second resolution with a `:microsecond` time
+  # component carrying the same `{value, precision}` shape used by
+  # Elixir's `Time`, `NaiveDateTime`, and `DateTime` structs:
+  #
+  # * `value` is an absolute microsecond count in the range `0..999_999`.
+  #
+  # * `precision` is the number of significant fractional digits, in the
+  #   range `0..6`. It records the declared resolution and therefore the
+  #   width of the implied interval — `{120_000, 2}` is the centisecond
+  #   interval `[.12, .13)` whereas `{120_000, 3}` is the millisecond
+  #   interval `[.120, .121)`.
+  #
+  # Because `value` is always normalised to microseconds, ordering two
+  # sub-second parts is a direct integer comparison of their values;
+  # `precision` plays no role in comparison, only in interval width and
+  # formatting.
+  #
+  # The maximum precision is 6 (microsecond), matching Elixir. Fractional
+  # input carrying more than 6 digits is truncated to microsecond
+  # resolution.
 
   @max_precision 6
   @microseconds_per_second 1_000_000
@@ -32,7 +31,7 @@ defmodule Tempo.Microsecond do
   A sub-second component: `{microsecond_value, precision}` where
   `microsecond_value` is `0..999_999` and `precision` is `0..6`.
   """
-  @type t :: {0..999_999, 0..6}
+  @type t :: Tempo.microsecond()
 
   @doc """
   Convert parsed fractional-second digits into a `{value, precision}`

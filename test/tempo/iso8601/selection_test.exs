@@ -10,7 +10,7 @@ defmodule Tempo.Parser.Selection.Test do
     assert Tempo.from_iso8601("2018Y3ML1K1IN") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [year: 2018, month: 3, selection: [day_of_week: 1, instance: 1]]
               }}
 
@@ -18,7 +18,7 @@ defmodule Tempo.Parser.Selection.Test do
     assert Tempo.from_iso8601("2018Y9MTLT8H20M3IN") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [year: 2018, month: 9, selection: [hour: 8, minute: 20, instance: 3]]
               }}
 
@@ -26,7 +26,7 @@ defmodule Tempo.Parser.Selection.Test do
     assert Tempo.from_iso8601("{2018,2019,2020,2021,2022}YL2M29D1IN") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [year: [2018..2022], selection: [month: 2, day: 29, instance: 1]]
               }}
 
@@ -34,7 +34,7 @@ defmodule Tempo.Parser.Selection.Test do
     assert Tempo.from_iso8601("L5M7K2IN") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [selection: [month: 5, day_of_week: 7, instance: 2]]
               }}
 
@@ -42,7 +42,7 @@ defmodule Tempo.Parser.Selection.Test do
     assert Tempo.from_iso8601("X*YL11M4K4INT17HZ-5H") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [
                   year: :any,
                   selection: [month: 11, day_of_week: 4, instance: 4],
@@ -55,7 +55,7 @@ defmodule Tempo.Parser.Selection.Test do
     assert Tempo.from_iso8601("L4M{19..26}D4K1IN") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [
                   selection: [
                     month: 4,
@@ -71,14 +71,14 @@ defmodule Tempo.Parser.Selection.Test do
              {
                :ok,
                %Tempo{
-                 calendar: Calendrical.Gregorian,
+                 calendar: Calendar.ISO,
                  time: [
                    year: {:mask, [:X, :X, :X, [0, 2, 4, 6, 8]]},
                    month: 11,
                    selection: [
                      interval: %Tempo.Interval{
                        from: %Tempo{
-                         calendar: Calendrical.Gregorian,
+                         calendar: Calendar.ISO,
                          time: [selection: [day_of_week: 1, instance: 1]]
                        },
                        to: nil,
@@ -95,7 +95,7 @@ defmodule Tempo.Parser.Selection.Test do
     assert Tempo.from_iso8601("2018YL1K1IN") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [year: 2018, selection: [day_of_week: 1, instance: 1]]
               }}
 
@@ -103,7 +103,7 @@ defmodule Tempo.Parser.Selection.Test do
     assert Tempo.from_iso8601("2018YL1K1INT10H0M0S") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [
                   year: 2018,
                   selection: [day_of_week: 1, instance: 1],
@@ -117,7 +117,7 @@ defmodule Tempo.Parser.Selection.Test do
     assert Tempo.from_iso8601("2018YL{1,2,5}KN") ==
              {:ok,
               %Tempo{
-                calendar: Calendrical.Gregorian,
+                calendar: Calendar.ISO,
                 time: [year: 2018, selection: [day_of_week: [1..2, 5]]]
               }}
 
@@ -128,7 +128,7 @@ defmodule Tempo.Parser.Selection.Test do
                %Tempo.Interval{
                  duration: %Tempo.Duration{time: [day: 5]},
                  from: %Tempo{
-                   calendar: Calendrical.Gregorian,
+                   calendar: Calendar.ISO,
                    time: [year: 2018, month: 9, selection: [day_of_week: 1, instance: 1]]
                  },
                  to: nil
@@ -142,7 +142,7 @@ defmodule Tempo.Parser.Selection.Test do
                %Tempo.Interval{
                  duration: %Tempo.Duration{time: [day: 5]},
                  from: %Tempo{
-                   calendar: Calendrical.Gregorian,
+                   calendar: Calendar.ISO,
                    time: [year: 2018, month: 9, selection: [day_of_week: [1, 3], instance: 1]]
                  },
                  to: nil
@@ -265,7 +265,7 @@ defmodule Tempo.Parser.Selection.Test do
                |> IntervalSet.members()
                |> Enum.map(&Interval.from/1)
 
-      for calendar <- [Calendrical.Gregorian, Calendrical.ISOWeek] do
+      for calendar <- [Calendar.ISO, Calendrical.ISOWeek] do
         assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2027Y53WL1KN", calendar)
         assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2027Y54WL1KN", calendar)
 
@@ -356,11 +356,11 @@ defmodule Tempo.Parser.Selection.Test do
              {
                :ok,
                %Tempo{
-                 calendar: Calendrical.Gregorian,
+                 calendar: Calendar.ISO,
                  time: [
                    selection: [
                      interval: %Tempo.Interval{
-                       from: %Tempo{calendar: Calendrical.Gregorian, time: [month: 4, day: 4]},
+                       from: %Tempo{calendar: Calendar.ISO, time: [month: 4, day: 4]},
                        to: nil,
                        duration: %Tempo.Duration{time: [day: -20]}
                      },

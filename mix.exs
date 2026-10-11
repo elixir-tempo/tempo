@@ -135,7 +135,7 @@ defmodule Tempo.MixProject do
         ~r/^Tempo(?:\.(Interval|IntervalSet|Duration|Set|RecurrenceSet|RecurrenceSet\.Conditional))?$/,
       "Clock and current time": ~r/^Tempo\.Clock(\.|$)/,
       "Set algebra and comparison":
-        ~r/^Tempo\.(Operations|Allen|Select|Territory|Workdays)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
+        ~r/^Tempo\.(Allen|Select|Territory|Workdays)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
       "Interval set backends": ~r/^Tempo\.IntervalSet\.Backend(\.|$)/,
       "Recurrence rules": ~r/^Tempo\.(RRule|Cron)$/,
       "Computed events": ~r/^Tempo\.Event(\.|$)/,
@@ -147,11 +147,8 @@ defmodule Tempo.MixProject do
       # core algebra type — see its moduledoc.
       "ISO 8601 and IXDTF": ~r/^Tempo\.(Range|Sigils)$/,
       Enumeration: ~r/^Tempo\.Enumeration$|^Enumerable\.Tempo/,
-      "Explanation and inspection": ~r/^Tempo\.(Explain|Explanation|Inspect|Format|Validation)$/,
-      Exceptions: ~r/^Tempo\.\w+Error$/,
-      # The engine: documented for contributors, but not the API a caller uses.
-      Internals:
-        ~r/^Tempo\.(Compare|Microsecond|UnitValues|Interval\.(Steps|Cycle)|Network\.Normalize|RRule\.(Expander|Rule|Selection)|Iso8601\.Tokenizer(\.\w+)?)$/
+      "Explanation and inspection": ~r/^Tempo\.(Explain|Explanation|Format)$/,
+      Exceptions: ~r/^Tempo\.\w+Error$/
     ]
   end
 

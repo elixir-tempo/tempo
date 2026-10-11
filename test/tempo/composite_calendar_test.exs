@@ -10,7 +10,7 @@ defmodule Tempo.CompositeCalendarTest do
   alias Calendrical.Reform.Sweden
   alias Tempo.Interval
   alias Tempo.IntervalSet
-  alias Tempo.UnitValues
+  alias Tempo.Test.Engine.UnitValues
 
   # A month with days missing, and a year with months missing.
   #

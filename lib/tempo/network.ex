@@ -1,4 +1,6 @@
 defmodule Tempo.Network do
+  use Tempo.Border
+
   @moduledoc """
   A chronological network — a set of time-periods together with the
   sequences and relations that constrain them.
@@ -28,6 +30,7 @@ defmodule Tempo.Network do
 
   """
 
+  alias Tempo.Border
   alias Tempo.Network.{Relation, TimePeriod}
 
   @type t :: %__MODULE__{
@@ -85,7 +88,7 @@ defmodule Tempo.Network do
   def add_period(%__MODULE__{} = network, period) do
     record(
       network,
-      "Tempo.Network.add_period/2 takes a Tempo.Network.TimePeriod, not #{inspect(period)}."
+      "Tempo.Network.add_period/2 takes a Tempo.Network.TimePeriod, not #{Border.inspect(period)}."
     )
   end
 
@@ -162,7 +165,7 @@ defmodule Tempo.Network do
   def add_sequence(%__MODULE__{} = network, period_ids) do
     record(
       network,
-      "Tempo.Network.add_sequence/2 takes a list of period ids, not #{inspect(period_ids)}."
+      "Tempo.Network.add_sequence/2 takes a list of period ids, not #{Border.inspect(period_ids)}."
     )
   end
 
@@ -204,14 +207,14 @@ defmodule Tempo.Network do
       not Relation.valid_type?(type) ->
         record(
           network,
-          "Tempo.Network.add_relation/5 does not know the relation #{inspect(type)}."
+          "Tempo.Network.add_relation/5 does not know the relation #{Border.inspect(type)}."
         )
 
       not relation_options?(options) ->
         record(
           network,
           "Tempo.Network.add_relation/5 takes one option, :metadata, a map, not " <>
-            "#{inspect(options)}."
+            "#{Border.inspect(options)}."
         )
 
       true ->
@@ -257,8 +260,11 @@ defmodule Tempo.Network do
 
   def check(%__MODULE__{relations: relations}) do
     case Enum.find(relations, &(not Relation.valid_type?(&1.type))) do
-      nil -> :ok
-      relation -> {:error, ArgumentError.exception("Unknown relation #{inspect(relation.type)}.")}
+      nil ->
+        :ok
+
+      relation ->
+        {:error, ArgumentError.exception("Unknown relation #{Border.inspect(relation.type)}.")}
     end
   end
 

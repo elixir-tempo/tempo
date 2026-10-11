@@ -3,7 +3,7 @@ defmodule Tempo.ShiftZoneTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
+  alias Tempo.Test.Engine.Compare
 
   describe "Tempo.shift_zone/2" do
     test "Paris 14:00 → New York is 08:00 EDT in June" do

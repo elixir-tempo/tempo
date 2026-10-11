@@ -1,9 +1,7 @@
 defmodule Tempo.MaskTest do
   use ExUnit.Case, async: true
 
-  alias Tempo.Mask
-
-  doctest Tempo.Mask
+  alias Tempo.Test.Engine.Mask
 
   @cal Calendrical.Gregorian
 

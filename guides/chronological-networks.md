@@ -205,7 +205,7 @@ reigns = [
 
 {reign_spans, _dynasty_end} =
   Enum.map_reduce(reigns, ~o"-664Y", fn {_name, length}, accession ->
-    abdication = Tempo.Math.add(accession, length)
+    abdication = Tempo.shift(accession, length)
     {Tempo.Interval.new!(from: accession, to: abdication), abdication}
   end)
 ```

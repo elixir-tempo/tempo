@@ -19,10 +19,10 @@ defmodule Tempo.RRule.StepPastPartsTest do
   alias Calendrical.Hebrew
   alias Calendrical.ISOWeek
   alias Calendrical.NRF
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
+  alias Tempo.Test.Engine.Compare
 
   # A step's unit, the steps of it walked, and the starts walked from:
   # Tuesday 16 June 2026, to each resolution, and a Sunday.

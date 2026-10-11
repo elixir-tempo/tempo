@@ -190,7 +190,7 @@ A `nil` unit means the walk derives its step from the endpoint resolution — th
 
 Mask rules:
 
-* A **year mask** (`156X`, `-1XXX`) translates directly to a year range via `Tempo.Mask.mask_bounds/1`. The signed half-open upper bound is computed as `-magnitude_min + 1` for negative masks.
+* A **year mask** (`156X`, `-1XXX`) translates directly to a year range. The signed half-open upper bound is computed as `-magnitude_min + 1` for negative masks.
 
 * A **finer-unit mask** narrows to the values its digits allow in the calendar: `1985-06-1X` is the 10th to the 19th of June, `[1985-06-10, 1985-06-20)`, and `1985-06-3X` the 30th alone. A fully masked unit allows every value, so `1985-XX-XX` is the year and `1985-06-XX` the month, and a mask walks its own unit, as `156X` walks years. An unspecified unit other than the year (`1985Y6MX*D`) is read as a fully masked one: the month. A masked day of the year, written `O` or as a day straight after its year, is the dates it names: `2026Y3XO` and `2026Y3XD` are 30 January to 8 February, `[2026-01-30, 2026-02-09)`.
 
@@ -349,7 +349,7 @@ iex> Enum.take(~o"X*W", 1)
 
 ## 4. `count/1`, `member?/2`, `slice/1` — fast paths
 
-`Enum.count/1`, `Enum.member?/2`, and `Enum.slice/2` (with `Enum.at/2`) have O(1) implementations for `%Tempo{}` and `%Tempo.Interval{}`, backed by `Tempo.Interval.Steps`. They are calendar-aware (a Coptic year counts 13 months, not 12) and DST-aware (a spring-forward day counts 23 hours, a fall-back day 25), and they agree element-for-element with the `reduce/3` walk (§5.6 lists the one divergence).
+`Enum.count/1`, `Enum.member?/2`, and `Enum.slice/2` (with `Enum.at/2`) have O(1) implementations for `%Tempo{}` and `%Tempo.Interval{}`. They are calendar-aware (a Coptic year counts 13 months, not 12) and DST-aware (a spring-forward day counts 23 hours, a fall-back day 25), and they agree element-for-element with the `reduce/3` walk (§5.6 lists the one divergence).
 
 Values that don't convert to a single interval — groups, selections, ranges, sets, masks — return `{:error, …}` and let `Enum` fall back to the `reduce/3` walk, which handles them.
 

@@ -7,6 +7,8 @@ defmodule Tempo.InvalidUnitError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:unit, :valid_units]
 
   @type t :: %__MODULE__{
@@ -16,15 +18,15 @@ defmodule Tempo.InvalidUnitError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{unit: unit, valid_units: valid}) when is_list(valid) do
-    "Invalid time unit #{inspect(unit)}. Valid units are #{inspect(valid)}"
+    "Invalid time unit #{Border.inspect(unit)}. Valid units are #{Border.inspect(valid)}"
   end
 
   def message(%__MODULE__{unit: unit}) do
-    "Invalid time unit #{inspect(unit)}"
+    "Invalid time unit #{Border.inspect(unit)}"
   end
 end

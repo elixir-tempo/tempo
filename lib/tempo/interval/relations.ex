@@ -1,4 +1,6 @@
 defmodule Tempo.Interval.Relations do
+  use Tempo.Border
+
   @moduledoc """
   Algebra over *sets* of Allen relations.
 

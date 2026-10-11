@@ -1,33 +1,33 @@
 defmodule Tempo.Operations do
-  @moduledoc """
-  Set operations on Tempo values — union, intersection,
-  complement, difference, symmetric difference — plus the
-  companion predicates (`disjoint?/2`, `overlaps?/2`,
-  `within?/2`, `contains?/2`, `equal?/2`).
+  @moduledoc false
 
-  Every operation accepts any Tempo value (implicit `%Tempo{}`,
-  `%Tempo.Interval{}`, `%Tempo.IntervalSet{}`, or all-of
-  `%Tempo.Set{}`) and routes through `align/2,3` — a single
-  preflight that normalises operands to a common anchor class,
-  resolution, calendar, and (where relevant) UTC reference frame.
-  Set-op results are always `%Tempo.IntervalSet{}`; predicate
-  results are booleans.
+  # Set operations on Tempo values — union, intersection,
+  # complement, difference, symmetric difference — plus the
+  # companion predicates (`disjoint?/2`, `overlaps?/2`,
+  # `within?/2`, `contains?/2`, `equal?/2`).
+  #
+  # Every operation accepts any Tempo value (implicit `%Tempo{}`,
+  # `%Tempo.Interval{}`, `%Tempo.IntervalSet{}`, or all-of
+  # `%Tempo.Set{}`) and routes through `align/2,3` — a single
+  # preflight that normalises operands to a common anchor class,
+  # resolution, calendar, and (where relevant) UTC reference frame.
+  # Set-op results are always `%Tempo.IntervalSet{}`; predicate
+  # results are booleans.
+  #
+  # See `plans/set-operations.md` for the design rationale
+  # including:
+  #
+  # * why IntervalSet (not rule-algebra) is the operational form,
+  # * how timezones and DST are handled,
+  # * why the `:within` option is required for some operand
+  #   combinations,
+  # * and the axis-compatibility rule (anchored vs unanchored).
+  #
+  # The top-level user API lives on `Tempo` via delegation — callers
+  # should prefer `Tempo.union/2`, `Tempo.intersection/2`, etc. over
+  # calling `Tempo.Operations` directly.
 
-  See `plans/set-operations.md` for the design rationale
-  including:
-
-  * why IntervalSet (not rule-algebra) is the operational form,
-  * how timezones and DST are handled,
-  * why the `:within` option is required for some operand
-    combinations,
-  * and the axis-compatibility rule (anchored vs unanchored).
-
-  The top-level user API lives on `Tempo` via delegation — callers
-  should prefer `Tempo.union/2`, `Tempo.intersection/2`, etc. over
-  calling `Tempo.Operations` directly.
-
-  """
-
+  alias Tempo.Border
   alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Interval
@@ -364,7 +364,7 @@ defmodule Tempo.Operations do
       {:error,
        UnanchoredError.exception(
          operation:
-           "place a value led by #{inspect(leading_unit(value))} on each day of a " <>
+           "place a value led by #{Border.inspect(leading_unit(value))} on each day of a " <>
              ":within window, which takes a time of day only (write a recurring " <>
              "date as a selection or an RRULE)"
        )}
@@ -558,8 +558,8 @@ defmodule Tempo.Operations do
         {:error,
          UnanchoredError.exception(
            operation:
-             "combine values on different axes (led by #{inspect(leading_unit(a))} " <>
-               "and #{inspect(leading_unit(b))}) in a set operation; give both the " <>
+             "combine values on different axes (led by #{Border.inspect(leading_unit(a))} " <>
+               "and #{Border.inspect(leading_unit(b))}) in a set operation; give both the " <>
                "same leading unit"
          )}
 
@@ -856,8 +856,8 @@ defmodule Tempo.Operations do
          operation: :align,
          calendar: tempo.calendar,
          reason:
-           "Cannot express #{inspect(tempo)} as a month-axis calendar date " <>
-             "under #{inspect(tempo.calendar)}"
+           "Cannot express #{Border.inspect(tempo)} as a month-axis calendar date " <>
+             "under #{Border.name(tempo.calendar)}"
        )}
     else
       {:ok, %{tempo | time: resolved}}
@@ -1252,7 +1252,7 @@ defmodule Tempo.Operations do
 
   defp metadata_resolver(other) do
     {:error,
-     "Invalid :metadata option #{inspect(other)}. " <>
+     "Invalid :metadata option #{Border.inspect(other)}. " <>
        "Valid options are :left, :merge, or {:merge, fun/2}"}
   end
 

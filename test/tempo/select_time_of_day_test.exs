@@ -8,10 +8,10 @@ defmodule Tempo.SelectTimeOfDayTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Duration
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   describe "integer indices take the unit from the base's own resolution" do
     test "a day span ending in the next month selects hours, not days" do

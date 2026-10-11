@@ -125,7 +125,7 @@ defmodule Tempo.InspectCoverageTest do
   # metadata. Built directly since the parser normalises most of
   # these away before they reach inspect.
   describe "component value rendering" do
-    @cal Calendrical.Gregorian
+    @cal Calendar.ISO
     defp t(time), do: inspect(%Tempo{time: time, calendar: @cal})
 
     test "unit designators for each time unit" do

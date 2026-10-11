@@ -7,6 +7,8 @@ defmodule Tempo.ResolutionError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:current, :target, :operation, :calendar, :reason]
 
   @type t :: %__MODULE__{
@@ -19,7 +21,7 @@ defmodule Tempo.ResolutionError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true
@@ -29,21 +31,21 @@ defmodule Tempo.ResolutionError do
 
   def message(%__MODULE__{operation: :extend, current: current, target: target})
       when not is_nil(current) and not is_nil(target) do
-    "Target resolution #{inspect(target)} is coarser than the current " <>
-      "resolution #{inspect(current)}. Use `Tempo.trunc/2` to reduce resolution."
+    "Target resolution #{Border.inspect(target)} is coarser than the current " <>
+      "resolution #{Border.inspect(current)}. Use `Tempo.trunc/2` to reduce resolution."
   end
 
   def message(%__MODULE__{reason: :no_path, current: current, target: target, calendar: cal})
       when not is_nil(current) and not is_nil(target) do
-    "No path from #{inspect(current)} to #{inspect(target)} under " <>
-      "calendar #{inspect(cal)} — no finer unit is defined."
+    "No path from #{Border.inspect(current)} to #{Border.inspect(target)} under " <>
+      "calendar #{Border.name(cal)} — no finer unit is defined."
   end
 
   def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason
 
   def message(%__MODULE__{operation: op, current: current, target: target})
       when not is_nil(op) and not is_nil(current) and not is_nil(target) do
-    "#{op} from #{inspect(current)} to #{inspect(target)} is not valid"
+    "#{op} from #{Border.inspect(current)} to #{Border.inspect(target)} is not valid"
   end
 
   def message(%__MODULE__{}), do: "Resolution operation failed"

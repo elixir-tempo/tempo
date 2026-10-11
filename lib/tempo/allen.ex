@@ -1,4 +1,6 @@
 defmodule Tempo.Allen do
+  use Tempo.Border
+
   @moduledoc """
   Allen's interval algebra, in Allen's own words.
 

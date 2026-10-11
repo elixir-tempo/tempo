@@ -1,30 +1,29 @@
 defmodule Tempo.Interval.Steps do
-  @moduledoc """
-  Closed-form step arithmetic for interval enumeration.
+  @moduledoc false
 
-  Backs the `Enumerable` protocol implementation for
-  `t:Tempo.Interval.t/0` — specifically its `count/1`, `slice/1`,
-  and `member?/2` callbacks — with O(1) (or near-O(1))
-  implementations driven by the calendar's date algebra rather than
-  walking the interval one step at a time.
-
-  Each function takes the iteration unit and the calendar in addition
-  to the endpoints:
-
-  * `count_steps/4` — how many `unit`-wide steps fit in
-    `[from, to)`.
-
-  * `nth_step/4` — the `n`-th element from `from` at `unit`
-    granularity.
-
-  * `on_step?/4` — whether `element` falls on a `unit`-step
-    boundary counted from `from`.
-
-  Phase 1 covers `:year`, `:month`, and `:day`. Sub-day units
-  (`:hour`, `:minute`, `:second`, `:microsecond`) are added in
-  subsequent phases.
-
-  """
+  # Closed-form step arithmetic for interval enumeration.
+  #
+  # Backs the `Enumerable` protocol implementation for
+  # `t:Tempo.Interval.t/0` — specifically its `count/1`, `slice/1`,
+  # and `member?/2` callbacks — with O(1) (or near-O(1))
+  # implementations driven by the calendar's date algebra rather than
+  # walking the interval one step at a time.
+  #
+  # Each function takes the iteration unit and the calendar in addition
+  # to the endpoints:
+  #
+  # * `count_steps/4` — how many `unit`-wide steps fit in
+  #   `[from, to)`.
+  #
+  # * `nth_step/4` — the `n`-th element from `from` at `unit`
+  #   granularity.
+  #
+  # * `on_step?/4` — whether `element` falls on a `unit`-step
+  #   boundary counted from `from`.
+  #
+  # Phase 1 covers `:year`, `:month`, and `:day`. Sub-day units
+  # (`:hour`, `:minute`, `:second`, `:microsecond`) are added in
+  # subsequent phases.
 
   alias Tempo.Compare
   alias Tempo.Enumeration.Zone
@@ -99,24 +98,24 @@ defmodule Tempo.Interval.Steps do
 
   ### Examples
 
-      iex> from = Tempo.from_iso8601!("2026Y")
-      iex> to = Tempo.from_iso8601!("2030Y")
-      iex> Tempo.Interval.Steps.count_steps(from, to, :year, Calendrical.Gregorian)
+      iex> from = ~o"2026Y"
+      iex> to = ~o"2030Y"
+      iex> Tempo.Interval.Steps.count_steps(from, to, :year, from.calendar)
       4
 
-      iex> from = Tempo.from_iso8601!("2026-01")
-      iex> to = Tempo.from_iso8601!("2027-03")
-      iex> Tempo.Interval.Steps.count_steps(from, to, :month, Calendrical.Gregorian)
+      iex> from = ~o"2026-01"
+      iex> to = ~o"2027-03"
+      iex> Tempo.Interval.Steps.count_steps(from, to, :month, from.calendar)
       14
 
-      iex> from = Tempo.from_iso8601!("2026-01-01")
-      iex> to = Tempo.from_iso8601!("2026-02-01")
-      iex> Tempo.Interval.Steps.count_steps(from, to, :day, Calendrical.Gregorian)
+      iex> from = ~o"2026-01-01"
+      iex> to = ~o"2026-02-01"
+      iex> Tempo.Interval.Steps.count_steps(from, to, :day, from.calendar)
       31
 
-      iex> from = Tempo.from_iso8601!("1985Y")
-      iex> to = Tempo.from_iso8601!("1986-06")
-      iex> Tempo.Interval.Steps.count_steps(from, to, :year, Calendrical.Gregorian)
+      iex> from = ~o"1985Y"
+      iex> to = ~o"1986-06"
+      iex> Tempo.Interval.Steps.count_steps(from, to, :year, from.calendar)
       2
 
   """
@@ -281,12 +280,12 @@ defmodule Tempo.Interval.Steps do
 
   ### Examples
 
-      iex> from = Tempo.from_iso8601!("2026-01-01")
-      iex> Tempo.Interval.Steps.nth_step(from, 30, :day, Calendrical.Gregorian)
+      iex> from = ~o"2026-01-01"
+      iex> Tempo.Interval.Steps.nth_step(from, 30, :day, from.calendar)
       ~o"2026Y1M31D"
 
-      iex> from = Tempo.from_iso8601!("2026-01")
-      iex> Tempo.Interval.Steps.nth_step(from, 14, :month, Calendrical.Gregorian)
+      iex> from = ~o"2026-01"
+      iex> Tempo.Interval.Steps.nth_step(from, 14, :month, from.calendar)
       ~o"2027Y3M"
 
   """
@@ -380,9 +379,9 @@ defmodule Tempo.Interval.Steps do
 
   ### Examples
 
-      iex> from = Tempo.from_iso8601!("2026-01-01")
-      iex> elt = Tempo.from_iso8601!("2026-01-31")
-      iex> Tempo.Interval.Steps.on_step?(elt, from, :day, Calendrical.Gregorian)
+      iex> from = ~o"2026-01-01"
+      iex> elt = ~o"2026-01-31"
+      iex> Tempo.Interval.Steps.on_step?(elt, from, :day, from.calendar)
       true
 
   """

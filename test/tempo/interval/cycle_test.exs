@@ -11,10 +11,8 @@ defmodule Tempo.Interval.CycleTest do
   import Tempo.Sigils
 
   alias Tempo.Interval
-  alias Tempo.Interval.Cycle
   alias Tempo.IntervalSet
-
-  doctest Tempo.Interval.Cycle
+  alias Tempo.Test.Engine.Interval.Cycle
 
   describe "parts/1" do
     test "a span that ends where its cycle does is one part, up to the cycle's end" do

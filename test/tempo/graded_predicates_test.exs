@@ -17,10 +17,10 @@ defmodule Tempo.GradedPredicatesTest do
 
   # What is asked of two placed spans of years, each `{first, after_last}`.
   @holds %{
-    overlaps: {&Interval.certainly_overlaps?/2, &Interval.possibly_overlaps?/2},
-    within: {&Interval.certainly_within?/2, &Interval.possibly_within?/2},
-    before: {&Interval.certainly_before?/2, &Interval.possibly_before?/2},
-    after: {&Interval.certainly_after?/2, &Interval.possibly_after?/2}
+    overlaps: {&Tempo.certainly_overlaps?/2, &Tempo.possibly_overlaps?/2},
+    within: {&Tempo.certainly_within?/2, &Tempo.possibly_within?/2},
+    before: {&Tempo.certainly_before?/2, &Tempo.possibly_before?/2},
+    after: {&Tempo.certainly_after?/2, &Tempo.possibly_after?/2}
   }
 
   ## The measure

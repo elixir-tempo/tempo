@@ -1,4 +1,6 @@
 defmodule Tempo do
+  use Tempo.Border
+
   @moduledoc """
   Documentation for `Tempo`.
 
@@ -106,6 +108,7 @@ defmodule Tempo do
   alias Calendrical.Kday
   alias Localize.Territory.Hemisphere
   alias Tempo.AbstractSeasonError
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Clock
   alias Tempo.Compare
@@ -161,7 +164,7 @@ defmodule Tempo do
     :shift,
     :extended,
     :qualifications,
-    calendar: Calendars.default(),
+    calendar: Border.outside(),
     metadata: %{}
   ]
 
@@ -180,6 +183,12 @@ defmodule Tempo do
 
   """
   @type token :: integer() | float() | :any | list() | tuple()
+
+  @typedoc """
+  A part of a second: `{microseconds, precision}`, where `microseconds` is `0..999_999` and `precision`, `0..6`, is the number of decimal places it was written to.
+
+  """
+  @type microsecond :: {0..999_999, 0..6}
 
   @type time_unit ::
           :year | :month | :week | :day | :hour | :minute | :second | :microsecond
@@ -205,7 +214,7 @@ defmodule Tempo do
           | {:hour, token}
           | {:minute, token}
           | {:second, token}
-          | {:microsecond, Tempo.Microsecond.t() | [Tempo.Microsecond.t()]}
+          | {:microsecond, microsecond() | [microsecond()]}
           | {:selection, keyword()}
         ]
 
@@ -490,7 +499,6 @@ defmodule Tempo do
   @spec new(keyword() | map()) :: {:ok, t()} | {:error, error_reason()}
   def new(components) when is_list(components) do
     with :ok <- ensure_keyword(components),
-         components = Enum.map(components, &calendar_option_as_gregorian/1),
          {components, options} <- split_components_and_options(components),
          :ok <- validate_options(options),
          :ok <- validate_components(components),
@@ -503,19 +511,19 @@ defmodule Tempo do
     end
   end
 
-  def new(components) when is_map(components) do
+  def new(components) when is_map(components) and not is_struct(components) do
     components
     |> Map.to_list()
     |> new()
   end
 
-  # `Calendar.ISO`, Elixir's default calendar, enters Tempo as the calendar
-  # of its notation at the public API (`Tempo.Calendars.effective/1`), so
-  # nothing inside Tempo sees it; `to_date/1` and its kin give it back.
-  defp calendar_option_as_gregorian({:calendar, calendar}),
-    do: {:calendar, Calendars.effective(calendar)}
-
-  defp calendar_option_as_gregorian(entry), do: entry
+  def new(other) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.new/1 expects a keyword list of time-scale components " <>
+         "and options. Got: #{Border.inspect(other)}"
+     )}
+  end
 
   @doc """
   Bang variant of `new/1` — raises on invalid input.
@@ -531,7 +539,7 @@ defmodule Tempo do
     case new(components) do
       {:ok, tempo} -> tempo
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, "Tempo.new!/1 failed: #{inspect(reason)}"
+      {:error, reason} -> raise ArgumentError, "Tempo.new!/1 failed: #{Border.inspect(reason)}"
     end
   end
 
@@ -542,7 +550,7 @@ defmodule Tempo do
       {:error,
        ArgumentError.exception(
          "Tempo.new/1 expects a keyword list of time-scale components " <>
-           "and options. Got: #{inspect(components)}"
+           "and options. Got: #{Border.inspect(components)}"
        )}
     end
   end
@@ -551,7 +559,16 @@ defmodule Tempo do
     {options, components} =
       Enum.split_with(kw, fn {key, _value} -> key in @known_options end)
 
-    {components, options}
+    {components, in_a_calendar(options)}
+  end
+
+  # A value built with no calendar, or with `nil` for one, is in the
+  # calendar a value that names none is in.
+  defp in_a_calendar(options) do
+    case Keyword.get(options, :calendar) do
+      nil -> Keyword.put(options, :calendar, Calendars.default())
+      _named -> options
+    end
   end
 
   defp validate_options(options) do
@@ -595,14 +612,14 @@ defmodule Tempo do
   defp validate_qualification(other) do
     {:error,
      ArgumentError.exception(
-       ":qualification must be one of #{inspect(@qualification_values)}, got #{inspect(other)}"
+       ":qualification must be one of #{Border.inspect(@qualification_values)}, got #{Border.inspect(other)}"
      )}
   end
 
   defp validate_metadata(metadata) when is_map(metadata), do: :ok
 
   defp validate_metadata(other) do
-    {:error, ArgumentError.exception(":metadata must be a map, got #{inspect(other)}")}
+    {:error, ArgumentError.exception(":metadata must be a map, got #{Border.inspect(other)}")}
   end
 
   # IXDTF (RFC 9557) elective suffix tags, written `[key=value]`: a key of
@@ -616,7 +633,7 @@ defmodule Tempo do
   end
 
   defp validate_tags(other) do
-    {:error, ArgumentError.exception(":tags must be a map, got #{inspect(other)}")}
+    {:error, ArgumentError.exception(":tags must be a map, got #{Border.inspect(other)}")}
   end
 
   defp valid_tag?(key, value) when is_binary(key) and key != "u-ca" do
@@ -637,7 +654,7 @@ defmodule Tempo do
   defp invalid_tag(key, value) do
     {:error,
      ArgumentError.exception(
-       "Invalid IXDTF tag #{inspect(key)} => #{inspect(value)}: a tag key is a string of " <>
+       "Invalid IXDTF tag #{Border.inspect(key)} => #{Border.inspect(value)}: a tag key is a string of " <>
          "lowercase letters, digits, `_` and `-` starting with a letter or `_` (and not " <>
          "`u-ca`, which is the :calendar option), and its value letters and digits, " <>
          "several joined by `-`"
@@ -659,8 +676,8 @@ defmodule Tempo do
           {:halt,
            {:error,
             ArgumentError.exception(
-              "Tempo.new/1 does not recognise the component #{inspect(unit)}. " <>
-                "Valid components are #{inspect(@canonical_unit_order)}."
+              "Tempo.new/1 does not recognise the component #{Border.inspect(unit)}. " <>
+                "Valid components are #{Border.inspect(@canonical_unit_order)}."
             )}}
 
         not component_value?(unit, value) ->
@@ -724,7 +741,7 @@ defmodule Tempo do
        ArgumentError.exception(
          "Tempo.new/1 cannot mix calendar axes — choose one of: " <>
            ":month/:day (Gregorian), :week/:day_of_week (week), " <>
-           ":day_of_year (ordinal), or :quarter. Got: #{inspect(keys)}"
+           ":day_of_year (ordinal), or :quarter. Got: #{Border.inspect(keys)}"
        )}
     else
       :ok
@@ -743,7 +760,7 @@ defmodule Tempo do
         quarter_group(
           components,
           quarter,
-          Calendars.effective(Keyword.get(options, :calendar))
+          Keyword.get(options, :calendar)
         )
     end
   end
@@ -764,7 +781,7 @@ defmodule Tempo do
   # weeks is the Gregorian day of the year, as one parsed for it is, and is
   # left for the validation that converts it.
   defp day_of_year_to_date(components, options) do
-    calendar = Calendars.effective(Keyword.get(options, :calendar))
+    calendar = Keyword.get(options, :calendar)
 
     case Keyword.pop(components, :day_of_year) do
       {nil, _unchanged} ->
@@ -808,9 +825,8 @@ defmodule Tempo do
   end
 
   defp build_tempo(components, options) do
-    # A missing — or explicitly `nil` — calendar defaults to Gregorian, so a
-    # value built through `new/1` never carries the bare-struct `nil`.
-    calendar = Calendars.effective(Keyword.get(options, :calendar))
+    # The calendar is always named by now (`in_a_calendar/1`).
+    calendar = Keyword.get(options, :calendar)
     zone = Keyword.get(options, :zone)
     shift = Keyword.get(options, :shift)
     qualification = Keyword.get(options, :qualification)
@@ -984,9 +1000,25 @@ defmodule Tempo do
            | Tempo.Duration.t()
            | Tempo.Set.t()}
           | {:error, error_reason()}
-  def from_iso8601(string, calendar_or_options \\ [])
+  def from_iso8601(string, calendar_or_options \\ []), do: read(string, calendar_or_options)
 
-  def from_iso8601(string, options) when is_binary(string) and is_list(options) do
+  @doc false
+  # Text read as `from_iso8601/2` reads it, for the library's own use. A
+  # public function crosses the border, and a call from inside is known by a
+  # value among its arguments, which text is not: so where the library reads
+  # text itself it reads through this, and what it reads is as Tempo holds
+  # it inside.
+  @spec read(String.t(), Calendar.calendar() | keyword()) ::
+          {:ok,
+           t()
+           | Tempo.Interval.t()
+           | Tempo.IntervalSet.t()
+           | Tempo.Duration.t()
+           | Tempo.Set.t()}
+          | {:error, error_reason()}
+  def read(string, calendar_or_options \\ [])
+
+  def read(string, options) when is_binary(string) and is_list(options) do
     # Options form, and the default. `:calendar` selects the calendar
     # (default: the IXDTF `[u-ca=NAME]` suffix, else Gregorian);
     # `strict: true` rejects an IXDTF value whose numeric offset disagrees
@@ -1000,7 +1032,7 @@ defmodule Tempo do
     end
   end
 
-  def from_iso8601(string, calendar) when is_binary(string) do
+  def read(string, calendar) when is_binary(string) do
     # Explicit user calendar always wins — an IXDTF `[u-ca=NAME]` does
     # not override the user's choice. This keeps the existing
     # `Tempo.from_iso8601(string, Calendrical.Hebrew)` idiom
@@ -1008,7 +1040,7 @@ defmodule Tempo do
     do_from_iso8601(string, calendar, false)
   end
 
-  def from_iso8601(not_a_string, _calendar_or_options) do
+  def read(not_a_string, _calendar_or_options) do
     {:error, not_a_string(not_a_string)}
   end
 
@@ -1016,7 +1048,7 @@ defmodule Tempo do
   # empty, a number, a map) is an error and no raise, as a string that is no
   # date is: a reader sits where what a caller was sent arrives.
   defp not_a_string(value) do
-    written = inspect(value, limit: 5, printable_limit: 60)
+    written = Border.inspect(value, limit: 5, printable_limit: 60)
     ParseError.exception(reason: "Could not parse #{written}: it is not a string")
   end
 
@@ -1072,7 +1104,7 @@ defmodule Tempo do
     do: %{exception | reason: reason, unit: nil, value: nil, valid_range: nil}
 
   defp basic_end_reason(string, date, time, digits) do
-    "The end #{inspect(digits)} of #{inspect(string)} is read as #{basic_end_reading(digits)}: " <>
+    "The end #{Border.inspect(digits)} of #{Border.inspect(string)} is read as #{basic_end_reading(digits)}: " <>
       "in the basic format digits alone are a date (ISO 8601-1 §5.3.5), and an interval's end " <>
       "may leave out its higher components only where the result is unambiguous (§5.5.1). " <>
       basic_end_advice(date, time, digits)
@@ -1228,7 +1260,7 @@ defmodule Tempo do
 
   defp resolve_endpoint_calendar(%__MODULE__{extended: %{calendar: type}} = endpoint)
        when is_atom(type) and not is_nil(type) do
-    case Calendrical.calendar_from_cldr_calendar_type(type) do
+    case Calendars.named(type) do
       {:ok, calendar} -> %{endpoint | calendar: calendar}
       {:error, _reason} -> endpoint
     end
@@ -1240,9 +1272,8 @@ defmodule Tempo do
   #
   # * Explicit user calendar always wins.
   # * Otherwise, if the IXDTF `[u-ca=NAME]` suffix is present, its
-  #   atom is resolved to a `Calendrical.*` module via
-  #   `Calendrical.calendar_from_cldr_calendar_type/1`.
-  # * Otherwise, fall back to `Calendrical.Gregorian`.
+  #   atom is resolved to a calendar module (`Tempo.Calendars.named/1`).
+  # * Otherwise, the calendar of a value that names none.
   defp resolve_calendar(:from_ixdtf_or_default, nil),
     do: {:ok, Calendars.default()}
 
@@ -1250,7 +1281,7 @@ defmodule Tempo do
     do: {:ok, Calendars.default()}
 
   defp resolve_calendar(:from_ixdtf_or_default, %{calendar: name}) when is_atom(name),
-    do: Calendrical.calendar_from_cldr_calendar_type(name)
+    do: Calendars.named(name)
 
   defp resolve_calendar(:from_ixdtf_or_default, _extended),
     do: {:ok, Calendars.default()}
@@ -1440,7 +1471,7 @@ defmodule Tempo do
     case parse_duration(string) do
       {:ok, duration} -> duration
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, inspect(reason)
+      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
     end
   end
 
@@ -1854,7 +1885,7 @@ defmodule Tempo do
 
   defp raise_on_error({:ok, value}), do: value
   defp raise_on_error({:error, exception}) when is_exception(exception), do: raise(exception)
-  defp raise_on_error({:error, reason}), do: raise(ArgumentError, inspect(reason))
+  defp raise_on_error({:error, reason}), do: raise(ArgumentError, Border.inspect(reason))
 
   # Apply the `strict: true` IXDTF offset/zone consistency check when
   # requested; otherwise the value passes through unchanged.
@@ -2149,7 +2180,7 @@ defmodule Tempo do
     case parse(input, options) do
       {:ok, value} -> value
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, "Tempo.parse!/2 failed: #{inspect(reason)}"
+      {:error, reason} -> raise ArgumentError, "Tempo.parse!/2 failed: #{Border.inspect(reason)}"
     end
   end
 
@@ -2159,9 +2190,16 @@ defmodule Tempo do
   # A text longer than the tokenizer reads is not read as words either: it
   # was refused as ISO 8601 for its length and then handed here, where ten
   # thousand bytes took seconds to refuse.
+  #
+  # Text that names no calendar is read in the calendar a value that names
+  # none is in, which the parser is told: it reads into Elixir's own where
+  # it is told nothing.
   defp parse_text(input, options) do
+    as_fields =
+      options |> Keyword.put_new(:calendar, Calendars.default()) |> Keyword.put(:as, :map)
+
     with :ok <- Tokenizer.within_length(input),
-         {:ok, value} <- Calendrical.parse(input, Keyword.put(options, :as, :map)),
+         {:ok, value} <- Calendrical.parse(input, as_fields),
          {:ok, parsed} <- parsed_to_tempo(value) do
       enforce_strict(parsed, options)
     end
@@ -2394,7 +2432,6 @@ defmodule Tempo do
 
   @spec from_date(date :: Date.t()) :: t()
   def from_date(%{year: year, month: month, day: day, calendar: calendar}) do
-    calendar = Calendars.effective(calendar)
     AST.build(date_units(year, month, day, calendar), calendar)
   end
 
@@ -2410,19 +2447,11 @@ defmodule Tempo do
   end
 
   @doc false
-  # A value in the default calendar where it was given `nil` for one. A
-  # struct built with no `:calendar` has the default already; one written
-  # with `calendar: nil` is read as it, where some operations did and
-  # others called `nil` as a module.
-  @spec with_a_calendar(t()) :: t()
-  def with_a_calendar(%__MODULE__{} = value), do: Calendars.settled(value)
-
-  @doc false
   # A calendar that numbers weeks within its year rather than months, whose
   # dates are a year, a week and a day of the week. It is the calendar's to
   # say (`calendar_base/0`), and this is the one function that asks it.
   @spec week_based_calendar?(module()) :: boolean()
-  def week_based_calendar?(calendar), do: Calendars.effective(calendar).calendar_base() == :week
+  def week_based_calendar?(calendar), do: calendar.calendar_base() == :week
 
   # The unit of a day in a calendar's dates: the day of the week in a
   # week-based calendar.
@@ -2470,7 +2499,7 @@ defmodule Tempo do
 
   ### Examples
 
-      iex> {:ok, q3} = Tempo.from_date_range(Calendrical.Interval.quarter(2026, 3, Calendrical.Gregorian))
+      iex> {:ok, q3} = Tempo.from_date_range(Date.range(~D[2026-07-01], ~D[2026-09-30]))
       iex> q3
       ~o"2026Y7M1D/10M1D"
 
@@ -2540,7 +2569,7 @@ defmodule Tempo do
     case from_date_range(range, options) do
       {:ok, interval} -> interval
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, inspect(reason)
+      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
     end
   end
 
@@ -2599,8 +2628,6 @@ defmodule Tempo do
           calendar: calendar
         } = naive
       ) do
-    calendar = Calendars.effective(calendar)
-
     AST.build(
       date_units(year, month, day, calendar) ++
         [hour: hour, minute: minute, second: second] ++ microsecond_component(naive),
@@ -2662,7 +2689,7 @@ defmodule Tempo do
           calendar: calendar
         } = dt
       ) do
-    tempo_calendar = Calendars.effective(calendar)
+    tempo_calendar = calendar
 
     time =
       date_units(year, month, day, tempo_calendar) ++
@@ -2990,21 +3017,21 @@ defmodule Tempo do
   defp component(value, unit), do: raise(no_component_error(unit, value))
 
   defp span_component(
-         %Tempo.Interval{from: %__MODULE__{time: from_time} = from, to: to} = interval,
+         %Tempo.Interval{from: %__MODULE__{} = from, to: to} = interval,
          unit
        ) do
     span_res = interval_component_resolution(from, to, interval)
 
     cond do
       span_res == :undefined ->
-        component(%__MODULE__{time: from_time, calendar: nil}, unit)
+        component(from, unit)
 
       unit_finer_or_equal?(span_res, unit) ->
-        component(%__MODULE__{time: from_time, calendar: nil}, unit)
+        component(from, unit)
 
       true ->
         raise ArgumentError,
-              "Tempo.#{unit}/1 is ambiguous for an interval spanning at #{inspect(span_res)} resolution. " <>
+              "Tempo.#{unit}/1 is ambiguous for an interval spanning at #{Border.inspect(span_res)} resolution. " <>
                 "Use `Tempo.Interval.endpoints/1` and extract the component from each endpoint explicitly."
     end
   end
@@ -3038,13 +3065,13 @@ defmodule Tempo do
   # interval that has one. Anything else has none to read.
   defp no_component_error(unit, %Tempo.Interval{} = interval) do
     ArgumentError.exception(
-      "Tempo.#{unit}/1 reads an interval from its start, and #{inspect(interval)} has none."
+      "Tempo.#{unit}/1 reads an interval from its start, and #{Border.inspect(interval)} has none."
     )
   end
 
   defp no_component_error(unit, value) do
     ArgumentError.exception(
-      "Tempo.#{unit}/1 takes a date or time value or an interval, and #{inspect(value)} " <>
+      "Tempo.#{unit}/1 takes a date or time value or an interval, and #{Border.inspect(value)} " <>
         "is neither."
     )
   end
@@ -3126,41 +3153,30 @@ defmodule Tempo do
 
   def anchored?(value), do: raise(not_one_value("anchored?/1", value))
 
-  @doc """
-  Check that an IXDTF value's explicit numeric offset agrees with its
-  IANA time zone at the value's wall instant.
-
-  A value may hold both a numeric offset and a zone, and the two may
-  disagree: Paris is an hour ahead of UTC in November, so 10:37 there
-  with an offset of five hours is inconsistent (RFC 9557 §3.4). A
-  value read from text never is, since `from_iso8601/2` settles a
-  disagreement where it reads one, and `new/1` refuses a `:shift` and a
-  `:zone` that disagree, so this is for a value made in another way, as
-  a struct built by hand. A zone written as an offset (`[+08:45]`) is
-  checked as a named one is. The same check backs the `strict: true`
-  option of `from_iso8601/2`.
-
-  ### Arguments
-
-  * `tempo` is a `t:t/0`.
-
-  ### Returns
-
-  * `:ok` when the offset agrees, or when there is nothing to check (no
-    zone, no explicit offset, or an unanchored value).
-
-  * `{:error, t:Tempo.ZoneOffsetMismatchError.t/0}` on disagreement.
-
-  ### Examples
-
-      iex> {:ok, t} = Tempo.from_iso8601("2022-11-20T10:37:00+01:00[Europe/Paris]")
-      iex> Tempo.validate_zone_offset(t)
-      :ok
-
-      iex> {:error, %Tempo.ZoneOffsetMismatchError{}} =
-      ...>   Tempo.from_iso8601("2022-11-20T10:37:00+05:00[Europe/Paris]", strict: true)
-
-  """
+  @doc false
+  # Check that an IXDTF value's explicit numeric offset agrees with its
+  # IANA time zone at the value's wall instant.
+  #
+  # A value may hold both a numeric offset and a zone, and the two may
+  # disagree: Paris is an hour ahead of UTC in November, so 10:37 there
+  # with an offset of five hours is inconsistent (RFC 9557 §3.4). A
+  # value read from text never is, since `from_iso8601/2` settles a
+  # disagreement where it reads one, and `new/1` refuses a `:shift` and a
+  # `:zone` that disagree, so this is for a value made in another way, as
+  # a struct built by hand. A zone written as an offset (`[+08:45]`) is
+  # checked as a named one is. The same check backs the `strict: true`
+  # option of `from_iso8601/2`.
+  #
+  # ### Arguments
+  #
+  # * `tempo` is a `t:t/0`.
+  #
+  # ### Returns
+  #
+  # * `:ok` when the offset agrees, or when there is nothing to check (no
+  #   zone, no explicit offset, or an unanchored value).
+  #
+  # * `{:error, t:Tempo.ZoneOffsetMismatchError.t/0}` on disagreement.
   @spec validate_zone_offset(t()) :: :ok | {:error, Tempo.ZoneOffsetMismatchError.t()}
   defdelegate validate_zone_offset(tempo), to: Tempo.Compare
 
@@ -3297,7 +3313,7 @@ defmodule Tempo do
   defp not_one_interval(function, value) do
     ArgumentError.exception(
       "Tempo.#{function} takes one date or time value or one interval, and " <>
-        "#{inspect(value)} is not one: it is a recurrence, or it names several spans."
+        "#{Border.inspect(value)} is not one: it is a recurrence, or it names several spans."
     )
   end
 
@@ -3434,7 +3450,7 @@ defmodule Tempo do
          target: truncate_to,
          current: resolution(tempo) |> elem(0),
          reason:
-           "#{inspect(truncate_to)} is on the #{target} axis and this value is on the " <>
+           "#{Border.inspect(truncate_to)} is on the #{target} axis and this value is on the " <>
              "#{value} axis — truncating between axes is not a coarsening. Convert the " <>
              "value to the #{target} axis first."
        )}
@@ -3583,7 +3599,7 @@ defmodule Tempo do
          unit: round_to,
          value: tempo,
          reason:
-           "Cannot round #{inspect(tempo)}: it holds several values (a set, a range, a " <>
+           "Cannot round #{Border.inspect(tempo)}: it holds several values (a set, a range, a " <>
              "group or unspecified digits), and one value is rounded."
        )}
     end
@@ -3647,7 +3663,7 @@ defmodule Tempo do
   @dialyzer {:nowarn_function, merge: 2}
   @spec merge(t(), t()) :: t() | {:error, error_reason()}
   def merge(%__MODULE__{} = base, %Tempo{} = from) do
-    calendar = calendar_of(base)
+    calendar = base.calendar
 
     if Validation.written_in_another_calendar?(from.time, calendar),
       do: {:error, placed_by_month_error(base, from, calendar)},
@@ -3728,8 +3744,8 @@ defmodule Tempo do
       value: from,
       target: calendar,
       reason:
-        "#{inspect(calendar)} is a calendar of weeks, with no months, so #{inspect(from)} " <>
-          "cannot be placed on #{inspect(base)}; place a week (W) and a day of the week (K) " <>
+        "#{Border.name(calendar)} is a calendar of weeks, with no months, so #{Border.inspect(from)} " <>
+          "cannot be placed on #{Border.inspect(base)}; place a week (W) and a day of the week (K) " <>
           "read in that calendar, or write the whole date, which is read as the Gregorian " <>
           "day and converted."
     )
@@ -3841,7 +3857,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "at/2 and on/2 place a Tempo value on a value or an interval, not " <>
-         "#{inspect(value)} on #{inspect(other)}."
+         "#{Border.inspect(value)} on #{Border.inspect(other)}."
      )}
   end
 
@@ -3868,7 +3884,7 @@ defmodule Tempo do
   # the other's. A time of day is the same in every calendar and is placed on
   # any.
   defp one_calendar(%__MODULE__{} = value, %__MODULE__{} = other) do
-    if dated?(value) and dated?(other) and placing_calendar(value) != placing_calendar(other),
+    if dated?(value) and dated?(other) and value.calendar != other.calendar,
       do: {:error, two_calendars_error(value, other)},
       else: :ok
   end
@@ -3878,25 +3894,23 @@ defmodule Tempo do
 
   defp dated?(%__MODULE__{}), do: false
 
-  defp placing_calendar(%__MODULE__{} = value), do: calendar_of(value)
-
   # A month or a day placed on a value of a calendar of weeks keeps the error
   # that says what such a calendar takes.
   defp two_calendars_error(value, other) do
     cond do
       by_month_on_weeks?(value, other) ->
-        placed_by_month_error(other, value, placing_calendar(other))
+        placed_by_month_error(other, value, other.calendar)
 
       by_month_on_weeks?(other, value) ->
-        placed_by_month_error(value, other, placing_calendar(value))
+        placed_by_month_error(value, other, value.calendar)
 
       true ->
         ConversionError.exception(
           value: value,
-          target: placing_calendar(other),
+          target: other.calendar,
           reason:
-            "#{inspect(value)} is a value of #{inspect(placing_calendar(value))} and " <>
-              "#{inspect(other)} one of #{inspect(placing_calendar(other))}, and a month, a " <>
+            "#{Border.inspect(value)} is a value of #{Border.name(value.calendar)} and " <>
+              "#{Border.inspect(other)} one of #{Border.name(other.calendar)}, and a month, a " <>
               "week and a day are numbered by their calendar: read both in one calendar to " <>
               "place one on the other."
         )
@@ -3904,7 +3918,7 @@ defmodule Tempo do
   end
 
   defp by_month_on_weeks?(%__MODULE__{time: time}, %__MODULE__{} = base),
-    do: Validation.written_in_another_calendar?(time, placing_calendar(base))
+    do: Validation.written_in_another_calendar?(time, base.calendar)
 
   # An interval is placed endpoint by endpoint; an open end, or one its
   # duration gives, has nothing to place.
@@ -3946,7 +3960,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "at/2 and on/2 place a value without a year on one with a year, and both " <>
-         "#{inspect(value)} and #{inspect(other)} have one."
+         "#{Border.inspect(value)} and #{Border.inspect(other)} have one."
      )}
   end
 
@@ -4016,7 +4030,7 @@ defmodule Tempo do
   defp selected_on(high, low, false = _anchored?) do
     {:error,
      ArgumentError.exception(
-       "#{inspect(low)} cannot be placed on #{inspect(high)}: the two are written by " <>
+       "#{Border.inspect(low)} cannot be placed on #{Border.inspect(high)}: the two are written by " <>
          "different units of a date (a month and its day, a week and its day, a day of the " <>
          "year), which name one date only in a year. Place them on a value with a year."
      )}
@@ -4029,12 +4043,14 @@ defmodule Tempo do
 
       [] ->
         {:error,
-         InvalidDateError.exception(reason: "#{inspect(low)} names no date on #{inspect(high)}.")}
+         InvalidDateError.exception(
+           reason: "#{Border.inspect(low)} names no date on #{Border.inspect(high)}."
+         )}
 
       _several_or_unending ->
         {:error,
          ArgumentError.exception(
-           "#{inspect(low)} names more than one date on #{inspect(high)}, and at/2 and " <>
+           "#{Border.inspect(low)} names more than one date on #{Border.inspect(high)}, and at/2 and " <>
              "on/2 place one. `Tempo.select/2` selects each of them."
          )}
     end
@@ -4114,7 +4130,7 @@ defmodule Tempo do
     case at(value, other) do
       {:ok, tempo} -> tempo
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, "at!/2 failed: #{inspect(reason)}"
+      {:error, reason} -> raise ArgumentError, "at!/2 failed: #{Border.inspect(reason)}"
     end
   end
 
@@ -4190,8 +4206,8 @@ defmodule Tempo do
       _both_select ->
         {:error,
          ArgumentError.exception(
-           "at/2 and on/2 place one selection, and #{inspect(high_source)} and " <>
-             "#{inspect(low_value)} both hold one."
+           "at/2 and on/2 place one selection, and #{Border.inspect(high_source)} and " <>
+             "#{Border.inspect(low_value)} both hold one."
          )}
     end
   end
@@ -4211,7 +4227,7 @@ defmodule Tempo do
   defp split_at_selection(time), do: Enum.split_while(time, &(not match?({:selection, _}, &1)))
 
   defp with_units_after(%__MODULE__{time: time} = tempo, units) do
-    case Validation.validate(%{tempo | time: time ++ units}, calendar_of(tempo)) do
+    case Validation.validate(%{tempo | time: time ++ units}, tempo.calendar) do
       {:ok, placed} -> placed
       other -> other
     end
@@ -4286,7 +4302,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "Tempo.extend/2 writes a value by the unit below its own: its second argument is " <>
-         "reserved and must be nil, got #{inspect(unit)}."
+         "reserved and must be nil, got #{Border.inspect(unit)}."
      )}
   end
 
@@ -4294,7 +4310,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "Tempo.extend/2 writes one date or time value by its next finer unit, and " <>
-         "#{inspect(value)} is not one."
+         "#{Border.inspect(value)} is not one."
      )}
   end
 
@@ -4330,7 +4346,7 @@ defmodule Tempo do
          ConversionError.exception(
            value: extended,
            reason:
-             "Cannot write #{inspect(%{extended | time: time})} by its next finer unit: the " <>
+             "Cannot write #{Border.inspect(%{extended | time: time})} by its next finer unit: the " <>
                "clock of its zone skips some of the values, and not the same ones under each " <>
                "value it names."
          )}
@@ -4354,7 +4370,7 @@ defmodule Tempo do
 
   defp extend_by_enumeration(tempo) do
     case Enumeration.implicit_enumeration(tempo) do
-      {:ok, enumerated} -> Validation.validate(enumerated, calendar_of(tempo))
+      {:ok, enumerated} -> Validation.validate(enumerated, tempo.calendar)
       {:finest, unit} -> {:error, no_finer_unit_error(tempo, unit)}
     end
   end
@@ -4365,27 +4381,28 @@ defmodule Tempo do
   # of the group is.
   defp extend_group(tempo) do
     with {:ok, written} <- Enumeration.group_as_set(tempo),
-         do: Validation.validate(written, calendar_of(tempo))
+         do: Validation.validate(written, tempo.calendar)
   end
 
   defp no_finer_unit_error(tempo, unit) do
     ResolutionError.exception(
       operation: :extend,
       current: unit,
-      calendar: calendar_of(tempo),
+      calendar: tempo.calendar,
       reason: no_finer_unit(tempo, unit)
     )
   end
 
-  defp no_finer_unit(tempo, :none), do: "Cannot extend #{inspect(tempo)}: it names no unit."
+  defp no_finer_unit(tempo, :none),
+    do: "Cannot extend #{Border.inspect(tempo)}: it names no unit."
 
   defp no_finer_unit(tempo, :microsecond) do
-    "Cannot extend #{inspect(tempo)}: a microsecond is the finest unit there is, so it has " <>
+    "Cannot extend #{Border.inspect(tempo)}: a microsecond is the finest unit there is, so it has " <>
       "no finer one to be written in."
   end
 
   defp no_finer_unit(tempo, unit),
-    do: "Cannot extend #{inspect(tempo)}: no unit finer than its #{unit} is defined."
+    do: "Cannot extend #{Border.inspect(tempo)}: no unit finer than its #{unit} is defined."
 
   @doc """
   Bang variant of `extend/2`: the extended value, or a raised exception.
@@ -4558,7 +4575,7 @@ defmodule Tempo do
   # `FunctionClauseError`: the function takes whatever a caller holds, and
   # says which of it is none of Elixir's dates and times.
   def from_elixir(value, _options) do
-    written = inspect(value, limit: 5, printable_limit: 60)
+    written = Border.inspect(value, limit: 5, printable_limit: 60)
 
     {:error,
      ConversionError.exception(
@@ -4642,9 +4659,6 @@ defmodule Tempo do
   """
   @spec extend_resolution(tempo :: t, target_unit :: time_unit()) ::
           t | {:error, error_reason()}
-  def extend_resolution(%Tempo{calendar: nil} = tempo, target_unit),
-    do: extend_resolution(with_a_calendar(tempo), target_unit)
-
   # The first value of a finer unit is one the clock of the value's zone
   # skips where it goes forward at that moment, and the value starts then on
   # the reading the clock shows, which is where it is compared from already.
@@ -4871,7 +4885,7 @@ defmodule Tempo do
   @spec to_date(t()) :: {:ok, Date.t()} | {:error, error_reason()}
   def to_date(%Tempo{time: [year: year, month: month, day: day]} = tempo)
       when is_integer(year) and is_integer(month) and is_integer(day) do
-    Date.new(year, month, day, native_calendar(tempo))
+    Date.new(year, month, day, tempo.calendar)
   end
 
   # Ordinal date: year plus day-of-year. Both `~o"...O"` and the
@@ -4880,11 +4894,11 @@ defmodule Tempo do
   # `:month` is the disambiguator.
   def to_date(%Tempo{time: [year: year, day: day_of_year]} = tempo)
       when is_integer(year) and is_integer(day_of_year) do
-    calendar = calendar_of(tempo)
+    calendar = tempo.calendar
 
     case calendar.date_from_day_of_year(year, day_of_year) do
       %Date{} = date ->
-        Date.convert(date, native_calendar(tempo))
+        Date.convert(date, tempo.calendar)
 
       {:error, _reason} ->
         {:error,
@@ -4901,8 +4915,8 @@ defmodule Tempo do
   # counted by ISO 8601's rule over the calendar's own year.
   def to_date(%Tempo{time: [year: year, week: week, day_of_week: day]} = tempo)
       when is_integer(year) and is_integer(week) and is_integer(day) do
-    with {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, calendar_of(tempo)) do
-      Date.convert(date, native_calendar(tempo))
+    with {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, tempo.calendar) do
+      Date.convert(date, tempo.calendar)
     end
   end
 
@@ -5003,7 +5017,7 @@ defmodule Tempo do
       )
       when is_integer(year) and is_integer(month) and is_integer(day) and is_integer(hour) and
              is_integer(minute) and is_integer(second) do
-    NaiveDateTime.new(year, month, day, hour, minute, second, microsecond, native_calendar(tempo))
+    NaiveDateTime.new(year, month, day, hour, minute, second, microsecond, tempo.calendar)
   end
 
   def to_naive_datetime(
@@ -5013,7 +5027,7 @@ defmodule Tempo do
       )
       when is_integer(year) and is_integer(month) and is_integer(day) and is_integer(hour) and
              is_integer(minute) and is_integer(second) do
-    NaiveDateTime.new(year, month, day, hour, minute, second, {0, 0}, native_calendar(tempo))
+    NaiveDateTime.new(year, month, day, hour, minute, second, {0, 0}, tempo.calendar)
   end
 
   def to_naive_datetime(
@@ -5056,7 +5070,7 @@ defmodule Tempo do
   # A week date's day as its calendar numbers it — the calendar's own week
   # in a week-based calendar, ISO 8601's in any other — at its time of day.
   defp week_naive_datetime(tempo, {year, week, day}, {hour, minute, second, microsecond}) do
-    with {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, calendar_of(tempo)) do
+    with {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, tempo.calendar) do
       NaiveDateTime.new(
         date.year,
         date.month,
@@ -5065,7 +5079,7 @@ defmodule Tempo do
         minute,
         second,
         microsecond,
-        native_calendar(tempo)
+        tempo.calendar
       )
     end
   end
@@ -5262,12 +5276,13 @@ defmodule Tempo do
       "5786Y9M30DT9H30M[u-ca=hebrew]"
 
   A whole span converts as one value. This is a fiscal quarter read back
-  as the Gregorian dates it covers:
+  as the dates it covers in `Calendar.ISO`, the calendar of a value that
+  names none:
 
       iex> {:ok, calendar} = Calendrical.FiscalYear.calendar_for(:AU)
       iex> {:ok, quarter} = Tempo.from_elixir(calendar.quarter(2027, 1))
-      iex> {:ok, gregorian} = Tempo.to_calendar(quarter, Calendrical.Gregorian)
-      iex> Tempo.to_iso8601!(gregorian)
+      iex> {:ok, dates} = Tempo.to_calendar(quarter, Calendar.ISO)
+      iex> Tempo.to_iso8601!(dates)
       "2026Y7M1D/10M1D"
 
   An interval set converts member by member:
@@ -5292,7 +5307,7 @@ defmodule Tempo do
       value: value,
       target: calendar,
       reason:
-        "Cannot convert #{inspect(value)} to #{inspect(calendar)}, which is not a calendar " <>
+        "Cannot convert #{Border.inspect(value)} to #{Border.name(calendar)}, which is not a calendar " <>
           "module. A calendar is a module such as `Calendrical.Hebrew`."
     )
   end
@@ -5324,7 +5339,7 @@ defmodule Tempo do
          calendar
        )
        when is_integer(year) and is_integer(month) and is_integer(day) do
-    convert_date(value, Date.new(year, month, day, Calendars.effective(source)), calendar)
+    convert_date(value, Date.new(year, month, day, source), calendar)
   end
 
   # A week date is the day of its week: the calendar's own week in a
@@ -5359,7 +5374,7 @@ defmodule Tempo do
          {:ok, converted} <-
            convert_date(
              date,
-             Date.new(year, month, day, Calendars.effective(source)),
+             Date.new(year, month, day, source),
              calendar
            ) do
       {:ok, %{converted | time: converted.time ++ time_of_day, shift: value.shift}}
@@ -5378,7 +5393,7 @@ defmodule Tempo do
        value: value,
        target: calendar,
        reason:
-         "Cannot convert #{inspect(value)} to #{inspect(calendar)}: a date, an interval of " <>
+         "Cannot convert #{Border.inspect(value)} to #{Border.name(calendar)}: a date, an interval of " <>
            "dates or an interval set converts."
      )}
   end
@@ -5473,7 +5488,7 @@ defmodule Tempo do
     case to_calendar(value, calendar) do
       {:ok, converted} -> converted
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, inspect(reason)
+      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
     end
   end
 
@@ -5535,7 +5550,7 @@ defmodule Tempo do
          ConversionError.exception(
            value: duration,
            target: Elixir.Duration,
-           reason: "duration component #{inspect(unit)} has no Elixir Duration equivalent"
+           reason: "duration component #{Border.inspect(unit)} has no Elixir Duration equivalent"
          )}
     end
   end
@@ -5564,7 +5579,7 @@ defmodule Tempo do
      ConversionError.exception(
        value: value,
        reason:
-         "Cannot convert #{inspect(value)} to a native Elixir value: only one date or " <>
+         "Cannot convert #{Border.inspect(value)} to a native Elixir value: only one date or " <>
            "time value, or a duration, has one."
      )}
   end
@@ -5677,7 +5692,7 @@ defmodule Tempo do
     Clock.utc_now() |> DateTime.truncate(:second) |> zoned_now(zone)
   end
 
-  def now(zone), do: {:error, UnknownZoneError.exception(zone_id: inspect(zone))}
+  def now(zone), do: {:error, UnknownZoneError.exception(zone_id: Border.inspect(zone))}
 
   # The current UTC instant read in `zone`.
   defp zoned_now(utc, "Etc/UTC"), do: from_datetime(utc)
@@ -6054,7 +6069,7 @@ defmodule Tempo do
     ConversionError.exception(
       value: tempo,
       reason:
-        "Cannot move #{inspect(tempo)} to another zone: it names more than one moment (a " <>
+        "Cannot move #{Border.inspect(tempo)} to another zone: it names more than one moment (a " <>
           "set, a mask or a group), and each has its own wall time there. Move each value " <>
           "it names."
     )
@@ -6209,7 +6224,7 @@ defmodule Tempo do
   # The moment a value's span starts at, to the second or the fraction of
   # one it is written to, on the wall clock of another zone.
   defp moment_in_zone(%Tempo{time: time} = tempo, target_zone) do
-    calendar = Calendars.effective(tempo.calendar)
+    calendar = tempo.calendar
     {whole, fraction} = Enum.split_with(time, &(not match?({:microsecond, _fraction}, &1)))
     utc_seconds = Compare.to_utc_seconds(%{tempo | time: whole})
 
@@ -6395,7 +6410,7 @@ defmodule Tempo do
 
   def metadata(value) do
     {:error,
-     ArgumentError.exception("Tempo.metadata/1 takes a Tempo value, got #{inspect(value)}")}
+     ArgumentError.exception("Tempo.metadata/1 takes a Tempo value, got #{Border.inspect(value)}")}
   end
 
   @doc """
@@ -6439,7 +6454,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "Tempo.put_metadata/2 takes a Tempo value and a map, got " <>
-         "#{inspect(value)} and #{inspect(metadata)}"
+         "#{Border.inspect(value)} and #{Border.inspect(metadata)}"
      )}
   end
 
@@ -6486,7 +6501,7 @@ defmodule Tempo do
 
   def day_of_week(%Tempo{} = tempo, starting_on) do
     {year, month, day} = require_ymd!(tempo, :day_of_week)
-    {dow, _first, _last} = calendar_of(tempo).day_of_week(year, month, day, starting_on)
+    {dow, _first, _last} = tempo.calendar.day_of_week(year, month, day, starting_on)
     dow
   end
 
@@ -6521,7 +6536,7 @@ defmodule Tempo do
   @spec day_of_year(t()) :: pos_integer()
   def day_of_year(%Tempo{} = tempo) do
     {year, month, day} = require_ymd!(tempo, :day_of_year)
-    calendar_of(tempo).day_of_year(year, month, day)
+    tempo.calendar.day_of_year(year, month, day)
   end
 
   def day_of_year(value), do: raise(not_one_value("day_of_year/1", value))
@@ -6559,7 +6574,7 @@ defmodule Tempo do
   @spec quarter_of_year(t()) :: 1..4
   def quarter_of_year(%Tempo{} = tempo) do
     {year, month, day} = require_ymd!(tempo, :quarter_of_year, default_day: 1)
-    calendar_of(tempo).quarter_of_year(year, month, day)
+    tempo.calendar.quarter_of_year(year, month, day)
   end
 
   def quarter_of_year(value), do: raise(not_one_value("quarter_of_year/1", value))
@@ -6591,7 +6606,7 @@ defmodule Tempo do
   """
   @spec leap_year?(t()) :: boolean()
   def leap_year?(%Tempo{} = tempo) do
-    calendar_of(tempo).leap_year?(whole!(tempo, :year, "leap_year?"))
+    tempo.calendar.leap_year?(whole!(tempo, :year, "leap_year?"))
   end
 
   def leap_year?(value), do: raise(not_one_value("leap_year?/1", value))
@@ -6629,24 +6644,12 @@ defmodule Tempo do
   def days_in_month(%Tempo{} = tempo) do
     year = whole!(tempo, :year, "days_in_month")
     month = whole!(tempo, :month, "days_in_month")
-    calendar = calendar_of(tempo)
+    calendar = tempo.calendar
 
     calendar.days_in_month(year, month)
   end
 
   def days_in_month(value), do: raise(not_one_value("days_in_month/1", value))
-
-  # Return the calendar module for a Tempo, defaulting to
-  # Calendrical.Gregorian when nil. Centralises the fallback so
-  # every accessor uses the same rule.
-  defp calendar_of(%Tempo{} = tempo), do: Calendars.of(tempo)
-
-  # The native Elixir calendar for a value at the outbound boundary
-  # (`to_date/1`, `to_naive_datetime/1`, `to_elixir/1`): Tempo's internal
-  # `Calendrical.Gregorian` becomes Elixir's `Calendar.ISO`, while any other
-  # calendar passes through — so a non-Gregorian value converts to a native
-  # type in its own calendar rather than being mislabelled ISO.
-  defp native_calendar(%Tempo{calendar: calendar}), do: Calendars.native(calendar)
 
   # Extract {year, month, day} from a Tempo or raise a uniform
   # error. Missing month or day default to 1 (start-of-unit) so
@@ -6666,7 +6669,7 @@ defmodule Tempo do
         week_date_ymd!(tempo, function, {year, week, whole!(tempo, :day_of_week, function, 1)})
 
       List.keymember?(time, :day_of_year, 0) ->
-        ordinal_date_ymd(year, whole!(tempo, :day_of_year, function), calendar_of(tempo))
+        ordinal_date_ymd(year, whole!(tempo, :day_of_year, function), tempo.calendar)
 
       true ->
         month_date_ymd!(tempo, function, year, Keyword.get(opts, :default_day, 1))
@@ -6679,7 +6682,7 @@ defmodule Tempo do
 
     if List.keymember?(time, :day, 0),
       do: {year, month, day},
-      else: first_ymd(time, {year, month, day}, calendar_of(tempo))
+      else: first_ymd(time, {year, month, day}, tempo.calendar)
   end
 
   defp ordinal_date_ymd(year, day_of_year, calendar) do
@@ -6713,11 +6716,11 @@ defmodule Tempo do
 
       nil ->
         raise ArgumentError,
-              "Tempo.#{function}/1 requires a #{unit} component. Got: #{inspect(tempo)}"
+              "Tempo.#{function}/1 requires a #{unit} component. Got: #{Border.inspect(tempo)}"
 
       _several ->
         raise ArgumentError,
-              "Tempo.#{function}/1 reads one #{unit}, and #{inspect(tempo)} holds several."
+              "Tempo.#{function}/1 reads one #{unit}, and #{Border.inspect(tempo)} holds several."
     end
   end
 
@@ -6725,12 +6728,12 @@ defmodule Tempo do
   # day in a week-based calendar, and the date of the ISO 8601 week's day in
   # any other.
   defp week_date_ymd!(tempo, function, {year, week, day}) do
-    case UnitValues.date_from_iso_week(year, week, day, calendar_of(tempo)) do
+    case UnitValues.date_from_iso_week(year, week, day, tempo.calendar) do
       {:ok, date} ->
         {date.year, date.month, date.day}
 
       {:error, _reason} ->
-        raise ArgumentError, "Tempo.#{function}/1 cannot place #{inspect(tempo)} on a day."
+        raise ArgumentError, "Tempo.#{function}/1 cannot place #{Border.inspect(tempo)} on a day."
     end
   end
 
@@ -6968,9 +6971,6 @@ defmodule Tempo do
           | {:error, error_reason()}
   def shift(tempo, shift, options \\ [])
 
-  def shift(%Tempo{calendar: nil} = tempo, shift, options),
-    do: shift(with_a_calendar(tempo), shift, options)
-
   def shift(%Tempo{} = tempo, %Tempo.Duration{} = duration, []) do
     Math.add(tempo, duration)
   end
@@ -6987,7 +6987,7 @@ defmodule Tempo do
   # and parse it here rather than at every call site. `"-PT30M"`
   # (leading-sign form) parses to the negated duration.
   def shift(%Tempo{} = tempo, duration_string, options) when is_binary(duration_string) do
-    case from_iso8601(duration_string) do
+    case read(duration_string) do
       {:ok, %Duration{} = duration} ->
         shift(tempo, duration, options)
 
@@ -6997,7 +6997,7 @@ defmodule Tempo do
            value: duration_string,
            target: Duration,
            reason:
-             "the string parsed as #{inspect(other)}, not a duration — " <>
+             "the string parsed as #{Border.inspect(other)}, not a duration — " <>
                "`Tempo.shift/2` takes an ISO 8601 duration such as \"PT30M\" or \"-P1D\""
          )}
 
@@ -7034,7 +7034,7 @@ defmodule Tempo do
     {:error,
      ArgumentError.exception(
        "Tempo.shift/3 shifts a Tempo value or an interval by a duration or by keyword " <>
-         "units, not #{inspect(tempo)} by #{inspect(shift)}."
+         "units, not #{Border.inspect(tempo)} by #{Border.inspect(shift)}."
      )}
   end
 
@@ -7046,7 +7046,7 @@ defmodule Tempo do
   defp skipping_an_interval(interval) do
     ArgumentError.exception(
       "Tempo.shift/3 with :skipping walks free time from one moment, and " <>
-        "#{inspect(interval)} has two ends: shift its start, and count its length from there."
+        "#{Border.inspect(interval)} has two ends: shift its start, and count its length from there."
     )
   end
 
@@ -7062,7 +7062,7 @@ defmodule Tempo do
   end
 
   defp months_and_years_apart(text) when is_binary(text) do
-    case from_iso8601(text) do
+    case read(text) do
       {:ok, %Duration{} = duration} -> months_and_years_apart(duration)
       _no_duration -> :as_given
     end
@@ -7167,8 +7167,8 @@ defmodule Tempo do
 
   defp shift_unit_error(other) do
     ArgumentError.exception(
-      "Tempo.shift/3 shifts by a number of #{inspect(@shift_units)}, or by " <>
-        "`microsecond: {microseconds, digits}`, and #{inspect(other)} is neither."
+      "Tempo.shift/3 shifts by a number of #{Border.inspect(@shift_units)}, or by " <>
+        "`microsecond: {microseconds, digits}`, and #{Border.inspect(other)} is neither."
     )
   end
 
@@ -7649,11 +7649,6 @@ defmodule Tempo do
           {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
   def to_interval(value, opts \\ [])
 
-  # A struct given `nil` for its calendar is read in the default one
-  # (`with_a_calendar/1`), here and wherever a value is taken.
-  def to_interval(%__MODULE__{calendar: nil} = value, opts),
-    do: to_interval(with_a_calendar(value), opts)
-
   def to_interval(value, opts) do
     if Group.abstract_season?(value) or Group.abstract_season?(Keyword.get(opts, :within)),
       do: season_to_interval(value, opts),
@@ -7705,7 +7700,7 @@ defmodule Tempo do
      ConversionError.exception(
        value: interval,
        reason:
-         "A recurrence has a number of occurrences, none or more, and #{inspect(interval)} " <>
+         "A recurrence has a number of occurrences, none or more, and #{Border.inspect(interval)} " <>
            "has #{recurrence}."
      )}
   end
@@ -7729,7 +7724,7 @@ defmodule Tempo do
       value: interval,
       reason:
         "A recurrence steps by its cadence from one occurrence to the next, and " <>
-          "#{inspect(cadence)} is no length of time."
+          "#{Border.inspect(cadence)} is no length of time."
     )
   end
 
@@ -8107,7 +8102,7 @@ defmodule Tempo do
     ConversionError.exception(
       value: from,
       reason:
-        "#{inspect(cadence)} brings #{inspect(from)}, which has no year, back to itself, so " <>
+        "#{Border.inspect(cadence)} brings #{Border.inspect(from)}, which has no year, back to itself, so " <>
           "each occurrence would be the same whole turn of its axis. Place the start on a " <>
           "date first with `Tempo.at/2` or `Tempo.on/2`."
     )
@@ -8130,13 +8125,13 @@ defmodule Tempo do
     do: {:error, step_error(value, :grouped_component)}
 
   defp selectable(%Tempo{time: time} = rule, interval) do
-    if selects_by_month?(time) and week_based_calendar?(calendar_of(rule)) do
+    if selects_by_month?(time) and week_based_calendar?(rule.calendar) do
       {:error,
        ConversionError.exception(
          value: interval,
          reason:
-           "#{inspect(calendar_of(rule))} is a calendar of weeks, with no months, so " <>
-             "#{inspect(interval)} cannot select by a month, a day of one or a day of the year."
+           "#{Border.name(rule.calendar)} is a calendar of weeks, with no months, so " <>
+             "#{Border.inspect(interval)} cannot select by a month, a day of one or a day of the year."
        )}
     else
       Selection.calendar_week_in_its_year(time, interval)
@@ -8222,7 +8217,7 @@ defmodule Tempo do
         {:error,
          ArgumentError.exception(
            "an open-ended :within window must start at a point in time; " <>
-             "#{inspect(from)} names none"
+             "#{Border.inspect(from)} names none"
          )}
     end
   end
@@ -8234,7 +8229,7 @@ defmodule Tempo do
        when from in [nil, :undefined] do
     {:error,
      ArgumentError.exception(
-       "a :within window needs a start, and #{inspect(within)} has none: a window is the " <>
+       "a :within window needs a start, and #{Border.inspect(within)} has none: a window is the " <>
          "time from one moment to another, or from one moment on"
      )}
   end
@@ -8327,8 +8322,7 @@ defmodule Tempo do
         |> Stream.unfold(&walk_next(&1, value, base, walk_opts))
         |> Stream.concat()
 
-      {:ok,
-       IntervalSet.from_stream(Stream.concat(found, later), metadata: IntervalSet.metadata(first))}
+      {:ok, IntervalSet.lazy(Stream.concat(found, later), metadata: IntervalSet.metadata(first))}
     end
   end
 
@@ -9117,7 +9111,8 @@ defmodule Tempo do
   # years, `P1M` whole months, `P1W` whole weeks from their Monday — and every
   # period the window overlaps is walked; the occurrences are then kept by
   # overlap with the window. Unaligned, a period boundary falls mid-period, and
-  # the last period the window reaches into is never walked (`R/../P1Y/FL1M15DN` over September 2026 to March 2027 lost
+  # the last period the window reaches into is never walked
+  # (`R/../P1Y/FL1M15DN` over September 2026 to March 2027 lost
   # 15 January 2027). When the selection resolves in another calendar — an IXDTF
   # `[u-ca=…]` suffix on the whole expression, carried on the `repeat_rule` —
   # the start is converted into that calendar first, so the periods are that
@@ -9669,8 +9664,6 @@ defmodule Tempo do
          cadence,
          periods
        ) do
-    calendar = Calendars.effective(calendar)
-
     case calendar.years_in_cycle() do
       years when is_integer(years) ->
         come_round?(cadence, periods, calendar) or
@@ -9716,7 +9709,6 @@ defmodule Tempo do
          %Tempo.Duration{time: [{unit, amount}]}
        )
        when is_integer(amount) and amount > 0 and is_map_key(@places_finer_than, unit) do
-    calendar = Calendars.effective(calendar)
     parts = Enum.drop(@places_in_a_week, Map.fetch!(@places_finer_than, unit))
     places = Enum.map(parts, &place_named(&1, selection, from, calendar))
     moved = moved_by_its_zone(from, unit, amount)
@@ -9955,7 +9947,7 @@ defmodule Tempo do
          %Tempo.Duration{time: [{unit, _amount}]}
        )
        when unit in [:year, :month] do
-    case periods_of_a_cycle(unit, Calendars.effective(calendar)) do
+    case periods_of_a_cycle(unit, calendar) do
       {:ok, count} -> Enum.uniq([@periods_before_asking, count])
       :error -> [@periods_before_asking]
     end
@@ -10124,7 +10116,7 @@ defmodule Tempo do
          ConversionError.exception(
            value: anchor,
            reason:
-             "Stepping #{inspect(anchor)} back by #{inspect(back)} gives #{inspect(start)}, not one value."
+             "Stepping #{Border.inspect(anchor)} back by #{Border.inspect(back)} gives #{Border.inspect(start)}, not one value."
          )}
     end
   end
@@ -10217,7 +10209,7 @@ defmodule Tempo do
          ConversionError.exception(
            value: to,
            reason:
-             "Stepping #{inspect(to)} back by #{inspect(back)} gives #{inspect(start)}, not one value."
+             "Stepping #{Border.inspect(to)} back by #{Border.inspect(back)} gives #{Border.inspect(start)}, not one value."
          )}
     end
   end
@@ -11155,7 +11147,7 @@ defmodule Tempo do
 
   defp week_year_floor(%Tempo{time: [year: year], calendar: calendar} = from, start)
        when is_integer(year) do
-    with false <- week_based_calendar?(Calendars.effective(calendar)),
+    with false <- week_based_calendar?(calendar),
          {:ok, %Date{} = monday} <- UnitValues.date_from_iso_week(year, 1, 1, calendar),
          {:ok, %Date{} = monday} <- Date.convert(monday, calendar) do
       %{from | time: [year: monday.year, month: monday.month, day: monday.day]}
@@ -11171,7 +11163,7 @@ defmodule Tempo do
          %Tempo{time: [{:year, year}, {:month, month} | _finer]} = start
        )
        when is_integer(year) and is_integer(month) do
-    case UnitValues.weeks_of_month(year, month, Calendars.effective(calendar)) do
+    case UnitValues.weeks_of_month(year, month, calendar) do
       {:ok, [%Date.Range{first: first} | _later_weeks]} ->
         %{from | time: [year: first.year, month: first.month, day: first.day]}
 
@@ -11281,7 +11273,7 @@ defmodule Tempo do
   # week had no unit to be put in and the year was selected whole.
   defp week_in_a_calendar_of_weeks(start_unit, finest_unit, %Tempo{} = rule)
        when finest_unit in [:week, :calendar_week] do
-    if week_based_calendar?(calendar_of(rule)), do: :week, else: start_unit
+    if week_based_calendar?(rule.calendar), do: :week, else: start_unit
   end
 
   defp week_in_a_calendar_of_weeks(start_unit, _finest_unit, _rule), do: start_unit
@@ -12502,7 +12494,7 @@ defmodule Tempo do
     case to_interval_set(value) do
       {:ok, set} -> set
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, inspect(reason)
+      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
     end
   end
 
@@ -12550,7 +12542,7 @@ defmodule Tempo do
         raise exception
 
       {:error, reason} ->
-        raise ArgumentError, "Tempo.map/2 could not build the set: #{inspect(reason)}"
+        raise ArgumentError, "Tempo.map/2 could not build the set: #{Border.inspect(reason)}"
     end
   end
 
@@ -12612,7 +12604,7 @@ defmodule Tempo do
   # value at all.
   defp not_one_value(function, value) do
     ArgumentError.exception(
-      "Tempo.#{function} takes one date or time value, and #{inspect(value)} is not one."
+      "Tempo.#{function} takes one date or time value, and #{Border.inspect(value)} is not one."
     )
   end
 
@@ -12760,7 +12752,7 @@ defmodule Tempo do
     {:error,
      UnboundedRecurrenceError.exception(
        reason:
-         "#{inspect(tempo)} selects in every year, so it needs a :within window — " <>
+         "#{Border.inspect(tempo)} selects in every year, so it needs a :within window — " <>
            "any Tempo value that limits the years."
      )}
   end
@@ -12899,7 +12891,7 @@ defmodule Tempo do
     with_units = %{selected | time: Keyword.merge(time, trailing)}
 
     with {:ok, %Tempo{} = read} <-
-           Validation.validate(with_units, Calendars.effective(calendar)) do
+           Validation.validate(with_units, calendar) do
       to_interval(read)
     end
   end
@@ -12940,8 +12932,6 @@ defmodule Tempo do
     {prefix, [{unit, {:group, {kind, members}}, size} | rest]} =
       Enum.split_while(time, &(not match?({_unit, {:group, _members}, _size}, &1)))
 
-    calendar = Calendars.effective(calendar)
-
     with :all <- kind,
          {:ok, groups} <- Group.groups_of_set(unit, members, size, prefix, calendar) do
       groups
@@ -12963,7 +12953,7 @@ defmodule Tempo do
       ConversionError.exception(
         value: tempo,
         reason:
-          "Cannot convert #{inspect(tempo)}: its #{unit} group counts from the end of a " <>
+          "Cannot convert #{Border.inspect(tempo)}: its #{unit} group counts from the end of a " <>
             "span the units before it do not fix."
       )
     else
@@ -13149,35 +13139,128 @@ defmodule Tempo do
   end
 
   @doc """
-  Union of two Tempo values — every instant in either operand.
-  See `Tempo.Operations.union/3` for full details.
+  Union of two values: every member of either operand, kept as a distinct interval with its original metadata.
+
+  Members are preserved, so two operands that cover the same time give **two** members in the result, not one. For the canonical instant-set form, with touching members merged, call `Tempo.IntervalSet.coalesce/1` on the result.
+
+  ### Arguments
+
+  * `a` is any Tempo value that converts to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `b` is such a value, or a list of them, united with `a` from left to right.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
   ### Examples
 
       iex> {:ok, either} = Tempo.union(~o"2026-01", ~o"2026-03")
       iex> either
       #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y1M/2M" unit: day>, #Tempo.Interval<~o"2026Y3M/4M" unit: day>]>
 
+  Members stay distinct even when they touch, and `Tempo.IntervalSet.coalesce/1` merges them:
+
+      iex> {:ok, both} = Tempo.union(~o"2026-01", ~o"2026-02")
+      iex> {Tempo.IntervalSet.count(both),
+      ...>  both |> Tempo.IntervalSet.coalesce() |> Tempo.IntervalSet.count()}
+      {2, 1}
+
   """
-  defdelegate union(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate union(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  Intersection of two Tempo values — every instant in both
-  operands. Each result interval is the trimmed overlap; `a`
-  members can split into multiple fragments. See
-  `Tempo.Operations.intersection/3`.
+  Intersection of two values: every instant present in both operands, returned as one or more trimmed intervals.
+
+  There is one result interval for each pair of members that overlap: the `a` member trimmed to its overlap with the `b` member. So a member of `a` gives several intervals when several members of `b` overlap it, and where the members of an operand overlap each other so do the results (two bookings of one room, each within the opening hours, are two results). Call `Tempo.IntervalSet.coalesce/1` for the time they cover.
+
+  This is the set-theoretic intersection, `A ∩ B`. Use it when the question is about *covered time*: "the parts of my meetings that fall inside business hours", "the overlap between two date ranges". For the member-preserving filter, which returns whole `a` members that overlap any `b` member, use `members_overlapping/3`.
+
+  ### Arguments
+
+  * `a` is any Tempo value that converts to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `b` is such a value, or a list of them, intersected with `a` from left to right, so *"when are all of these free at once?"* is one expression. An empty list is the identity: `a` alone.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  * `:metadata` decides what a result interval carries when both operands have metadata. `:left`, the default, keeps the `a` member's metadata and drops `b`'s. `:merge` merges the two maps, `b` winning on a conflicting key. `{:merge, fun}` calls `fun.(a_metadata, b_metadata)` and uses the result.
+
+  Reach for `{:merge, fun}` whenever the question is *which operands produced this window*. A plain `:merge` cannot answer it: merging `%{resource: "Alice"}` with `%{resource: "Bob"}` keeps only Bob, silently. A function that accumulates keeps both.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
   ### Examples
 
       iex> {:ok, both} = Tempo.intersection(~o"2026-06-15T09/2026-06-15T17", ~o"2026-06-15T14/2026-06-15T20")
       iex> both
       #Tempo.IntervalSet<[~o"2026Y6M15DT14H/T17H"]>
 
+  A list of operands is intersected from left to right:
+
+      iex> alice = ~o"2026-06-15T09:00:00/2026-06-15T12:00:00"
+      iex> bob = ~o"2026-06-15T10:00:00/2026-06-15T17:00:00"
+      iex> room = ~o"2026-06-15T11:00:00/2026-06-15T15:00:00"
+      iex> {:ok, mutual} = Tempo.intersection(alice, [bob, room])
+      iex> Tempo.IntervalSet.members(mutual)
+      [~o"2026Y6M15DT11H0M0S/T12H0M0S"]
+
+  A function given as `:metadata` says who is free in each window:
+
+      iex> alice = Tempo.Interval.new!(
+      ...>   from: ~o"2026-06-15T09:00:00", to: ~o"2026-06-15T12:00:00",
+      ...>   metadata: %{free: ["Alice"]})
+      iex> bob = Tempo.Interval.new!(
+      ...>   from: ~o"2026-06-15T10:00:00", to: ~o"2026-06-15T17:00:00",
+      ...>   metadata: %{free: ["Bob"]})
+      iex> accumulate = fn a, b -> Map.merge(a, b, fn _key, x, y -> x ++ y end) end
+      iex> {:ok, both} = Tempo.intersection(alice, bob, metadata: {:merge, accumulate})
+      iex> both |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.Interval.metadata/1)
+      [%{free: ["Alice", "Bob"]}]
+
   """
-  defdelegate intersection(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate intersection(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  Complement of a Tempo value within a window — the instants of the
-  `:within` window it does not cover. The `:within` option is
-  required. See `Tempo.Operations.complement/2`.
+  Complement of a value within a window: the instants of the `:within` window that no member of `set` covers.
+
+  Unlike `difference/3`, which trims each member of its first operand, `complement/2` returns the instant-set form: one member for each gap in what `set` covers. This is the right question for "find all the free time in the workday".
+
+  ### Arguments
+
+  * `set` is any Tempo value that converts to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is the window to complement within, any Tempo value. Required: a complement with no window is infinite, and Tempo does not pick one implicitly.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0` with one member for each gap.
+
+  * `{:error, reason}` when no `:within` window is given, a `:bound` option is given where `:within` is meant, or the operands cannot be aligned.
 
   ### Examples
 
@@ -13187,13 +13270,35 @@ defmodule Tempo do
       #Tempo.IntervalSet<[~o"2026Y6M15DT9H0M/T10H0M", ~o"2026Y6M15DT11H0M/T17H0M"]>
 
   """
-  defdelegate complement(set, opts), to: Tempo.Operations
+  defdelegate complement(set, options), to: Tempo.Operations
 
   @doc """
-  Difference `a \\ b` — every instant in `a` that is not in
-  `b`. Each result interval is the trimmed remainder; `a`
-  members can split into multiple fragments. See
-  `Tempo.Operations.difference/3`.
+  Difference `a \\ b`: every instant in `a` that is not in `b`, returned as one or more trimmed intervals.
+
+  Each member of `a` is trimmed to the parts of it that no member of `b` overlaps. One member of `a` splits into several intervals when `b` covers only its middle, and each of them carries that member's metadata.
+
+  This is the set-theoretic difference, `A ∖ B`. Use it when the question is about *covered time*: "the parts of the workday that aren't lunch", "free time around a busy schedule". For the member-preserving filter, which keeps whole `a` members that no `b` member overlaps and drops the rest, use `members_outside/3`.
+
+  ### Arguments
+
+  * `a` is any Tempo value that converts to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `b` is such a value, or a list of them, subtracted from `a` from left to right, so *"the workday minus everything already booked"* is one expression. An empty list is the identity: nothing is booked, so all of `a` remains.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
   ### Examples
 
       iex> workday = ~o"2026-06-15T09/2026-06-15T17"
@@ -13202,27 +13307,82 @@ defmodule Tempo do
       iex> working
       #Tempo.IntervalSet<[~o"2026Y6M15DT9H/T12H", ~o"2026Y6M15DT13H/T17H"]>
 
+  A list of operands is subtracted from left to right, and an empty list leaves `a` as it is:
+
+      iex> work = ~o"2026-06-15T09:00:00/2026-06-15T17:00:00"
+      iex> standup = ~o"2026-06-15T09:00:00/2026-06-15T09:30:00"
+      iex> lunch = ~o"2026-06-15T12:00:00/2026-06-15T13:00:00"
+      iex> {:ok, free} = Tempo.difference(work, [standup, lunch])
+      iex> Tempo.IntervalSet.count(free)
+      2
+
+      iex> work = ~o"2026-06-15T09:00:00/2026-06-15T17:00:00"
+      iex> {:ok, free} = Tempo.difference(work, [])
+      iex> Tempo.IntervalSet.count(free)
+      1
+
   """
-  defdelegate difference(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate difference(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  Symmetric difference `a △ b` — instants in exactly one of
-  the two operands. Trimmed/instant-level. See
-  `Tempo.Operations.symmetric_difference/3`.
+  Symmetric difference `a △ b`: every instant in exactly one of the two operands, returned as trimmed intervals. It is `(a \\ b) ∪ (b \\ a)`, each by `difference/3`.
+
+  Use it when the question is about *covered time*: "the hours that one of us has free but the other doesn't". For the member-preserving filter, which keeps whole members of either operand that no member of the other overlaps, use `members_in_exactly_one/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
   ### Examples
 
       iex> {:ok, exactly_one} = Tempo.symmetric_difference(~o"2026-06-15T09/2026-06-15T13", ~o"2026-06-15T11/2026-06-15T17")
       iex> exactly_one
       #Tempo.IntervalSet<[~o"2026Y6M15DT9H/T11H", ~o"2026Y6M15DT13H/T17H"]>
 
+      iex> {:ok, either} = Tempo.symmetric_difference(~o"2026-01/2026-04", ~o"2026-03/2026-06")
+      iex> Tempo.IntervalSet.members(either)
+      [~o"2026Y1M/3M", ~o"2026Y4M/6M"]
+
   """
-  defdelegate symmetric_difference(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate symmetric_difference(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  Member-preserving overlap filter — returns the whole members of
-  `a` that overlap any member of `b`, with their original
-  metadata. Use this when the question is about *which events*
-  hit the query window. See `Tempo.Operations.members_overlapping/3`.
+  Member-preserving overlap filter: the **members of `a`** that overlap any member of `b`, kept as distinct intervals with their original metadata.
+
+  This is the "which of these bookings hit the query window?" question. Each member that survives is a whole member of `a`, not a trimmed part of one. For the instant-level intersection, each survivor trimmed to its overlap with `b`, use `intersection/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0` of whole members of `a`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
   ### Examples
 
       iex> busy = Tempo.IntervalSet.new!([
@@ -13233,16 +13393,37 @@ defmodule Tempo do
       iex> monday_events
       #Tempo.IntervalSet<[~o"2026Y6M15DT10H0M/T11H0M"]>
 
+      iex> bookings = Tempo.IntervalSet.new!([~o"2026-01-05/2026-01-06", ~o"2026-01-20/2026-01-21"])
+      iex> {:ok, hits} = Tempo.members_overlapping(bookings, ~o"2026-01-01/2026-01-10")
+      iex> Tempo.IntervalSet.members(hits)
+      [~o"2026Y1M5D/6D"]
+
   """
-  defdelegate members_overlapping(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate members_overlapping(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  Member-preserving anti-overlap filter — returns the whole
-  members of `a` that do NOT overlap any member of `b`, kept
-  whole with their original metadata. Use this when the
-  question is about *which events* survive the filter (e.g.
-  "which workdays aren't holidays?"). See
-  `Tempo.Operations.members_outside/3`.
+  Member-preserving anti-overlap filter: the **members of `a`** that no member of `b` overlaps, kept whole with their original metadata.
+
+  This is the "which workdays aren't holidays?" question. A member of `a` is dropped entirely when any member of `b` overlaps it, even in part. For the instant-level difference, each member of `a` trimmed to the parts `b` leaves and split where it must be, use `difference/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0` of whole members of `a`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
   ### Examples
 
       iex> busy = Tempo.IntervalSet.new!([
@@ -13253,13 +13434,37 @@ defmodule Tempo do
       iex> not_monday
       #Tempo.IntervalSet<[~o"2026Y6M16DT14H0M/T15H0M"]>
 
+      iex> bookings = Tempo.IntervalSet.new!([~o"2026-01-05/2026-01-06", ~o"2026-01-20/2026-01-21"])
+      iex> {:ok, missed} = Tempo.members_outside(bookings, ~o"2026-01-01/2026-01-10")
+      iex> Tempo.IntervalSet.members(missed)
+      [~o"2026Y1M20D/21D"]
+
   """
-  defdelegate members_outside(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate members_outside(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  Member-preserving symmetric-difference filter — members of
-  either operand that don't overlap any member of the other,
-  kept whole. See `Tempo.Operations.members_in_exactly_one/3`.
+  Member-preserving symmetric-difference filter: the members of either operand that no member of the other overlaps, kept whole with their original metadata. It is `members_outside(a, b)` united with `members_outside(b, a)`.
+
+  This is the "which events appear on exactly one calendar?" question. For the instant-level form, use `symmetric_difference/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0` of whole members of either operand.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
   ### Examples
 
       iex> busy = Tempo.IntervalSet.new!([
@@ -13271,12 +13476,34 @@ defmodule Tempo do
       iex> unshared
       #Tempo.IntervalSet<[~o"2026Y6M16DT14H0M/T15H0M"]>
 
+      iex> mine = Tempo.IntervalSet.new!([~o"2026-01-05/2026-01-06", ~o"2026-01-20/2026-01-21"])
+      iex> yours = Tempo.IntervalSet.new!([~o"2026-01-20/2026-01-21", ~o"2026-01-25/2026-01-26"])
+      iex> {:ok, unshared} = Tempo.members_in_exactly_one(mine, yours)
+      iex> Tempo.IntervalSet.members(unshared)
+      [~o"2026Y1M5D/6D", ~o"2026Y1M25D/26D"]
+
   """
-  defdelegate members_in_exactly_one(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate members_in_exactly_one(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  `true` when `a` and `b` share no instants.
-  See `Tempo.Operations.disjoint?/3`.
+  `true` when `a` and `b` share no instant: no member of `a` overlaps any member of `b`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `intersection/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `intersection/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
+
   ### Examples
 
       iex> Tempo.disjoint?(~o"2026-01", ~o"2026-03")
@@ -13286,11 +13513,27 @@ defmodule Tempo do
       false
 
   """
-  defdelegate disjoint?(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate disjoint?(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
   `true` when `a` and `b` share at least one instant.
-  See `Tempo.Operations.overlaps?/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `intersection/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `intersection/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
+
   ### Examples
 
       iex> Tempo.overlaps?(~o"2026-06-15T10/2026-06-15T12", ~o"2026-06-15T11/2026-06-15T14")
@@ -13300,11 +13543,27 @@ defmodule Tempo do
       false
 
   """
-  defdelegate overlaps?(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate overlaps?(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  `true` when every instant of `b` is also in `a` — the mirror of
-  `within?/3`. See `Tempo.Operations.contains?/3`.
+  `true` when every instant of `b` is also in `a`: the mirror of `within?/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `difference/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `difference/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
+
   ### Examples
 
       iex> Tempo.contains?(~o"2026-06", ~o"2026-06-15")
@@ -13314,11 +13573,27 @@ defmodule Tempo do
       false
 
   """
-  defdelegate contains?(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate contains?(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  `true` when `a` and `b` span the same instants (at their
-  aligned resolution). See `Tempo.Operations.equal?/3`.
+  `true` when `a` and `b` cover the same instants. Which members cover them, and what metadata they carry, is ignored: only the covered instants count.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `intersection/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `intersection/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
+
   ### Examples
 
       iex> Tempo.equal?(~o"2026-06", ~o"2026-06-01/2026-07-01")
@@ -13328,22 +13603,46 @@ defmodule Tempo do
       false
 
   """
-  defdelegate equal?(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate equal?(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  Classify the Allen interval-algebra relation between two
-  interval-like values.
+  Classify the Allen interval-algebra relation between two interval-like values.
 
-  Thin delegate to `Tempo.Interval.relation/2` — see that
-  function's docs for the full table of 13 relations.
+  Returns one of 13 mutually exclusive relations: a richer answer than the ternary `:lt | :eq | :gt` of `compare/3`, which reduces an interval to where it starts and loses the containment and overlap that the interval algebra keeps. Hence the name `relation` and not `compare`.
 
-  Named `relation` (not `compare`) because it returns one of 13
-  Allen relations rather than stdlib's ternary `:lt | :eq | :gt`
-  — using `compare` would invite the wrong mental model at the
-  call site.
+  For intervals `X = [x₁, x₂)` and `Y = [y₁, y₂)` under Tempo's half-open convention:
 
-  Use `Tempo.IntervalSet.relation_matrix/2` when both operands
-  are multi-member sets and you want the per-pair breakdown.
+  | Relation | Shape (X relative to Y) | Condition |
+  |---|---|---|
+  | `:precedes` | X ends strictly before Y starts | `x₂ < y₁` |
+  | `:meets` | X ends exactly at Y's start | `x₂ = y₁` |
+  | `:overlaps` | X starts before Y, ends inside | `x₁ < y₁ < x₂ < y₂` |
+  | `:finished_by` | X contains Y, shared end | `x₁ < y₁ ∧ x₂ = y₂` |
+  | `:contains` | X strictly contains Y | `x₁ < y₁ ∧ x₂ > y₂` |
+  | `:starts` | Shared start, X ends earlier | `x₁ = y₁ ∧ x₂ < y₂` |
+  | `:equals` | Identical endpoints | `x₁ = y₁ ∧ x₂ = y₂` |
+  | `:started_by` | Shared start, X ends later | `x₁ = y₁ ∧ x₂ > y₂` |
+  | `:during` | X strictly inside Y | `x₁ > y₁ ∧ x₂ < y₂` |
+  | `:finishes` | X starts after Y, shared end | `x₁ > y₁ ∧ x₂ = y₂` |
+  | `:overlapped_by` | Y starts before X, ends inside X | `y₁ < x₁ < y₂ < x₂` |
+  | `:met_by` | X starts exactly at Y's end | `x₁ = y₂` |
+  | `:preceded_by` | X starts strictly after Y's end | `x₁ > y₂` |
+
+  Every pair of non-empty bounded intervals stands in exactly one of these relations. `Tempo.Allen` has a predicate for each, and the inverse (`Tempo.Allen.inverse/1`) and composition (`Tempo.Allen.compose/2`) of relations.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0`, which is taken as the span it names, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * One of the 13 relation atoms.
+
+  * `{:error, reason}` when an operand cannot be reduced to a single bounded interval: a set of several members, an open-ended interval, a recurrence. For sets of several members use `Tempo.IntervalSet.relation_matrix/2`.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line to relate from.
+
+  * `{:error, %Tempo.UnanchoredError{}}` when one operand has a year and the other none, or neither has and they lead with different units: they share no line to be related on.
 
   ### Examples
 
@@ -13355,32 +13654,77 @@ defmodule Tempo do
       iex> Tempo.relation(a, b)
       :overlaps
 
+      iex> Tempo.relation(~o"2026Y", ~o"2026-06-15")
+      :contains
+
   """
   defdelegate relation(a, b), to: Tempo.Interval
 
   @doc """
-  Compare two Tempo values, returning stdlib's ternary
-  `:lt | :eq | :gt`.
+  Compare two Tempo values, returning the standard library's ternary `:lt | :eq | :gt`.
 
-  Thin delegate to `Tempo.Compare.compare/3` — see that function for
-  the full discussion, including how uncertainty is handled and how
-  calendar-dependent durations are resolved.
+  This is the sorter-module callback Elixir's `Enum` and `List` functions look for, so `Tempo` can be passed wherever `Date`, `Time`, or `DateTime` would be:
 
-  This is the sorter-module callback `Enum` looks for, so `Tempo` may
-  be passed anywhere `Date` or `DateTime` would be. Use `relation/2`
-  when the question is *how* two intervals relate rather than which
-  comes first.
+      Enum.sort_by(sessions, & &1.starts_at, Tempo)
+      Enum.max_by(bookings, & &1.window.from, Tempo)
+
+  Use `relation/2` when the question is *how* two intervals relate: this function reduces Allen's 13 relations to a total order, which is what sorting needs and reasoning does not.
+
+  A value that names more than one moment (a mask, a group, a set, significant digits) compares as the moment its span starts at, the start of what `to_interval/1` gives it.
+
+  A total order cannot express doubt, so uncertainty is dropped before comparing: `~o"1984?"` and `~o"1984"` compare `:eq`, and a margin of error is discarded in the same way. When the uncertainty is the point, reach for `certainly_before?/2` or `possibly_before?/2`.
+
+  ### Arguments
+
+  * `a` and `b` are two values of the same kind: both `t:t/0`, both `t:Tempo.Duration.t/0`, or both `t:Tempo.Interval.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:relative_to` is a `t:t/0` used to resolve calendar-dependent durations. `P1M` has no fixed length, so comparing it needs a date to measure that month from.
+
+  ### Returns
+
+  * `:lt`, `:eq`, or `:gt`.
+
+  * Raises `ArgumentError` when the two values are of different kinds, or when a duration cannot be resolved to a fixed length and no `:relative_to` is given.
+
+  * Raises `Tempo.FloatingTempoError` when one value has a zone or an offset and the other none, and `Tempo.UnanchoredError` when one has a year and the other none: neither pair has an order.
+
+  * Raises `Tempo.ConversionError` where a value's start cannot be found without listing more than 10,000 values: a mask that stands for more years than that (`~o"XXXXXY6M"`).
 
   ### Examples
 
+  Tempo values compare as the moments they start at:
+
       iex> Tempo.compare(~o"2026-06-15", ~o"2026-06-16")
       :lt
+
+      iex> Tempo.compare(~o"2026Y", ~o"2026-06")
+      :lt
+
+  Zones are resolved, so the same instant compares equal:
+
+      iex> Tempo.compare(~o"2026-06-15T09:00:00Z", ~o"2026-06-15T10:00:00+01:00")
+      :eq
+
+  Which makes `Tempo` a sorter:
 
       iex> [~o"2026-06-16", ~o"2026-06-15"]
       ...> |> Enum.sort(Tempo)
       [~o"2026Y6M15D", ~o"2026Y6M16D"]
 
+  Durations compare by length:
+
       iex> Tempo.compare(~o"PT1H", ~o"PT90M")
+      :lt
+
+  Intervals compare by start, ties broken by end:
+
+      iex> morning = Tempo.Interval.new!(from: ~o"2026-06-15T09:00", to: ~o"2026-06-15T10:00")
+      iex> longer = Tempo.Interval.new!(from: ~o"2026-06-15T09:00", to: ~o"2026-06-15T11:00")
+      iex> Tempo.compare(morning, longer)
       :lt
 
   """
@@ -13456,7 +13800,7 @@ defmodule Tempo do
 
   def duration(value) do
     {:error,
-     ArgumentError.exception("Tempo.duration/1 takes a Tempo value, got #{inspect(value)}")}
+     ArgumentError.exception("Tempo.duration/1 takes a Tempo value, got #{Border.inspect(value)}")}
   end
 
   # A value with no year that has no length (a month, whose days are its
@@ -13562,9 +13906,14 @@ defmodule Tempo do
   @spec duration!(t(), t()) :: Duration.t()
   def duration!(from, to) do
     case duration(from, to) do
-      {:ok, duration} -> duration
-      {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, "Tempo.duration!/2 failed: #{inspect(reason)}"
+      {:ok, duration} ->
+        duration
+
+      {:error, exception} when is_exception(exception) ->
+        raise exception
+
+      {:error, reason} ->
+        raise ArgumentError, "Tempo.duration!/2 failed: #{Border.inspect(reason)}"
     end
   end
 
@@ -13572,8 +13921,8 @@ defmodule Tempo do
   `true` when a value is at least as long as the given duration.
 
   An interval, or the span a value names, is measured between its
-  endpoints (see `Tempo.Interval.at_least?/2`); an interval set by the
-  time it covers, from its first instant, as `duration/1` measures it.
+  endpoints; an interval set by the time it covers, from its first
+  instant, as `duration/1` measures it.
   An unbounded interval or set is longer than any duration.
 
   ### Arguments
@@ -13781,8 +14130,16 @@ defmodule Tempo do
   defp amount_sign(_zero), do: 0
 
   @doc """
-  `true` when both endpoints of the interval are concrete
-  (neither `:undefined` nor `nil`). See `Tempo.Interval.bounded?/1`.
+  `true` when a value has both a start and an end: neither end of the interval, of the span a value names or of a set is open.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or a `t:t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises its error.
+
   ### Examples
 
       iex> Tempo.bounded?(Tempo.to_interval!(~o"2026-06-15"))
@@ -13822,10 +14179,19 @@ defmodule Tempo do
   def empty?(value), do: value |> span!() |> empty?()
 
   @doc """
-  `true` when `a` ends at or before `b` starts — the two share no
-  instant and `a` is earlier. An 11:00–12:00 meeting is before a 12:00
-  lunch. Allen's `:precedes`, which also needs a gap, is
-  `Tempo.Allen.precedes?/2`. See `Tempo.Interval.before?/2`.
+  `true` when `a` ends at or before `b` starts: the two share no instant and `a` is earlier.
+
+  This is the everyday sense: an 11:00 to 12:00 meeting is before a 12:00 lunch, since under the half-open convention the meeting ends as lunch begins. Allen's `:precedes` also needs a gap between the two, and `Tempo.Allen.precedes?/2` tests for it.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation/2` returns when an operand is not a single bounded interval: a set of several members, an open or recurring interval, a one-of set.
 
   ### Examples
 
@@ -13837,13 +14203,27 @@ defmodule Tempo do
       iex> Tempo.before?(~o"2026-01", ~o"2026-02")
       true
 
+      iex> meeting = ~o"2026-06-15T11/2026-06-15T12"
+      iex> Tempo.before?(meeting, ~o"2026-06-15T11:30/2026-06-15T13")
+      false
+
   """
   defdelegate before?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` starts at or after `b` ends — the two share no
-  instant and `a` is later. Allen's `:preceded_by`, which also needs a
-  gap, is `Tempo.Allen.preceded_by?/2`. See `Tempo.Interval.after?/2`.
+  `true` when `a` starts at or after `b` ends: the two share no instant and `a` is later.
+
+  The mirror of `before?/2`. Allen's `:preceded_by` also needs a gap between the two, and `Tempo.Allen.preceded_by?/2` tests for it.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation/2` returns when an operand is not a single bounded interval: a set of several members, an open or recurring interval, a one-of set.
 
   ### Examples
 
@@ -13857,8 +14237,18 @@ defmodule Tempo do
   defdelegate after?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when the two intervals touch at a single boundary
-  (Allen's `:meets | :met_by`). See `Tempo.Interval.adjacent?/2`.
+  `true` when the two intervals touch at a single boundary: either ends exactly where the other starts. This is Allen's `:meets` or `:met_by`, and `Tempo.Allen.meets?/2` tests the one direction.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation/2` returns when an operand is not a single bounded interval: a set of several members, an open or recurring interval, a one-of set.
+
   ### Examples
 
       iex> Tempo.adjacent?(~o"2026-02", ~o"2026-01")
@@ -13871,16 +14261,25 @@ defmodule Tempo do
   defdelegate adjacent?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when every instant of `a` is also in `b` — `a` fits inside
-  `b`, shared ends included. The canonical "does this fit inside that
-  window?" predicate, for single values and sets alike; see
-  `Tempo.Operations.within?/3`.
+  `true` when every instant of `a` is also in `b`: `a` fits inside `b`, shared ends included. The "does this fit inside that window?" predicate, for single values and sets alike: it compares the instants each operand covers, not member with member.
 
-  `within?/3` asks about the whole of `a`. The `:within` option of
-  `to_interval_set/2` and the set operations is looser: it keeps
-  every occurrence that overlaps its window, one already in
-  progress when the window opens included. Allen's strict `:during`
-  is `Tempo.Allen.during?/2`.
+  `within?/3` asks about the whole of `a`. The `:within` option of `to_interval_set/2` and the set operations is looser: it keeps every occurrence that overlaps its window, one already in progress when the window opens included. Allen's strict `:during` is `Tempo.Allen.during?/2`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `difference/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `difference/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
 
   ### Examples
 
@@ -13894,11 +14293,23 @@ defmodule Tempo do
       false
 
   """
-  defdelegate within?(a, b, opts \\ []), to: Tempo.Operations
+  defdelegate within?(a, b, options \\ []), to: Tempo.Operations
 
   @doc """
-  The three-valued certainty that `a` and `b` intersect, given their
-  `±` margins. See `Tempo.Interval.overlap_certainty/2`.
+  The three-valued certainty that `a` and `b` intersect, given their `±` margins.
+
+  The three-valued counterpart of `overlaps?/3`. Each endpoint that has a margin is widened into a range, and the result says whether the two intersect for every consistent placement (`:certain`), for some (`:possible`), or for none (`:impossible`). Operands with no uncertainty answer as `overlaps?/3` does: only `:certain` and `:impossible` occur.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `:certain`, `:possible`, or `:impossible`.
+
+  * `{:error, reason}` when either operand is open-ended or a set of several members.
+
   ### Examples
 
       iex> Tempo.overlap_certainty(~o"2026-06", ~o"2026-06-15")
@@ -13914,39 +14325,86 @@ defmodule Tempo do
   defdelegate overlap_certainty(a, b), to: Tempo.Interval
 
   @doc """
-  The three-valued certainty that `a` falls within `b`, given their
-  `±` margins. See `Tempo.Interval.within_certainty/2`.
+  The three-valued certainty that `a` falls within `b`, given any uncertainty in either.
+
+  The three-valued counterpart of `within?/3`. Uncertainty may be a `±` margin or underspecification: a value with unspecified digits (`~o"20XX"`) is read over every year its mask admits, so `:possible` says that some of them fall within `b` and some do not. Operands with no uncertainty answer as `within?/3` does.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `:certain`, `:possible`, or `:impossible`.
+
+  * `{:error, reason}` when either operand is open-ended or a set of several members.
+
+  * `{:error, %Tempo.UnanchoredError{}}` when an operand with no year is compared with one that leads with another unit.
+
   ### Examples
 
       iex> Tempo.within_certainty(~o"20XX", ~o"2000Y/2100Y")
       :certain
 
-  One grounding (2000) escapes a span starting at 2001, so within is
-  only possible:
+  One of the years the mask admits, 2000, is outside a span that starts at 2001, so within is only possible:
 
       iex> Tempo.within_certainty(~o"20XX", ~o"2001Y/2101Y")
+      :possible
+
+      iex> Tempo.within_certainty(~o"2000±1Y", ~o"2000Y")
       :possible
 
   """
   defdelegate within_certainty(a, b), to: Tempo.Interval
 
   @doc """
-  The three-valued certainty that `relation(a, b)` is (one of) `target`.
-  See `Tempo.Interval.relation_certainty/3`.
+  The three-valued certainty that `relation(a, b)` is `target`, or one of the relations of `target`.
+
+  It is `:certain` when every relation the two could stand in is in `target`, `:possible` when some are and `:impossible` when none is. The relations they could stand in account for any `±` margin and for underspecification: an operand with unspecified digits (`~o"20XX"`) is read over every value its mask admits.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  * `target` is an Allen relation atom such as `:during`, or a list of them.
+
+  ### Returns
+
+  * `:certain`, `:possible`, or `:impossible`.
+
+  * `{:error, reason}` when either operand is open-ended or a set of several members.
+
+  * `{:error, %Tempo.UnanchoredError{}}` when an operand with no year is compared with one that leads with another unit.
+
   ### Examples
 
       iex> Tempo.relation_certainty(~o"20XX", ~o"2200", :precedes)
       :certain
 
+  Some year from 2000 to 2099 may come before 2050, and some may follow it:
+
       iex> Tempo.relation_certainty(~o"20XX", ~o"2050", :precedes)
       :possible
+
+      iex> Tempo.relation_certainty(~o"2000±1Y", ~o"2010±1Y", :precedes)
+      :certain
 
   """
   defdelegate relation_certainty(a, b, target), to: Tempo.Interval
 
   @doc """
-  `true` when `a` and `b` intersect for *every* placement of their `±`
-  margins. See `Tempo.Interval.certainly_overlaps?/2`.
+  `true` when `a` and `b` intersect for *every* placement of their `±` margins: `overlap_certainty/2` is `:certain`. With no uncertainty it is `overlaps?/3`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `overlap_certainty/2` returns for an operand that is open-ended or a set of several members.
+
   ### Examples
 
       iex> Tempo.certainly_overlaps?(~o"2000±1Y", ~o"2001±1Y")
@@ -13959,8 +14417,18 @@ defmodule Tempo do
   defdelegate certainly_overlaps?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` and `b` *could* intersect for some placement of their
-  `±` margins. See `Tempo.Interval.possibly_overlaps?/2`.
+  `true` when `a` and `b` *could* intersect for some placement of their `±` margins: `overlap_certainty/2` is `:certain` or `:possible`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `overlap_certainty/2` returns for an operand that is open-ended or a set of several members.
+
   ### Examples
 
       iex> Tempo.possibly_overlaps?(~o"2000±1Y", ~o"2001±1Y")
@@ -13973,8 +14441,18 @@ defmodule Tempo do
   defdelegate possibly_overlaps?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` falls within `b` for *every* placement of their `±`
-  margins. See `Tempo.Interval.certainly_within?/2`.
+  `true` when `a` falls within `b` for *every* placement of their `±` margins: `within_certainty/2` is `:certain`. With no uncertainty it is `within?/3`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `within_certainty/2` returns for an operand that is open-ended or a set of several members.
+
   ### Examples
 
       iex> Tempo.certainly_within?(~o"2000±1Y", ~o"1990Y/2010Y")
@@ -13987,8 +14465,18 @@ defmodule Tempo do
   defdelegate certainly_within?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` *could* fall within `b` for some placement of their
-  `±` margins. See `Tempo.Interval.possibly_within?/2`.
+  `true` when `a` *could* fall within `b` for some placement of their `±` margins: `within_certainty/2` is `:certain` or `:possible`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `within_certainty/2` returns for an operand that is open-ended or a set of several members.
+
   ### Examples
 
       iex> Tempo.possibly_within?(~o"2000±1Y", ~o"2000Y")
@@ -13998,8 +14486,18 @@ defmodule Tempo do
   defdelegate possibly_within?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` ends before `b` starts for *every* placement of their
-  `±` margins. See `Tempo.Interval.certainly_before?/2`.
+  `true` when `a` ends at or before `b` starts, the two sharing no instant and `a` the earlier, for *every* placement of their `±` margins. With no uncertainty it is `before?/2`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation_certainty/3` returns for an operand that is open-ended or a set of several members.
+
   ### Examples
 
       iex> Tempo.certainly_before?(~o"2000±1Y", ~o"2010")
@@ -14012,8 +14510,18 @@ defmodule Tempo do
   defdelegate certainly_before?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` *could* end before `b` starts for some placement of
-  their `±` margins. See `Tempo.Interval.possibly_before?/2`.
+  `true` when `a` *could* end at or before `b` starts for some placement of their `±` margins.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation_certainty/3` returns for an operand that is open-ended or a set of several members.
+
   ### Examples
 
       iex> Tempo.possibly_before?(~o"2000±1Y", ~o"2001")
@@ -14023,8 +14531,18 @@ defmodule Tempo do
   defdelegate possibly_before?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` starts after `b` ends for *every* placement of their
-  `±` margins. See `Tempo.Interval.certainly_after?/2`.
+  `true` when `a` starts at or after `b` ends, the two sharing no instant and `a` the later, for *every* placement of their `±` margins. With no uncertainty it is `after?/2`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation_certainty/3` returns for an operand that is open-ended or a set of several members.
+
   ### Examples
 
       iex> Tempo.certainly_after?(~o"2010±1Y", ~o"2000")
@@ -14037,8 +14555,18 @@ defmodule Tempo do
   defdelegate certainly_after?(a, b), to: Tempo.Interval
 
   @doc """
-  `true` when `a` *could* start after `b` ends for some placement of
-  their `±` margins. See `Tempo.Interval.possibly_after?/2`.
+  `true` when `a` *could* start at or after `b` ends for some placement of their `±` margins.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation_certainty/3` returns for an operand that is open-ended or a set of several members.
+
   ### Examples
 
       iex> Tempo.possibly_after?(~o"2001±1Y", ~o"2000")
@@ -14048,22 +14576,47 @@ defmodule Tempo do
   defdelegate possibly_after?(a, b), to: Tempo.Interval
 
   @doc """
-  Narrow a Tempo span by a selector — the composition primitive
-  for "workdays of June", "the 15th of every month", and similar
-  queries.
+  Narrow a Tempo span by a selector, returning what it selects as a `t:Tempo.IntervalSet.t/0`: the composition primitive for "workdays of June", "the 15th of every month", and similar questions. `Tempo.Select` has the whole vocabulary of selectors.
 
-  `Tempo.select/2` is a **pure function**: the selector is a value,
-  not an ambient configuration. Locale-dependent constraints are
-  constructed by `Tempo.workdays/1` and `Tempo.weekends/1` and
-  composed in at the call site.
+  `Tempo.select/2` is a **pure function**: the selector is a value, not an ambient configuration. Locale-dependent constraints are constructed by `Tempo.workdays/1` and `Tempo.weekends/1` and composed in at the call site.
 
-  A span is selected period by period at its start's resolution, so
-  the Christmases of `~o"2026/2029"` are three. An open-ended span
-  (`~o"2026-06-15/.."`) gives a lazy set, walked as far as it is
-  taken. What is selected keeps the metadata of what it is selected
-  from. See `Tempo.Select` for the full vocabulary.
+  A span is selected period by period at its start's resolution, so the Christmases of `~o"2026/2029"` are three and the quarter `~o"2026Y3Q"` selects in July, August and September. An open-ended span (`~o"2026-06-15/.."`) gives a lazy set, walked as far as it is taken.
+
+  What is selected keeps the metadata of what it is selected from: each school day of a term tagged `%{term: 3}` is tagged `%{term: 3}` too, and a set's own metadata stays with the set.
+
+  In a named zone, what is selected is what the zone's clock shows of it. A time of day the clock skips on some day is not selected on that day, nor is a day the zone left out: `~o"T02"` selects nothing on the night New York's clocks go from 02:00 to 03:00. A window is the part of it the clock shows, so `~o"T02/T04"` is 03:00 to 04:00 on that night, and one written with a duration (`~o"T02/PT2H"`) runs that long from 03:00.
 
   A computed event is selected from the year, the month or the week it falls in (`Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` is 5 April). One with no date where it is asked for, a year it is not computed for or a name no resolver knows, is `{:error, %Tempo.EventError{}}`.
+
+  ### Arguments
+
+  * `base` is any Tempo value that converts to an interval or an interval set. A group or a mask is resolved to the span it names before the selector is applied, so every ISO 8601-2 shape composes with every selector.
+
+  * `selector` is a list or a range of integers, a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.Workdays.t/0`, a recurrence, a list of these, or a function of the period that returns one. `Tempo.Select` describes each.
+
+  The shapes `base` may take:
+
+  | Base shape | Example | Converts to |
+  |---|---|---|
+  | A value | `~o"2026-06"` | One interval |
+  | An interval | `~o"2026-07/2026-10"` | One interval |
+  | An interval set | What `union/3` returns | Each of its members |
+  | A quarter | `~o"2026Y3Q"` | One interval, the group resolved |
+  | A season (25 to 32) | `~o"2026Y26M"` | The interval between its equinox and solstice |
+  | A range in a unit | `~o"2026Y{6..8}M"` | An interval set of three members |
+  | A stepped range | `~o"2026Y{1..-1//3}M"` | An interval set of disjoint members |
+  | A set of intervals | `~o"{2026-01-05/2026-01-12,2026-02-02/2026-02-09}"` | Each of its members |
+  | A mask | `~o"156X"` | The decade it names |
+  | An open-ended span | `~o"2026-06-15/.."` | A lazy interval set, selected as it is walked |
+  | A duration form or a recurrence | `~o"2026-06-15/P14D"` | The span or the occurrences it converts to |
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the selector cannot be applied: a span with an open start has no first period to select from, and a selector that names a month or a day of another calendar than the base's selects nothing from it. A selector that is itself an error, as `Tempo.workdays/1` returns for a territory it cannot resolve, is returned as it is.
+
+  * `{:error, %Tempo.EventError{}}` for a computed event with no date where it is asked for.
 
   ### Examples
 
@@ -14077,12 +14630,48 @@ defmodule Tempo do
       iex> {Tempo.year(from), Tempo.month(from), Tempo.day(from)}
       {2026, 12, 25}
 
+  The tenth day of the year, and each Friday of June:
+
+      iex> {:ok, set} = Tempo.select(~o"2026", ~o"10O")
+      iex> [day10] = Tempo.IntervalSet.members(set)
+      iex> from = Tempo.Interval.from(day10)
+      iex> {Tempo.month(from), Tempo.day(from)}
+      {1, 10}
+
+      iex> {:ok, set} = Tempo.select(~o"2026-06", ~o"5K")
+      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [5, 12, 19, 26]
+
+      iex> {:ok, set} = Tempo.select(~o"2026-02", Tempo.workdays(:US))
+      iex> Tempo.IntervalSet.count(set)
+      20
+
+  A span is selected period by period, and an open-ended one lazily:
+
+      iex> {:ok, set} = Tempo.select(~o"2026/2029", ~o"12-25")
+      iex> set |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.year(Tempo.Interval.from(&1)))
+      [2026, 2027, 2028]
+
+      iex> {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:US))
+      iex> weekends |> Tempo.IntervalSet.walk() |> Enum.take(2) |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [20, 21]
+
   The school days of a term are tagged with the term:
 
       iex> {:ok, term} = Tempo.Interval.new(from: ~o"2027-07-19", to: ~o"2027-07-21", metadata: %{term: 3})
       iex> {:ok, days} = Tempo.select(term, Tempo.workdays(:AU))
       iex> days |> Tempo.IntervalSet.members() |> Enum.map(&Tempo.metadata/1)
       [%{term: 3}, %{term: 3}]
+
+  On the night New York's clocks go forward, 02:00 is not on the clock:
+
+      iex> clocks_go_forward = ~o"2024-03-10[America/New_York]"
+      iex> {:ok, skipped} = Tempo.select(clocks_go_forward, ~o"T02")
+      iex> Tempo.IntervalSet.count(skipped)
+      0
+      iex> {:ok, quiet_hours} = Tempo.select(clocks_go_forward, ~o"T02/T04")
+      iex> Tempo.IntervalSet.members(quiet_hours)
+      [~o"2024Y3M10DT3H/T4H[America/New_York]"]
 
   """
   defdelegate select(base, selector), to: Tempo.Select
@@ -14112,7 +14701,7 @@ defmodule Tempo do
     case select(base, selector) do
       {:ok, set} -> set
       {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, inspect(reason)
+      {:error, reason} -> raise ArgumentError, Border.inspect(reason)
     end
   end
 
@@ -14210,7 +14799,7 @@ defmodule Tempo do
         {:error,
          ArgumentError.exception(
            "Tempo.workdays/2 takes one option, :except, a Tempo value, interval, " <>
-             "interval set or recurrence set, not #{inspect(options)}."
+             "interval set or recurrence set, not #{Border.inspect(options)}."
          )}
     end
   end
@@ -14386,7 +14975,7 @@ defmodule Tempo do
   # answer raises.
   defp predicate_answer!({:ok, answer}), do: answer
   defp predicate_answer!({:error, exception}) when is_exception(exception), do: raise(exception)
-  defp predicate_answer!({:error, reason}), do: raise(ArgumentError, inspect(reason))
+  defp predicate_answer!({:error, reason}), do: raise(ArgumentError, Border.inspect(reason))
 
   @doc """
   Shift `tempo` by `count` workdays, stepping over the territory's
@@ -14644,7 +15233,7 @@ defmodule Tempo do
         {:error,
          ArgumentError.exception(
            "Tempo.roll_to_workday/3 takes one option, :roll, one of " <>
-             "#{Enum.map_join(@rolls, ", ", &inspect/1)}, not #{inspect(options)}."
+             "#{Enum.map_join(@rolls, ", ", &Border.inspect/1)}, not #{Border.inspect(options)}."
          )}
     end
   end
@@ -14689,9 +15278,9 @@ defmodule Tempo do
            operation: :roll_to_workday,
            current: day |> resolution() |> elem(0),
            target: :month,
-           calendar: calendar_of(day),
+           calendar: day.calendar,
            reason:
-             "A modified roll keeps a day in its month, and #{inspect(day)} is in a calendar " <>
+             "A modified roll keeps a day in its month, and #{Border.inspect(day)} is in a calendar " <>
                "of weeks, which has none. Roll it with `roll: :following` or `roll: :preceding`."
          )}
     end
@@ -14800,10 +15389,11 @@ defmodule Tempo do
 
   defp workday_selector(%Tempo.Workdays{} = workdays), do: {:ok, workdays}
 
+  # The territory's working days of the week, as `workdays/2` answers a
+  # caller with them.
   defp workday_selector(territory) do
-    case workdays(territory) do
-      %Tempo{} = selector -> {:ok, selector}
-      {:error, _reason} = error -> error
+    with {:ok, resolved} <- Territory.resolve(territory) do
+      {:ok, workdays_of(resolved, nil)}
     end
   end
 
@@ -14827,7 +15417,7 @@ defmodule Tempo do
 
   defp workdays_from(%Tempo{}, count, _territory, function) do
     {:error,
-     ArgumentError.exception("`#{function}` counts whole workdays, not #{inspect(count)}.")}
+     ArgumentError.exception("`#{function}` counts whole workdays, not #{Border.inspect(count)}.")}
   end
 
   defp workdays_from(value, _count, _territory, function),
@@ -14856,7 +15446,7 @@ defmodule Tempo do
        when run > @most_days_off_in_a_row do
     {:error,
      ArgumentError.exception(
-       "No workday follows #{inspect(tempo)} within #{@most_days_off_in_a_row} days off."
+       "No workday follows #{Border.inspect(tempo)} within #{@most_days_off_in_a_row} days off."
      )}
   end
 
@@ -14888,7 +15478,7 @@ defmodule Tempo do
   defp nearest_workday_from(tempo, _days_off, _distance) do
     {:error,
      ArgumentError.exception(
-       "No workday falls within #{@most_days_off_in_a_row} days of #{inspect(tempo)}."
+       "No workday falls within #{@most_days_off_in_a_row} days of #{Border.inspect(tempo)}."
      )}
   end
 
@@ -14946,7 +15536,7 @@ defmodule Tempo do
   defp day_date(%Tempo{time: time} = tempo) do
     case {whole_unit(time, :year), whole_unit(time, :month), whole_unit(time, :day)} do
       {year, month, day} when is_integer(year) and is_integer(month) and is_integer(day) ->
-        Date.new(year, month, day, calendar_of(tempo))
+        Date.new(year, month, day, tempo.calendar)
 
       # A day of the year or of a week, with or without a time of day: a
       # calendar of weeks keeps its week and day beside a time.
@@ -14973,7 +15563,7 @@ defmodule Tempo do
         target: :day,
         reason:
           "`#{function}` needs a value that denotes a day, such as a date or a datetime; " <>
-            "#{inspect(tempo)} does not."
+            "#{Border.inspect(tempo)} does not."
       )
     else
       UnanchoredError.exception(operation: function, value: tempo)
@@ -14982,7 +15572,7 @@ defmodule Tempo do
 
   defp not_a_day(value, function) do
     ArgumentError.exception(
-      "`#{function}` needs a Tempo value that denotes a day, not #{inspect(value)}."
+      "`#{function}` needs a Tempo value that denotes a day, not #{Border.inspect(value)}."
     )
   end
 

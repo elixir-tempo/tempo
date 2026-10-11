@@ -19,7 +19,7 @@ defmodule Tempo.FixedOffsetTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
+  alias Tempo.Test.Engine.Compare
 
   # A `DateTime` at each offset, as Localize reads one: its time zone is the
   # offset.

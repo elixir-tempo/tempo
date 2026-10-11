@@ -1,6 +1,9 @@
 defimpl Enumerable, for: Tempo.Interval do
+  use Tempo.Border, enumerable: true
+
   @moduledoc false
 
+  alias Tempo.Border
   alias Tempo.Enumeration.Zone
   alias Tempo.Interval.Steps
   alias Tempo.Math
@@ -163,7 +166,7 @@ defimpl Enumerable, for: Tempo.Interval do
       interval: interval,
       operation: operation,
       reason:
-        "`#{operation}` needs every value of #{inspect(interval)}, which has no end and " <>
+        "`#{operation}` needs every value of #{Border.inspect(interval)}, which has no end and " <>
           "would be walked for ever. Take the values you need with `Enum.take/2` or " <>
           "`Enum.take_while/2`, or give the interval an end."
     )
@@ -175,7 +178,7 @@ defimpl Enumerable, for: Tempo.Interval do
       operation: "Enum.slice/2",
       reason:
         "`Enum.at/2`, `Enum.empty?/1`, `Enum.random/1` and `Enum.slice/2` are not answered " <>
-          "for #{inspect(interval)}, which has no end: what needs its last value would walk " <>
+          "for #{Border.inspect(interval)}, which has no end: what needs its last value would walk " <>
           "it for ever. Take the values you need with `Enum.take/2` or `Enum.take_while/2`, " <>
           "or give the interval an end."
     )
@@ -380,7 +383,7 @@ defimpl Enumerable, for: Tempo.Interval do
     Tempo.IntervalEndpointsError.exception(
       interval: interval,
       reason:
-        "Cannot walk #{inspect(interval)}: an end that holds a selection names several " <>
+        "Cannot walk #{Border.inspect(interval)}: an end that holds a selection names several " <>
           "dates, and the interval converts to no span for each."
     )
   end
@@ -456,7 +459,7 @@ defimpl Enumerable, for: Tempo.Interval do
         raise Tempo.IntervalEndpointsError.exception(
                 interval: interval,
                 reason:
-                  "Cannot walk #{inspect(interval)}: its end is no one point to stop at. It " <>
+                  "Cannot walk #{Border.inspect(interval)}: its end is no one point to stop at. It " <>
                     "holds several values (a set, a range, a group or unspecified digits) " <>
                     "or counts from the end of a unit it does not bound."
               )

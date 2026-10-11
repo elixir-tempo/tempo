@@ -20,7 +20,7 @@ defmodule Tempo.RRule.WeekNumberFromWkstTest do
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
-  alias Tempo.UnitValues
+  alias Tempo.Test.Engine.UnitValues
 
   @weekdays %{
     1 => {:monday, "MO"},

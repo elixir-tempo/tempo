@@ -1,49 +1,48 @@
 defmodule Tempo.Iso8601.Tokenizer.Numbers do
-  @moduledoc """
-  Numbers aren't just numbers in ISO8601 when considering
-  the extension formats. In some situations they may:
+  @moduledoc false
 
-  * Have exponents
-  * Have significant digits (the `S` suffix)
-  * Have unspecified digits
-
-  And how these are formed varies by whether the
-  number is being parsed for an implicit form,
-  extended form or explicit form.
-
-  ## Implicit form
-
-  * Numbers are always positive with no sign
-  except when its the year in which case it may have
-  a negative sign.
-
-  * Numbers are always a positive integer, or a the
-    "unspecified" symbol `X` in any digit location. Numbers
-    are either 2, 3 or 4 digits wide (decades are three
-    digits) and this implementation does not currently
-    support more than 4 digits for years.
-
-  * Significant digits are not supported.
-
-  ** Extended form
-
-  * Same as the Implicit Form
-
-  ## Explicit form
-
-  * Numbers may be positive of negative
-
-  * The "unspecified" symbol `X` may appear in
-    any digit location.
-
-  * The symbol `X*` means the entire
-    field is unspecified.
-
-  * Exponent and significant digits are supported,
-    but only if the number is an integer (ie does
-    not have unspecified digits).
-
-  """
+  # Numbers aren't just numbers in ISO8601 when considering
+  # the extension formats. In some situations they may:
+  #
+  # * Have exponents
+  # * Have significant digits (the `S` suffix)
+  # * Have unspecified digits
+  #
+  # And how these are formed varies by whether the
+  # number is being parsed for an implicit form,
+  # extended form or explicit form.
+  #
+  # ## Implicit form
+  #
+  # * Numbers are always positive with no sign
+  # except when its the year in which case it may have
+  # a negative sign.
+  #
+  # * Numbers are always a positive integer, or a the
+  #   "unspecified" symbol `X` in any digit location. Numbers
+  #   are either 2, 3 or 4 digits wide (decades are three
+  #   digits) and this implementation does not currently
+  #   support more than 4 digits for years.
+  #
+  # * Significant digits are not supported.
+  #
+  # ** Extended form
+  #
+  # * Same as the Implicit Form
+  #
+  # ## Explicit form
+  #
+  # * Numbers may be positive of negative
+  #
+  # * The "unspecified" symbol `X` may appear in
+  #   any digit location.
+  #
+  # * The symbol `X*` means the entire
+  #   field is unspecified.
+  #
+  # * Exponent and significant digits are supported,
+  #   but only if the number is an integer (ie does
+  #   not have unspecified digits).
   import NimbleParsec
   import Tempo.Iso8601.Tokenizer.Helpers
 

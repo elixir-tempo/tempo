@@ -14,19 +14,20 @@ defmodule Tempo.WeekBesideItsMonthTest do
   a rule read from an RRULE that would have it read in a month is refused.
 
   The measure is Elixir's own `Date`: whole weeks from a Monday, the first
-  of a month the one that holds its first day, and `:calendar` for the week
-  of a year.
+  of a month the one that holds four or more of its days, as `Calendar.ISO`
+  counts them (decided 2026-10-11: the rule is the calendar's), and
+  `:calendar` for the week of a year.
   """
   use ExUnit.Case, async: true
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
+  alias Tempo.Test.Engine.Compare
+  alias Tempo.Test.Engine.RRule.Expander
 
   ## The measure
 
@@ -34,28 +35,36 @@ defmodule Tempo.WeekBesideItsMonthTest do
 
   defp monday_of(date), do: Date.beginning_of_week(date, :monday)
 
+  # The Monday a month's first week starts on: the week that holds four or
+  # more of the month's days, which is the one with its first Thursday.
+  defp first_monday(first) do
+    monday = monday_of(first)
+    if Date.diff(first, monday) <= 3, do: monday, else: Date.add(monday, 7)
+  end
+
   # A week of a month, from its Monday to the Monday after.
   defp week(year, month, week) do
-    start = Date.new!(year, month, 1) |> monday_of() |> Date.add(7 * (week - 1))
+    start = Date.new!(year, month, 1) |> first_monday() |> Date.add(7 * (week - 1))
     {start, Date.add(start, 7)}
   end
 
-  # How many weeks a month has: those from the week that holds its first day
-  # up to the week that holds the first day of the next.
+  # How many weeks a month has: those from its first week up to the first
+  # week of the next.
   defp weeks_in(year, month) do
     first = Date.new!(year, month, 1)
     next = first |> Date.end_of_month() |> Date.add(1)
 
-    div(Date.diff(monday_of(next), monday_of(first)), 7)
+    div(Date.diff(first_monday(next), first_monday(first)), 7)
   end
 
-  # The week of its month a day is in, and none where its week is the first
-  # of the month after.
+  # The week of its month a day is in, and none where its week is a week of
+  # the month before or the month after: a week is of the month its
+  # Thursday is in.
   defp week_of_its_month(date) do
-    next_month = date |> Date.end_of_month() |> Date.add(1)
+    thursday = Date.add(monday_of(date), 3)
 
-    if Date.before?(Date.add(monday_of(date), 6), next_month),
-      do: div(Date.diff(monday_of(date), monday_of(Date.beginning_of_month(date))), 7) + 1
+    if {thursday.year, thursday.month} == {date.year, date.month},
+      do: div(Date.diff(monday_of(date), first_monday(Date.beginning_of_month(date))), 7) + 1
   end
 
   defp week_of_its_year(date), do: date |> Date.to_erl() |> :calendar.iso_week_number() |> elem(1)

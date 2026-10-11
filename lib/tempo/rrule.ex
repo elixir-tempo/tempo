@@ -1,4 +1,6 @@
 defmodule Tempo.RRule do
+  use Tempo.Border
+
   @moduledoc """
   Reads and writes [iCalendar RFC 5545](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10)
   `RRULE` strings. `parse/2` turns a rule into Tempo's AST — a
@@ -50,6 +52,8 @@ defmodule Tempo.RRule do
 
   import Kernel, except: [to_string: 1]
 
+  alias Tempo.Border
+  alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.RRule.Encoder
   alias Tempo.RRule.Rule
@@ -175,7 +179,7 @@ defmodule Tempo.RRule do
   def parse!(rrule, options \\ []) do
     case parse(rrule, options) do
       {:ok, interval} -> interval
-      {:error, reason} -> raise ArgumentError, "Invalid RRULE: #{inspect(reason)}"
+      {:error, reason} -> raise ArgumentError, "Invalid RRULE: #{Border.inspect(reason)}"
     end
   end
 
@@ -434,7 +438,7 @@ defmodule Tempo.RRule do
   # We round-trip it through `Tempo.from_iso8601/1` to get a proper
   # `%Tempo{}` struct.
   defp parse_until(value) do
-    case Tempo.from_iso8601(value) do
+    case Tempo.read(value, Calendars.rule()) do
       {:ok, tempo} -> {:ok, {:until, tempo}}
       {:error, reason} -> {:error, {:invalid_until, value, reason}}
     end
@@ -475,7 +479,7 @@ defmodule Tempo.RRule do
   # and days are in by the parts that select them. One with no such part has
   # nothing to say it with, and would be counted in the Gregorian.
   defp carries_its_calendar(%Rule{rscale: calendar} = rule, nil)
-       when not is_notation(calendar) do
+       when not is_nil(calendar) and not is_notation(calendar) do
     if is_nil(Rule.to_selection(rule, nil)),
       do: {:error, {:rscale_without_a_start, calendar}},
       else: :ok

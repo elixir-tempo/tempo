@@ -16,9 +16,7 @@ defmodule Tempo.UnitValuesTest do
   use ExUnit.Case, async: true
   use ExUnitProperties
 
-  alias Tempo.UnitValues
-
-  doctest Tempo.UnitValues
+  alias Tempo.Test.Engine.UnitValues
 
   # Calendars of whole months whose year begins with its first month, each
   # with the year 15 June 2026 falls in.

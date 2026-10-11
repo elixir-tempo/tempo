@@ -1,6 +1,7 @@
 defmodule Tempo.Iso8601.Parser do
   @moduledoc false
 
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Duration
   alias Tempo.Iso8601.AST
@@ -183,7 +184,7 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   defp backwards_reason({:range, [{_from_tag, from}, {_to_tag, to}]}) do
-    "The range #{inspect(from)}..#{inspect(to)} is written backwards: a range runs from " <>
+    "The range #{Border.inspect(from)}..#{Border.inspect(to)} is written backwards: a range runs from " <>
       "its first value up to its last"
   end
 
@@ -652,7 +653,7 @@ defmodule Tempo.Iso8601.Parser do
 
     if Unit.compare(max_1, min_2) == :lt do
       raise ParseError,
-            "Group max of #{inspect(group_1)} is less than the group min of #{inspect(group_2)}"
+            "Group max of #{Border.inspect(group_1)} is less than the group min of #{Border.inspect(group_2)}"
     else
       [{:group, parse_date(group_1)} | parse_date([{:group, group_2} | rest])]
     end
@@ -667,7 +668,7 @@ defmodule Tempo.Iso8601.Parser do
   def parse_date([{:selection, selection}, {:group, group} | rest]) do
     unless Unit.ordered?(selection) do
       raise ParseError,
-            "Selection time units must be in decreasing time scale order. Found #{inspect(selection)}."
+            "Selection time units must be in decreasing time scale order. Found #{Border.inspect(selection)}."
     end
 
     {_min_1, max_1} = selection_min_max(selection)
@@ -675,7 +676,7 @@ defmodule Tempo.Iso8601.Parser do
 
     if Unit.compare(max_1, min_2) == :lt do
       raise ParseError,
-            "selection #{inspect(selection)} is finer than the following group #{inspect(group)}"
+            "selection #{Border.inspect(selection)} is finer than the following group #{Border.inspect(group)}"
     else
       selection = parse_date(selection) |> reduce_list()
       [{:selection, selection} | parse_date([{:group, group} | rest])]
@@ -688,7 +689,7 @@ defmodule Tempo.Iso8601.Parser do
 
     if Unit.compare(max_1, min_2) == :lt do
       raise ParseError,
-            "group #{inspect(group)} is finer than the following selection #{inspect(selection)}"
+            "group #{Border.inspect(group)} is finer than the following selection #{Border.inspect(selection)}"
     else
       [{:group, parse_date(group)} | parse_date([{:selection, selection} | rest])]
     end
@@ -701,7 +702,8 @@ defmodule Tempo.Iso8601.Parser do
     {min, _max} = group_min_max(group)
 
     if Unit.fetch_sort_key(unit_1) != :error and Unit.compare(unit_1, min) == :lt do
-      raise ParseError, "#{inspect(unit_1)} is less than the group min of #{inspect(min)}"
+      raise ParseError,
+            "#{Border.inspect(unit_1)} is less than the group min of #{Border.inspect(min)}"
     else
       [parse_date({unit_1, value_1}) | parse_date([{:group, group} | rest])]
     end
@@ -716,7 +718,7 @@ defmodule Tempo.Iso8601.Parser do
 
     if Unit.fetch_sort_key(unit_2) != :error and Unit.compare(max, unit_2) == :lt do
       raise ParseError,
-            "#{inspect(unit_2)} is greater than the group max of #{inspect(max)}"
+            "#{Border.inspect(unit_2)} is greater than the group max of #{Border.inspect(max)}"
     else
       [{:group, parse_date(group)} | parse_date([{unit_2, value_2} | rest])]
     end
@@ -727,7 +729,7 @@ defmodule Tempo.Iso8601.Parser do
   # with the first as a unit is, which raised a `KeyError`.
   def parse_date([{:selection, first}, {:selection, second} | _rest]) do
     raise ParseError,
-          "A value holds one selection, and #{inspect(first)} and #{inspect(second)} are two: " <>
+          "A value holds one selection, and #{Border.inspect(first)} and #{Border.inspect(second)} are two: " <>
             "the parts of a rule are written in one, as `L6M15DN` is"
   end
 
@@ -739,7 +741,7 @@ defmodule Tempo.Iso8601.Parser do
 
     if Unit.fetch_sort_key(unit_1) != :error and Unit.compare(unit_1, min) == :lt do
       raise ParseError,
-            "#{inspect(unit_1)} is less than the selection min of #{inspect(min)}"
+            "#{Border.inspect(unit_1)} is less than the selection min of #{Border.inspect(min)}"
     else
       [parse_date({unit_1, value_1}) | parse_date([{:selection, selection} | rest])]
     end
@@ -751,12 +753,12 @@ defmodule Tempo.Iso8601.Parser do
 
     unless Unit.ordered?(selection) do
       raise ParseError,
-            "Selection time units must be in decreasing time scale order. Found #{inspect(selection)}."
+            "Selection time units must be in decreasing time scale order. Found #{Border.inspect(selection)}."
     end
 
     if Unit.fetch_sort_key(unit_2) != :error and Unit.compare(max, unit_2) == :lt do
       raise ParseError,
-            "#{inspect(unit_2)} is greater than the selection max of #{inspect(max)}"
+            "#{Border.inspect(unit_2)} is greater than the selection max of #{Border.inspect(max)}"
     else
       selection = parse_date(selection) |> reduce_list()
       [{:selection, selection} | parse_date([{unit_2, value_2} | rest])]
@@ -766,7 +768,7 @@ defmodule Tempo.Iso8601.Parser do
   def parse_date([{:selection, selection} | rest]) do
     unless Unit.ordered?(selection) do
       raise ParseError,
-            "Selection time units must be in decreasing time scale order. Found #{inspect(selection)}."
+            "Selection time units must be in decreasing time scale order. Found #{Border.inspect(selection)}."
     end
 
     selection = parse_date(selection) |> reduce_list()
@@ -900,7 +902,7 @@ defmodule Tempo.Iso8601.Parser do
       second_with_fraction(components)
     else
       raise ParseError,
-            "#{inspect(components)} is not a duration in the alternative format, " <>
+            "#{Border.inspect(components)} is not a duration in the alternative format, " <>
               "which is a calendar or ordinal date and a time of day"
     end
   end
@@ -1163,7 +1165,7 @@ defmodule Tempo.Iso8601.Parser do
       {:range, [from, to]}
     else
       raise ParseError,
-            "Time ranges must have the same time units on both sides. Found #{inspect(from)}..#{inspect(to)}"
+            "Time ranges must have the same time units on both sides. Found #{Border.inspect(from)}..#{Border.inspect(to)}"
     end
   end
 

@@ -1,6 +1,7 @@
 defmodule Tempo.Mask do
   @moduledoc false
 
+  alias Tempo.Border
   alias Tempo.ConversionError
   alias Tempo.Enumeration
   alias Tempo.InvalidDateError
@@ -78,14 +79,15 @@ defmodule Tempo.Mask do
 
   def error(tempo, {:no_candidates, unit}) do
     InvalidDateError.exception(
-      reason: "#{inspect(tempo)} names no date: no #{unit} matches its mask."
+      reason: "#{Border.inspect(tempo)} names no date: no #{unit} matches its mask."
     )
   end
 
   def error(tempo, {:unmaskable, unit}) do
     ConversionError.exception(
       value: tempo,
-      reason: "#{inspect(tempo)} masks its #{unit}, which has no range of values to narrow to."
+      reason:
+        "#{Border.inspect(tempo)} masks its #{unit}, which has no range of values to narrow to."
     )
   end
 

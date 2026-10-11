@@ -7,6 +7,8 @@ defmodule Tempo.AmbiguousZoneError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:wall_time, :zone_id, :options]
 
   @type t :: %__MODULE__{
@@ -17,19 +19,19 @@ defmodule Tempo.AmbiguousZoneError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true
   def message(%__MODULE__{wall_time: wall, zone_id: zone, options: options})
       when is_binary(wall) and is_binary(zone) and is_list(options) do
-    "Wall time #{wall} is ambiguous in #{inspect(zone)} — occurs at offsets " <>
-      "#{inspect(options)}. Supply an explicit offset to disambiguate."
+    "Wall time #{wall} is ambiguous in #{Border.inspect(zone)} — occurs at offsets " <>
+      "#{Border.inspect(options)}. Supply an explicit offset to disambiguate."
   end
 
   def message(%__MODULE__{wall_time: wall, zone_id: zone})
       when is_binary(wall) and is_binary(zone) do
-    "Wall time #{wall} is ambiguous in #{inspect(zone)}"
+    "Wall time #{wall} is ambiguous in #{Border.inspect(zone)}"
   end
 
   def message(%__MODULE__{}), do: "Wall time is ambiguous in the given zone"

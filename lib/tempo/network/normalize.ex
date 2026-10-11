@@ -1,46 +1,46 @@
 defmodule Tempo.Network.Normalize do
-  @moduledoc """
-  Reduce a `t:Tempo.Network.t/0` to a Simple Temporal Problem: a
-  set of boundary nodes and integer-weighted constraints of the single
-  shape `b₁ − b₂ ≤ k`.
+  @moduledoc false
 
-  Every period contributes a `start` and an `end` boundary; a single
-  shared origin `z₀` (`:origin`) is what absolute dates count from. The
-  network's **axis** is set by the finest unit among its bounds, its
-  durations and its relation delays, a week counting in days: a date
-  becomes a position on it, and a duration a count of it.
+  # Reduce a `t:Tempo.Network.t/0` to a Simple Temporal Problem: a
+  # set of boundary nodes and integer-weighted constraints of the single
+  # shape `b₁ − b₂ ≤ k`.
+  #
+  # Every period contributes a `start` and an `end` boundary; a single
+  # shared origin `z₀` (`:origin`) is what absolute dates count from. The
+  # network's **axis** is set by the finest unit among its bounds, its
+  # durations and its relation delays, a week counting in days: a date
+  # becomes a position on it, and a duration a count of it.
+  #
+  # Every value is placed by its actual length, never a mean one:
+  #
+  # * **The axis** counts the years of the network's calendar when all its
+  #   bounds share one, its months at month resolution where every year of
+  #   it has as many, and days otherwise, whose positions (Calendrical's iso
+  #   days) are the same in every calendar. A network in hours, minutes or seconds counts seconds
+  #   on the time line: the wall clock when its bounds are floating, UTC
+  #   when they are zoned. Its results are shown in its own unit.
+  #
+  # * **A bound is the span it names**: a lower bound takes the first unit
+  #   of its span and an upper bound the last, so `~o"1300Y"` as the latest
+  #   a period can start is, on a day axis, 31 December 1300, and
+  #   `~o"2026-06-01"` in a network of hours is 23:00 that day.
+  #
+  # * **A duration** in the axis unit (or in hours, minutes and seconds on
+  #   the time line) is a count, and a fraction of a unit is an error. A
+  #   coarser one (years or months on a day axis, years on a month axis,
+  #   days and longer on the time line) is **measured**: added, in its
+  #   period's calendar and zone, to every position its start can take, the
+  #   shortest and longest runs bound its length, and where they end bounds
+  #   its end, so a day across a daylight-saving change is its 23 or 25
+  #   hours. `Tempo.Network.Solver` measures again as it narrows the starts,
+  #   until nothing changes, so a period whose start is known takes the
+  #   exact length of its days, months and years. A start with no bound
+  #   takes its calendar's shortest and longest over the cycle its years
+  #   come round in (400 years, in the Gregorian calendar), on a wall clock,
+  #   and is an error in a zone or in a calendar whose years come round in
+  #   no cycle.
 
-  Every value is placed by its actual length, never a mean one:
-
-  * **The axis** counts the years of the network's calendar when all its
-    bounds share one, its months at month resolution where every year of
-    it has as many, and days otherwise, whose positions (Calendrical's iso
-    days) are the same in every calendar. A network in hours, minutes or seconds counts seconds
-    on the time line: the wall clock when its bounds are floating, UTC
-    when they are zoned. Its results are shown in its own unit.
-
-  * **A bound is the span it names**: a lower bound takes the first unit
-    of its span and an upper bound the last, so `~o"1300Y"` as the latest
-    a period can start is, on a day axis, 31 December 1300, and
-    `~o"2026-06-01"` in a network of hours is 23:00 that day.
-
-  * **A duration** in the axis unit (or in hours, minutes and seconds on
-    the time line) is a count, and a fraction of a unit is an error. A
-    coarser one (years or months on a day axis, years on a month axis,
-    days and longer on the time line) is **measured**: added, in its
-    period's calendar and zone, to every position its start can take, the
-    shortest and longest runs bound its length, and where they end bounds
-    its end, so a day across a daylight-saving change is its 23 or 25
-    hours. `Tempo.Network.Solver` measures again as it narrows the starts,
-    until nothing changes, so a period whose start is known takes the
-    exact length of its days, months and years. A start with no bound
-    takes its calendar's shortest and longest over the cycle its years
-    come round in (400 years, in the Gregorian calendar), on a wall clock,
-    and is an error in a zone or in a calendar whose years come round in
-    no cycle.
-
-  """
-
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Enumeration.Zone
@@ -315,13 +315,13 @@ defmodule Tempo.Network.Normalize do
   # A count of the axis unit as a duration, on the time line in the
   # network's unit where that loses nothing.
   @spec duration_of(integer(), t()) :: {:ok, Tempo.Duration.t()} | {:error, term()}
-  def duration_of(count, %{unit: :year}), do: Tempo.from_iso8601("P#{count}Y")
-  def duration_of(count, %{unit: :month}), do: Tempo.from_iso8601("P#{count}M")
-  def duration_of(count, %{unit: :day}), do: Tempo.from_iso8601("P#{count}D")
+  def duration_of(count, %{unit: :year}), do: Tempo.read("P#{count}Y")
+  def duration_of(count, %{unit: :month}), do: Tempo.read("P#{count}M")
+  def duration_of(count, %{unit: :day}), do: Tempo.read("P#{count}D")
 
   def duration_of(count, %{unit: :second, display: display}) do
     unit = Enum.find([display, :minute, :second], &(rem(count, unit_seconds(&1)) == 0))
-    Tempo.from_iso8601("PT#{div(count, unit_seconds(unit))}#{time_designator(unit)}")
+    Tempo.read("PT#{div(count, unit_seconds(unit))}#{time_designator(unit)}")
   end
 
   # --- the axis --------------------------------------------------
@@ -334,7 +334,7 @@ defmodule Tempo.Network.Normalize do
   # seconds as seconds on the time line of the network's bounds.
   defp axis(%Network{} = network) do
     bounds = network.periods |> Map.values() |> Enum.flat_map(&date_bounds/1)
-    calendars = bounds |> Enum.map(&Calendars.effective(&1.calendar)) |> Enum.uniq()
+    calendars = bounds |> Enum.map(& &1.calendar) |> Enum.uniq()
     zones = bounds |> Enum.map(&zone_key/1) |> Enum.uniq()
 
     network |> finest_unit() |> axis(calendars, zones)
@@ -487,7 +487,7 @@ defmodule Tempo.Network.Normalize do
 
   defp period_calendar(period, network_calendar) do
     case date_bounds(period) do
-      [%Tempo{calendar: calendar} | _rest] -> Calendars.effective(calendar)
+      [%Tempo{calendar: calendar} | _rest] -> calendar
       [] -> network_calendar
     end
   end
@@ -1104,7 +1104,7 @@ defmodule Tempo.Network.Normalize do
 
   defp unplaceable_error(value) do
     ArgumentError.exception(
-      "Tempo.Network cannot place #{inspect(value)} as a bound: it names no single span."
+      "Tempo.Network cannot place #{Border.inspect(value)} as a bound: it names no single span."
     )
   end
 
@@ -1117,31 +1117,32 @@ defmodule Tempo.Network.Normalize do
 
   defp fractional_error(duration, unit) do
     ArgumentError.exception(
-      "Tempo.Network measures durations in whole units on its #{inspect(unit)} axis, and " <>
-        "#{inspect(duration)} names a fraction of one."
+      "Tempo.Network measures durations in whole units on its #{Border.inspect(unit)} axis, and " <>
+        "#{Border.inspect(duration)} names a fraction of one."
     )
   end
 
   defp unmeasurable_error(duration, calendar) do
     ArgumentError.exception(
-      "Tempo.Network cannot measure #{inspect(duration)} in #{inspect(calendar)} from a " <>
+      "Tempo.Network cannot measure #{Border.inspect(duration)} in #{Border.name(calendar)} from a " <>
         "position its start can take."
     )
   end
 
   defp unbounded_error(%{duration: duration, source: source} = measure) do
     ArgumentError.exception(
-      "#{describe_source(source)} counts #{inspect(duration)} in #{describe_frame(measure)}, " <>
+      "#{describe_source(source)} counts #{Border.inspect(duration)} in #{describe_frame(measure)}, " <>
         "whose length depends on where it starts, and nothing bounds that start. Bound it, " <>
         "or give the duration in the network's unit."
     )
   end
 
   defp describe_frame(%{zone: {:zone, zone}}), do: zone
-  defp describe_frame(%{calendar: calendar}), do: inspect(calendar)
+  defp describe_frame(%{calendar: calendar}), do: Border.name(calendar)
 
-  defp describe_source({:duration, _bound, id, _duration}), do: "The duration of #{inspect(id)}"
+  defp describe_source({:duration, _bound, id, _duration}),
+    do: "The duration of #{Border.inspect(id)}"
 
   defp describe_source({:relation, %Relation{from: from, to: to}}),
-    do: "The delay between #{inspect(from)} and #{inspect(to)}"
+    do: "The delay between #{Border.inspect(from)} and #{Border.inspect(to)}"
 end

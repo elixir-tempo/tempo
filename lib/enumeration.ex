@@ -1,7 +1,7 @@
 defmodule Tempo.Enumeration do
   @moduledoc false
 
-  alias Tempo.Calendars
+  alias Tempo.Border
   alias Tempo.ConversionError
   alias Tempo.Enumeration.Zone
   alias Tempo.InvalidDateError
@@ -74,7 +74,6 @@ defmodule Tempo.Enumeration do
   # group in it is walked as the one value it is.
   @spec walk(Tempo.t()) :: walk()
   def walk(%Tempo{calendar: calendar} = tempo) do
-    calendar = Calendars.effective(calendar)
     start(tempo, walked_as_written(tempo, calendar), calendar)
   end
 
@@ -85,8 +84,6 @@ defmodule Tempo.Enumeration do
   # unit to walk by.
   @spec implicit_walk(Tempo.t()) :: walk()
   def implicit_walk(%Tempo{calendar: calendar} = tempo) do
-    calendar = Calendars.effective(calendar)
-
     if explicitly_enumerable?(tempo),
       do: start(tempo, walked_as_written(tempo, calendar), calendar),
       else: walk_by_finer_unit(tempo, calendar)
@@ -517,7 +514,6 @@ defmodule Tempo.Enumeration do
   # error is that error.
   @spec group_as_set(Tempo.t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def group_as_set(%Tempo{time: time, calendar: calendar} = tempo) do
-    calendar = Calendars.effective(calendar)
     {before, [group]} = Enum.split(time, -1)
 
     with :ok <- names_a_value(walk(tempo)),
@@ -928,7 +924,7 @@ defmodule Tempo.Enumeration do
       ConversionError.exception(
         value: tempo,
         reason:
-          "Cannot list #{inspect(tempo)}: its #{unit} counts from the end of a span " <>
+          "Cannot list #{Border.inspect(tempo)}: its #{unit} counts from the end of a span " <>
             "the units before it do not fix."
       )
     else
@@ -939,7 +935,7 @@ defmodule Tempo.Enumeration do
   defp exception(_tempo, {:significant_digits, value, digits, size}) do
     ArgumentError.exception(
       "Cannot enumerate a significant-digits block of #{size} candidates " <>
-        "(limit: #{@significant_digits_limit}). Source: #{inspect(value)}S#{digits}"
+        "(limit: #{@significant_digits_limit}). Source: #{Border.inspect(value)}S#{digits}"
     )
   end
 
@@ -947,7 +943,7 @@ defmodule Tempo.Enumeration do
     ConversionError.exception(
       value: tempo,
       reason:
-        "Cannot write #{inspect(tempo)} by the values its group names: the group names " <>
+        "Cannot write #{Border.inspect(tempo)} by the values its group names: the group names " <>
           "other values in each of the periods it is counted in."
     )
   end
@@ -955,7 +951,8 @@ defmodule Tempo.Enumeration do
   # A set, a range or a group none of whose values exists where it is written.
   defp exception(tempo, :no_members) do
     InvalidDateError.exception(
-      reason: "#{inspect(tempo)} names no date: none of the values it is written with exists."
+      reason:
+        "#{Border.inspect(tempo)} names no date: none of the values it is written with exists."
     )
   end
 
@@ -994,7 +991,7 @@ defmodule Tempo.Enumeration do
       {:finest, :microsecond} ->
         raise ArgumentError,
               "Cannot enumerate a Tempo at microsecond precision 6 " <>
-                "— that is the finest representable ulp. Got: #{inspect(tempo)}"
+                "— that is the finest representable ulp. Got: #{Border.inspect(tempo)}"
 
       # A season of 21 to 24 has no dates to walk until it has a hemisphere.
       {:finest, :season} ->
@@ -1002,8 +999,8 @@ defmodule Tempo.Enumeration do
 
       {:finest, unit} ->
         raise ArgumentError,
-              "Cannot enumerate a Tempo at #{inspect(unit)} resolution " <>
-                "— no finer unit is defined. Got: #{inspect(tempo)}"
+              "Cannot enumerate a Tempo at #{Border.inspect(unit)} resolution " <>
+                "— no finer unit is defined. Got: #{Border.inspect(tempo)}"
     end
   end
 
@@ -1031,8 +1028,6 @@ defmodule Tempo.Enumeration do
         {:ok, %{tempo | time: time ++ [{:microsecond, enum_values}]}}
 
       true ->
-        calendar = Calendars.effective(calendar)
-
         case Unit.implicit_enumerator(unit, calendar) do
           nil ->
             {:finest, unit}

@@ -7,22 +7,22 @@ defmodule Tempo.Enumeration.Test do
              %Tempo{
                time: [year: 2022, month: 1, day: 1],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2022, month: 1, day: 2],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2022, month: 2, day: 1],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2022, month: 2, day: 2],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              }
            ]
   end
@@ -32,42 +32,42 @@ defmodule Tempo.Enumeration.Test do
              %Tempo{
                time: [year: 2021, month: 1, day: 1],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2021, month: 1, day: 2],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2021, month: 2, day: 1],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2021, month: 2, day: 2],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2022, month: 1, day: 1],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2022, month: 1, day: 2],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2022, month: 2, day: 1],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [year: 2022, month: 2, day: 2],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              }
            ]
   end
@@ -77,12 +77,12 @@ defmodule Tempo.Enumeration.Test do
              %Tempo{
                time: [month: 1, day: 23],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              },
              %Tempo{
                time: [month: 2, day: 23],
                shift: nil,
-               calendar: Calendrical.Gregorian
+               calendar: Calendar.ISO
              }
            ]
   end
@@ -93,22 +93,22 @@ defmodule Tempo.Enumeration.Test do
                %Tempo{
                  time: [month: 1, day: 23, hour: 3],
                  shift: nil,
-                 calendar: Calendrical.Gregorian
+                 calendar: Calendar.ISO
                },
                %Tempo{
                  time: [month: 1, day: 23, hour: 4],
                  shift: nil,
-                 calendar: Calendrical.Gregorian
+                 calendar: Calendar.ISO
                },
                %Tempo{
                  time: [month: 2, day: 23, hour: 3],
                  shift: nil,
-                 calendar: Calendrical.Gregorian
+                 calendar: Calendar.ISO
                },
                %Tempo{
                  time: [month: 2, day: 23, hour: 4],
                  shift: nil,
-                 calendar: Calendrical.Gregorian
+                 calendar: Calendar.ISO
                }
              ]
   end
@@ -119,27 +119,27 @@ defmodule Tempo.Enumeration.Test do
                %Tempo{
                  time: [year: 2022, month: 1, day: 1],
                  shift: nil,
-                 calendar: Calendrical.Gregorian
+                 calendar: Calendar.ISO
                },
                %Tempo{
                  time: [year: 2022, month: 1, day: 2],
                  shift: nil,
-                 calendar: Calendrical.Gregorian
+                 calendar: Calendar.ISO
                },
                %Tempo{
                  time: [year: 2022, month: 1, day: 3],
                  shift: nil,
-                 calendar: Calendrical.Gregorian
+                 calendar: Calendar.ISO
                },
                %Tempo{
                  time: [year: 2022, month: 1, day: 4],
                  shift: nil,
-                 calendar: Calendrical.Gregorian
+                 calendar: Calendar.ISO
                },
                %Tempo{
                  time: [year: 2022, month: 2, day: 1],
                  shift: nil,
-                 calendar: Calendrical.Gregorian
+                 calendar: Calendar.ISO
                }
              ]
   end

@@ -3,9 +3,9 @@ defmodule Tempo.FromElixir.Test do
   import Tempo.Sigils
 
   alias Calendrical.FiscalYear
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   # `Tempo.from_elixir/2` unifies Date, Time, NaiveDateTime, and
   # DateTime into `%Tempo{}`. The intended resolution is inferred
@@ -308,7 +308,7 @@ defmodule Tempo.FromElixir.Test do
       {:ok, calendar} = FiscalYear.calendar_for(:AU)
       {:ok, quarter} = Tempo.from_elixir(calendar.quarter(2027, 1))
 
-      {:ok, gregorian} = Tempo.to_calendar(quarter, Calendrical.Gregorian)
+      {:ok, gregorian} = Tempo.to_calendar(quarter, Calendar.ISO)
 
       assert Tempo.to_iso8601!(gregorian) == "2026Y7M1D/10M1D"
     end
@@ -380,7 +380,7 @@ defmodule Tempo.FromElixir.Test do
 
     test "a converted interval round-trips" do
       {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15/2026-06-16", Calendrical.Hebrew)
-      {:ok, back} = Tempo.to_calendar(hebrew, Calendrical.Gregorian)
+      {:ok, back} = Tempo.to_calendar(hebrew, Calendar.ISO)
 
       assert Tempo.to_iso8601!(back) == "2026Y6M15D/16D"
     end
@@ -424,7 +424,7 @@ defmodule Tempo.FromElixir.Test do
 
         assert {value, Tempo.to_iso8601!(converted)} == {value, text}
 
-        assert {value, Tempo.to_calendar(converted, Calendrical.Gregorian)} ==
+        assert {value, Tempo.to_calendar(converted, Calendar.ISO)} ==
                  {value, {:ok, value}}
       end
     end
@@ -468,7 +468,7 @@ defmodule Tempo.FromElixir.Test do
 
     test "and nothing of the calendar it was in" do
       hebrew = Tempo.from_iso8601!("5786Y9M30D[u-ca=hebrew]")
-      assert Tempo.to_calendar(hebrew, Calendrical.Gregorian) == {:ok, ~o"2026Y6M15D"}
+      assert Tempo.to_calendar(hebrew, Calendar.ISO) == {:ok, ~o"2026Y6M15D"}
     end
   end
 end

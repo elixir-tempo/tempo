@@ -14,8 +14,8 @@ defmodule Tempo.IntervalShiftTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
+  alias Tempo.Test.Engine.Compare
 
   ## The measure
 

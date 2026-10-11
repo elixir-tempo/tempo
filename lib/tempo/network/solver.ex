@@ -1,9 +1,11 @@
 defmodule Tempo.Network.Solver do
+  use Tempo.Border
+
   @moduledoc """
   Consistency checking and constraint propagation for a chronological
   network, by solving its Simple Temporal Problem.
 
-  The network normalises (`Tempo.Network.Normalize`) to a directed
+  The network normalises to a directed
   weighted graph — one node per boundary plus the origin `z₀` — whose
   all-pairs shortest paths are the **minimal network**: the tightest
   bound on `b₁ − b₂` is the shortest-path weight `b₁ → b₂` (Dechter,
@@ -25,7 +27,7 @@ defmodule Tempo.Network.Solver do
   duration in a unit coarser than the network's axis (a year in a network
   of days) is measured by its actual length from where its period can
   start, and the network is solved again as those lengths narrow, until
-  they settle (see `Tempo.Network.Normalize`).
+  they settle.
 
   A network whose builders recorded an error (see `Tempo.Network`), or one
   it cannot place (a unit finer than a second, floating and zoned bounds
@@ -35,6 +37,7 @@ defmodule Tempo.Network.Solver do
 
   """
 
+  alias Tempo.Border
   alias Tempo.Network
   alias Tempo.Network.Normalize
 
@@ -541,7 +544,7 @@ defmodule Tempo.Network.Solver do
   def trace(%Network{}, boundary, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Network.Solver.trace/3 takes {:start, id} or {:end, id}, not #{inspect(boundary)}."
+       "Tempo.Network.Solver.trace/3 takes {:start, id} or {:end, id}, not #{Border.inspect(boundary)}."
      )}
   end
 
@@ -555,7 +558,7 @@ defmodule Tempo.Network.Solver do
         {:error,
          ArgumentError.exception(
            "Tempo.Network.Solver.trace/3 takes one option, :bound, :earliest or :latest, " <>
-             "not #{inspect(options)}."
+             "not #{Border.inspect(options)}."
          )}
     end
   end

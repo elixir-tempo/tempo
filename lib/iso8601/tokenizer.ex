@@ -1,20 +1,20 @@
 defmodule Tempo.Iso8601.Tokenizer do
-  @moduledoc """
-  Tokenizes an ISO 8601 (parts 1 and 2) or IXDTF string into a
-  list of tagged tokens that the internal parser then converts
-  into a `t:Tempo.t/0` struct.
+  @moduledoc false
 
-  `tokenize/1` returns a 2-tuple `{tokens, extended_info}` where
-  `extended_info` is either `nil` or a map of parsed
-  [IXDTF](https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html)
-  suffix information.  See `Tempo.Iso8601.Tokenizer.Extended` for
-  the shape of the extended map.
-
-  """
+  # Tokenizes an ISO 8601 (parts 1 and 2) or IXDTF string into a
+  # list of tagged tokens that the internal parser then converts
+  # into a `t:Tempo.t/0` struct.
+  #
+  # `tokenize/1` returns a 2-tuple `{tokens, extended_info}` where
+  # `extended_info` is either `nil` or a map of parsed
+  # [IXDTF](https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html)
+  # suffix information.  See `Tempo.Iso8601.Tokenizer.Extended` for
+  # the shape of the extended map.
 
   import NimbleParsec
   import Tempo.Iso8601.Tokenizer.Grammar
 
+  alias Tempo.Border
   alias Tempo.Iso8601.Tokenizer.Extended
   alias Tempo.Iso8601.Tokenizer.Memo
   alias Tempo.Iso8601.Tokenizer.Plain
@@ -182,8 +182,8 @@ defmodule Tempo.Iso8601.Tokenizer do
          ParseError.exception(
            input: string,
            reason:
-             "Could not parse #{inspect(string)} as a duration. " <>
-               "Error detected at #{inspect(remaining)}"
+             "Could not parse #{Border.inspect(string)} as a duration. " <>
+               "Error detected at #{Border.inspect(remaining)}"
          )}
 
       {:error, message, detected_at, _context, _line, _column} ->
@@ -191,8 +191,8 @@ defmodule Tempo.Iso8601.Tokenizer do
          ParseError.exception(
            input: string,
            reason:
-             "Could not parse #{inspect(string)} as a duration. " <>
-               String.capitalize(message) <> ". Error detected at #{inspect(detected_at)}"
+             "Could not parse #{Border.inspect(string)} as a duration. " <>
+               String.capitalize(message) <> ". Error detected at #{Border.inspect(detected_at)}"
          )}
     end
   end
@@ -255,8 +255,8 @@ defmodule Tempo.Iso8601.Tokenizer do
      ParseError.exception(
        input: string,
        reason:
-         "Could not parse #{inspect(string)} as #{article(profile)}. " <>
-           "Error detected at #{inspect(remaining)}"
+         "Could not parse #{Border.inspect(string)} as #{article(profile)}. " <>
+           "Error detected at #{Border.inspect(remaining)}"
      )}
   end
 
@@ -265,8 +265,8 @@ defmodule Tempo.Iso8601.Tokenizer do
      ParseError.exception(
        input: string,
        reason:
-         "Could not parse #{inspect(string)} as #{article(profile)}. " <>
-           String.capitalize(message) <> ". Error detected at #{inspect(detected_at)}"
+         "Could not parse #{Border.inspect(string)} as #{article(profile)}. " <>
+           String.capitalize(message) <> ". Error detected at #{Border.inspect(detected_at)}"
      )}
   end
 
@@ -334,14 +334,16 @@ defmodule Tempo.Iso8601.Tokenizer do
         {:error,
          ParseError.exception(
            input: string,
-           reason: "Could not parse #{inspect(string)}. Error detected at #{inspect(remaining)}"
+           reason:
+             "Could not parse #{Border.inspect(string)}. Error detected at #{Border.inspect(remaining)}"
          )}
 
       {:error, message, detected_at, _, _, _} ->
         {:error,
          ParseError.exception(
            input: string,
-           reason: String.capitalize(message) <> ". Error detected at #{inspect(detected_at)}"
+           reason:
+             String.capitalize(message) <> ". Error detected at #{Border.inspect(detected_at)}"
          )}
     end
   end

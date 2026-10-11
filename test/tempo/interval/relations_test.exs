@@ -157,9 +157,9 @@ defmodule Tempo.Interval.RelationsTest do
 
     test "composition admits the relation that actually holds" do
       for a <- @intervals, b <- @intervals, c <- @intervals do
-        ab = Interval.relation(a, b)
-        bc = Interval.relation(b, c)
-        ac = Interval.relation(a, c)
+        ab = Tempo.relation(a, b)
+        bc = Tempo.relation(b, c)
+        ac = Tempo.relation(a, c)
 
         possible = Allen.compose([ab], [bc])
 
@@ -174,9 +174,9 @@ defmodule Tempo.Interval.RelationsTest do
 
     test "narrowing by the truth never empties a sound composition" do
       for a <- @intervals, b <- @intervals, c <- @intervals do
-        possible = Allen.compose([Interval.relation(a, b)], [Interval.relation(b, c)])
+        possible = Allen.compose([Tempo.relation(a, b)], [Tempo.relation(b, c)])
 
-        refute Relations.empty?(Relations.narrow(possible, [Interval.relation(a, c)]))
+        refute Relations.empty?(Relations.narrow(possible, [Tempo.relation(a, c)]))
       end
     end
   end

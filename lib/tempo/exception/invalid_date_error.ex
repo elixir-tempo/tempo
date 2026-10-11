@@ -10,6 +10,8 @@ defmodule Tempo.InvalidDateError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:unit, :value, :valid_range, :year, :month, :day, :calendar, :reason]
 
   @type t :: %__MODULE__{
@@ -25,7 +27,7 @@ defmodule Tempo.InvalidDateError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   # A reason written beside the values the unit takes is the whole of what
@@ -43,11 +45,12 @@ defmodule Tempo.InvalidDateError do
   def message(%__MODULE__{unit: unit, value: value, valid_range: range, year: y, month: m})
       when not is_nil(unit) and not is_nil(value) and not is_nil(range) do
     context = date_context(y, m)
-    "#{inspect(value)} is not valid for #{unit}#{context} (valid range #{inspect(range)})"
+
+    "#{Border.inspect(value)} is not valid for #{unit}#{context} (valid range #{Border.inspect(range)})"
   end
 
   def message(%__MODULE__{unit: unit, value: value}) when not is_nil(unit) do
-    "Invalid #{unit}: #{inspect(value)}"
+    "Invalid #{unit}: #{Border.inspect(value)}"
   end
 
   def message(%__MODULE__{reason: reason}) when is_binary(reason), do: reason

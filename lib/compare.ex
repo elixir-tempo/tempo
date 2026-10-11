@@ -1,32 +1,32 @@
 defmodule Tempo.Compare do
-  @moduledoc """
-  Shared comparison primitives for Tempo values.
+  @moduledoc false
 
-  Set operations, enumeration, and IntervalSet construction all
-  need to compare two time keyword lists as start-moments on the
-  time line. This module is the single place that definition
-  lives. The comparison treats missing trailing units as their
-  unit minimum — so `[year: 2022]` (which means "start of 2022")
-  compares correctly against `[year: 2022, month: 6]` (which
-  means "start of June 2022") without ambiguity.
+  # Shared comparison primitives for Tempo values.
+  #
+  # Set operations, enumeration, and IntervalSet construction all
+  # need to compare two time keyword lists as start-moments on the
+  # time line. This module is the single place that definition
+  # lives. The comparison treats missing trailing units as their
+  # unit minimum — so `[year: 2022]` (which means "start of 2022")
+  # compares correctly against `[year: 2022, month: 6]` (which
+  # means "start of June 2022") without ambiguity.
+  #
+  # For set operations that span timezones, `to_utc_seconds/1`
+  # projects a zoned `%Tempo{}` into gregorian-seconds-since-UTC
+  # epoch so operands in different zones can share a total order.
+  # The projection is computed on demand and never cached — that
+  # policy decision was made in the implicit-to-explicit plan and
+  # revisited in the set-operations plan.
+  #
+  # The same projection makes comparison calendar-independent:
+  # when two values are in different calendars, each is routed
+  # through its calendar's date→absolute-day conversion (the
+  # `date_to_iso_days` round-trip) before comparison, so a Hebrew
+  # and a Gregorian date order by their true instants rather than
+  # by their raw numeric components. Same-calendar comparison keeps
+  # the fast structural path on the `:time` lists.
 
-  For set operations that span timezones, `to_utc_seconds/1`
-  projects a zoned `%Tempo{}` into gregorian-seconds-since-UTC
-  epoch so operands in different zones can share a total order.
-  The projection is computed on demand and never cached — that
-  policy decision was made in the implicit-to-explicit plan and
-  revisited in the set-operations plan.
-
-  The same projection makes comparison calendar-independent:
-  when two values are in different calendars, each is routed
-  through its calendar's date→absolute-day conversion (the
-  `date_to_iso_days` round-trip) before comparison, so a Hebrew
-  and a Gregorian date order by their true instants rather than
-  by their raw numeric components. Same-calendar comparison keeps
-  the fast structural path on the `:time` lists.
-
-  """
-
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.Duration
@@ -347,7 +347,7 @@ defmodule Tempo.Compare do
     ConversionError.exception(
       value: value,
       reason:
-        "#{inspect(value)} has no one moment its span starts at, so it has no place " <>
+        "#{Border.inspect(value)} has no one moment its span starts at, so it has no place " <>
           "in an order."
     )
   end
@@ -434,8 +434,8 @@ defmodule Tempo.Compare do
   defp no_line_error(%Tempo{} = a, %Tempo{} = b) do
     UnanchoredError.exception(
       operation:
-        "order values on different axes (#{inspect(a)} is led by #{inspect(leading_unit(a))} " <>
-          "and #{inspect(b)} by #{inspect(leading_unit(b))}); give both the same leading unit",
+        "order values on different axes (#{Border.inspect(a)} is led by #{Border.inspect(leading_unit(a))} " <>
+          "and #{Border.inspect(b)} by #{Border.inspect(leading_unit(b))}); give both the same leading unit",
       reason: :comparison
     )
   end
@@ -486,7 +486,7 @@ defmodule Tempo.Compare do
        )
        when is_binary(zone) and zone != "" and is_integer(year) do
     if List.starts_with?(a_time, b_time) or List.starts_with?(b_time, a_time) do
-      reading = wall_seconds(a_time, year, Calendars.effective(a.calendar))
+      reading = wall_seconds(a_time, year, a.calendar)
       TimeZoneDatabase.changes(zone, reading - @a_day_or_so, reading + @a_day_or_so) != []
     else
       false
@@ -523,7 +523,7 @@ defmodule Tempo.Compare do
   defp no_frame_error(%Tempo{} = a, %Tempo{} = b) do
     UnanchoredError.exception(
       operation:
-        "order #{inspect(a)} and #{inspect(b)}, which differ in zone or calendar and " <>
+        "order #{Border.inspect(a)} and #{Border.inspect(b)}, which differ in zone or calendar and " <>
           "have no year to be placed by",
       reason: :comparison
     )
@@ -544,8 +544,6 @@ defmodule Tempo.Compare do
   end
 
   defp starts_on_its_firsts?(%Tempo{calendar: calendar, time: time}) do
-    calendar = Calendars.effective(calendar)
-
     case UnitValues.start_date(time, calendar) do
       {:ok, {_year, month, day}} ->
         month == Keyword.get(time, :month, 1) and day == Keyword.get(time, :day, 1)
@@ -759,7 +757,7 @@ defmodule Tempo.Compare do
   defp kind_of(%Tempo.Duration{}), do: "a Tempo.Duration"
   defp kind_of(%Interval{}), do: "a Tempo.Interval"
   defp kind_of(%IntervalSet{}), do: "a Tempo.IntervalSet"
-  defp kind_of(other), do: inspect(other)
+  defp kind_of(other), do: Border.inspect(other)
 
   @doc """
   Drop the `margin_of_error` annotation from every component of a time
@@ -878,7 +876,7 @@ defmodule Tempo.Compare do
     %Tempo{time: [{:year, year} | _rest] = time, extended: extended, shift: shift} =
       point = dated_point!(value)
 
-    wall = wall_seconds(time, year, Calendars.effective(point.calendar))
+    wall = wall_seconds(time, year, point.calendar)
     wall - resolve_offset_seconds(extended, shift, wall, wall_seconds_spanned(time))
   end
 
@@ -900,7 +898,7 @@ defmodule Tempo.Compare do
   @spec to_wall_seconds(Tempo.t()) :: integer() | float()
   def to_wall_seconds(%Tempo{} = value) do
     %Tempo{time: [{:year, year} | _rest] = time, calendar: calendar} = dated_point!(value)
-    wall_seconds(time, year, Calendars.effective(calendar))
+    wall_seconds(time, year, calendar)
   end
 
   # A value as the point with a year it is projected from. Most values given
@@ -1012,7 +1010,7 @@ defmodule Tempo.Compare do
   defp wall_time_written(%Tempo{time: [{:year, year} | _rest] = time, calendar: calendar})
        when is_integer(year) and year >= 1 do
     if whole_units?(time),
-      do: time |> wall_seconds(year, Calendars.effective(calendar)) |> wall_seconds_to_iso(),
+      do: time |> wall_seconds(year, calendar) |> wall_seconds_to_iso(),
       else: nil
   end
 
@@ -1072,7 +1070,7 @@ defmodule Tempo.Compare do
       {:ok, %Tempo{time: [{:year, year} | _rest] = time, calendar: calendar}}
       when is_integer(year) ->
         time
-        |> wall_seconds(year, Calendars.effective(calendar))
+        |> wall_seconds(year, calendar)
         |> check_wall(zone_id, stated, wall_seconds_spanned(time))
 
       _no_wall_instant ->
@@ -1150,8 +1148,6 @@ defmodule Tempo.Compare do
   # week interval report a zero-second duration. The dates and their
   # counts come from Calendrical, never from arithmetic here.
   defp start_day(time, year, calendar) do
-    calendar = Calendars.effective(calendar)
-
     cond do
       Keyword.has_key?(time, :week) ->
         day = Keyword.get(time, :day_of_week, Keyword.get(time, :day, 1))

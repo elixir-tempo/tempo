@@ -1,4 +1,6 @@
 defmodule Tempo.Network.TimePeriod do
+  use Tempo.Border
+
   @moduledoc """
   A single time-period in a chronological network — a reign, era, or
   the time-span of a stratum.
@@ -26,6 +28,7 @@ defmodule Tempo.Network.TimePeriod do
 
   """
 
+  alias Tempo.Border
   alias Tempo.Network.TimePeriod
 
   @typedoc "A start/end bound: a Tempo value, or `nil` when unknown."
@@ -203,25 +206,33 @@ defmodule Tempo.Network.TimePeriod do
     if Keyword.keyword?(options) do
       options |> Keyword.keys() |> Enum.find(&(&1 not in @options)) |> unknown_option()
     else
-      {:error, invalid("takes a keyword list of options, not #{inspect(options)}")}
+      {:error, invalid("takes a keyword list of options, not #{Border.inspect(options)}")}
     end
   end
 
   defp unknown_option(nil), do: :ok
 
   defp unknown_option(key) when is_map_key(@renamed, key),
-    do: {:error, invalid("takes #{inspect(@renamed[key])} where 1.x took #{inspect(key)}")}
+    do:
+      {:error,
+       invalid("takes #{Border.inspect(@renamed[key])} where 1.x took #{Border.inspect(key)}")}
 
   defp unknown_option(key),
-    do: {:error, invalid("does not take #{inspect(key)}; its options are #{inspect(@options)}")}
+    do:
+      {:error,
+       invalid(
+         "does not take #{Border.inspect(key)}; its options are #{Border.inspect(@options)}"
+       )}
 
   defp name_option(name) when is_binary(name) or is_nil(name), do: {:ok, name}
-  defp name_option(name), do: {:error, invalid("takes a string :name, not #{inspect(name)}")}
+
+  defp name_option(name),
+    do: {:error, invalid("takes a string :name, not #{Border.inspect(name)}")}
 
   defp metadata_option(metadata) when is_map(metadata), do: {:ok, metadata}
 
   defp metadata_option(metadata),
-    do: {:error, invalid("takes a map as :metadata, not #{inspect(metadata)}")}
+    do: {:error, invalid("takes a map as :metadata, not #{Border.inspect(metadata)}")}
 
   defp invalid(phrase), do: ArgumentError.exception("Tempo.Network.TimePeriod.new/2 #{phrase}.")
 
@@ -248,7 +259,9 @@ defmodule Tempo.Network.TimePeriod do
   defp to_tempo(%Tempo{} = value), do: {:ok, value}
   defp to_tempo(year) when is_integer(year), do: parsed("#{year}Y", Tempo, year)
   defp to_tempo(string) when is_binary(string), do: parsed(string, Tempo, string)
-  defp to_tempo(other), do: {:error, invalid("takes a date as a bound, not #{inspect(other)}")}
+
+  defp to_tempo(other),
+    do: {:error, invalid("takes a date as a bound, not #{Border.inspect(other)}")}
 
   defp to_duration(nil), do: {:ok, nil}
   defp to_duration(%Tempo.Duration{} = value), do: {:ok, value}
@@ -256,14 +269,14 @@ defmodule Tempo.Network.TimePeriod do
   defp to_duration(string) when is_binary(string), do: parsed(string, Tempo.Duration, string)
 
   defp to_duration(other),
-    do: {:error, invalid("takes a duration as a bound, not #{inspect(other)}")}
+    do: {:error, invalid("takes a duration as a bound, not #{Border.inspect(other)}")}
 
   # A string or a number read as a date or a duration, which must parse
   # to the kind of value the bound needs.
   defp parsed(string, kind, given) do
-    case Tempo.from_iso8601(string) do
+    case Tempo.read(string) do
       {:ok, %^kind{} = value} -> {:ok, value}
-      _other -> {:error, invalid("cannot read #{inspect(given)} as a #{describe(kind)}")}
+      _other -> {:error, invalid("cannot read #{Border.inspect(given)} as a #{describe(kind)}")}
     end
   end
 

@@ -4,6 +4,7 @@ defmodule Tempo.Inspect do
   import Kernel, except: [inspect: 1]
 
   alias Localize.Validity.U
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.Interval
@@ -27,7 +28,7 @@ defmodule Tempo.Inspect do
 
   ### Examples
 
-      iex> Tempo.from_iso8601!("2022-11-20") |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()
+      iex> ~o"2022-11-20" |> Tempo.Inspect.to_iodata() |> IO.iodata_to_binary()
       "2022Y11M20D"
 
   """
@@ -267,8 +268,6 @@ defmodule Tempo.Inspect do
   # out from the calendar module, the one record a value keeps of its
   # calendar, and carried in the `extended` of the copy being written.
   defp calendar_name(%Tempo{calendar: calendar}, implied \\ Calendars.default()) do
-    calendar = Calendars.effective(calendar)
-
     if calendar in [Calendars.default(), implied], do: nil, else: faithful_name(calendar)
   end
 
@@ -359,7 +358,7 @@ defmodule Tempo.Inspect do
   def inspect(%Tempo{calendar: calendar} = tempo) when is_notation(calendar) do
     # `to_iso8601/1` (via `inspect_value/1`) already appends the
     # IXDTF extended trailer; don't add it again here.
-    encoded(Calendars.settled(tempo), "Tempo", &(@sigil_o <> &1 <> "\""))
+    encoded(tempo, "Tempo", &(@sigil_o <> &1 <> "\""))
   end
 
   def inspect(%Tempo{calendar: calendar} = tempo) when is_notation_weeks(calendar) do
@@ -370,7 +369,11 @@ defmodule Tempo.Inspect do
     # `to_iso8601/1` (via `inspect_value/1`) already appends the
     # IXDTF extended trailer for any zone / calendar / tags present
     # on the Tempo, so we don't add it again here.
-    encoded(tempo, "Tempo", &(@from_iso8601 <> &1 <> "\", " <> Kernel.inspect(calendar) <> ")"))
+    encoded(
+      tempo,
+      "Tempo",
+      &(@from_iso8601 <> &1 <> "\", " <> Border.name(calendar) <> ")")
+    )
   end
 
   def inspect(%Tempo.Interval{} = interval) do
@@ -414,7 +417,7 @@ defmodule Tempo.Inspect do
         &(@sigil_o <> &1 <> "\"")
 
       [%Tempo{calendar: calendar} | _rest] ->
-        &(@from_iso8601 <> &1 <> "\", " <> Kernel.inspect(calendar) <> ")")
+        &(@from_iso8601 <> &1 <> "\", " <> Border.name(calendar) <> ")")
     end
   end
 

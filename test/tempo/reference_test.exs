@@ -757,7 +757,7 @@ defmodule Tempo.Reference.Test do
     property "to_calendar/2 is the day Date.convert/2 gives" do
       check all(point <- Generators.other_calendar_day()) do
         {:ok, date} = Reference.elixir_date(point)
-        {:ok, gregorian} = Tempo.to_calendar(reading(point), Calendrical.Gregorian)
+        {:ok, gregorian} = Tempo.to_calendar(reading(point), Calendar.ISO)
 
         assert Tempo.to_date(gregorian) == {:ok, Date.convert!(date, Calendar.ISO)}
 

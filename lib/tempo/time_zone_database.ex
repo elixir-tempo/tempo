@@ -1,4 +1,6 @@
 defmodule Tempo.TimeZoneDatabase do
+  use Tempo.Border
+
   @moduledoc """
   Access to the time zone database Tempo uses for zone validation,
   offset resolution, and DST-aware arithmetic.
@@ -104,27 +106,25 @@ defmodule Tempo.TimeZoneDatabase do
     end
   end
 
-  @doc """
-  The period in effect in `zone` at a UTC instant given as gregorian
-  seconds (seconds since year 0, `:calendar`'s epoch).
-
-  Pre-common-era instants return a zero-offset local-mean-time
-  period without consulting the database.
-
-  ### Arguments
-
-  * `zone` is an IANA zone name.
-
-  * `utc_seconds` is the instant in gregorian seconds, UTC.
-
-  ### Returns
-
-  * `{:ok, period}` — a UTC instant is never ambiguous.
-
-  * `{:error, reason}` from the database (unknown zone, or no real
-    database configured).
-
-  """
+  @doc false
+  # The period in effect in `zone` at a UTC instant given as gregorian
+  # seconds (seconds since year 0, `:calendar`'s epoch).
+  #
+  # Pre-common-era instants return a zero-offset local-mean-time
+  # period without consulting the database.
+  #
+  # ### Arguments
+  #
+  # * `zone` is an IANA zone name.
+  #
+  # * `utc_seconds` is the instant in gregorian seconds, UTC.
+  #
+  # ### Returns
+  #
+  # * `{:ok, period}` — a UTC instant is never ambiguous.
+  #
+  # * `{:error, reason}` from the database (unknown zone, or no real
+  #   database configured).
   @spec period_at_utc(String.t(), integer()) :: {:ok, period()} | {:error, term()}
   def period_at_utc(_zone, utc_seconds) when utc_seconds < @gregorian_seconds_year_1 do
     {:ok, @pre_ce_period}
@@ -134,28 +134,26 @@ defmodule Tempo.TimeZoneDatabase do
     database().time_zone_period_from_utc_iso_days(iso_days(utc_seconds), zone)
   end
 
-  @doc """
-  The period(s) matching a wall-clock reading in `zone`, given as
-  gregorian seconds.
-
-  Returns the standard behaviour shapes: `{:ok, period}` for an
-  unambiguous reading, `{:ambiguous, first, second}` for a DST
-  fall-back, `{:gap, ...}` for a spring-forward reading that does
-  not exist, or `{:error, reason}`. Pre-common-era readings return
-  `{:ok, local-mean-time}` without consulting the database.
-
-  ### Arguments
-
-  * `zone` is an IANA zone name.
-
-  * `wall_seconds` is the wall-clock reading in gregorian seconds.
-
-  ### Returns
-
-  * `{:ok, period}` | `{:ambiguous, period, period}` |
-    `{:gap, {period, limit}, {period, limit}}` | `{:error, reason}`.
-
-  """
+  @doc false
+  # The period(s) matching a wall-clock reading in `zone`, given as
+  # gregorian seconds.
+  #
+  # Returns the standard behaviour shapes: `{:ok, period}` for an
+  # unambiguous reading, `{:ambiguous, first, second}` for a DST
+  # fall-back, `{:gap, ...}` for a spring-forward reading that does
+  # not exist, or `{:error, reason}`. Pre-common-era readings return
+  # `{:ok, local-mean-time}` without consulting the database.
+  #
+  # ### Arguments
+  #
+  # * `zone` is an IANA zone name.
+  #
+  # * `wall_seconds` is the wall-clock reading in gregorian seconds.
+  #
+  # ### Returns
+  #
+  # * `{:ok, period}` | `{:ambiguous, period, period}` |
+  #   `{:gap, {period, limit}, {period, limit}}` | `{:error, reason}`.
   @spec period_at_wall(String.t(), integer()) ::
           {:ok, period()}
           | {:ambiguous, period(), period()}
@@ -173,38 +171,31 @@ defmodule Tempo.TimeZoneDatabase do
     database().time_zone_periods_from_wall_datetime(naive, zone)
   end
 
-  @doc """
-  The calendar days a zone leaves out: the days its wall clock never
-  showed, where the zone moved across the date line.
-
-  Samoa had no 30 December 2011, and Manila no 31 December 1844. A
-  value that names such a day names no time, and nothing steps onto
-  it or walks through it.
-
-  The days are found once for each zone and kept, since a zone has
-  none or one and asking the database of every day walked would cost
-  more than the walk. A zone's offset at the start of each decade
-  from 1800 to 2100 shows the years it moved a day ahead, and the
-  days of those years are asked of the database. They are kept for
-  as long as the system runs, so a database that learns of a new
-  move across the date line is asked again only when it restarts.
-
-  ### Arguments
-
-  * `zone` is an IANA zone name.
-
-  ### Returns
-
-  * A list of `{year, month, day}` Gregorian dates, empty for nearly
-    every zone, and for an unknown zone or with no database
-    configured.
-
-  ### Examples
-
-      iex> Tempo.TimeZoneDatabase.days_left_out("Etc/UTC")
-      []
-
-  """
+  @doc false
+  # The calendar days a zone leaves out: the days its wall clock never
+  # showed, where the zone moved across the date line.
+  #
+  # Samoa had no 30 December 2011, and Manila no 31 December 1844. A
+  # value that names such a day names no time, and nothing steps onto
+  # it or walks through it.
+  #
+  # The days are found once for each zone and kept, since a zone has
+  # none or one and asking the database of every day walked would cost
+  # more than the walk. A zone's offset at the start of each decade
+  # from 1800 to 2100 shows the years it moved a day ahead, and the
+  # days of those years are asked of the database. They are kept for
+  # as long as the system runs, so a database that learns of a new
+  # move across the date line is asked again only when it restarts.
+  #
+  # ### Arguments
+  #
+  # * `zone` is an IANA zone name.
+  #
+  # ### Returns
+  #
+  # * A list of `{year, month, day}` Gregorian dates, empty for nearly
+  #   every zone, and for an unknown zone or with no database
+  #   configured.
   @spec days_left_out(String.t()) :: [:calendar.date()]
   def days_left_out(zone) when is_binary(zone) do
     key = {__MODULE__, :days_left_out, zone}
@@ -294,51 +285,42 @@ defmodule Tempo.TimeZoneDatabase do
   @questions_to_find_a_block 367
   @asked_in_its_place 3
 
-  @doc """
-  The changes of a zone's clock between two moments: each moment its
-  offset from UTC changes, with the offset before and the offset after.
-
-  The `Calendar.TimeZoneDatabase` behaviour answers for one moment or one
-  reading and lists no changes, so they are found: the zone's period at
-  the start of each day is asked, and where two days differ the moment of
-  the change is found between them. Two changes in one day are both
-  found (Scoresbysund's clocks changed twice in an hour on 31 March 2024),
-  where the second does not put back the very period the first ended.
-
-  The days are asked in blocks of about a year, each found once for a
-  zone and kept for as long as the system runs, as `days_left_out/1`
-  keeps its days. A zone is on its local mean time before 1800, which
-  every zone in the IANA database is until its first change, so a block
-  before then is asked only at its two ends.
-
-  A span of half a year or less is asked of its own days, and nothing is
-  kept for it, until its year has been asked of as often as finding the
-  whole of it takes: a database answers from a table for some years ahead and
-  works each answer out past them, a hundred times as slowly, so that a
-  year found for the sake of one day of it took fifty milliseconds.
-
-  ### Arguments
-
-  * `zone` is an IANA zone name.
-
-  * `from` and `to` are moments in gregorian seconds, UTC.
-
-  ### Returns
-
-  * A list of `{moment, offset_before, offset_after}` in order of time,
-    for each change after `from` and no later than `to`: the moment in
-    gregorian seconds, UTC, and each offset in seconds. It is empty where
-    there is no change, for an unknown zone, and with no database
-    configured.
-
-  ### Examples
-
-      iex> from = :calendar.datetime_to_gregorian_seconds({{2026, 1, 1}, {0, 0, 0}})
-      iex> to = :calendar.datetime_to_gregorian_seconds({{2027, 1, 1}, {0, 0, 0}})
-      iex> Tempo.TimeZoneDatabase.changes("Etc/UTC", from, to)
-      []
-
-  """
+  @doc false
+  # The changes of a zone's clock between two moments: each moment its
+  # offset from UTC changes, with the offset before and the offset after.
+  #
+  # The `Calendar.TimeZoneDatabase` behaviour answers for one moment or one
+  # reading and lists no changes, so they are found: the zone's period at
+  # the start of each day is asked, and where two days differ the moment of
+  # the change is found between them. Two changes in one day are both
+  # found (Scoresbysund's clocks changed twice in an hour on 31 March 2024),
+  # where the second does not put back the very period the first ended.
+  #
+  # The days are asked in blocks of about a year, each found once for a
+  # zone and kept for as long as the system runs, as `days_left_out/1`
+  # keeps its days. A zone is on its local mean time before 1800, which
+  # every zone in the IANA database is until its first change, so a block
+  # before then is asked only at its two ends.
+  #
+  # A span of half a year or less is asked of its own days, and nothing is
+  # kept for it, until its year has been asked of as often as finding the
+  # whole of it takes: a database answers from a table for some years ahead and
+  # works each answer out past them, a hundred times as slowly, so that a
+  # year found for the sake of one day of it took fifty milliseconds.
+  #
+  # ### Arguments
+  #
+  # * `zone` is an IANA zone name.
+  #
+  # * `from` and `to` are moments in gregorian seconds, UTC.
+  #
+  # ### Returns
+  #
+  # * A list of `{moment, offset_before, offset_after}` in order of time,
+  #   for each change after `from` and no later than `to`: the moment in
+  #   gregorian seconds, UTC, and each offset in seconds. It is empty where
+  #   there is no change, for an unknown zone, and with no database
+  #   configured.
   @spec changes(String.t(), integer(), integer()) :: [{integer(), integer(), integer()}]
   def changes(zone, from, to) when is_binary(zone) and is_integer(from) and is_integer(to) do
     blocks = block_of(from)..block_of(to)//1
@@ -405,84 +387,66 @@ defmodule Tempo.TimeZoneDatabase do
     end
   end
 
-  @doc """
-  Whether a zone's clock changes within `margin` seconds of a moment.
-
-  It is `changes/3` asked of the moments each side of one, for a caller
-  that asks it of every value it handles: a reading the clock skips or
-  shows twice is beside a change, so a value with none near it needs
-  nothing asked of the database.
-
-  ### Arguments
-
-  * `zone` is an IANA zone name.
-
-  * `moment` is a moment in gregorian seconds. A reading of the zone's
-    wall clock serves where `margin` is more than any offset the zone has
-    had.
-
-  * `margin` is a number of seconds.
-
-  ### Returns
-
-  * `true` where the zone's offset from UTC changes at a moment no more
-    than `margin` seconds from `moment`, and `false` where it does not,
-    for an unknown zone, and with no database configured.
-
-  ### Examples
-
-      iex> midsummer = :calendar.datetime_to_gregorian_seconds({{2026, 6, 21}, {12, 0, 0}})
-      iex> Tempo.TimeZoneDatabase.change_within?("Etc/UTC", midsummer, 86_400)
-      false
-
-  """
+  @doc false
+  # Whether a zone's clock changes within `margin` seconds of a moment.
+  #
+  # It is `changes/3` asked of the moments each side of one, for a caller
+  # that asks it of every value it handles: a reading the clock skips or
+  # shows twice is beside a change, so a value with none near it needs
+  # nothing asked of the database.
+  #
+  # ### Arguments
+  #
+  # * `zone` is an IANA zone name.
+  #
+  # * `moment` is a moment in gregorian seconds. A reading of the zone's
+  #   wall clock serves where `margin` is more than any offset the zone has
+  #   had.
+  #
+  # * `margin` is a number of seconds.
+  #
+  # ### Returns
+  #
+  # * `true` where the zone's offset from UTC changes at a moment no more
+  #   than `margin` seconds from `moment`, and `false` where it does not,
+  #   for an unknown zone, and with no database configured.
   @spec change_within?(String.t(), integer(), non_neg_integer()) :: boolean()
   def change_within?(zone, moment, margin)
       when is_binary(zone) and is_integer(moment) and is_integer(margin) do
     changes(zone, moment - margin - 1, moment + margin) != []
   end
 
-  @doc """
-  Whether the changes already found for a zone show none within `margin`
-  seconds of a moment.
-
-  It is `change_within?/3` answered from what has been kept, and asks
-  nothing of the database. Where the changes about the moment have not been
-  found yet it is `false`, as it is where one is near, so it serves a caller
-  that has another way to its answer, slower and in need of no list of
-  changes: a value stepped once, far in the future, does not then wait for
-  a year of its zone's days to be asked of the database. A year it has been
-  asked of as often as finding its changes takes is found, and answered
-  from.
-
-  ### Arguments
-
-  * `zone` is an IANA zone name.
-
-  * `moment` is a moment in gregorian seconds. A reading of the zone's
-    wall clock serves where `margin` is more than any offset the zone has
-    had.
-
-  * `margin` is a number of seconds.
-
-  ### Returns
-
-  * `true` where the changes of the zone have been found for all of the
-    time within `margin` seconds of `moment`, and none of them is in it.
-
-  * `false` where a change is within `margin` seconds of `moment`, and
-    where the changes there have not been found: `changes/3` of a span
-    longer than half a year finds them.
-
-  ### Examples
-
-      iex> midsummer = :calendar.datetime_to_gregorian_seconds({{2026, 6, 21}, {12, 0, 0}})
-      iex> Tempo.TimeZoneDatabase.changes("Etc/UTC", midsummer - 31_622_400, midsummer + 31_622_400)
-      []
-      iex> Tempo.TimeZoneDatabase.clear_of_changes?("Etc/UTC", midsummer, 86_400)
-      true
-
-  """
+  @doc false
+  # Whether the changes already found for a zone show none within `margin`
+  # seconds of a moment.
+  #
+  # It is `change_within?/3` answered from what has been kept, and asks
+  # nothing of the database. Where the changes about the moment have not been
+  # found yet it is `false`, as it is where one is near, so it serves a caller
+  # that has another way to its answer, slower and in need of no list of
+  # changes: a value stepped once, far in the future, does not then wait for
+  # a year of its zone's days to be asked of the database. A year it has been
+  # asked of as often as finding its changes takes is found, and answered
+  # from.
+  #
+  # ### Arguments
+  #
+  # * `zone` is an IANA zone name.
+  #
+  # * `moment` is a moment in gregorian seconds. A reading of the zone's
+  #   wall clock serves where `margin` is more than any offset the zone has
+  #   had.
+  #
+  # * `margin` is a number of seconds.
+  #
+  # ### Returns
+  #
+  # * `true` where the changes of the zone have been found for all of the
+  #   time within `margin` seconds of `moment`, and none of them is in it.
+  #
+  # * `false` where a change is within `margin` seconds of `moment`, and
+  #   where the changes there have not been found: `changes/3` of a span
+  #   longer than half a year finds them.
   @spec clear_of_changes?(String.t(), integer(), non_neg_integer()) :: boolean()
   def clear_of_changes?(zone, moment, margin)
       when is_binary(zone) and is_integer(moment) and is_integer(margin) do
@@ -608,20 +572,18 @@ defmodule Tempo.TimeZoneDatabase do
     end
   end
 
-  @doc """
-  The total UTC offset of a period in seconds — the standard offset
-  plus any daylight-saving adjustment.
-
-  ### Arguments
-
-  * `period` is a `t:period/0`.
-
-  ### Returns
-
-  * An offset in seconds. Always an integer in practice; the spec is
-    `number()` because the behaviour's period field specs admit floats.
-
-  """
+  @doc false
+  # The total UTC offset of a period in seconds — the standard offset
+  # plus any daylight-saving adjustment.
+  #
+  # ### Arguments
+  #
+  # * `period` is a `t:period/0`.
+  #
+  # ### Returns
+  #
+  # * An offset in seconds. Always an integer in practice; the spec is
+  #   `number()` because the behaviour's period field specs admit floats.
   @spec total_offset(period()) :: number()
   def total_offset(%{utc_offset: utc_offset, std_offset: std_offset}) do
     utc_offset + std_offset

@@ -1,4 +1,6 @@
 defmodule Tempo.Interval do
+  use Tempo.Border
+
   @moduledoc """
   An explicit bounded span on the time line.
 
@@ -50,6 +52,7 @@ defmodule Tempo.Interval do
 
   """
 
+  alias Tempo.Border
   alias Tempo.Calendars
   alias Tempo.Compare
   alias Tempo.ConversionError
@@ -168,7 +171,7 @@ defmodule Tempo.Interval do
 
   * `:recurrence` is the number of occurrences, a `non_neg_integer()`, or `:infinity`. The default is `1`, one span.
 
-  * `:repeat_rule` is a `t:Tempo.RRule.Rule.t/0` or `t:Tempo.t/0`.
+  * `:repeat_rule` is the rule a recurrence repeats by, as `Tempo.RRule.parse/2` reads one, or a `t:Tempo.t/0`.
 
   * `:metadata` is a free-form map carried through set operations.
 
@@ -244,7 +247,7 @@ defmodule Tempo.Interval do
     {:error,
      ArgumentError.exception(
        "Tempo.Interval.new/1 takes :recurrence as a number of occurrences, 0 or more, " <>
-         "or :infinity; got #{inspect(other)}"
+         "or :infinity; got #{Border.inspect(other)}"
      )}
   end
 
@@ -278,7 +281,7 @@ defmodule Tempo.Interval do
   defp span_end(last) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.new/1's :through is a Tempo value or interval, not #{inspect(last)}."
+       "Tempo.Interval.new/1's :through is a Tempo value or interval, not #{Border.inspect(last)}."
      )}
   end
 
@@ -298,9 +301,14 @@ defmodule Tempo.Interval do
   @spec new!(keyword()) :: t()
   def new!(options) when is_list(options) do
     case new(options) do
-      {:ok, iv} -> iv
-      {:error, exception} when is_exception(exception) -> raise exception
-      {:error, reason} -> raise ArgumentError, "Tempo.Interval.new!/1 failed: #{inspect(reason)}"
+      {:ok, iv} ->
+        iv
+
+      {:error, exception} when is_exception(exception) ->
+        raise exception
+
+      {:error, reason} ->
+        raise ArgumentError, "Tempo.Interval.new!/1 failed: #{Border.inspect(reason)}"
     end
   end
 
@@ -360,14 +368,14 @@ defmodule Tempo.Interval do
       not Keyword.keyword?(options) ->
         {:error,
          ArgumentError.exception(
-           "Tempo.Interval.new/1 expects a keyword list; got #{inspect(options)}"
+           "Tempo.Interval.new/1 expects a keyword list; got #{Border.inspect(options)}"
          )}
 
       unknown = Enum.find(Keyword.keys(options), &(&1 not in @public_new_options)) ->
         {:error,
          ArgumentError.exception(
-           "Tempo.Interval.new/1 does not recognise option #{inspect(unknown)}. " <>
-             "Valid options: #{inspect(@public_new_options)}"
+           "Tempo.Interval.new/1 does not recognise option #{Border.inspect(unknown)}. " <>
+             "Valid options: #{Border.inspect(@public_new_options)}"
          )}
 
       true ->
@@ -391,11 +399,15 @@ defmodule Tempo.Interval do
     cond do
       not valid_endpoint?(from) ->
         {:error,
-         ArgumentError.exception(":from must be a %Tempo{} or :undefined, got #{inspect(from)}")}
+         ArgumentError.exception(
+           ":from must be a %Tempo{} or :undefined, got #{Border.inspect(from)}"
+         )}
 
       not valid_endpoint?(to) ->
         {:error,
-         ArgumentError.exception(":to must be a %Tempo{} or :undefined, got #{inspect(to)}")}
+         ArgumentError.exception(
+           ":to must be a %Tempo{} or :undefined, got #{Border.inspect(to)}"
+         )}
 
       true ->
         :ok
@@ -584,7 +596,7 @@ defmodule Tempo.Interval do
   defp coarser_unit_error(unit, resolution_unit) do
     ArgumentError.exception(
       ":unit must be equal to or finer than the resolution of :from " <>
-        "(#{inspect(resolution_unit)}), got #{inspect(unit)}"
+        "(#{Border.inspect(resolution_unit)}), got #{Border.inspect(unit)}"
     )
   end
 
@@ -855,29 +867,26 @@ defmodule Tempo.Interval do
   ## lifting lives here so the logic is testable in isolation and
   ## stays close to the struct it produces.
 
-  @doc """
-  Given a fully-resolved `%Tempo{}`, compute the two endpoints of
-  its implicit span under the half-open `[from, to)` convention.
-
-  Returns `{:ok, {lower, upper}, unit}` where both bounds are
-  `%Tempo{}` values at the input's own resolution and `unit` is the
-  iteration granularity the implicit span walks at — the next-finer
-  unit below the input's resolution (`nil` when the walk unit is
-  simply the bounds' resolution, as for masked and grouped values).
-  Returns `{:error, reason}` when the input has no finer unit that
-  could produce a bounded span.
-
-  The bounds are *not* drilled into the finer unit: `[year: 2022]`
-  yields `[year: 2022] / [year: 2023]` with unit `:month`, not
-  `2022-01 / 2023-01`. Extent keeps its stated resolution;
-  granularity travels separately so `Tempo.to_interval/1` can carry
-  it on the interval's `:unit` field. Masked values widen to the
-  coarsest un-masked prefix and use the internal mask-bounds helper
-  to determine the enclosing span.
-
-  """
+  @doc false
+  # Given a fully-resolved `%Tempo{}`, compute the two endpoints of
+  # its implicit span under the half-open `[from, to)` convention.
+  #
+  # Returns `{:ok, {lower, upper}, unit}` where both bounds are
+  # `%Tempo{}` values at the input's own resolution and `unit` is the
+  # iteration granularity the implicit span walks at — the next-finer
+  # unit below the input's resolution (`nil` when the walk unit is
+  # simply the bounds' resolution, as for masked and grouped values).
+  # Returns `{:error, reason}` when the input has no finer unit that
+  # could produce a bounded span.
+  #
+  # The bounds are *not* drilled into the finer unit: `[year: 2022]`
+  # yields `[year: 2022] / [year: 2023]` with unit `:month`, not
+  # `2022-01 / 2023-01`. Extent keeps its stated resolution;
+  # granularity travels separately so `Tempo.to_interval/1` can carry
+  # it on the interval's `:unit` field. Masked values widen to the
+  # coarsest un-masked prefix and use the internal mask-bounds helper
+  # to determine the enclosing span.
   def next_unit_boundary(%Tempo{time: time, calendar: calendar} = tempo) do
-    calendar = Calendars.effective(calendar)
     time = significant_digits_as_mask(time)
 
     case List.last(time) do
@@ -1328,78 +1337,66 @@ defmodule Tempo.Interval do
   ## Allen's interval algebra
   ## ----------------------------------------------------------
 
-  @doc """
-  Classify the Allen relation between two interval-like values.
-
-  Returns one of 13 mutually exclusive relations from Allen's
-  interval algebra — a richer answer than stdlib's ternary
-  `compare/2` (`:lt` / `:eq` / `:gt`), which collapses intervals
-  to their start points and loses the containment and overlap
-  distinctions that interval algebra captures. Hence the name
-  `relation` rather than `compare`.
-
-  For intervals `X = [x₁, x₂)` and `Y = [y₁, y₂)` under Tempo's
-  half-open convention:
-
-  | Relation          | Shape (X relative to Y)          | Condition                      |
-  | ----------------- | -------------------------------- | ------------------------------ |
-  | `:precedes`       | X ends strictly before Y starts  | `x₂ < y₁`                      |
-  | `:meets`          | X ends exactly at Y's start      | `x₂ = y₁`                      |
-  | `:overlaps`       | X starts before Y, ends inside   | `x₁ < y₁ < x₂ < y₂`            |
-  | `:finished_by`    | X contains Y, shared end         | `x₁ < y₁ ∧ x₂ = y₂`            |
-  | `:contains`       | X strictly contains Y            | `x₁ < y₁ ∧ x₂ > y₂`            |
-  | `:starts`         | Shared start, X ends earlier     | `x₁ = y₁ ∧ x₂ < y₂`            |
-  | `:equals`         | Identical endpoints              | `x₁ = y₁ ∧ x₂ = y₂`            |
-  | `:started_by`     | Shared start, X ends later       | `x₁ = y₁ ∧ x₂ > y₂`            |
-  | `:during`         | X strictly inside Y              | `x₁ > y₁ ∧ x₂ < y₂`            |
-  | `:finishes`       | X starts after Y, shared end     | `x₁ > y₁ ∧ x₂ = y₂`            |
-  | `:overlapped_by`  | Y starts before X, ends inside X | `y₁ < x₁ < y₂ < x₂`            |
-  | `:met_by`         | X starts exactly at Y's end      | `x₁ = y₂`                      |
-  | `:preceded_by`    | X starts strictly after Y's end  | `x₁ > y₂`                      |
-
-  Every pair of non-empty bounded intervals stands in exactly
-  one of these relations. `Tempo.Allen` has a predicate for each,
-  and the inverse (`Tempo.Allen.inverse/1`) and composition
-  (`Tempo.Allen.compose/2`) of relations.
-
-  ### Arguments
-
-  * `a` and `b` are each one of:
-
-    * a `t:Tempo.t/0` point (converted to its implicit span).
-
-    * a `t:Tempo.Interval.t/0`.
-
-    * a `t:Tempo.IntervalSet.t/0` with exactly one member.
-
-  ### Returns
-
-  * One of the 13 relation atoms.
-
-  * `{:error, reason}` when either operand is a multi-member
-    IntervalSet, an open-ended interval, or otherwise can't be
-    reduced to a single bounded interval. For multi-member
-    sets use `Tempo.IntervalSet.relation_matrix/2`.
-
-  * `{:error, %Tempo.FloatingTempoError{}}` when one operand is zoned
-    and the other floating: a value with no zone has no place on the
-    universal time line to relate from.
-
-  * `{:error, %Tempo.UnanchoredError{}}` when one operand has a year
-    and the other none, or neither has and they lead with different
-    units: they share no line to be related on.
-
-  ### Examples
-
-      iex> a = Tempo.Interval.new!(from: ~o"2026-06-01", to: ~o"2026-06-10")
-      iex> b = Tempo.Interval.new!(from: ~o"2026-06-05", to: ~o"2026-06-15")
-      iex> Tempo.Interval.relation(a, b)
-      :overlaps
-
-      iex> Tempo.Interval.relation(~o"2026Y", ~o"2026-06-15")
-      :contains
-
-  """
+  @doc false
+  # Classify the Allen relation between two interval-like values.
+  #
+  # Returns one of 13 mutually exclusive relations from Allen's
+  # interval algebra — a richer answer than stdlib's ternary
+  # `compare/2` (`:lt` / `:eq` / `:gt`), which collapses intervals
+  # to their start points and loses the containment and overlap
+  # distinctions that interval algebra captures. Hence the name
+  # `relation` rather than `compare`.
+  #
+  # For intervals `X = [x₁, x₂)` and `Y = [y₁, y₂)` under Tempo's
+  # half-open convention:
+  #
+  # | Relation          | Shape (X relative to Y)          | Condition                      |
+  # | ----------------- | -------------------------------- | ------------------------------ |
+  # | `:precedes`       | X ends strictly before Y starts  | `x₂ < y₁`                      |
+  # | `:meets`          | X ends exactly at Y's start      | `x₂ = y₁`                      |
+  # | `:overlaps`       | X starts before Y, ends inside   | `x₁ < y₁ < x₂ < y₂`            |
+  # | `:finished_by`    | X contains Y, shared end         | `x₁ < y₁ ∧ x₂ = y₂`            |
+  # | `:contains`       | X strictly contains Y            | `x₁ < y₁ ∧ x₂ > y₂`            |
+  # | `:starts`         | Shared start, X ends earlier     | `x₁ = y₁ ∧ x₂ < y₂`            |
+  # | `:equals`         | Identical endpoints              | `x₁ = y₁ ∧ x₂ = y₂`            |
+  # | `:started_by`     | Shared start, X ends later       | `x₁ = y₁ ∧ x₂ > y₂`            |
+  # | `:during`         | X strictly inside Y              | `x₁ > y₁ ∧ x₂ < y₂`            |
+  # | `:finishes`       | X starts after Y, shared end     | `x₁ > y₁ ∧ x₂ = y₂`            |
+  # | `:overlapped_by`  | Y starts before X, ends inside X | `y₁ < x₁ < y₂ < x₂`            |
+  # | `:met_by`         | X starts exactly at Y's end      | `x₁ = y₂`                      |
+  # | `:preceded_by`    | X starts strictly after Y's end  | `x₁ > y₂`                      |
+  #
+  # Every pair of non-empty bounded intervals stands in exactly
+  # one of these relations. `Tempo.Allen` has a predicate for each,
+  # and the inverse (`Tempo.Allen.inverse/1`) and composition
+  # (`Tempo.Allen.compose/2`) of relations.
+  #
+  # ### Arguments
+  #
+  # * `a` and `b` are each one of:
+  #
+  #   * a `t:Tempo.t/0` point (converted to its implicit span).
+  #
+  #   * a `t:Tempo.Interval.t/0`.
+  #
+  #   * a `t:Tempo.IntervalSet.t/0` with exactly one member.
+  #
+  # ### Returns
+  #
+  # * One of the 13 relation atoms.
+  #
+  # * `{:error, reason}` when either operand is a multi-member
+  #   IntervalSet, an open-ended interval, or otherwise can't be
+  #   reduced to a single bounded interval. For multi-member
+  #   sets use `Tempo.IntervalSet.relation_matrix/2`.
+  #
+  # * `{:error, %Tempo.FloatingTempoError{}}` when one operand is zoned
+  #   and the other floating: a value with no zone has no place on the
+  #   universal time line to relate from.
+  #
+  # * `{:error, %Tempo.UnanchoredError{}}` when one operand has a year
+  #   and the other none, or neither has and they lead with different
+  #   units: they share no line to be related on.
   @spec relation(interval_like(), interval_like()) :: relation() | {:error, term()}
   def relation(a, b) do
     with :ok <- same_frame(a, b),
@@ -1500,8 +1497,8 @@ defmodule Tempo.Interval do
   defp to_single_interval(other, label) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.relation/2 cannot classify operand #{inspect(label)}: " <>
-         "#{inspect(other)}"
+       "Tempo.Interval.relation/2 cannot classify operand #{Border.inspect(label)}: " <>
+         "#{Border.inspect(other)}"
      )}
   end
 
@@ -1566,7 +1563,7 @@ defmodule Tempo.Interval do
     IntervalEndpointsError.exception(
       interval: interval,
       reason:
-        "#{inspect(interval)} has no one #{end_name}: #{inspect(endpoint)} names several " <>
+        "#{Border.inspect(interval)} has no one #{end_name}: #{Border.inspect(endpoint)} names several " <>
           "spans (a set, a selection, or a mask whose values do not run together)."
     )
   end
@@ -1584,7 +1581,7 @@ defmodule Tempo.Interval do
     {:error,
      ArgumentError.exception(
        "Tempo.Interval.relation/2 needs bounded intervals on both sides. " <>
-         "Operand #{inspect(label)} has an open-ended endpoint (`:undefined`)."
+         "Operand #{Border.inspect(label)} has an open-ended endpoint (`:undefined`)."
      )}
   end
 
@@ -1592,7 +1589,7 @@ defmodule Tempo.Interval do
     {:error,
      ArgumentError.exception(
        "Tempo.Interval.relation/2 requires a single bounded interval on each side. " <>
-         "Operand #{inspect(label)} is an IntervalSet with #{length(ivs)} members. " <>
+         "Operand #{Border.inspect(label)} is an IntervalSet with #{length(ivs)} members. " <>
          "For set-level questions use `Tempo.overlaps?/2`, `Tempo.disjoint?/2`, " <>
          "`Tempo.intersection/2`, or `Tempo.IntervalSet.relation_matrix/2`."
      )}
@@ -1602,27 +1599,11 @@ defmodule Tempo.Interval do
   ## Shape predicates
   ## ----------------------------------------------------------
 
-  @doc """
-  `true` when both endpoints are concrete `%Tempo{}` values —
-  stated, or fixed by a start or an end and a duration
-  (`2026-06-01/P9D`) — rather than `:undefined` or `nil`. Useful
-  as a guard before set operations or duration checks.
-
-  ### Examples
-
-      iex> Tempo.Interval.bounded?(%Tempo.Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"})
-      true
-
-      iex> Tempo.Interval.bounded?(~o"2026-06-01/P9D")
-      true
-
-      iex> Tempo.Interval.bounded?(%Tempo.Interval{from: ~o"2026-06-01", to: :undefined})
-      false
-
-      iex> Tempo.Interval.bounded?(~o"R3/2026-06-01/P1D")
-      true
-
-  """
+  @doc false
+  # `true` when both endpoints are concrete `%Tempo{}` values —
+  # stated, or fixed by a start or an end and a duration
+  # (`2026-06-01/P9D`) — rather than `:undefined` or `nil`. Useful
+  # as a guard before set operations or duration checks.
   @spec bounded?(t()) :: boolean()
   # A recurrence of a count is as bounded as each of its occurrences: its
   # last ends where the count does.
@@ -1853,12 +1834,14 @@ defmodule Tempo.Interval do
   end
 
   defp no_span_error(value) do
-    ArgumentError.exception("#{inspect(value)} names no span: its selection picks nothing.")
+    ArgumentError.exception(
+      "#{Border.inspect(value)} names no span: its selection picks nothing."
+    )
   end
 
   defp several_spans_error(value) do
     ArgumentError.exception(
-      "#{inspect(value)} names several spans, so it has no single start or end: " <>
+      "#{Border.inspect(value)} names several spans, so it has no single start or end: " <>
         "take them from its interval set with Tempo.to_interval_set/1."
     )
   end
@@ -2030,9 +2013,8 @@ defmodule Tempo.Interval do
   Years, months, weeks and days are counted by the calendar itself
   (its `diff/3`), so a month is one month however many days it
   has, and the day a daylight-saving change shortens is still one day.
-  Hours, minutes and seconds are elapsed time on the UTC time line
-  (`Tempo.Compare.to_utc_seconds/1`), so the same day measured in hours
-  is 23 of them. Whatever is less than a whole unit — an hour-resolution
+  Hours, minutes and seconds are elapsed time on the UTC time line,
+  so the same day measured in hours is 23 of them. Whatever is less than a whole unit — an hour-resolution
   span between zones half an hour apart, or a day-resolution span whose
   endpoints are in different zones — is kept in the finer units after
   it (`PT5H30M`, `P2DT1H`) rather than lost.
@@ -2131,7 +2113,7 @@ defmodule Tempo.Interval do
   def duration(value, _options) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.duration/2 measures an interval, not #{inspect(value)}: " <>
+       "Tempo.Interval.duration/2 measures an interval, not #{Border.inspect(value)}: " <>
          "Tempo.duration/1 measures the span a value names."
      )}
   end
@@ -2146,7 +2128,7 @@ defmodule Tempo.Interval do
         {:error,
          ArgumentError.exception(
            "Tempo.Interval.duration/2 takes one option, :leap_seconds, true or false, " <>
-             "not #{inspect(options)}."
+             "not #{Border.inspect(options)}."
          )}
     end
   end
@@ -2189,7 +2171,7 @@ defmodule Tempo.Interval do
 
     {:error,
      ArgumentError.exception(
-       "An interval's endpoints are Tempo values, and #{inspect(endpoint)} is not one, " <>
+       "An interval's endpoints are Tempo values, and #{Border.inspect(endpoint)} is not one, " <>
          "so the interval has no length."
      )}
   end
@@ -2262,7 +2244,9 @@ defmodule Tempo.Interval do
 
       _open ->
         {:error,
-         ArgumentError.exception("#{inspect(interval)} has an endpoint whose span has no start.")}
+         ArgumentError.exception(
+           "#{Border.inspect(interval)} has an endpoint whose span has no start."
+         )}
     end
   end
 
@@ -2301,7 +2285,7 @@ defmodule Tempo.Interval do
   defp different_calendars_error(from, to, operation) do
     ArgumentError.exception(
       "`Tempo.Interval.#{operation}` requires both endpoints in the same calendar. " <>
-        "Got #{inspect(from.calendar)} and #{inspect(to.calendar)}. " <>
+        "Got #{Border.name(from.calendar)} and #{Border.name(to.calendar)}. " <>
         "Convert one endpoint first — set operations such as " <>
         "`Tempo.intersection/2` and `Tempo.difference/2` handle " <>
         "cross-calendar inputs automatically."
@@ -2406,7 +2390,7 @@ defmodule Tempo.Interval do
          unit
        )
        when is_integer(from_year) and is_integer(to_year) and unit in [:year, :month] do
-    units_between(from, to, unit, Calendars.effective(calendar))
+    units_between(from, to, unit, calendar)
   end
 
   defp units_as_counted(_from, _to, _unit), do: :by_dates
@@ -2612,7 +2596,7 @@ defmodule Tempo.Interval do
   def leap_seconds_spanned(value) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.leap_seconds_spanned/1 reads an interval, not #{inspect(value)}."
+       "Tempo.Interval.leap_seconds_spanned/1 reads an interval, not #{Border.inspect(value)}."
      )}
   end
 
@@ -2641,23 +2625,13 @@ defmodule Tempo.Interval do
     from_s <= n and to_s > n
   end
 
-  @doc """
-  `true` when the interval is at least as long as the given
-  duration.
-
-  Unbounded intervals (`:undefined` endpoint) satisfy any finite
-  minimum — an infinite span is trivially "at least" any
-  duration.
-
-  ### Examples
-
-      iex> iv = %Tempo.Interval{from: ~o"2026-06-15T09", to: ~o"2026-06-15T11"}
-      iex> Tempo.Interval.at_least?(iv, ~o"PT1H")
-      true
-      iex> Tempo.Interval.at_least?(iv, ~o"PT3H")
-      false
-
-  """
+  @doc false
+  # `true` when the interval is at least as long as the given
+  # duration.
+  #
+  # Unbounded intervals (`:undefined` endpoint) satisfy any finite
+  # minimum — an infinite span is trivially "at least" any
+  # duration.
   @spec at_least?(t(), Duration.t()) :: boolean()
   def at_least?(interval, duration),
     do: resolved_at_least?(measurable!(interval), duration)
@@ -2669,22 +2643,12 @@ defmodule Tempo.Interval do
     length_order(interval, d) in [:earlier, :same]
   end
 
-  @doc """
-  `true` when the interval is at most as long as the given
-  duration.
-
-  Unbounded intervals return `false` — an infinite span exceeds
-  any finite maximum.
-
-  ### Examples
-
-      iex> iv = %Tempo.Interval{from: ~o"2026-06-15T09", to: ~o"2026-06-15T10"}
-      iex> Tempo.Interval.at_most?(iv, ~o"PT1H")
-      true
-      iex> Tempo.Interval.at_most?(iv, ~o"PT30M")
-      false
-
-  """
+  @doc false
+  # `true` when the interval is at most as long as the given
+  # duration.
+  #
+  # Unbounded intervals return `false` — an infinite span exceeds
+  # any finite maximum.
   @spec at_most?(t(), Duration.t()) :: boolean()
   def at_most?(interval, duration),
     do: resolved_at_most?(measurable!(interval), duration)
@@ -2696,21 +2660,11 @@ defmodule Tempo.Interval do
     length_order(interval, d) in [:later, :same]
   end
 
-  @doc """
-  `true` when the interval's length equals the given duration
-  exactly.
-
-  Unbounded intervals always return `false`.
-
-  ### Examples
-
-      iex> iv = %Tempo.Interval{from: ~o"2026-06-15T09", to: ~o"2026-06-15T10"}
-      iex> Tempo.Interval.exactly?(iv, ~o"PT1H")
-      true
-      iex> Tempo.Interval.exactly?(iv, ~o"PT2H")
-      false
-
-  """
+  @doc false
+  # `true` when the interval's length equals the given duration
+  # exactly.
+  #
+  # Unbounded intervals always return `false`.
   @spec exactly?(t(), Duration.t()) :: boolean()
   def exactly?(interval, duration),
     do: resolved_exactly?(measurable!(interval), duration)
@@ -2722,19 +2676,9 @@ defmodule Tempo.Interval do
     length_order(interval, d) == :same
   end
 
-  @doc """
-  `true` when the interval's length is strictly greater than
-  the given duration.
-
-  ### Examples
-
-      iex> iv = %Tempo.Interval{from: ~o"2026-06-15T09", to: ~o"2026-06-15T11"}
-      iex> Tempo.Interval.longer_than?(iv, ~o"PT1H")
-      true
-      iex> Tempo.Interval.longer_than?(iv, ~o"PT2H")
-      false
-
-  """
+  @doc false
+  # `true` when the interval's length is strictly greater than
+  # the given duration.
   @spec longer_than?(t(), Duration.t()) :: boolean()
   def longer_than?(interval, duration),
     do: resolved_longer_than?(measurable!(interval), duration)
@@ -2749,19 +2693,9 @@ defmodule Tempo.Interval do
     length_order(interval, d) == :earlier
   end
 
-  @doc """
-  `true` when the interval's length is strictly less than the
-  given duration.
-
-  ### Examples
-
-      iex> iv = %Tempo.Interval{from: ~o"2026-06-15T09", to: ~o"2026-06-15T10"}
-      iex> Tempo.Interval.shorter_than?(iv, ~o"PT2H")
-      true
-      iex> Tempo.Interval.shorter_than?(iv, ~o"PT1H")
-      false
-
-  """
+  @doc false
+  # `true` when the interval's length is strictly less than the
+  # given duration.
   @spec shorter_than?(t(), Duration.t()) :: boolean()
   def shorter_than?(interval, duration),
     do: resolved_shorter_than?(measurable!(interval), duration)
@@ -2803,7 +2737,8 @@ defmodule Tempo.Interval do
   end
 
   defp measurable!(other) do
-    raise ArgumentError, "A length is measured of an interval, and #{inspect(other)} is not one."
+    raise ArgumentError,
+          "A length is measured of an interval, and #{Border.inspect(other)} is not one."
   end
 
   # How a duration from an interval's start compares with its end: `:earlier`
@@ -2867,61 +2802,34 @@ defmodule Tempo.Interval do
   @before_relations [:precedes, :meets]
   @after_relations [:preceded_by, :met_by]
 
-  @doc """
-  `true` when `a` ends at or before `b` starts — the two share no
-  instant and `a` is earlier.
-
-  This is the everyday sense: an 11:00–12:00 meeting is before a
-  12:00 lunch, since under the half-open convention the meeting ends
-  as lunch begins. Allen's `:precedes` also needs a gap between the
-  two; `Tempo.Allen.precedes?/2` tests for it.
-
-  Raises when an operand is not a single bounded interval (a
-  multi-member set, an open or recurring interval, a one-of set), as
-  `relation/2` returns an error there.
-
-  ### Examples
-
-      iex> meeting = ~o"2026-06-15T11/2026-06-15T12"
-      iex> Tempo.Interval.before?(meeting, ~o"2026-06-15T12/2026-06-15T13")
-      true
-      iex> Tempo.Interval.before?(meeting, ~o"2026-06-15T11:30/2026-06-15T13")
-      false
-
-  """
+  @doc false
+  # `true` when `a` ends at or before `b` starts — the two share no
+  # instant and `a` is earlier.
+  #
+  # This is the everyday sense: an 11:00–12:00 meeting is before a
+  # 12:00 lunch, since under the half-open convention the meeting ends
+  # as lunch begins. Allen's `:precedes` also needs a gap between the
+  # two; `Tempo.Allen.precedes?/2` tests for it.
+  #
+  # Raises when an operand is not a single bounded interval (a
+  # multi-member set, an open or recurring interval, a one-of set), as
+  # `relation/2` returns an error there.
   @spec before?(interval_like(), interval_like()) :: boolean()
   def before?(a, b), do: match_relation(a, b, @before_relations)
 
-  @doc """
-  `true` when `a` starts at or after `b` ends — the two share no
-  instant and `a` is later.
-
-  The mirror of `before?/2`. Allen's `:preceded_by` also needs a gap
-  between the two; `Tempo.Allen.preceded_by?/2` tests for it.
-
-  ### Examples
-
-      iex> Tempo.Interval.after?(~o"2026-02", ~o"2026-01")
-      true
-
-  """
+  @doc false
+  # `true` when `a` starts at or after `b` ends — the two share no
+  # instant and `a` is later.
+  #
+  # The mirror of `before?/2`. Allen's `:preceded_by` also needs a gap
+  # between the two; `Tempo.Allen.preceded_by?/2` tests for it.
   @spec after?(interval_like(), interval_like()) :: boolean()
   def after?(a, b), do: match_relation(a, b, @after_relations)
 
-  @doc """
-  `true` when the two intervals touch at a single boundary —
-  either ends exactly where the other starts (Allen's
-  `:meets | :met_by`; `Tempo.Allen.meets?/2` tests one direction).
-
-  ### Examples
-
-      iex> Tempo.Interval.adjacent?(~o"2026-06-15", ~o"2026-06-16")
-      true
-
-      iex> Tempo.Interval.adjacent?(~o"2026-06-15", ~o"2026-06-17")
-      false
-
-  """
+  @doc false
+  # `true` when the two intervals touch at a single boundary —
+  # either ends exactly where the other starts (Allen's
+  # `:meets | :met_by`; `Tempo.Allen.meets?/2` tests one direction).
   @spec adjacent?(interval_like(), interval_like()) :: boolean()
   def adjacent?(a, b), do: match_relation(a, b, [:meets, :met_by])
 
@@ -3009,118 +2917,77 @@ defmodule Tempo.Interval do
   @typedoc "A three-valued relation certainty."
   @type certainty :: :certain | :possible | :impossible
 
-  @doc """
-  The certainty that `a` and `b` intersect, given their `±` margins.
-
-  The three-valued counterpart of `Tempo.overlaps?/3`. Each margin-bearing
-  endpoint is widened into a range, and the result reports whether
-  intersection holds for every consistent placement (`:certain`), some
-  (`:possible`), or none (`:impossible`). Crisp operands degrade exactly
-  to `Tempo.overlaps?/3` (only `:certain`/`:impossible` occur).
-
-  ### Arguments
-
-  * `a` and `b` are each a bounded `t:Tempo.t/0`, `t:Tempo.Interval.t/0`,
-    or single-member `t:Tempo.IntervalSet.t/0`.
-
-  ### Returns
-
-  * `:certain`, `:possible`, or `:impossible`.
-
-  * `{:error, reason}` when either operand is open-ended or a
-    multi-member set.
-
-  ### Examples
-
-      iex> Tempo.Interval.overlap_certainty(~o"2000±1Y", ~o"2010±1Y")
-      :impossible
-
-      iex> Tempo.Interval.overlap_certainty(~o"2000±1Y", ~o"2001±1Y")
-      :possible
-
-      iex> Tempo.Interval.overlap_certainty(~o"2000Y", ~o"2000Y")
-      :certain
-
-  """
+  @doc false
+  # The certainty that `a` and `b` intersect, given their `±` margins.
+  #
+  # The three-valued counterpart of `Tempo.overlaps?/3`. Each margin-bearing
+  # endpoint is widened into a range, and the result reports whether
+  # intersection holds for every consistent placement (`:certain`), some
+  # (`:possible`), or none (`:impossible`). Crisp operands degrade exactly
+  # to `Tempo.overlaps?/3` (only `:certain`/`:impossible` occur).
+  #
+  # ### Arguments
+  #
+  # * `a` and `b` are each a bounded `t:Tempo.t/0`, `t:Tempo.Interval.t/0`,
+  #   or single-member `t:Tempo.IntervalSet.t/0`.
+  #
+  # ### Returns
+  #
+  # * `:certain`, `:possible`, or `:impossible`.
+  #
+  # * `{:error, reason}` when either operand is open-ended or a
+  #   multi-member set.
   @spec overlap_certainty(interval_like(), interval_like()) :: certainty() | {:error, term()}
   def overlap_certainty(a, b), do: concept_certainty(a, b, @intersecting_relations)
 
-  @doc """
-  The certainty that `a` falls within `b`, given any uncertainty in either.
-
-  The three-valued counterpart of `within?/2` (Allen `:equals | :starts
-  | :during | :finishes`). Uncertainty may be a `±` margin *or*
-  underspecification — an unspecified-digit value (`~o"20XXY"`) is read
-  over the set of years its mask admits, so `:possible` reports that some
-  but not all groundings fall within `b`. Crisp operands degrade exactly to
-  `within?/2`.
-
-  ### Arguments
-
-  * `a` and `b` are each a bounded `t:Tempo.t/0`, `t:Tempo.Interval.t/0`,
-    or single-member `t:Tempo.IntervalSet.t/0`.
-
-  ### Returns
-
-  * `:certain`, `:possible`, or `:impossible`.
-
-  * `{:error, reason}` for open-ended or multi-member operands, or a
-    `t:Tempo.UnanchoredError.t/0` when an unanchored operand is
-    compared across resolution axes.
-
-  ### Examples
-
-      iex> Tempo.Interval.within_certainty(~o"2000Y6M", ~o"2000Y")
-      :certain
-
-      iex> Tempo.Interval.within_certainty(~o"2000±1Y", ~o"2000Y")
-      :possible
-
-      iex> # ~o"20XXY" is some year in [2000, 2100); 2000 escapes [2001, 2101)
-      iex> Tempo.Interval.within_certainty(~o"20XXY", ~o"2001Y/2101Y")
-      :possible
-
-  """
+  @doc false
+  # The certainty that `a` falls within `b`, given any uncertainty in either.
+  #
+  # The three-valued counterpart of `within?/2` (Allen `:equals | :starts
+  # | :during | :finishes`). Uncertainty may be a `±` margin *or*
+  # underspecification — an unspecified-digit value (`~o"20XXY"`) is read
+  # over the set of years its mask admits, so `:possible` reports that some
+  # but not all groundings fall within `b`. Crisp operands degrade exactly to
+  # `within?/2`.
+  #
+  # ### Arguments
+  #
+  # * `a` and `b` are each a bounded `t:Tempo.t/0`, `t:Tempo.Interval.t/0`,
+  #   or single-member `t:Tempo.IntervalSet.t/0`.
+  #
+  # ### Returns
+  #
+  # * `:certain`, `:possible`, or `:impossible`.
+  #
+  # * `{:error, reason}` for open-ended or multi-member operands, or a
+  #   `t:Tempo.UnanchoredError.t/0` when an unanchored operand is
+  #   compared across resolution axes.
   @spec within_certainty(interval_like(), interval_like()) :: certainty() | {:error, term()}
   def within_certainty(a, b), do: concept_certainty(a, b, @within_relations)
 
-  @doc """
-  The certainty that `relation(a, b)` is (one of) `target`.
-
-  Certainty is containment of the possible relations in `target`. The
-  possible relations account for any `±` margin and for underspecification:
-  an unspecified-digit operand (`~o"20XXY"`) is read over every grounding
-  its mask admits, and two unanchored operands compare on a shared leading
-  unit.
-
-  ### Arguments
-
-  * `a` and `b` are bounded interval-like values.
-
-  * `target` is a single Allen relation atom (e.g. `:during`) or a list
-    of relation atoms.
-
-  ### Returns
-
-  * `:certain`, `:possible`, or `:impossible`.
-
-  * `{:error, reason}` for open-ended or multi-member operands, or a
-    `t:Tempo.UnanchoredError.t/0` when an unanchored operand is
-    compared across resolution axes.
-
-  ### Examples
-
-      iex> Tempo.Interval.relation_certainty(~o"2000±1Y", ~o"2010±1Y", :precedes)
-      :certain
-
-      iex> Tempo.Interval.relation_certainty(~o"2000Y", ~o"2000Y", :equals)
-      :certain
-
-      iex> # some year in 2000–2099 may precede 2050, may follow it
-      iex> Tempo.Interval.relation_certainty(~o"20XXY", ~o"2050Y", :precedes)
-      :possible
-
-  """
+  @doc false
+  # The certainty that `relation(a, b)` is (one of) `target`.
+  #
+  # Certainty is containment of the possible relations in `target`. The
+  # possible relations account for any `±` margin and for underspecification:
+  # an unspecified-digit operand (`~o"20XXY"`) is read over every grounding
+  # its mask admits, and two unanchored operands compare on a shared leading
+  # unit.
+  #
+  # ### Arguments
+  #
+  # * `a` and `b` are bounded interval-like values.
+  #
+  # * `target` is a single Allen relation atom (e.g. `:during`) or a list
+  #   of relation atoms.
+  #
+  # ### Returns
+  #
+  # * `:certain`, `:possible`, or `:impossible`.
+  #
+  # * `{:error, reason}` for open-ended or multi-member operands, or a
+  #   `t:Tempo.UnanchoredError.t/0` when an unanchored operand is
+  #   compared across resolution axes.
   @spec relation_certainty(interval_like(), interval_like(), relation() | [relation()]) ::
           certainty() | {:error, term()}
   def relation_certainty(a, b, target) when is_atom(target),
@@ -3129,122 +2996,57 @@ defmodule Tempo.Interval do
   def relation_certainty(a, b, target) when is_list(target),
     do: concept_certainty(a, b, MapSet.new(target))
 
-  @doc """
-  `true` when `a` and `b` intersect for *every* placement of their `±`
-  margins — `overlap_certainty(a, b) == :certain`. Crisp counterpart:
-  `Tempo.overlaps?/3`.
-
-  ### Examples
-
-      iex> Tempo.Interval.certainly_overlaps?(~o"2000Y", ~o"2000Y")
-      true
-
-      iex> Tempo.Interval.certainly_overlaps?(~o"2000±1Y", ~o"2001±1Y")
-      false
-
-  """
+  @doc false
+  # `true` when `a` and `b` intersect for *every* placement of their `±`
+  # margins — `overlap_certainty(a, b) == :certain`. Crisp counterpart:
+  # `Tempo.overlaps?/3`.
   @spec certainly_overlaps?(interval_like(), interval_like()) :: boolean()
   def certainly_overlaps?(a, b), do: certainty_in?(overlap_certainty(a, b), [:certain])
 
-  @doc """
-  `true` when `a` and `b` *could* intersect for some placement of their
-  `±` margins — `overlap_certainty/2` is `:certain` or `:possible`.
-
-  ### Examples
-
-      iex> Tempo.Interval.possibly_overlaps?(~o"2000±1Y", ~o"2001±1Y")
-      true
-
-      iex> Tempo.Interval.possibly_overlaps?(~o"2000±1Y", ~o"2010±1Y")
-      false
-
-  """
+  @doc false
+  # `true` when `a` and `b` *could* intersect for some placement of their
+  # `±` margins — `overlap_certainty/2` is `:certain` or `:possible`.
   @spec possibly_overlaps?(interval_like(), interval_like()) :: boolean()
   def possibly_overlaps?(a, b), do: certainty_in?(overlap_certainty(a, b), [:certain, :possible])
 
-  @doc """
-  `true` when `a` falls within `b` for *every* placement of their `±`
-  margins. Crisp counterpart: `within?/2`.
-
-  ### Examples
-
-      iex> Tempo.Interval.certainly_within?(~o"2000Y6M", ~o"2000Y")
-      true
-
-  """
+  @doc false
+  # `true` when `a` falls within `b` for *every* placement of their `±`
+  # margins. Crisp counterpart: `within?/2`.
   @spec certainly_within?(interval_like(), interval_like()) :: boolean()
   def certainly_within?(a, b), do: certainty_in?(within_certainty(a, b), [:certain])
 
-  @doc """
-  `true` when `a` *could* fall within `b` for some placement of their
-  `±` margins.
-
-  ### Examples
-
-      iex> Tempo.Interval.possibly_within?(~o"2000±1Y", ~o"2000Y")
-      true
-
-  """
+  @doc false
+  # `true` when `a` *could* fall within `b` for some placement of their
+  # `±` margins.
   @spec possibly_within?(interval_like(), interval_like()) :: boolean()
   def possibly_within?(a, b), do: certainty_in?(within_certainty(a, b), [:certain, :possible])
 
-  @doc """
-  `true` when `a` ends at or before `b` starts — they share no instant
-  and `a` is earlier — for *every* placement of their `±` margins.
-  Crisp counterpart: `before?/2`.
-
-  ### Examples
-
-      iex> Tempo.Interval.certainly_before?(~o"2000±1Y", ~o"2010±1Y")
-      true
-
-      iex> Tempo.Interval.certainly_before?(~o"2000±1Y", ~o"2001±1Y")
-      false
-
-  """
+  @doc false
+  # `true` when `a` ends at or before `b` starts — they share no instant
+  # and `a` is earlier — for *every* placement of their `±` margins.
+  # Crisp counterpart: `before?/2`.
   @spec certainly_before?(interval_like(), interval_like()) :: boolean()
   def certainly_before?(a, b),
     do: certainty_in?(relation_certainty(a, b, @before_relations), [:certain])
 
-  @doc """
-  `true` when `a` *could* end at or before `b` starts for some placement
-  of their `±` margins.
-
-  ### Examples
-
-      iex> Tempo.Interval.possibly_before?(~o"2000±1Y", ~o"2001±1Y")
-      true
-
-  """
+  @doc false
+  # `true` when `a` *could* end at or before `b` starts for some placement
+  # of their `±` margins.
   @spec possibly_before?(interval_like(), interval_like()) :: boolean()
   def possibly_before?(a, b),
     do: certainty_in?(relation_certainty(a, b, @before_relations), [:certain, :possible])
 
-  @doc """
-  `true` when `a` starts at or after `b` ends — they share no instant
-  and `a` is later — for *every* placement of their `±` margins. Crisp
-  counterpart: `after?/2`.
-
-  ### Examples
-
-      iex> Tempo.Interval.certainly_after?(~o"2010±1Y", ~o"2000±1Y")
-      true
-
-  """
+  @doc false
+  # `true` when `a` starts at or after `b` ends — they share no instant
+  # and `a` is later — for *every* placement of their `±` margins. Crisp
+  # counterpart: `after?/2`.
   @spec certainly_after?(interval_like(), interval_like()) :: boolean()
   def certainly_after?(a, b),
     do: certainty_in?(relation_certainty(a, b, @after_relations), [:certain])
 
-  @doc """
-  `true` when `a` *could* start at or after `b` ends for some placement
-  of their `±` margins.
-
-  ### Examples
-
-      iex> Tempo.Interval.possibly_after?(~o"2001±1Y", ~o"2000±1Y")
-      true
-
-  """
+  @doc false
+  # `true` when `a` *could* start at or after `b` ends for some placement
+  # of their `±` margins.
   @spec possibly_after?(interval_like(), interval_like()) :: boolean()
   def possibly_after?(a, b),
     do: certainty_in?(relation_certainty(a, b, @after_relations), [:certain, :possible])
@@ -3841,7 +3643,7 @@ defmodule Tempo.Interval do
     ConversionError.exception(
       value: operand,
       reason:
-        "#{inspect(operand)} names several spans, so it has no one span whose place is " <>
+        "#{Border.inspect(operand)} names several spans, so it has no one span whose place is " <>
           "uncertain: ask of each span in `Tempo.to_interval_set/1`."
     )
   end

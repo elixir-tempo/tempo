@@ -3,25 +3,37 @@
 # than raising (`Tempo.Format.string_chars/1`).
 
 defimpl String.Chars, for: Tempo do
+  use Tempo.Border, every: true
+
   def to_string(tempo), do: Tempo.Format.string_chars(tempo)
 end
 
 defimpl String.Chars, for: Tempo.Interval do
+  use Tempo.Border, every: true
+
   def to_string(interval), do: Tempo.Format.string_chars(interval)
 end
 
 defimpl String.Chars, for: Tempo.IntervalSet do
+  use Tempo.Border, every: true
+
   def to_string(set), do: Tempo.Format.string_chars(set)
 end
 
 defimpl String.Chars, for: Tempo.Set do
+  use Tempo.Border, every: true
+
   def to_string(set), do: Tempo.Format.string_chars(set)
 end
 
 defimpl String.Chars, for: Tempo.RecurrenceSet do
+  use Tempo.Border, every: true
+
   def to_string(set), do: Tempo.Format.string_chars(set)
 end
 
 defimpl String.Chars, for: Tempo.Duration do
+  use Tempo.Border, every: true
+
   def to_string(duration), do: Tempo.Format.string_chars(duration)
 end

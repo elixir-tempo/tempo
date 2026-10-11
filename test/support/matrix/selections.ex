@@ -26,11 +26,12 @@ defmodule Tempo.Matrix.Selections do
 
   A week beside a month, in the period or among the parts, is a week of
   that month (decided 2026-10-07 and 2026-10-08), and is written here as
-  `:week_of_month`. A month's weeks are whole and begin on Monday; the
-  first is the one that holds the month's first day, and the week that
-  holds the first day of the next month is that month's first. So a week
-  of a month may start in the month before, and a month's last days may be
-  in no week of it.
+  `:week_of_month`. The rule is the calendar's (decided 2026-10-11), and
+  the text here is read with no calendar, so it is `Calendar.ISO`'s, which
+  is TR35's: a month's weeks are whole and begin on Monday, and the first
+  is the one that holds four or more of the month's days. So a week of a
+  month may start in the month before, and a month's first and last days
+  may be in no week of it.
 
   """
 
@@ -192,8 +193,9 @@ defmodule Tempo.Matrix.Selections do
     {Gregorian, [year: 2026, month: 6], [day_of_week: [1]], :instance},
     {Gregorian, [year: 2026, month: 6], [day_of_week: [{1, 5}]], :instance},
     {Gregorian, [year: 2026, month: 6], [day_of_week: [1]], :hour},
-    # June 2026 begins on a Monday and has four weeks; March begins on a
-    # Sunday, so its first week starts in February and it has five.
+    # June 2026 begins on a Monday and has four weeks, the last ending
+    # before its 29th; March begins on a Sunday, so its first week starts on
+    # its 2nd, and it has four.
     {Gregorian, [year: 2026, month: 6], [], :week_of_month},
     {Gregorian, [year: 2026, month: 3], [], :week_of_month},
     {Gregorian, [year: 2026, month: 6], [week_of_month: [2]], :day_of_week},
@@ -433,17 +435,27 @@ defmodule Tempo.Matrix.Selections do
     end
   end
 
-  # A month's weeks begin on Monday, and its first is the one that holds its
-  # first day.
+  # A month's weeks begin on Monday, and its first is the one that holds
+  # four or more of its days: the week of its first day where that is a
+  # Monday, a Tuesday, a Wednesday or a Thursday, and the week after where
+  # it is not.
   defp month_week_start(year, month, week) do
-    year |> Date.new!(month, 1) |> Date.beginning_of_week(:monday) |> Date.add((week - 1) * 7)
+    first = Date.new!(year, month, 1)
+    monday = Date.beginning_of_week(first, :monday)
+    week_one = if Date.diff(first, monday) <= 3, do: monday, else: Date.add(monday, 7)
+
+    Date.add(week_one, (week - 1) * 7)
   end
 
-  # The week that holds the first day of the next month is that month's
-  # first, so a month has the weeks before it.
+  # A month has the weeks from its first up to the next month's first.
   defp weeks_in_month(year, month) do
-    next = year |> Date.new!(month, 1) |> Date.end_of_month() |> Date.add(1)
-    div(Date.diff(Date.beginning_of_week(next, :monday), month_week_start(year, month, 1)), 7)
+    %Date{year: next_year, month: next_month} =
+      year |> Date.new!(month, 1) |> Date.end_of_month() |> Date.add(1)
+
+    div(
+      Date.diff(month_week_start(next_year, next_month, 1), month_week_start(year, month, 1)),
+      7
+    )
   end
 
   # A day selected in a year is a day of the year where no part beside it is

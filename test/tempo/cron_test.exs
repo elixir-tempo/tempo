@@ -7,8 +7,8 @@ defmodule Tempo.CronTest do
 
   alias Tempo.Cron
   alias Tempo.IntervalSet
-  alias Tempo.RRule.Expander
   alias Tempo.RRule.Rule
+  alias Tempo.Test.Engine.RRule.Expander
 
   describe "every field `*`" do
     test "`* * * * *` → every minute" do

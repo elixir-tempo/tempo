@@ -15,11 +15,11 @@ defmodule Tempo.UnspecifiedUnitSelectedTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
+  alias Tempo.Test.Engine.Compare
 
   defp seconds(%Date{} = date),
     do:

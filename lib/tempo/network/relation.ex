@@ -1,4 +1,6 @@
 defmodule Tempo.Network.Relation do
+  use Tempo.Border
+
   @moduledoc """
   A chronological relation — a constraint between the boundaries of two
   time-periods.

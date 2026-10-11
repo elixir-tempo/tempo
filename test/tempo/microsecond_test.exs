@@ -6,9 +6,7 @@ defmodule Tempo.MicrosecondTest do
   # is `Time.from_iso8601!/1` reading the same digits, which keeps a
   # microsecond's six and drops what is finer, as Tempo does.
 
-  alias Tempo.Microsecond
-
-  doctest Tempo.Microsecond
+  alias Tempo.Test.Engine.Microsecond
 
   # Fractions as they are written: with zeros before and after, and of one
   # digit to more digits than a microsecond has.

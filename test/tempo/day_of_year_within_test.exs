@@ -13,9 +13,9 @@ defmodule Tempo.DayOfYearWithinTest do
   """
   use ExUnit.Case, async: true
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   # A part as it is written, and the days of a year it names.
   @parts [

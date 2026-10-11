@@ -13,6 +13,8 @@ defmodule Tempo.UnboundedSetError do
 
   """
 
+  alias Tempo.Border
+
   defexception [:operation, :set]
 
   @type t :: %__MODULE__{
@@ -22,7 +24,7 @@ defmodule Tempo.UnboundedSetError do
 
   @impl true
   def exception(bindings) when is_list(bindings) do
-    struct!(__MODULE__, bindings)
+    Border.leave(struct!(__MODULE__, bindings))
   end
 
   @impl true

@@ -9,11 +9,11 @@ defmodule Tempo.CalendarIndependenceTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.Network
   alias Tempo.Network.Solver
+  alias Tempo.Test.Engine.Compare
 
   # Build a value in the named calendar via its IXDTF `u-ca` tag.
   defp cal(string, calendar), do: Tempo.from_iso8601!("#{string}[u-ca=#{calendar}]")
@@ -69,7 +69,7 @@ defmodule Tempo.CalendarIndependenceTest do
     end
 
     test "a sigil with no u-ca suffix is still Gregorian" do
-      assert ~o"2026-06-15".calendar == Calendrical.Gregorian
+      assert ~o"2026-06-15".calendar == Calendar.ISO
     end
   end
 
@@ -80,7 +80,7 @@ defmodule Tempo.CalendarIndependenceTest do
     # `Tempo.to_string/2` called as a module. It is in the default calendar,
     # and one written with `calendar: nil` is read as it.
     test "is in the default calendar" do
-      assert %Tempo{time: [year: 2026]}.calendar == Calendrical.Gregorian
+      assert %Tempo{time: [year: 2026]}.calendar == Calendar.ISO
       assert %Tempo{time: [year: 2026]} == ~o"2026"
     end
 

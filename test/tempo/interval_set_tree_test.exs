@@ -9,9 +9,9 @@ defmodule Tempo.IntervalSetTreeTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.IntervalSet
   alias Tempo.IntervalSet.Backend.Tree
+  alias Tempo.Test.Engine.Compare
 
   @base ~o"2020-01-01"
 

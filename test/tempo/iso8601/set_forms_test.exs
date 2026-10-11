@@ -16,10 +16,10 @@ defmodule Tempo.Iso8601.SetFormsTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Compare
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.ParseError
+  alias Tempo.Test.Engine.Compare
 
   defp read(text), do: Tempo.from_iso8601!(text)
 

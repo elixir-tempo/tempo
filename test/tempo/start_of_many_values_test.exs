@@ -18,10 +18,10 @@ defmodule Tempo.StartOfManyValuesTest do
   import Tempo.Sigils
 
   alias Calendrical.Julian.March25
-  alias Tempo.Compare
   alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.Test.Engine.Compare
 
   # Values that name several values, in every shape a unit names them.
   @several [

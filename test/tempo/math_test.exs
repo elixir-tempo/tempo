@@ -3,13 +3,11 @@ defmodule Tempo.Math.Test do
   import Tempo.Sigils
 
   alias Tempo.Interval
-  alias Tempo.Math
+  alias Tempo.Test.Engine.Math
 
   # `Tempo.Math`'s examples were not executed by anything, so the
   # `add_unit/3` and `subtract_unit/3` examples went on documenting a
   # bare return long after the functions began threading `{:ok, _}`.
-  doctest Tempo.Math, import: true
-
   describe "large day-count arithmetic (absolute-day fast path)" do
     defp add_days(tempo, n), do: Math.add(tempo, %Tempo.Duration{time: [day: n]})
 

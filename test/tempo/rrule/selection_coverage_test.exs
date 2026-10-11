@@ -3,7 +3,7 @@ defmodule Tempo.RRule.SelectionCoverageTest do
 
   import Tempo.Sigils
 
-  alias Tempo.RRule.Selection
+  alias Tempo.Test.Engine.RRule.Selection
 
   @cal Calendrical.Gregorian
 

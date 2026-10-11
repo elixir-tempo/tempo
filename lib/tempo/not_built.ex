@@ -25,7 +25,8 @@ defmodule Tempo.NotBuilt do
   # numbering (`w`) under a month for good
   # (`Tempo.RRule.Selection.calendar_week_in_its_year/2`).
 
-  alias Tempo.{Calendars, ConversionError, Duration, Interval}
+  alias Tempo.Border
+  alias Tempo.{ConversionError, Duration, Interval}
 
   import Tempo.Calendars, only: [is_notation: 1]
 
@@ -109,8 +110,8 @@ defmodule Tempo.NotBuilt do
   # is a filter by the week of its month.
   @spec week_of_month(list(), Tempo.t()) :: {:error, ConversionError.t()}
   def week_of_month(selector, %Tempo{calendar: calendar} = from) when is_list(selector) do
-    asked = "the selection of #{inspect(selector)} from #{inspect(from)}"
-    {:error, error(asked, :week_of_month, Calendars.effective(calendar))}
+    asked = "the selection of #{Border.inspect(selector)} from #{Border.inspect(from)}"
+    {:error, error(asked, :week_of_month, calendar)}
   end
 
   @doc false
@@ -123,5 +124,5 @@ defmodule Tempo.NotBuilt do
   # hand is, is refused by the same name.
   @spec rule_to_an_end(Interval.t()) :: ConversionError.t()
   def rule_to_an_end(%Interval{to: %Tempo{calendar: calendar}} = recurrence),
-    do: error(recurrence, :rule_to_an_end, Calendars.effective(calendar))
+    do: error(recurrence, :rule_to_an_end, calendar)
 end
