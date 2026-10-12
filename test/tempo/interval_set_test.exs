@@ -81,6 +81,64 @@ defmodule Tempo.IntervalSet.Test do
     end
   end
 
+  describe "new/2 holds its members in one calendar" do
+    setup do
+      {:ok, hebrew} = Tempo.to_interval(Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]"))
+
+      %{hebrew: hebrew, iso: ~o"2026-06-15/2026-06-17"}
+    end
+
+    # A set kept each member in the calendar it was given in, so a set
+    # could hold members of several.
+    test "a member of another calendar is brought to the first member's", context do
+      {:ok, hebrew_first} = Tempo.IntervalSet.new([context.hebrew, context.iso])
+
+      assert Enum.map(Tempo.IntervalSet.members(hebrew_first), &Tempo.to_iso8601!/1) ==
+               ["5786Y6M15D/16D[u-ca=hebrew]", "5786Y9M30D/10M2D[u-ca=hebrew]"]
+
+      {:ok, iso_first} = Tempo.IntervalSet.new([context.iso, context.hebrew])
+
+      assert Enum.map(Tempo.IntervalSet.members(iso_first), &Tempo.to_iso8601!/1) ==
+               ["2026Y3M4D/5D", "2026Y6M15D/17D"]
+
+      for member <- Tempo.IntervalSet.members(iso_first) do
+        assert Interval.from(member).calendar == Calendar.ISO
+        assert Interval.to(member).calendar == Calendar.ISO
+      end
+    end
+
+    test "the set covers what its members covered, in whichever calendar it is asked", context do
+      {:ok, set} = Tempo.IntervalSet.new([context.hebrew, context.iso])
+
+      assert Tempo.IntervalSet.covered?(set, ~o"2026-06-16")
+      assert Tempo.IntervalSet.covered?(set, ~o"2026-03-04")
+      refute Tempo.IntervalSet.covered?(set, ~o"2026-06-17")
+    end
+
+    test "members of one calendar are as they were given" do
+      {:ok, june} = Tempo.to_interval(~o"2026-06")
+      days = ~o"2026-08-01/2026-08-03"
+
+      {:ok, set} = Tempo.IntervalSet.new([june, days])
+
+      assert Tempo.IntervalSet.members(set) == [june, days]
+    end
+
+    test "on every backend", context do
+      {:ok, tree} = Tempo.IntervalSet.new([context.hebrew, context.iso], backend: :tree)
+
+      assert Enum.map(Tempo.IntervalSet.members(tree), &Interval.from(&1).calendar) ==
+               [Calendrical.Hebrew, Calendrical.Hebrew]
+    end
+
+    test "members with no year in two calendars have no one order, as before" do
+      hebrew_hours = Tempo.from_iso8601!("T13/T17[u-ca=hebrew]")
+
+      assert {:error, %Tempo.UnanchoredError{}} =
+               Tempo.IntervalSet.new([~o"T09/T12", hebrew_hours])
+    end
+  end
+
   describe "new!/1" do
     test "raises on open-ended input" do
       {:ok, open} = Tempo.from_iso8601("../1985")

@@ -99,6 +99,7 @@ defmodule Tempo.IntervalSet do
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet.Backend
   alias Tempo.IntervalSet.Backend.Lazy
+  alias Tempo.Operations
   alias Tempo.UnboundedSetError
 
   @typedoc """
@@ -122,6 +123,11 @@ defmodule Tempo.IntervalSet do
   The input list is sorted ascending by `from` endpoint; with
   `coalesce: true`, adjacent or overlapping intervals are merged
   under the half-open `[from, to)` convention.
+
+  A set's members are in one calendar, the first interval's as it is
+  given. An interval of another calendar is brought to it as a set
+  operation brings its second operand to its first's: each end is
+  extended to its day and written in the set's calendar.
 
   ### Arguments
 
@@ -149,8 +155,9 @@ defmodule Tempo.IntervalSet do
   * `{:ok, interval_set}` where `interval_set` is a `t:t/0`, or
 
   * `{:error, reason}` when an input interval is open-ended or
-    otherwise cannot participate in a set, or is one the backend cannot
-    hold: an interval tree holds members with a year.
+    otherwise cannot participate in a set, cannot be brought to the
+    set's calendar, or is one the backend cannot hold: an interval tree
+    holds members with a year.
 
   ### Examples
 
@@ -161,6 +168,13 @@ defmodule Tempo.IntervalSet do
       2
       iex> Tempo.IntervalSet.first(set).from.time
       [year: 2022, month: 1]
+
+      iex> {:ok, hebrew_day} = Tempo.to_interval(~o"5786-06-15[u-ca=hebrew]")
+      iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15/2026-06-17", hebrew_day])
+      iex> set
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.to_iso8601!/1)
+      ["2026Y3M4D/5D", "2026Y6M15D/17D"]
 
   """
   @spec new([Interval.t()], keyword()) :: {:ok, t()} | {:error, term()}
@@ -181,6 +195,7 @@ defmodule Tempo.IntervalSet do
     backend = resolve_backend(Keyword.get(opts, :backend, Backend.List))
 
     with :ok <- validate_all_bounded(intervals),
+         {:ok, intervals} <- in_one_calendar(intervals),
          :ok <- validate_one_order(intervals),
          :ok <- held_by_backend(backend, intervals) do
       # `coalesce: false` is the default: IntervalSet preserves
@@ -208,6 +223,32 @@ defmodule Tempo.IntervalSet do
          backend: backend
        }}
     end
+  end
+
+  # A set's members are in one calendar, its first member's as it was
+  # given: a member of another is brought to it as a set operation brings its
+  # second operand to its first's, each end extended to its day and written
+  # in the calendar. So a set is told by any one of its members.
+  defp in_one_calendar([%Interval{} = first | _rest] = intervals) do
+    calendar = calendar_of(first)
+
+    if Enum.all?(intervals, &(calendar_of(&1) == calendar)) do
+      {:ok, intervals}
+    else
+      Operations.in_calendar(intervals, calendar)
+    end
+  end
+
+  defp in_one_calendar(intervals) do
+    {:ok, intervals}
+  end
+
+  defp calendar_of(%Interval{from: %Tempo{calendar: calendar}}) do
+    calendar
+  end
+
+  defp calendar_of(_member) do
+    nil
   end
 
   # The members are sorted by their starts, so each end must have a place in

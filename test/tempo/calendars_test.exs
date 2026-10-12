@@ -13,6 +13,7 @@ defmodule Tempo.CalendarsTest do
   alias Tempo.Calendars
   alias Tempo.ConversionError
   alias Tempo.Interval
+  alias Tempo.IntervalSet
   alias Tempo.Matrix.Corpus
   alias Tempo.Network
   alias Tempo.RRule
@@ -142,6 +143,37 @@ defmodule Tempo.CalendarsTest do
 
       assert Calendars.inside(by_hand).calendar == Calendars.default()
       assert Calendars.outside(Calendars.inside(by_hand)) == ~o"2026-06-15"
+    end
+  end
+
+  describe "a set is told by one member" do
+    # A set's members are in one calendar, so whether a caller holds it is
+    # asked of its first member, and of what a lazy set says of members it
+    # has yet to give: no set is read whole to be told.
+    test "on each backend, as a caller holds it and as Tempo works with it" do
+      interval = ~o"2026-06-15/2026-06-17"
+      {:ok, list} = IntervalSet.new([interval, ~o"2026-07-01/2026-07-03"])
+      {:ok, tree} = IntervalSet.new([interval, ~o"2026-07-01/2026-07-03"], backend: :tree)
+      lazy = IntervalSet.from_stream(Stream.map([interval], & &1))
+
+      for set <- [list, tree, lazy] do
+        assert Calendars.outside?(set)
+        refute Calendars.outside?(Calendars.inside(set))
+        assert Calendars.outside(Calendars.inside(set)) == set
+      end
+    end
+
+    test "a set of another calendar is neither" do
+      {:ok, hebrew} = Tempo.to_interval(Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]"))
+      {:ok, set} = IntervalSet.new([hebrew, ~o"2026-06-15/2026-06-17"])
+
+      refute Calendars.outside?(set)
+      assert Calendars.inside(set) == set
+    end
+
+    test "an interval with neither end is told by its rule" do
+      assert Calendars.outside?(~o"R/../P1Y/FL12M25DN")
+      refute Calendars.outside?(Calendars.inside(~o"R/../P1Y/FL12M25DN"))
     end
   end
 

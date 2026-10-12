@@ -830,28 +830,55 @@ defmodule Tempo.Operations do
   end
 
   defp convert_calendar_intervals(%IntervalSet{} = set, target_calendar) do
-    set
-    |> IntervalSet.members()
-    |> Enum.reduce_while({:ok, []}, fn %Interval{from: from, to: to} = interval, {:ok, acc} ->
-      with {:ok, from} <- convert_tempo_calendar(from, target_calendar),
-           {:ok, to} <- convert_tempo_calendar(to, target_calendar) do
-        {:cont, {:ok, [%{interval | from: from, to: to} | acc]}}
-      else
-        error -> {:halt, error}
+    with {:ok, converted} <- set |> IntervalSet.members() |> in_calendar(target_calendar) do
+      {:ok, IntervalSet.with_intervals(set, converted)}
+    end
+  end
+
+  @doc false
+  # Intervals as intervals of a calendar, as a set operation brings its
+  # second operand to its first's and a set its members to its first
+  # member's: each end that names a year is extended to its day and written
+  # in the calendar, and an end already of the calendar, or with no year, is
+  # as it was.
+  @spec in_calendar([Interval.t()], module()) :: {:ok, [Interval.t()]} | {:error, Exception.t()}
+  def in_calendar(intervals, target_calendar) when is_list(intervals) do
+    intervals
+    |> Enum.reduce_while({:ok, []}, fn interval, {:ok, converted} ->
+      case interval_in_calendar(interval, target_calendar) do
+        {:ok, interval} -> {:cont, {:ok, [interval | converted]}}
+        {:error, _exception} = error -> {:halt, error}
       end
     end)
-    |> case do
-      {:ok, converted} -> {:ok, IntervalSet.with_intervals(set, Enum.reverse(converted))}
-      error -> error
+    |> in_the_order_given()
+  end
+
+  defp in_the_order_given({:ok, converted}) do
+    {:ok, Enum.reverse(converted)}
+  end
+
+  defp in_the_order_given({:error, _exception} = error) do
+    error
+  end
+
+  defp interval_in_calendar(%Interval{from: from, to: to} = interval, target_calendar) do
+    with {:ok, from} <- convert_tempo_calendar(from, target_calendar),
+         {:ok, to} <- convert_tempo_calendar(to, target_calendar) do
+      {:ok, %{interval | from: from, to: to}}
     end
   end
 
   # Convert a single %Tempo{}'s day into the target calendar, keeping its
-  # time of day. Unanchored Tempos (no :year) pass through unchanged —
-  # their components are calendar-independent. An unbounded endpoint
-  # carries no calendar-bound components.
+  # time of day. One of that calendar already is as it was. Unanchored
+  # Tempos (no :year) pass through unchanged — their components are
+  # calendar-independent. An unbounded endpoint carries no calendar-bound
+  # components.
   defp convert_tempo_calendar(nil, _target_calendar) do
     {:ok, nil}
+  end
+
+  defp convert_tempo_calendar(%Tempo{calendar: calendar} = tempo, calendar) do
+    {:ok, tempo}
   end
 
   defp convert_tempo_calendar(%Tempo{} = tempo, target_calendar) do
@@ -860,6 +887,11 @@ defmodule Tempo.Operations do
     else
       {:ok, tempo}
     end
+  end
+
+  # An end that is no value (an open one) names no calendar.
+  defp convert_tempo_calendar(end_of_no_value, _target_calendar) do
+    {:ok, end_of_no_value}
   end
 
   # Extend to day precision so there is a day to convert — a calendar date,

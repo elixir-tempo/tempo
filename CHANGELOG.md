@@ -10,6 +10,8 @@
 
 * An interval is in one calendar. `Tempo.Interval.new/1` returns a `Tempo.IntervalEndpointsError` for two ends of different calendars, where it answered an interval of both, and in text a `[u-ca=…]` on either end names the calendar of both ends, two that name different calendars being a `Tempo.ParseError`.
 
+* A set's members are in one calendar. `Tempo.IntervalSet.new/2` brings an interval of another calendar to its first interval's, as a set operation brings its second operand to its first's, where it kept each member in the calendar it was given in.
+
 * A solar term is the calendar's to answer, and `Calendar.ISO` reckons none: `(qingming)e` on a value that names no calendar is a `Tempo.EventError` whose reason is `{:no_solar_terms, Calendar.ISO}`, as `Tempo.Event.date("qingming", 2026)` is. A value of `[u-ca=gregory]` or of a lunisolar calendar has its solar terms, and `Tempo.Event.date/3` takes the calendar to ask.
 
 * An operation on any value is documented on `Tempo` alone: a relation, a certainty and a length predicate (`Tempo.before?/2`, `Tempo.at_least?/2`) are no longer documented on `Tempo.Interval` as well, nor a set operation, a selection and a formatted string in modules of their own. The engine's modules, which the documentation grouped as Internals, are no longer documented either.

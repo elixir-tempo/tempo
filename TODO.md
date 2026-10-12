@@ -72,6 +72,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A set's members are in one calendar** — the user, 2026-10-12. `Tempo.IntervalSet.new/2` brings an interval of another calendar to its first interval's, as the set operations do, so a set is told by one member and no public call reads a whole set to know whose it is. 2026-10-12.
+
 * [x] **An interval is in one calendar** — the user, 2026-10-12: "An expression (a tempo, an interval or duration) can only be in a single calendar. No mixing calendars across endpoints". `Tempo.Interval.new/1` returns an error for two ends of different calendars, and in text a `[u-ca=…]` on either end names the calendar of both, two that differ being an error. 2026-10-12.
 
 * [x] **Calendrical from GitHub again** — the path dependency of the callback work is gone: `mix.exs` names `github: "elixir-localize/calendrical", branch: "main"`, and the locks are at Calendrical `06aa274` and Localize `d01dead0`, the heads pushed on 2026-10-10. 2026-10-11.

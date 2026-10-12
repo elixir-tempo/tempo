@@ -63,16 +63,17 @@ defmodule Tempo.Calendars do
   @doc false
   # Whether a value is as a caller holds it, for the first clause of a
   # public function: a value in `Calendar.ISO` (or written by hand with no
-  # calendar), a date or a time of Elixir's in it, or an interval either end
-  # of which is one. What a function's head cannot see (the members of a
-  # set, the values of a list of options) is asked of `outside?/1`. The
-  # structs are matched as maps, so that this module does not wait on
-  # `Tempo` to compile.
+  # calendar), a date or a time of Elixir's in it, or an interval an end of
+  # which is one, or the rule of one with neither end. What a function's
+  # head cannot see (the members of a set, the values of a list of options)
+  # is asked of `outside?/1`. The structs are matched as maps, so that this
+  # module does not wait on `Tempo` to compile.
   defguard is_outside(value)
            when is_held_outside(value) or
                   (is_struct(value, Tempo.Interval) and
                      (is_held_outside(:erlang.map_get(:from, value)) or
-                        is_held_outside(:erlang.map_get(:to, value))))
+                        is_held_outside(:erlang.map_get(:to, value)) or
+                        is_held_outside(:erlang.map_get(:repeat_rule, value))))
 
   @doc false
   # What a public function was given, as Tempo works with it: `Calendar.ISO`
@@ -106,6 +107,32 @@ defmodule Tempo.Calendars do
 
   def outside?(%{__struct__: Tempo.Duration}) do
     false
+  end
+
+  # An interval is in one calendar, so it is told by an end, or by its rule
+  # where it has neither (`R/../P1Y/FL12M25DN`).
+  def outside?(%{__struct__: Tempo.Interval, from: from, to: to, repeat_rule: rule}) do
+    outside?(from) or outside?(to) or outside?(rule)
+  end
+
+  # A set's members are in one calendar (`Tempo.IntervalSet.new/2` brings
+  # them to its first member's), so a set is told by one member: the first
+  # of a list, what a lazy set says of members it has yet to give, or the
+  # first its backend gives.
+  def outside?(%{__struct__: Tempo.IntervalSet, intervals: [first | _rest]}) do
+    outside?(first)
+  end
+
+  def outside?(%{__struct__: Tempo.IntervalSet, intervals: []}) do
+    false
+  end
+
+  def outside?(%{__struct__: Tempo.IntervalSet, intervals: %{calendar: calendar}}) do
+    outside?(calendar)
+  end
+
+  def outside?(%{__struct__: Tempo.IntervalSet, backend: backend, intervals: state}) do
+    outside?(backend.first(state))
   end
 
   def outside?(%Stream{}) do
