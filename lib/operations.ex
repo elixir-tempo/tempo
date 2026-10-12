@@ -371,18 +371,12 @@ defmodule Tempo.Operations do
     {:ok, a, b}
   end
 
-  # A window with no year, where an operand is dated.
-  defp placed_on_window(_a, _b, _classes, _dated_operand, window_set, within) do
-    ensure_anchored_window(window_set, within)
-  end
-
-  defp ensure_anchored_window(window_set, within) do
-    if anchor_class(window_set) == :anchored do
-      :ok
-    else
-      {:error,
-       UnanchoredError.exception(operation: "use a value as the :within window", value: within)}
-    end
+  # A window with no year, where an operand is dated: the window is asked
+  # its class once, where it is placed, and this clause is the one that is
+  # left for a window that has no year.
+  defp placed_on_window(_a, _b, _classes, _dated_operand, _window_set, within) do
+    {:error,
+     UnanchoredError.exception(operation: "use a value as the :within window", value: within)}
   end
 
   # Anchoring to a `:within` window walks its days and grafts each unanchored
