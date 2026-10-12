@@ -9,6 +9,9 @@ defmodule Tempo.Matrix.Runner do
 
   """
 
+  alias Tempo.Interval
+  alias Tempo.IntervalSet
+
   # A cell that has not answered in this long is a hang, unless its run
   # allows it longer: the exhaustive corpus holds values of tens of
   # thousands of members, and writing one out takes seconds. The limit tells
@@ -243,40 +246,10 @@ defmodule Tempo.Matrix.Runner do
     false
   end
 
-  defp exited({%{__exception__: true} = exception, _stacktrace}) do
-    raised(exception)
-  end
-
-  defp exited({reason, stacktrace}) when is_list(stacktrace) do
-    :error
-    |> Exception.normalize(reason, stacktrace)
-    |> raised()
-  end
-
-  defp exited(:killed) do
-    {:killed, nil}
-  end
-
-  defp exited(reason) do
-    {{:raised, ErlangError}, describe(reason)}
-  end
-
-  # An `ArgumentError` whose message is the runtime's own came from a built-in
-  # function given what it cannot take, not from a `raise` written on purpose.
-  defp raised(%ArgumentError{} = exception) do
-    message = message(exception)
-
-    if message =~ ~r/^(errors were found at the given arguments|argument error)/ do
-      {:builtin_raise, message}
-    else
-      {{:raised, ArgumentError}, message}
-    end
-  end
-
   # Whether an answer holds an expression of two calendars anywhere in it:
   # an interval whose ends differ, or a set whose members do. A lazy set's
   # members are still to be given, and are not read.
-  defp mixes_calendars?(%Tempo.Interval{
+  defp mixes_calendars?(%Interval{
          from: %Tempo{calendar: from_calendar},
          to: %Tempo{calendar: to_calendar}
        })
@@ -284,8 +257,8 @@ defmodule Tempo.Matrix.Runner do
     true
   end
 
-  defp mixes_calendars?(%Tempo.IntervalSet{} = set) do
-    Tempo.bounded?(set) and mixed_members?(Tempo.IntervalSet.members(set))
+  defp mixes_calendars?(%IntervalSet{} = set) do
+    Tempo.bounded?(set) and mixed_members?(IntervalSet.members(set))
   end
 
   defp mixes_calendars?(%Stream{}) do
@@ -317,11 +290,41 @@ defmodule Tempo.Matrix.Runner do
 
   defp mixed_members?(members) do
     calendars =
-      for %Tempo.Interval{from: %Tempo{calendar: calendar}} <- members, uniq: true do
+      for %Interval{from: %Tempo{calendar: calendar}} <- members, uniq: true do
         calendar
       end
 
-    length(calendars) > 1 or Enum.any?(members, &mixes_calendars?/1)
+    match?([_one, _another | _rest], calendars) or Enum.any?(members, &mixes_calendars?/1)
+  end
+
+  defp exited({%{__exception__: true} = exception, _stacktrace}) do
+    raised(exception)
+  end
+
+  defp exited({reason, stacktrace}) when is_list(stacktrace) do
+    :error
+    |> Exception.normalize(reason, stacktrace)
+    |> raised()
+  end
+
+  defp exited(:killed) do
+    {:killed, nil}
+  end
+
+  defp exited(reason) do
+    {{:raised, ErlangError}, describe(reason)}
+  end
+
+  # An `ArgumentError` whose message is the runtime's own came from a built-in
+  # function given what it cannot take, not from a `raise` written on purpose.
+  defp raised(%ArgumentError{} = exception) do
+    message = message(exception)
+
+    if message =~ ~r/^(errors were found at the given arguments|argument error)/ do
+      {:builtin_raise, message}
+    else
+      {{:raised, ArgumentError}, message}
+    end
   end
 
   defp raised(%{__struct__: module} = exception) do

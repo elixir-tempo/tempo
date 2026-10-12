@@ -1,6 +1,9 @@
 defmodule Tempo.Matrix.Test do
   use ExUnit.Case, async: false
 
+  alias Tempo.Calendars
+  alias Tempo.Interval
+  alias Tempo.IntervalSet
   alias Tempo.Matrix.Baseline
   alias Tempo.Matrix.Census
   alias Tempo.Matrix.Checks
@@ -39,16 +42,16 @@ defmodule Tempo.Matrix.Test do
     {:ok, hebrew_span} = Tempo.to_interval(hebrew)
     {:ok, span} = Tempo.to_interval(day)
 
-    assert Runner.outcome(fn -> {:ok, Tempo.Calendars.inside(day)} end) == :inside_calendar
-    assert Runner.outcome(fn -> inspect(Tempo.Calendars.default()) end) == :inside_calendar
+    assert Runner.outcome(fn -> {:ok, Calendars.inside(day)} end) == :inside_calendar
+    assert Runner.outcome(fn -> inspect(Calendars.default()) end) == :inside_calendar
 
-    assert Runner.outcome(fn -> {:ok, %Tempo.Interval{from: hebrew, to: day}} end) ==
+    assert Runner.outcome(fn -> {:ok, %Interval{from: hebrew, to: day}} end) ==
              :mixed_calendars
 
-    assert Runner.outcome(fn -> %Tempo.IntervalSet{intervals: [hebrew_span, span]} end) ==
+    assert Runner.outcome(fn -> %IntervalSet{intervals: [hebrew_span, span]} end) ==
              :mixed_calendars
 
-    assert Runner.outcome(fn -> Tempo.IntervalSet.new([hebrew_span, span]) end) == :ok
+    assert Runner.outcome(fn -> IntervalSet.new([hebrew_span, span]) end) == :ok
 
     refute Runner.passes?(:inside_calendar, :deliberate)
     refute Runner.passes?(:mixed_calendars, :deliberate)
