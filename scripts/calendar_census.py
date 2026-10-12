@@ -452,6 +452,7 @@ DECIDERS = collections.OrderedDict([
         ("lib/tempo.ex", "every_week_follows?", None),
         ("lib/compare.ex", "same_axis?", None),
         ("lib/tempo/unit_values.ex", "month_of_year?", None),
+        ("lib/validation.ex", "months_in_a_calendar_of_weeks?", "Validation"),
         ("lib/explain.ex", "calendar_of_months", None),
         ("lib/tempo.ex", "date_units", "Tempo"),
         ("lib/iso8601/group.ex", "calendar_week", None),
@@ -494,14 +495,45 @@ DECIDERS = collections.OrderedDict([
         ("lib/tempo/calendars.ex", "default", "Calendars"),
         ("lib/tempo/calendars.ex", "validated", "Calendars"),
         ("lib/tempo/calendars.ex", "is_notation", "*"),
-        ("lib/validation.ex", "reading_calendar", None),
-        ("lib/validation.ex", "written_calendar", None),
     ]),
     ("ISO 8601's week dates: the notation's calendar of weeks, in the one module", [
         ("lib/tempo/calendars.ex", "weeks", "Calendars"),
         ("lib/tempo/calendars.ex", "is_notation_weeks", "*"),
     ]),
 ])
+
+# How each group stands after the user's rulings of 2026-10-12. "kind": the
+# function asks a calendar what kind it is (of weeks or of months, which the
+# user holds a calendar to be: "Week calendars are 2026Y25W2D format") or
+# which CLDR calendar it is. "left": it asks whether a calendar is the
+# notation's own, where a standard is written in that calendar ("Leave
+# them"). "complies": it asks a callback about a year or a date and branches
+# on the answer ("They comply").
+STANDING = collections.OrderedDict([
+    ("kind", "Asks a calendar its kind"),
+    ("left", "Asks whether a calendar is the notation's own: left"),
+    ("complies", "Branches on a callback's answer about a year or a date: complies"),
+])
+STANDING_OF_GROUP = {
+    "A calendar of weeks, or of months": "kind",
+    "A year that begins on another day than the first of its first month": "complies",
+    "A month or a day named otherwise than by its field": "complies",
+    "A calendar that numbers its months by the year (a year of twelve or of thirteen)": "complies",
+    "The Gregorian calendar, by its name or its CLDR type": "left",
+    "A calendar with a year 0": "complies",
+    "The notation's calendar: what a value is in where it names none, and what asks whether a calendar is it": "left",
+    "ISO 8601's week dates: the notation's calendar of weeks, in the one module": "left",
+}
+# A function that stands otherwise than its group: one asks a CLDR type for
+# how a year is worded, and one asks three callbacks about a year.
+STANDING_OF_FUNCTION = {
+    ("lib/tempo/format.ex", "worded_as_gregorian?"): "kind",
+    ("lib/tempo.ex", "kind_of_year"): "complies",
+}
+
+
+def standing(heading, home, name):
+    return STANDING_OF_FUNCTION.get((home, name), STANDING_OF_GROUP[heading])
 
 STATIC_FAMILIES = ["Calendrical", "Localize", "Astro", "Calendar", "Date", "NaiveDateTime",
                    "DateTime", "Time"]
@@ -809,6 +841,11 @@ def write(census):
     probed = collections.Counter((name.lstrip(":"), count) for _r, _n, _f, receiver, name, count in probes if receiver == "calendar")
     called = collections.Counter(key for _r, _n, key in census["called"])
     defined = collections.Counter(key for _r, _n, key in census["defined"])
+    by_standing = collections.OrderedDict((key, []) for key in STANDING)
+    for heading, deciders in DECIDERS.items():
+        for home, name, _qualifier in deciders:
+            if (home, name) in defined:
+                by_standing[standing(heading, home, name)].append((home, name))
 
     emit("## The counts")
     emit("")
@@ -819,7 +856,8 @@ def write(census):
         ["Probes of what a calendar exports", f"{sum(probed.values())} probes of {len(probed)} functions"],
         ["Lines of code that name a calendar", f"{len(named)} lines, {mentions} names"],
         ["Calendars named", ", ".join(f"{name} {count}" for name, count in by_calendar.most_common())],
-        ["Deciders by a calendar's kind", f"{len(defined)} functions defined, called at {sum(called.values())} places"],
+        *[[f"Deciders: {title.lower()}", f"{len(by_standing[key])} functions, called at {sum(called[f] for f in by_standing[key])} places"]
+          for key, title in STANDING.items()],
         ["Calls into Calendrical's own modules", str(sum(1 for row in static if row[3].startswith("Calendrical")))],
         ["Calls into Elixir's `Date`, `NaiveDateTime`, `DateTime` and `Time`", str(sum(1 for row in static if row[3].split(".")[0] in ("Date", "NaiveDateTime", "DateTime", "Time")))],
         ["Calls into Erlang's `:calendar`", str(len(census["erlang"]))],
@@ -873,18 +911,30 @@ def write(census):
         for (name, count), total in sorted(functions.items(), key=lambda item: (-item[1], item[0]))]))
     emit("")
 
-    emit("## 4. Functions that decide by a calendar's kind")
+    emit("## 4. Functions that decide by a calendar's answer")
     emit("")
-    emit(f"{len(defined)} functions, defined in {sum(defined.values())} clauses and called at {sum(called.values())} places. A call of one is a place where what Tempo does depends on which calendar it holds.")
+    emit(f"{len(defined)} functions, defined in {sum(defined.values())} clauses and called at {sum(called.values())} places, in three standings after the user's rulings of 2026-10-12. A function no longer in the code is listed as not found until its line is taken out of the script.")
     emit("")
-    for heading, deciders in DECIDERS.items():
-        emit(f"### {heading}")
+    notes = {
+        "kind": "What Tempo does here depends on what kind of calendar it holds. A calendar is of weeks or of months, and says which (`calendar_base/0`, asked in one function): its dates are a year, a week and a day of the week, or a year, a month and a day, and a month written for a calendar of weeks is an error.",
+        "left": "The user, 2026-10-12: \"Leave them\". A standard is written in the notation's calendar here: ISO 8601-2's seasons, RFC 5545, the zone database, and a value written with no calendar named.",
+        "complies": "The user, 2026-10-12: \"They comply\". Each calls `calendar.function` and branches on what it answers about a year or a date, and asks nothing of the calendar's kind.",
+    }
+    for key, title in STANDING.items():
+        emit(f"### {title}")
         emit("")
-        emit(table(["Function", "Defined", "Calls", "Called at"], [
-            [f"`{name}`", sites(sorted({(r, n) for r, n, d in census["defined"] if d == (home, name)})) or "not found",
-             called[(home, name)], sites([(r, n) for r, n, c in census["called"] if c == (home, name)]) or "none"]
-            for home, name, _qualifier in deciders]))
+        emit(f"{len(by_standing[key])} functions, called at {sum(called[f] for f in by_standing[key])} places. {notes[key]}")
         emit("")
+        for heading, deciders in DECIDERS.items():
+            rows = [
+                [f"`{name}`", sites(sorted({(r, n) for r, n, d in census["defined"] if d == (home, name)})) or "not found",
+                 called[(home, name)], sites([(r, n) for r, n, c in census["called"] if c == (home, name)]) or "none"]
+                for home, name, _qualifier in deciders if standing(heading, home, name) == key]
+            if rows:
+                emit(f"#### {heading}")
+                emit("")
+                emit(table(["Function", "Defined", "Calls", "Called at"], rows))
+                emit("")
     base = [(r, n, f) for r, n, f, name, _c in dynamic if name == "calendar_base"]
     emit("### `calendar_base/0`, asked directly")
     emit("")
