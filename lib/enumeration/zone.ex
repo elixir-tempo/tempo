@@ -106,10 +106,6 @@ defmodule Tempo.Enumeration.Zone do
     end
   end
 
-  def in_gregorian(%Tempo{calendar: calendar} = value) when is_notation(calendar) do
-    value
-  end
-
   def in_gregorian(
         %Tempo{
           time: [{:year, year}, {:month, month}, {:day, day} | clock],
@@ -158,11 +154,6 @@ defmodule Tempo.Enumeration.Zone do
     else
       _no_such_week -> :error
     end
-  end
-
-  def in_calendar_of(%Tempo{} = gregorian, %Tempo{calendar: calendar})
-      when is_notation(calendar) do
-    {:ok, gregorian}
   end
 
   def in_calendar_of(

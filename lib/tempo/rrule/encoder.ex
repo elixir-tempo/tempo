@@ -449,13 +449,13 @@ defmodule Tempo.RRule.Encoder do
   # RRULE UNTIL uses basic-format ISO 8601 — no separators — and is a date
   # of the Gregorian calendar, so an end in another calendar is written as
   # the Gregorian date it is.
-  defp encode_until(%Tempo{calendar: calendar} = value)
-       when not is_notation(calendar) do
-    with {:ok, %Tempo{} = gregorian} <- Tempo.to_calendar(value, Calendars.rule()),
-         do: encode_until(gregorian)
+  defp encode_until(%Tempo{} = value) do
+    with {:ok, %Tempo{} = gregorian} <- Tempo.to_calendar(value, Calendars.rule()) do
+      encode_gregorian_until(gregorian)
+    end
   end
 
-  defp encode_until(%Tempo{time: time} = value) do
+  defp encode_gregorian_until(%Tempo{time: time} = value) do
     case time do
       [year: y, month: m, day: d] ->
         {:ok, "#{pad(y, 4)}#{pad(m, 2)}#{pad(d, 2)}"}
