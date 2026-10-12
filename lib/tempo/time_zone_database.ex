@@ -123,12 +123,12 @@ defmodule Tempo.TimeZoneDatabase do
   #
   # * `{:error, reason}` from the database (unknown zone, or no real
   #   database configured).
-  @spec period_at_utc(String.t(), integer()) :: {:ok, period()} | {:error, term()}
-  def period_at_utc(_zone, utc_seconds) when utc_seconds < @gregorian_seconds_year_1 do
+  @spec do_period_at_utc(String.t(), integer()) :: {:ok, period()} | {:error, term()}
+  def do_period_at_utc(_zone, utc_seconds) when utc_seconds < @gregorian_seconds_year_1 do
     {:ok, @pre_ce_period}
   end
 
-  def period_at_utc(zone, utc_seconds) do
+  def do_period_at_utc(zone, utc_seconds) do
     database().time_zone_period_from_utc_iso_days(iso_days(utc_seconds), zone)
   end
 
@@ -152,16 +152,16 @@ defmodule Tempo.TimeZoneDatabase do
   #
   # * `{:ok, period}` | `{:ambiguous, period, period}` |
   #   `{:gap, {period, limit}, {period, limit}}` | `{:error, reason}`.
-  @spec period_at_wall(String.t(), integer()) ::
+  @spec do_period_at_wall(String.t(), integer()) ::
           {:ok, period()}
           | {:ambiguous, period(), period()}
           | {:gap, {period(), Calendar.naive_datetime()}, {period(), Calendar.naive_datetime()}}
           | {:error, term()}
-  def period_at_wall(_zone, wall_seconds) when wall_seconds < @gregorian_seconds_year_1 do
+  def do_period_at_wall(_zone, wall_seconds) when wall_seconds < @gregorian_seconds_year_1 do
     {:ok, @pre_ce_period}
   end
 
-  def period_at_wall(zone, wall_seconds) do
+  def do_period_at_wall(zone, wall_seconds) do
     {{year, month, day}, {hour, minute, second}} =
       :calendar.gregorian_seconds_to_datetime(wall_seconds)
 
@@ -194,8 +194,8 @@ defmodule Tempo.TimeZoneDatabase do
   # * A list of `{year, month, day}` Gregorian dates, empty for nearly
   #   every zone, and for an unknown zone or with no database
   #   configured.
-  @spec days_left_out(String.t()) :: [:calendar.date()]
-  def days_left_out(zone) when is_binary(zone) do
+  @spec do_days_left_out(String.t()) :: [:calendar.date()]
+  def do_days_left_out(zone) when is_binary(zone) do
     key = {__MODULE__, :days_left_out, zone}
 
     case :persistent_term.get(key, nil) do
@@ -248,8 +248,11 @@ defmodule Tempo.TimeZoneDatabase do
   end
 
   defp offset_at_start(zone, year) do
-    case period_at_utc(zone, :calendar.datetime_to_gregorian_seconds({{year, 1, 1}, {0, 0, 0}})) do
-      {:ok, period} -> total_offset(period)
+    case do_period_at_utc(
+           zone,
+           :calendar.datetime_to_gregorian_seconds({{year, 1, 1}, {0, 0, 0}})
+         ) do
+      {:ok, period} -> do_total_offset(period)
       {:error, _reason} -> 0
     end
   end
@@ -273,7 +276,7 @@ defmodule Tempo.TimeZoneDatabase do
   end
 
   defp gap_at(zone, reading) do
-    case period_at_wall(zone, :calendar.datetime_to_gregorian_seconds(reading)) do
+    case do_period_at_wall(zone, :calendar.datetime_to_gregorian_seconds(reading)) do
       {:gap, {_before, starts}, {_after, ends}} -> {starts, ends}
       _shown_or_not_known -> nil
     end
@@ -326,8 +329,8 @@ defmodule Tempo.TimeZoneDatabase do
   #   gregorian seconds, UTC, and each offset in seconds. It is empty where
   #   there is no change, for an unknown zone, and with no database
   #   configured.
-  @spec changes(String.t(), integer(), integer()) :: [{integer(), integer(), integer()}]
-  def changes(zone, from, to) when is_binary(zone) and is_integer(from) and is_integer(to) do
+  @spec do_changes(String.t(), integer(), integer()) :: [{integer(), integer(), integer()}]
+  def do_changes(zone, from, to) when is_binary(zone) and is_integer(from) and is_integer(to) do
     blocks = block_of(from)..block_of(to)//1
 
     if kept?(zone, blocks) or to - from > @span_asked_by_its_days or
@@ -423,10 +426,10 @@ defmodule Tempo.TimeZoneDatabase do
   # * `true` where the zone's offset from UTC changes at a moment no more
   #   than `margin` seconds from `moment`, and `false` where it does not,
   #   for an unknown zone, and with no database configured.
-  @spec change_within?(String.t(), integer(), non_neg_integer()) :: boolean()
-  def change_within?(zone, moment, margin)
+  @spec do_change_within?(String.t(), integer(), non_neg_integer()) :: boolean()
+  def do_change_within?(zone, moment, margin)
       when is_binary(zone) and is_integer(moment) and is_integer(margin) do
-    changes(zone, moment - margin - 1, moment + margin) != []
+    do_changes(zone, moment - margin - 1, moment + margin) != []
   end
 
   @doc false
@@ -460,8 +463,8 @@ defmodule Tempo.TimeZoneDatabase do
   # * `false` where a change is within `margin` seconds of `moment`, and
   #   where the changes there have not been found: `changes/3` of a span
   #   longer than half a year finds them.
-  @spec clear_of_changes?(String.t(), integer(), non_neg_integer()) :: boolean()
-  def clear_of_changes?(zone, moment, margin)
+  @spec do_clear_of_changes?(String.t(), integer(), non_neg_integer()) :: boolean()
+  def do_clear_of_changes?(zone, moment, margin)
       when is_binary(zone) and is_integer(moment) and is_integer(margin) do
     first = block_of(moment - margin)
     last = block_of(moment + margin)
@@ -562,7 +565,7 @@ defmodule Tempo.TimeZoneDatabase do
   end
 
   defp periods_at(zone, moments) do
-    for moment <- moments, {:ok, period} <- [period_at_utc(zone, moment)], do: {moment, period}
+    for moment <- moments, {:ok, period} <- [do_period_at_utc(zone, moment)], do: {moment, period}
   end
 
   # The changes between two moments asked. One period at both is no change
@@ -574,14 +577,14 @@ defmodule Tempo.TimeZoneDatabase do
 
   defp changes_between(zone, [{from, before}, {to, _later} = last]) do
     moment = first_moment_of_another(zone, from, to, before)
-    {:ok, later} = period_at_utc(zone, moment)
+    {:ok, later} = do_period_at_utc(zone, moment)
 
     change(moment, before, later) ++ changes_between(zone, [{moment, later}, last])
   end
 
   # A period that differs only in its name is no change of the clock.
   defp change(moment, before, later) do
-    case {total_offset(before), total_offset(later)} do
+    case {do_total_offset(before), do_total_offset(later)} do
       {same, same} -> []
       {before, later} -> [{moment, before, later}]
     end
@@ -596,7 +599,7 @@ defmodule Tempo.TimeZoneDatabase do
   defp first_moment_of_another(zone, from, to, period) do
     middle = div(from + to, 2)
 
-    case period_at_utc(zone, middle) do
+    case do_period_at_utc(zone, middle) do
       {:ok, ^period} -> first_moment_of_another(zone, middle, to, period)
       _another -> first_moment_of_another(zone, from, middle, period)
     end
@@ -614,8 +617,8 @@ defmodule Tempo.TimeZoneDatabase do
   #
   # * An offset in seconds. Always an integer in practice; the spec is
   #   `number()` because the behaviour's period field specs admit floats.
-  @spec total_offset(period()) :: number()
-  def total_offset(%{utc_offset: utc_offset, std_offset: std_offset}) do
+  @spec do_total_offset(period()) :: number()
+  def do_total_offset(%{utc_offset: utc_offset, std_offset: std_offset}) do
     utc_offset + std_offset
   end
 

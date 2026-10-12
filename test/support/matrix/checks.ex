@@ -480,7 +480,7 @@ defmodule Tempo.Matrix.Checks do
 
   # A lazy set holds the functions that generate it, which are never equal.
   defp same_term(_name, %IntervalSet{} = returned, %IntervalSet{} = banged) do
-    if IntervalSet.bounded?(returned) and IntervalSet.bounded?(banged) do
+    if Tempo.bounded?(returned) and Tempo.bounded?(banged) do
       same_term(:members, IntervalSet.members(returned), IntervalSet.members(banged))
     else
       :ok

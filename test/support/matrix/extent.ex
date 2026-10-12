@@ -56,7 +56,7 @@ defmodule Tempo.Matrix.Extent do
   end
 
   def of(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set) do
+    if Tempo.bounded?(set) do
       of_members(IntervalSet.members(set))
     else
       :none
@@ -86,7 +86,7 @@ defmodule Tempo.Matrix.Extent do
   end
 
   def members(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set) do
+    if Tempo.bounded?(set) do
       members_of(IntervalSet.members(set))
     else
       :none
@@ -431,7 +431,7 @@ defmodule Tempo.Matrix.Extent do
   end
 
   def written(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set) do
+    if Tempo.bounded?(set) do
       written_members(IntervalSet.members(set))
     else
       :none

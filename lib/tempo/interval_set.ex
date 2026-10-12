@@ -497,8 +497,8 @@ defmodule Tempo.IntervalSet do
   # ### Returns
   #
   # * `true` when the set is empty, otherwise `false`.
-  @spec empty?(t()) :: boolean()
-  def empty?(%__MODULE__{backend: backend, intervals: state}) do
+  @spec do_empty?(t()) :: boolean()
+  def do_empty?(%__MODULE__{backend: backend, intervals: state}) do
     backend.empty?(state)
   end
 
@@ -602,8 +602,8 @@ defmodule Tempo.IntervalSet do
   #
   # * `true` when the set is finite and every member can be listed,
   #   otherwise `false`.
-  @spec bounded?(t()) :: boolean()
-  def bounded?(%__MODULE__{backend: backend, intervals: state}) do
+  @spec do_bounded?(t()) :: boolean()
+  def do_bounded?(%__MODULE__{backend: backend, intervals: state}) do
     backend.bounded?(state)
   end
 
@@ -638,7 +638,7 @@ defmodule Tempo.IntervalSet do
   # tuple) because these functions have no error shape and a silent
   # infinite walk is the alternative.
   defp ensure_bounded!(%__MODULE__{} = set, operation) do
-    if bounded?(set) do
+    if do_bounded?(set) do
       set
     else
       raise UnboundedSetError.exception(operation: operation, set: set)
@@ -979,7 +979,7 @@ defmodule Tempo.IntervalSet do
 
       for {iv_a, ai} <- Enum.with_index(a_ivs),
           {iv_b, bi} <- Enum.with_index(b_ivs) do
-        {ai, bi, Interval.relation(iv_a, iv_b)}
+        {ai, bi, Interval.do_relation(iv_a, iv_b)}
       end
     end
   end
@@ -1279,7 +1279,7 @@ defmodule Tempo.IntervalSet do
       ...>   ~o"2026-06-15T10:00:00/2026-06-15T11:00:00"
       ...> ])
       iex> {:ok, double_booked} = Tempo.IntervalSet.covered(back_to_back, at_least: 2)
-      iex> Tempo.IntervalSet.empty?(double_booked)
+      iex> Tempo.empty?(double_booked)
       true
       iex> {:ok, busy} = Tempo.IntervalSet.covered(back_to_back)
       iex> Tempo.IntervalSet.members(busy)
@@ -1335,7 +1335,7 @@ defmodule Tempo.IntervalSet do
   end
 
   defp sweepable(set) do
-    if bounded?(set) do
+    if do_bounded?(set) do
       :ok
     else
       {:error, UnboundedSetError.exception(operation: "Tempo.IntervalSet.covered/2", set: set)}

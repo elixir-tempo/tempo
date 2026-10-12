@@ -563,7 +563,7 @@ defmodule Tempo.Interval do
   defp in_the_zone_of(%Tempo{} = source, %Tempo{} = target) do
     zoned = copy_zone(source, target)
 
-    case Compare.validate_zone_offset(zoned) do
+    case Compare.do_validate_zone_offset(zoned) do
       :ok -> zoned
       {:error, _another_frame} -> target
     end
@@ -1031,7 +1031,7 @@ defmodule Tempo.Interval do
   # it on the interval's `:unit` field. Masked values widen to the
   # coarsest un-masked prefix and use the internal mask-bounds helper
   # to determine the enclosing span.
-  def next_unit_boundary(%Tempo{time: time, calendar: calendar} = tempo) do
+  def do_next_unit_boundary(%Tempo{time: time, calendar: calendar} = tempo) do
     time = significant_digits_as_mask(time)
 
     case List.last(time) do
@@ -1341,7 +1341,7 @@ defmodule Tempo.Interval do
   # begins, and was given an end on the Friday the zone left out.
   defp span_bounds(%Tempo{extended: %{zone_id: zone}} = tempo, time, unit, calendar)
        when is_binary(zone) and unit in [:day, :day_of_week] do
-    if TimeZoneDatabase.days_left_out(zone) == [] do
+    if TimeZoneDatabase.do_days_left_out(zone) == [] do
       bounds_by_the_calendar(tempo, time, unit, calendar)
     else
       bounds_by_the_clock(tempo, time, :day)
@@ -1618,8 +1618,8 @@ defmodule Tempo.Interval do
   # * `{:error, %Tempo.UnanchoredError{}}` when one operand has a year
   #   and the other none, or neither has and they lead with different
   #   units: they share no line to be related on.
-  @spec relation(interval_like(), interval_like()) :: relation() | {:error, term()}
-  def relation(a, b) do
+  @spec do_relation(interval_like(), interval_like()) :: relation() | {:error, term()}
+  def do_relation(a, b) do
     with :ok <- same_frame(a, b),
          {:ok, iv_a} <- to_single_interval(a, :a),
          {:ok, iv_b} <- to_single_interval(b, :b) do
@@ -1761,7 +1761,7 @@ defmodule Tempo.Interval do
   defp to_single_interval(other, label) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.relation/2 cannot classify operand #{Calendars.inspect(label)}: " <>
+       "Tempo.relation/2 cannot classify operand #{Calendars.inspect(label)}: " <>
          "#{Calendars.inspect(other)}"
      )}
   end
@@ -1827,7 +1827,7 @@ defmodule Tempo.Interval do
   end
 
   defp span_start({:ok, %IntervalSet{} = set}, endpoint, end_name, interval) do
-    case IntervalSet.bounded?(set) and IntervalSet.members(set) do
+    case IntervalSet.do_bounded?(set) and IntervalSet.members(set) do
       [%__MODULE__{} = span] -> span_start({:ok, span}, endpoint, end_name, interval)
       _several -> {:error, several_spans_error(endpoint, end_name, interval)}
     end
@@ -1869,7 +1869,7 @@ defmodule Tempo.Interval do
   defp open_ended_error(label) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.relation/2 needs bounded intervals on both sides. " <>
+       "Tempo.relation/2 needs bounded intervals on both sides. " <>
          "Operand #{Calendars.inspect(label)} has an open-ended endpoint (`:undefined`)."
      )}
   end
@@ -1877,7 +1877,7 @@ defmodule Tempo.Interval do
   defp multi_member_error(ivs, label) do
     {:error,
      ArgumentError.exception(
-       "Tempo.Interval.relation/2 requires a single bounded interval on each side. " <>
+       "Tempo.relation/2 requires a single bounded interval on each side. " <>
          "Operand #{Calendars.inspect(label)} is an IntervalSet with #{length(ivs)} members. " <>
          "For set-level questions use `Tempo.overlaps?/2`, `Tempo.disjoint?/2`, " <>
          "`Tempo.intersection/2`, or `Tempo.IntervalSet.relation_matrix/2`."
@@ -1893,14 +1893,15 @@ defmodule Tempo.Interval do
   # stated, or fixed by a start or an end and a duration
   # (`2026-06-01/P9D`) — rather than `:undefined` or `nil`. Useful
   # as a guard before set operations or duration checks.
-  @spec bounded?(t()) :: boolean()
+  @spec do_bounded?(t()) :: boolean()
   # A recurrence of a count is as bounded as each of its occurrences: its
   # last ends where the count does.
-  def bounded?(%__MODULE__{recurrence: count} = interval) when is_integer(count) and count > 1 do
-    bounded?(%{interval | recurrence: 1})
+  def do_bounded?(%__MODULE__{recurrence: count} = interval)
+      when is_integer(count) and count > 1 do
+    do_bounded?(%{interval | recurrence: 1})
   end
 
-  def bounded?(%__MODULE__{} = interval) do
+  def do_bounded?(%__MODULE__{} = interval) do
     case resolve_duration_form(interval) do
       %__MODULE__{from: %Tempo{}, to: %Tempo{}} ->
         true
@@ -2155,7 +2156,7 @@ defmodule Tempo.Interval do
   end
 
   defp only_span(spans, value, endpoint) do
-    case IntervalSet.bounded?(spans) and IntervalSet.members(spans) do
+    case IntervalSet.do_bounded?(spans) and IntervalSet.members(spans) do
       [span] -> endpoint.(span)
       [] -> {:error, no_span_error(value)}
       _several -> {:error, several_spans_error(value)}
@@ -3124,8 +3125,8 @@ defmodule Tempo.Interval do
   # Unbounded intervals (`:undefined` endpoint) satisfy any finite
   # minimum — an infinite span is trivially "at least" any
   # duration.
-  @spec at_least?(t(), Duration.t()) :: boolean()
-  def at_least?(interval, duration) do
+  @spec do_at_least?(t(), Duration.t()) :: boolean()
+  def do_at_least?(interval, duration) do
     resolved_at_least?(measurable!(interval), duration)
   end
 
@@ -3147,8 +3148,8 @@ defmodule Tempo.Interval do
   #
   # Unbounded intervals return `false` — an infinite span exceeds
   # any finite maximum.
-  @spec at_most?(t(), Duration.t()) :: boolean()
-  def at_most?(interval, duration) do
+  @spec do_at_most?(t(), Duration.t()) :: boolean()
+  def do_at_most?(interval, duration) do
     resolved_at_most?(measurable!(interval), duration)
   end
 
@@ -3169,8 +3170,8 @@ defmodule Tempo.Interval do
   # exactly.
   #
   # Unbounded intervals always return `false`.
-  @spec exactly?(t(), Duration.t()) :: boolean()
-  def exactly?(interval, duration) do
+  @spec do_exactly?(t(), Duration.t()) :: boolean()
+  def do_exactly?(interval, duration) do
     resolved_exactly?(measurable!(interval), duration)
   end
 
@@ -3189,8 +3190,8 @@ defmodule Tempo.Interval do
   @doc false
   # `true` when the interval's length is strictly greater than
   # the given duration.
-  @spec longer_than?(t(), Duration.t()) :: boolean()
-  def longer_than?(interval, duration) do
+  @spec do_longer_than?(t(), Duration.t()) :: boolean()
+  def do_longer_than?(interval, duration) do
     resolved_longer_than?(measurable!(interval), duration)
   end
 
@@ -3212,8 +3213,8 @@ defmodule Tempo.Interval do
   @doc false
   # `true` when the interval's length is strictly less than the
   # given duration.
-  @spec shorter_than?(t(), Duration.t()) :: boolean()
-  def shorter_than?(interval, duration) do
+  @spec do_shorter_than?(t(), Duration.t()) :: boolean()
+  def do_shorter_than?(interval, duration) do
     resolved_shorter_than?(measurable!(interval), duration)
   end
 
@@ -3339,8 +3340,8 @@ defmodule Tempo.Interval do
   # Raises when an operand is not a single bounded interval (a
   # multi-member set, an open or recurring interval, a one-of set), as
   # `relation/2` returns an error there.
-  @spec before?(interval_like(), interval_like()) :: boolean()
-  def before?(a, b) do
+  @spec do_before?(interval_like(), interval_like()) :: boolean()
+  def do_before?(a, b) do
     match_relation(a, b, @before_relations)
   end
 
@@ -3350,8 +3351,8 @@ defmodule Tempo.Interval do
   #
   # The mirror of `before?/2`. Allen's `:preceded_by` also needs a gap
   # between the two; `Tempo.Allen.preceded_by?/2` tests for it.
-  @spec after?(interval_like(), interval_like()) :: boolean()
-  def after?(a, b) do
+  @spec do_after?(interval_like(), interval_like()) :: boolean()
+  def do_after?(a, b) do
     match_relation(a, b, @after_relations)
   end
 
@@ -3359,8 +3360,8 @@ defmodule Tempo.Interval do
   # `true` when the two intervals touch at a single boundary —
   # either ends exactly where the other starts (Allen's
   # `:meets | :met_by`; `Tempo.Allen.meets?/2` tests one direction).
-  @spec adjacent?(interval_like(), interval_like()) :: boolean()
-  def adjacent?(a, b) do
+  @spec do_adjacent?(interval_like(), interval_like()) :: boolean()
+  def do_adjacent?(a, b) do
     match_relation(a, b, [:meets, :met_by])
   end
 
@@ -3401,7 +3402,7 @@ defmodule Tempo.Interval do
   # could not make. One-of sets, for example, have no crisp relation at
   # all; the raised error points the caller at the certainty API.
   defp match_relation(a, b, allowed_relations) do
-    case relation(a, b) do
+    case do_relation(a, b) do
       r when is_atom(r) -> r in allowed_relations
       {:error, exception} when is_exception(exception) -> raise exception
       {:error, reason} -> raise ArgumentError, to_string(reason)
@@ -3474,8 +3475,8 @@ defmodule Tempo.Interval do
   #
   # * `{:error, reason}` when either operand is open-ended or a
   #   multi-member set.
-  @spec overlap_certainty(interval_like(), interval_like()) :: certainty() | {:error, term()}
-  def overlap_certainty(a, b) do
+  @spec do_overlap_certainty(interval_like(), interval_like()) :: certainty() | {:error, term()}
+  def do_overlap_certainty(a, b) do
     concept_certainty(a, b, @intersecting_relations)
   end
 
@@ -3501,8 +3502,8 @@ defmodule Tempo.Interval do
   # * `{:error, reason}` for open-ended or multi-member operands, or a
   #   `t:Tempo.UnanchoredError.t/0` when an unanchored operand is
   #   compared across resolution axes.
-  @spec within_certainty(interval_like(), interval_like()) :: certainty() | {:error, term()}
-  def within_certainty(a, b) do
+  @spec do_within_certainty(interval_like(), interval_like()) :: certainty() | {:error, term()}
+  def do_within_certainty(a, b) do
     concept_certainty(a, b, @within_relations)
   end
 
@@ -3529,13 +3530,13 @@ defmodule Tempo.Interval do
   # * `{:error, reason}` for open-ended or multi-member operands, or a
   #   `t:Tempo.UnanchoredError.t/0` when an unanchored operand is
   #   compared across resolution axes.
-  @spec relation_certainty(interval_like(), interval_like(), relation() | [relation()]) ::
+  @spec do_relation_certainty(interval_like(), interval_like(), relation() | [relation()]) ::
           certainty() | {:error, term()}
-  def relation_certainty(a, b, target) when is_atom(target) do
+  def do_relation_certainty(a, b, target) when is_atom(target) do
     concept_certainty(a, b, MapSet.new([target]))
   end
 
-  def relation_certainty(a, b, target) when is_list(target) do
+  def do_relation_certainty(a, b, target) when is_list(target) do
     concept_certainty(a, b, MapSet.new(target))
   end
 
@@ -3543,67 +3544,67 @@ defmodule Tempo.Interval do
   # `true` when `a` and `b` intersect for *every* placement of their `±`
   # margins — `overlap_certainty(a, b) == :certain`. Crisp counterpart:
   # `Tempo.overlaps?/3`.
-  @spec certainly_overlaps?(interval_like(), interval_like()) :: boolean()
-  def certainly_overlaps?(a, b) do
-    certainty_in?(overlap_certainty(a, b), [:certain])
+  @spec do_certainly_overlaps?(interval_like(), interval_like()) :: boolean()
+  def do_certainly_overlaps?(a, b) do
+    certainty_in?(do_overlap_certainty(a, b), [:certain])
   end
 
   @doc false
   # `true` when `a` and `b` *could* intersect for some placement of their
   # `±` margins — `overlap_certainty/2` is `:certain` or `:possible`.
-  @spec possibly_overlaps?(interval_like(), interval_like()) :: boolean()
-  def possibly_overlaps?(a, b) do
-    certainty_in?(overlap_certainty(a, b), [:certain, :possible])
+  @spec do_possibly_overlaps?(interval_like(), interval_like()) :: boolean()
+  def do_possibly_overlaps?(a, b) do
+    certainty_in?(do_overlap_certainty(a, b), [:certain, :possible])
   end
 
   @doc false
   # `true` when `a` falls within `b` for *every* placement of their `±`
   # margins. Crisp counterpart: `within?/2`.
-  @spec certainly_within?(interval_like(), interval_like()) :: boolean()
-  def certainly_within?(a, b) do
-    certainty_in?(within_certainty(a, b), [:certain])
+  @spec do_certainly_within?(interval_like(), interval_like()) :: boolean()
+  def do_certainly_within?(a, b) do
+    certainty_in?(do_within_certainty(a, b), [:certain])
   end
 
   @doc false
   # `true` when `a` *could* fall within `b` for some placement of their
   # `±` margins.
-  @spec possibly_within?(interval_like(), interval_like()) :: boolean()
-  def possibly_within?(a, b) do
-    certainty_in?(within_certainty(a, b), [:certain, :possible])
+  @spec do_possibly_within?(interval_like(), interval_like()) :: boolean()
+  def do_possibly_within?(a, b) do
+    certainty_in?(do_within_certainty(a, b), [:certain, :possible])
   end
 
   @doc false
   # `true` when `a` ends at or before `b` starts — they share no instant
   # and `a` is earlier — for *every* placement of their `±` margins.
   # Crisp counterpart: `before?/2`.
-  @spec certainly_before?(interval_like(), interval_like()) :: boolean()
-  def certainly_before?(a, b) do
-    certainty_in?(relation_certainty(a, b, @before_relations), [:certain])
+  @spec do_certainly_before?(interval_like(), interval_like()) :: boolean()
+  def do_certainly_before?(a, b) do
+    certainty_in?(do_relation_certainty(a, b, @before_relations), [:certain])
   end
 
   @doc false
   # `true` when `a` *could* end at or before `b` starts for some placement
   # of their `±` margins.
-  @spec possibly_before?(interval_like(), interval_like()) :: boolean()
-  def possibly_before?(a, b) do
-    certainty_in?(relation_certainty(a, b, @before_relations), [:certain, :possible])
+  @spec do_possibly_before?(interval_like(), interval_like()) :: boolean()
+  def do_possibly_before?(a, b) do
+    certainty_in?(do_relation_certainty(a, b, @before_relations), [:certain, :possible])
   end
 
   @doc false
   # `true` when `a` starts at or after `b` ends — they share no instant
   # and `a` is later — for *every* placement of their `±` margins. Crisp
   # counterpart: `after?/2`.
-  @spec certainly_after?(interval_like(), interval_like()) :: boolean()
-  def certainly_after?(a, b) do
-    certainty_in?(relation_certainty(a, b, @after_relations), [:certain])
+  @spec do_certainly_after?(interval_like(), interval_like()) :: boolean()
+  def do_certainly_after?(a, b) do
+    certainty_in?(do_relation_certainty(a, b, @after_relations), [:certain])
   end
 
   @doc false
   # `true` when `a` *could* start at or after `b` ends for some placement
   # of their `±` margins.
-  @spec possibly_after?(interval_like(), interval_like()) :: boolean()
-  def possibly_after?(a, b) do
-    certainty_in?(relation_certainty(a, b, @after_relations), [:certain, :possible])
+  @spec do_possibly_after?(interval_like(), interval_like()) :: boolean()
+  def do_possibly_after?(a, b) do
+    certainty_in?(do_relation_certainty(a, b, @after_relations), [:certain, :possible])
   end
 
   # A certainty error must surface, not read as `false` — a silent false
@@ -3674,7 +3675,7 @@ defmodule Tempo.Interval do
   end
 
   defp in_frame(%IntervalSet{} = set, zoned) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       IntervalSet.map(set, &in_frame(&1, zoned))
     else
       set
@@ -3735,7 +3736,7 @@ defmodule Tempo.Interval do
   # Each member of a set is read, since a calendar holds days with no zone
   # beside meetings in one. A set without end is read by its first.
   defp operand_frame(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       set
       |> IntervalSet.members()
       |> frames()
@@ -4087,7 +4088,7 @@ defmodule Tempo.Interval do
   # depends on the missing year, so we signal that rather than guess.
   defp unanchored_possible_relations(a, b) do
     if same_axis_operands?(a, b) do
-      case relation(a, b) do
+      case do_relation(a, b) do
         relation when is_atom(relation) -> MapSet.new([relation])
         {:error, _reason} = error -> error
       end

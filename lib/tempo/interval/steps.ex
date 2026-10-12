@@ -223,7 +223,7 @@ defmodule Tempo.Interval.Steps do
 
     from
     |> zone_id()
-    |> TimeZoneDatabase.changes(from_utc, to_utc)
+    |> TimeZoneDatabase.do_changes(from_utc, to_utc)
     |> Enum.all?(fn {moment, before, later} ->
       rem(later - before, unit) == 0 and rem(moment + before - reading, unit) == 0
     end)
@@ -514,7 +514,7 @@ defmodule Tempo.Interval.Steps do
   # is not, an hour is as long as the clock shows it and this is
   # `:not_supported`: the walk of the wall clock answers.
   #
-  # The zone's changes are kept (`Tempo.TimeZoneDatabase.changes/3`), so a
+  # The zone's changes are kept (`Tempo.TimeZoneDatabase.do_changes/3`), so a
   # value is read from them and the zone is asked nothing as the walk goes.
   @spec clock_walk(Tempo.t(), Tempo.t(), atom() | nil, module()) ::
           {:ok, clock_walk()} | :not_supported
@@ -563,7 +563,7 @@ defmodule Tempo.Interval.Steps do
     zone = zone_id(from)
 
     if changes_on_the_steps?(from, from_utc, to_utc, unit) do
-      near = TimeZoneDatabase.changes(zone, from_utc - @a_day_or_so, to_utc + @a_day_or_so)
+      near = TimeZoneDatabase.do_changes(zone, from_utc - @a_day_or_so, to_utc + @a_day_or_so)
 
       {:ok,
        %{
@@ -896,8 +896,8 @@ defmodule Tempo.Interval.Steps do
   defp zone_offset_at_utc(zone, utc_seconds) do
     # Pre-common-era instants are handled inside the adapter
     # (local-mean-time, zero offset).
-    case TimeZoneDatabase.period_at_utc(zone, utc_seconds) do
-      {:ok, period} -> TimeZoneDatabase.total_offset(period)
+    case TimeZoneDatabase.do_period_at_utc(zone, utc_seconds) do
+      {:ok, period} -> TimeZoneDatabase.do_total_offset(period)
       {:error, _} -> 0
     end
   end

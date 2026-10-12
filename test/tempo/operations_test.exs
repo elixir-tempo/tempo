@@ -29,7 +29,7 @@ defmodule Tempo.Operations.Test do
       {:ok, d} = Tempo.from_iso8601("P3M")
 
       assert {:error, %Tempo.ConversionError{reason: :bare_duration} = e} =
-               Operations.align(~o"2022Y", d)
+               Operations.do_align(~o"2022Y", d)
 
       assert Exception.message(e) =~ "Duration"
     end
@@ -38,14 +38,14 @@ defmodule Tempo.Operations.Test do
       {:ok, s} = Tempo.from_iso8601("[2020Y,2021Y,2022Y]")
 
       assert {:error, %Tempo.ConversionError{reason: :one_of_set} = e} =
-               Operations.align(~o"2023Y", s)
+               Operations.do_align(~o"2023Y", s)
 
       assert Exception.message(e) =~ "one-of"
     end
 
     test "accepts Tempo.IntervalSet passthrough" do
       {:ok, set} = Tempo.to_interval_set(~o"2022Y")
-      assert {:ok, {a, b}} = Operations.align(set, ~o"2023Y")
+      assert {:ok, {a, b}} = Operations.do_align(set, ~o"2023Y")
       assert a.intervals != []
       assert b.intervals != []
     end
@@ -53,30 +53,30 @@ defmodule Tempo.Operations.Test do
 
   describe "align/2,3 — anchor class compatibility" do
     test "two anchored operands — OK" do
-      assert {:ok, _} = Operations.align(~o"2022Y", ~o"2023Y")
+      assert {:ok, _} = Operations.do_align(~o"2022Y", ~o"2023Y")
     end
 
     test "two unanchored operands — OK" do
-      assert {:ok, _} = Operations.align(~o"T10:00", ~o"T14:30")
+      assert {:ok, _} = Operations.do_align(~o"T10:00", ~o"T14:30")
     end
 
     test "two unanchored operands on the same axis — OK" do
       # Both lead with :month, so they recur on the same (annual) cycle.
-      assert {:ok, _} = Operations.align(~o"1M31D", ~o"6M15D")
-      assert {:ok, _} = Operations.align(~o"1M31D", ~o"1M")
+      assert {:ok, _} = Operations.do_align(~o"1M31D", ~o"6M15D")
+      assert {:ok, _} = Operations.do_align(~o"1M31D", ~o"1M")
     end
 
     test "two unanchored operands on different axes — error" do
       # `1M31D` recurs annually, `15D` monthly; there is no common timeline.
       assert {:error, %Tempo.UnanchoredError{} = e} =
-               Operations.align(~o"1M31D", ~o"15D")
+               Operations.do_align(~o"1M31D", ~o"15D")
 
       assert Exception.message(e) =~ "different axes"
     end
 
     test "anchored + unanchored without a window — error" do
       assert {:error, %Tempo.UnanchoredError{} = e} =
-               Operations.align(~o"2022Y", ~o"T10:30")
+               Operations.do_align(~o"2022Y", ~o"T10:30")
 
       assert Exception.message(e) =~ ":within"
       assert Exception.message(e) =~ "Tempo.at/2"
@@ -84,13 +84,13 @@ defmodule Tempo.Operations.Test do
 
     test "anchored + unanchored WITH a window — OK" do
       assert {:ok, _} =
-               Operations.align(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
+               Operations.do_align(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
     end
   end
 
   describe "align/2,3 — resolution" do
     test "aligns to the finer resolution" do
-      {:ok, {a, b}} = Operations.align(~o"2022Y", ~o"2022-06-15")
+      {:ok, {a, b}} = Operations.do_align(~o"2022Y", ~o"2022-06-15")
       [a_iv] = a.intervals
       [b_iv] = b.intervals
 
@@ -542,7 +542,7 @@ defmodule Tempo.Operations.Test do
 
     test "an unanchored window is rejected" do
       assert {:error, %Tempo.UnanchoredError{} = e} =
-               Operations.align(~o"2026-01-04", ~o"T10:30", within: ~o"T00:00")
+               Operations.do_align(~o"2026-01-04", ~o"T10:30", within: ~o"T00:00")
 
       assert Exception.message(e) =~ ":within window"
       assert Exception.message(e) =~ "has no year"
@@ -1051,7 +1051,7 @@ defmodule Tempo.Operations.Test do
       # It overlaps a span before midnight, so it is no member outside it,
       # where the part after midnight was returned.
       assert {:ok, none} = Tempo.members_outside(night, ~o"T23/T23:30")
-      assert IntervalSet.empty?(none)
+      assert Tempo.empty?(none)
 
       assert {:ok, hit} = Tempo.members_overlapping(night, ~o"T23/T23:30")
       assert IntervalSet.members(hit) == [~o"T22H0M/T2H0M"]
@@ -1248,8 +1248,8 @@ defmodule Tempo.Operations.Test do
         {:ok, a_set} = IntervalSet.new(a_members)
         {:ok, b_set} = IntervalSet.new(b_members)
 
-        {:ok, overlapping} = Operations.members_overlapping(a_set, b_set)
-        {:ok, outside} = Operations.members_outside(a_set, b_set)
+        {:ok, overlapping} = Tempo.members_overlapping(a_set, b_set)
+        {:ok, outside} = Tempo.members_outside(a_set, b_set)
 
         expected_overlapping = naive_filter(a_set, b_set, :overlapping)
         expected_outside = naive_filter(a_set, b_set, :outside)
@@ -1320,20 +1320,20 @@ defmodule Tempo.Operations.Test do
 
     test "defaults to the left operand's metadata, unchanged from before the option existed",
          context do
-      {:ok, both} = Operations.intersection(context.alice, context.bob)
+      {:ok, both} = Tempo.intersection(context.alice, context.bob)
 
       assert metadata_of(both) == [%{free: ["Alice"], role: :person}]
     end
 
     test ":left is the default, stated explicitly", context do
-      {:ok, implicit} = Operations.intersection(context.alice, context.bob)
-      {:ok, explicit} = Operations.intersection(context.alice, context.bob, metadata: :left)
+      {:ok, implicit} = Tempo.intersection(context.alice, context.bob)
+      {:ok, explicit} = Tempo.intersection(context.alice, context.bob, metadata: :left)
 
       assert metadata_of(implicit) == metadata_of(explicit)
     end
 
     test ":merge takes both maps, the right operand winning a conflict", context do
-      {:ok, both} = Operations.intersection(context.alice, context.bob, metadata: :merge)
+      {:ok, both} = Tempo.intersection(context.alice, context.bob, metadata: :merge)
 
       assert metadata_of(both) == [%{free: ["Bob"], role: :person, room: "Boardroom"}]
     end
@@ -1343,7 +1343,7 @@ defmodule Tempo.Operations.Test do
       accumulate = fn a, b -> Map.merge(a, b, fn _key, x, y -> x ++ y end) end
 
       {:ok, both} =
-        Operations.intersection(context.alice, context.bob, metadata: {:merge, accumulate})
+        Tempo.intersection(context.alice, context.bob, metadata: {:merge, accumulate})
 
       assert [%{free: ["Alice", "Bob"]}] = metadata_of(both)
     end
@@ -1363,7 +1363,7 @@ defmodule Tempo.Operations.Test do
       accumulate = fn a, b -> Map.merge(a, b, fn _key, x, y -> x ++ y end) end
 
       {:ok, pairs} =
-        Operations.intersection(context.alice, others, metadata: {:merge, accumulate})
+        Tempo.intersection(context.alice, others, metadata: {:merge, accumulate})
 
       assert pairs
              |> metadata_of()
@@ -1383,7 +1383,7 @@ defmodule Tempo.Operations.Test do
       late = Interval.new!(from: ~o"2026-06-15T09", to: ~o"2026-06-15T13", metadata: %{id: 2})
 
       {:ok, parts} =
-        Operations.intersection(IntervalSet.new!([early, late]), ~o"2026-06-15T10/2026-06-15T12")
+        Tempo.intersection(IntervalSet.new!([early, late]), ~o"2026-06-15T10/2026-06-15T12")
 
       assert Enum.map(IntervalSet.members(parts), &{&1.from.time[:hour], &1.to.time[:hour]}) ==
                [{10, 11}, {10, 12}]
@@ -1393,7 +1393,7 @@ defmodule Tempo.Operations.Test do
 
     test "an invalid :metadata option is an error, not a crash", context do
       assert {:error, message} =
-               Operations.intersection(context.alice, context.bob, metadata: :both)
+               Tempo.intersection(context.alice, context.bob, metadata: :both)
 
       assert message =~ ":left, :merge, or {:merge, fun/2}"
     end
@@ -1422,7 +1422,7 @@ defmodule Tempo.Operations.Test do
           )
         ])
 
-      {:ok, both} = Operations.intersection(whole, pieces, metadata: :merge)
+      {:ok, both} = Tempo.intersection(whole, pieces, metadata: :merge)
 
       assert metadata_of(both) == [
                %{who: "room", slot: :first},

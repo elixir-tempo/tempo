@@ -194,7 +194,7 @@ defmodule Tempo.Iso8601.OffsetAndZoneTest do
       for {timestamp, zone} <- @disagree do
         value = read(timestamp <> "[" <> zone <> "]")
 
-        assert {timestamp, zone, Tempo.validate_zone_offset(value)} == {timestamp, zone, :ok}
+        assert {timestamp, zone, Compare.do_validate_zone_offset(value)} == {timestamp, zone, :ok}
         assert {timestamp, zone, read(Tempo.to_iso8601!(value))} == {timestamp, zone, value}
       end
     end

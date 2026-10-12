@@ -125,7 +125,7 @@ defmodule Tempo.WorkdaysTest do
     test "an open-ended span is lazy" do
       {:ok, set} = Tempo.select(~o"2027-04-23/..", school_days())
 
-      refute IntervalSet.bounded?(set)
+      refute Tempo.bounded?(set)
 
       assert set
              |> IntervalSet.walk()

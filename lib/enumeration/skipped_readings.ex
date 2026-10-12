@@ -192,7 +192,7 @@ defmodule Tempo.Enumeration.SkippedReadings do
   # The stretches of the wall clock a zone skips that a reading of the value
   # could be in, each from its first reading to the first after it.
   defp skipped(%{written_to: :day}, zone, _value) do
-    for date <- TimeZoneDatabase.days_left_out(zone) do
+    for date <- TimeZoneDatabase.do_days_left_out(zone) do
       first = :calendar.datetime_to_gregorian_seconds({date, {0, 0, 0}})
       {first, first + @seconds_in.day}
     end
@@ -218,7 +218,7 @@ defmodule Tempo.Enumeration.SkippedReadings do
   end
 
   defp changes_in(year, zone, calendar) do
-    TimeZoneDatabase.changes(
+    TimeZoneDatabase.do_changes(
       zone,
       starts(year, calendar) - @margin,
       starts(year + 1, calendar) + @margin

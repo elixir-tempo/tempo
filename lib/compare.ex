@@ -589,7 +589,7 @@ defmodule Tempo.Compare do
   # The reading is within the value, so one is written with the units of
   # the other and more: any other pair is in the order of its units. Where
   # the zone's clock changes within a day or so of them (its changes are
-  # kept, `Tempo.TimeZoneDatabase.changes/3`), the two are compared as the
+  # kept, `Tempo.TimeZoneDatabase.do_changes/3`), the two are compared as the
   # moments they are.
   defp order_in_one_zone(a, b, order) do
     if across_a_change?(a, b) do
@@ -617,7 +617,7 @@ defmodule Tempo.Compare do
        when is_binary(zone) and zone != "" and is_integer(year) do
     if List.starts_with?(a_time, b_time) or List.starts_with?(b_time, a_time) do
       reading = wall_seconds(a_time, year, a.calendar)
-      TimeZoneDatabase.changes(zone, reading - @a_day_or_so, reading + @a_day_or_so) != []
+      TimeZoneDatabase.do_changes(zone, reading - @a_day_or_so, reading + @a_day_or_so) != []
     else
       false
     end
@@ -850,14 +850,14 @@ defmodule Tempo.Compare do
       :lt
 
   """
-  @spec compare(
+  @spec do_compare(
           Tempo.t() | Tempo.Duration.t() | Tempo.Interval.t(),
           Tempo.t() | Tempo.Duration.t() | Tempo.Interval.t(),
           keyword()
         ) :: :lt | :eq | :gt
-  def compare(a, b, options \\ [])
+  def do_compare(a, b, options \\ [])
 
-  def compare(%Tempo{} = a, %Tempo{} = b, _options) do
+  def do_compare(%Tempo{} = a, %Tempo{} = b, _options) do
     one_frame!(a, b)
 
     a
@@ -865,7 +865,7 @@ defmodule Tempo.Compare do
     |> from_endpoint_order()
   end
 
-  def compare(%Tempo.Duration{} = a, %Tempo.Duration{} = b, options) do
+  def do_compare(%Tempo.Duration{} = a, %Tempo.Duration{} = b, options) do
     with {:ok, a_seconds} <- Duration.to_unit(a, :second, options),
          {:ok, b_seconds} <- Duration.to_unit(b, :second, options) do
       from_magnitudes(a_seconds, b_seconds)
@@ -874,14 +874,14 @@ defmodule Tempo.Compare do
     end
   end
 
-  def compare(%Interval{} = a, %Interval{} = b, options) do
+  def do_compare(%Interval{} = a, %Interval{} = b, options) do
     case compare_bound(a.from, b.from, :from, options) do
       :eq -> compare_bound(a.to, b.to, :to, options)
       order -> order
     end
   end
 
-  def compare(a, b, _options) do
+  def do_compare(a, b, _options) do
     raise ArgumentError,
           "cannot compare #{kind_of(a)} with #{kind_of(b)} — " <>
             "both values must be of the same kind"
@@ -960,7 +960,7 @@ defmodule Tempo.Compare do
   end
 
   defp compare_bound(a, b, _side, options) do
-    compare(a, b, options)
+    do_compare(a, b, options)
   end
 
   defp kind_of(%Tempo{}) do
@@ -1214,16 +1214,19 @@ defmodule Tempo.Compare do
   * `{:error, t:Tempo.ZoneOffsetMismatchError.t/0}` when the stated
     offset disagrees with the zone.
 
-  See `Tempo.validate_zone_offset/1`, which delegates here, for worked
-  examples.
+  A value read from text never disagrees, since `Tempo.from_iso8601/2`
+  settles a disagreement where it reads one, and `Tempo.new/1` refuses a
+  `:shift` and a `:zone` that disagree, so this is for a value made in
+  another way, as a struct built by hand. The same check backs the
+  `strict: true` option of `Tempo.from_iso8601/2`.
 
   """
-  @spec validate_zone_offset(Tempo.t()) ::
+  @spec do_validate_zone_offset(Tempo.t()) ::
           :ok | {:error, Tempo.ZoneOffsetMismatchError.t()}
 
   # A zone written as an offset (`[+08:45]`) is the offset it is, and a
   # time shift beside it agrees with it only where it is that offset.
-  def validate_zone_offset(
+  def do_validate_zone_offset(
         %Tempo{extended: %{zone_offset: minutes}, shift: [_ | _] = shift} = tempo
       )
       when is_integer(minutes) do
@@ -1234,7 +1237,7 @@ defmodule Tempo.Compare do
     end
   end
 
-  def validate_zone_offset(%Tempo{extended: extended, shift: shift} = tempo) do
+  def do_validate_zone_offset(%Tempo{extended: extended, shift: shift} = tempo) do
     zone_id = extended && Map.get(extended, :zone_id)
     stated = explicit_offset_seconds(extended, shift)
 
@@ -1257,7 +1260,7 @@ defmodule Tempo.Compare do
 
   defp offset_zone_mismatch(%Tempo{} = tempo, stated, zone_offset) do
     ZoneOffsetMismatchError.exception(
-      zone_id: ZoneOffsetMismatchError.format_offset(zone_offset),
+      zone_id: ZoneOffsetMismatchError.do_format_offset(zone_offset),
       stated_offset: stated,
       zone_offsets: [zone_offset],
       wall_time: wall_time_written(tempo)
@@ -1321,7 +1324,7 @@ defmodule Tempo.Compare do
   end
 
   defp starts_of({:ok, %IntervalSet{} = set}) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       for(%Interval{from: %Tempo{} = start} <- IntervalSet.members(set), do: start)
     else
       []
@@ -1380,17 +1383,17 @@ defmodule Tempo.Compare do
     # 02:30 is half an hour at eleven hours ahead of UTC, and was held to
     # agree with no offset, though every reading of it is at that one.
     offsets =
-      case TimeZoneDatabase.period_at_wall(zone_id, wall) do
+      case TimeZoneDatabase.do_period_at_wall(zone_id, wall) do
         {:ok, period} ->
-          [TimeZoneDatabase.total_offset(period)]
+          [TimeZoneDatabase.do_total_offset(period)]
 
         {:ambiguous, first, second} ->
           [first, second]
-          |> Enum.map(&TimeZoneDatabase.total_offset/1)
+          |> Enum.map(&TimeZoneDatabase.do_total_offset/1)
 
         {:gap, _before, {later, gap_ends}} ->
           if comes_out_within?(gap_ends, wall, spanned) do
-            [TimeZoneDatabase.total_offset(later)]
+            [TimeZoneDatabase.do_total_offset(later)]
           else
             []
           end
@@ -1531,9 +1534,9 @@ defmodule Tempo.Compare do
 
   defp resolve_offset_seconds(%{zone_id: zone_id} = extended, shift, wall_seconds, spanned)
        when is_binary(zone_id) and zone_id != "" do
-    case TimeZoneDatabase.period_at_wall(zone_id, wall_seconds) do
+    case TimeZoneDatabase.do_period_at_wall(zone_id, wall_seconds) do
       {:ok, period} ->
-        TimeZoneDatabase.total_offset(period)
+        TimeZoneDatabase.do_total_offset(period)
 
       {:ambiguous, first, second} ->
         ambiguous_offset([first, second], explicit_offset_seconds(extended, shift))
@@ -1576,7 +1579,7 @@ defmodule Tempo.Compare do
   # reading, and it was read so where the gap had started before it, which
   # put 03:00 there at 04:00, where the hour ends.
   defp skipped_offset({before, gap_starts}, {_later, gap_ends}, wall_seconds, spanned) do
-    before = TimeZoneDatabase.total_offset(before)
+    before = TimeZoneDatabase.do_total_offset(before)
 
     if comes_out_within?(gap_ends, wall_seconds, spanned) do
       before + wall_seconds - gregorian_seconds(gap_starts)
@@ -1603,9 +1606,9 @@ defmodule Tempo.Compare do
   # Ambiguous wall time (DST fall-back): prefer the period whose
   # offset matches the explicit disambiguator, else the first period.
   defp ambiguous_offset(periods, preferred) do
-    case Enum.find(periods, &(TimeZoneDatabase.total_offset(&1) == preferred)) do
-      nil -> TimeZoneDatabase.total_offset(hd(periods))
-      period -> TimeZoneDatabase.total_offset(period)
+    case Enum.find(periods, &(TimeZoneDatabase.do_total_offset(&1) == preferred)) do
+      nil -> TimeZoneDatabase.do_total_offset(hd(periods))
+      period -> TimeZoneDatabase.do_total_offset(period)
     end
   end
 

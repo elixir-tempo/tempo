@@ -387,7 +387,7 @@ defmodule Tempo.Select do
 
   @doc false
   # What `Tempo.select/2` does, where it is documented.
-  @spec select(base(), selector() | {:error, term()}) ::
+  @spec do_select(base(), selector() | {:error, term()}) ::
           {:ok, IntervalSet.t()} | {:error, term()}
 
   # ---- A selector that is an error: returned as it is ----
@@ -395,17 +395,17 @@ defmodule Tempo.Select do
   # `Tempo.workdays/1` and `Tempo.weekends/1` return an error for a
   # territory they cannot resolve, so a pipeline reports that error.
 
-  def select(_base, {:error, _reason} = error) do
+  def do_select(_base, {:error, _reason} = error) do
     error
   end
 
-  def select(base, %Range{} = range) do
-    select(base, Enum.to_list(range))
+  def do_select(base, %Range{} = range) do
+    do_select(base, Enum.to_list(range))
   end
 
   # ---- IntervalSet base: select within each member ----
 
-  def select(%IntervalSet{} = set, selector) do
+  def do_select(%IntervalSet{} = set, selector) do
     set
     |> select_members(selector)
     |> with_set_metadata(IntervalSet.metadata(set))
@@ -414,9 +414,9 @@ defmodule Tempo.Select do
   # ---- Workdays less holidays: the weekdays, then those no holiday
   # falls on ----
 
-  def select(base, %Tempo.Workdays{weekdays: weekdays, except: except}) do
-    with {:ok, %IntervalSet{} = days} <- select(base, day_of_week_selector(weekdays)) do
-      if IntervalSet.bounded?(days) do
+  def do_select(base, %Tempo.Workdays{weekdays: weekdays, except: except}) do
+    with {:ok, %IntervalSet{} = days} <- do_select(base, day_of_week_selector(weekdays)) do
+      if IntervalSet.do_bounded?(days) do
         without_holidays(days, except, base)
       else
         lazily_without_holidays(days, except)
@@ -427,11 +427,11 @@ defmodule Tempo.Select do
   # ---- Tempo and Tempo.Set bases: select across the span they
   # convert to ----
 
-  def select(%Tempo{} = tempo, selector) do
+  def do_select(%Tempo{} = tempo, selector) do
     select_converted(tempo, selector)
   end
 
-  def select(%Tempo.Set{} = set, selector) do
+  def do_select(%Tempo.Set{} = set, selector) do
     select_converted(set, selector)
   end
 
@@ -443,7 +443,7 @@ defmodule Tempo.Select do
   # `nGnMU`), which names several months where a span has one to start from
   # and one to end at: it was walked as it stood, and gave no weekday of its
   # six months and the 15th of one of them.
-  def select(%Interval{} = interval, selector) do
+  def do_select(%Interval{} = interval, selector) do
     cond do
       Group.abstract_season?(interval) -> select_converted(interval, selector)
       group_at_an_end?(interval) -> select_from_its_span(interval, selector)
@@ -453,7 +453,7 @@ defmodule Tempo.Select do
 
   # ---- Catch-all: clearer error ----
 
-  def select(base, _selector) do
+  def do_select(base, _selector) do
     {:error,
      ArgumentError.exception(
        "Tempo.select/2 cannot select from #{Calendars.inspect(base)}: the base is a Tempo value, " <>
@@ -484,13 +484,13 @@ defmodule Tempo.Select do
   defp select_from_its_span(%Interval{} = interval, selector) do
     case Tempo.to_interval(interval) do
       {:ok, %Interval{} = span} -> select_interval(span, selector)
-      {:ok, %IntervalSet{} = set} -> select(set, selector)
+      {:ok, %IntervalSet{} = set} -> do_select(set, selector)
       {:error, _reason} = error -> error
     end
   end
 
   defp select_members(set, selector) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       set
       |> IntervalSet.members()
       |> collect(&member_selection(&1, selector))
@@ -507,7 +507,7 @@ defmodule Tempo.Select do
     case span(interval) do
       {:closed, span} -> select_closed(span, selector)
       {:open_end, span} -> select_open_end(span, selector)
-      {:set, set} -> select(set, selector)
+      {:set, set} -> do_select(set, selector)
       {:error, _reason} = error -> error
     end
   end
@@ -592,7 +592,7 @@ defmodule Tempo.Select do
   defp through_members(set, fun) do
     metadata = IntervalSet.metadata(set)
 
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       members = IntervalSet.members(set)
 
       # A set none of whose members `fun` changes is the set it was.
@@ -619,7 +619,7 @@ defmodule Tempo.Select do
   defp with_base_metadata({:ok, %IntervalSet{} = set}, metadata) do
     tagged = &%{&1 | metadata: Map.merge(metadata, &1.metadata)}
 
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       set
       |> IntervalSet.members()
       |> Enum.map(tagged)
@@ -710,8 +710,8 @@ defmodule Tempo.Select do
 
   defp select_converted(value, selector) do
     case Tempo.to_interval(value) do
-      {:ok, %Interval{} = interval} -> select(resolve_grouped_endpoints(interval), selector)
-      {:ok, %IntervalSet{} = set} -> select(set, selector)
+      {:ok, %Interval{} = interval} -> do_select(resolve_grouped_endpoints(interval), selector)
+      {:ok, %IntervalSet{} = set} -> do_select(set, selector)
       {:error, _reason} = error -> error
     end
   end
@@ -1087,14 +1087,14 @@ defmodule Tempo.Select do
   # A member's selection, as a list. A lazy set's members are checked as
   # the walk reaches them, so one that is not a closed span stops it.
   defp member_selection(member, selector) do
-    case select(member, selector) do
+    case do_select(member, selector) do
       {:ok, %IntervalSet{} = selected} -> members_of(selected)
       {:error, _reason} = error -> error
     end
   end
 
   defp members_of(set) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       {:ok, IntervalSet.members(set)}
     else
       {:error, UnboundedSetError.exception(operation: "Tempo.select/2", set: set)}

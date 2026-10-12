@@ -50,8 +50,8 @@ defmodule Tempo.Clock do
   # `Tempo.Clock.System` unless another is set). The clock is a caller's
   # module, so its reading is a caller's value, and is given as Tempo works
   # with it.
-  @spec utc_now() :: DateTime.t()
-  def utc_now do
+  @spec do_utc_now() :: DateTime.t()
+  def do_utc_now do
     Calendars.inside(clock().utc_now())
   end
 

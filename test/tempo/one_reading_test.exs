@@ -243,7 +243,7 @@ defmodule Tempo.OneReadingTest do
       {:ok, in_paris} = Tempo.in_zone(holiday, "Europe/Paris")
 
       assert {:ok, left} = Tempo.difference(meeting, in_paris)
-      assert IntervalSet.empty?(left)
+      assert Tempo.empty?(left)
     end
 
     test "a set that holds both is refused whichever its first member is", %{meeting: meeting} do
@@ -281,7 +281,7 @@ defmodule Tempo.OneReadingTest do
     test "a window within one day has the time of day placed on that day" do
       {:ok, free} = Tempo.complement(~o"T10H", within: ~o"2025-01-01T10:00")
 
-      assert IntervalSet.empty?(free)
+      assert Tempo.empty?(free)
     end
   end
 

@@ -466,14 +466,14 @@ defmodule Tempo.IntervalSet.Test do
       set = Tempo.IntervalSet.new!([at("09", "10"), at("11", "12")])
 
       assert {:ok, none} = Tempo.IntervalSet.covered(set, at_least: 2)
-      assert Tempo.IntervalSet.empty?(none)
+      assert Tempo.empty?(none)
     end
 
     test "members that merely meet never count as overlapping" do
       set = Tempo.IntervalSet.new!([at("09", "10"), at("10", "11"), at("11", "12")])
 
       assert {:ok, none} = Tempo.IntervalSet.covered(set, at_least: 2)
-      assert Tempo.IntervalSet.empty?(none)
+      assert Tempo.empty?(none)
     end
 
     test "members that meet are one region, at any threshold" do
@@ -556,7 +556,7 @@ defmodule Tempo.IntervalSet.Test do
       set = Tempo.IntervalSet.new!([])
 
       assert {:ok, none} = Tempo.IntervalSet.covered(set)
-      assert Tempo.IntervalSet.empty?(none)
+      assert Tempo.empty?(none)
     end
 
     test "an option covered/2 does not take is an error, not a raise" do

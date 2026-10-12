@@ -287,7 +287,7 @@ defmodule Tempo.ChangeOfTheClockTest do
       forward = DateTime.new!(~D[2024-03-10], ~T[03:00:00], zone)
       {:ambiguous, _first, back} = DateTime.new(~D[2024-11-03], ~T[01:00:00], zone)
 
-      assert TimeZoneDatabase.changes(
+      assert TimeZoneDatabase.do_changes(
                zone,
                gregorian_seconds(year_starts),
                gregorian_seconds(year_ends)
@@ -301,9 +301,11 @@ defmodule Tempo.ChangeOfTheClockTest do
       zone = "America/New_York"
       forward = gregorian_seconds(DateTime.new!(~D[2024-03-10], ~T[03:00:00], zone))
 
-      assert [{^forward, _before, _later}] = TimeZoneDatabase.changes(zone, forward - 1, forward)
-      assert TimeZoneDatabase.changes(zone, forward, forward + 86_400) == []
-      assert TimeZoneDatabase.changes(zone, forward - 86_400, forward - 1) == []
+      assert [{^forward, _before, _later}] =
+               TimeZoneDatabase.do_changes(zone, forward - 1, forward)
+
+      assert TimeZoneDatabase.do_changes(zone, forward, forward + 86_400) == []
+      assert TimeZoneDatabase.do_changes(zone, forward - 86_400, forward - 1) == []
     end
 
     test "are both found where there are two in a day" do
@@ -313,7 +315,7 @@ defmodule Tempo.ChangeOfTheClockTest do
       {:ok, to} = DateTime.new(~D[2024-04-02], ~T[00:00:00], "Etc/UTC")
 
       assert [{first, -3600, -7200}, {second, -7200, -3600}] =
-               TimeZoneDatabase.changes(
+               TimeZoneDatabase.do_changes(
                  "America/Scoresbysund",
                  gregorian_seconds(from),
                  gregorian_seconds(to)
@@ -327,12 +329,12 @@ defmodule Tempo.ChangeOfTheClockTest do
       {:ok, to} = DateTime.new(~D[2030-01-01], ~T[00:00:00], "Etc/UTC")
       {from, to} = {gregorian_seconds(from), gregorian_seconds(to)}
 
-      assert TimeZoneDatabase.changes("Etc/UTC", from, to) == []
-      assert TimeZoneDatabase.changes("Asia/Tokyo", from, to) == []
-      assert TimeZoneDatabase.changes("Made/Up_Zone", from, to) == []
+      assert TimeZoneDatabase.do_changes("Etc/UTC", from, to) == []
+      assert TimeZoneDatabase.do_changes("Asia/Tokyo", from, to) == []
+      assert TimeZoneDatabase.do_changes("Made/Up_Zone", from, to) == []
 
-      assert TimeZoneDatabase.changes("Europe/Paris", 0, 86_400 * 366 * 1700) == []
-      assert TimeZoneDatabase.changes("Europe/Paris", -86_400 * 366 * 10, 0) == []
+      assert TimeZoneDatabase.do_changes("Europe/Paris", 0, 86_400 * 366 * 1700) == []
+      assert TimeZoneDatabase.do_changes("Europe/Paris", -86_400 * 366 * 10, 0) == []
     end
   end
 

@@ -609,7 +609,7 @@ defmodule Tempo.BesideAGap do
   end
 
   defp values_in(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set) do
+    if Tempo.bounded?(set) do
       set
       |> IntervalSet.members()
       |> Enum.flat_map(&values_in/1)

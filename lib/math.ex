@@ -1212,7 +1212,7 @@ defmodule Tempo.Math do
     if is_nil(shift) and Zone.clear_of_changes?(stepped, 0) do
       stepped
     else
-      reading = TimeZoneDatabase.period_at_wall(zone, wall_reading(stepped))
+      reading = TimeZoneDatabase.do_period_at_wall(zone, wall_reading(stepped))
       settle_reading(stepped, shift, reading)
     end
   end
@@ -1301,7 +1301,7 @@ defmodule Tempo.Math do
   end
 
   defp mark_reading(moved, zone, wall, offset, shift) do
-    case TimeZoneDatabase.period_at_wall(zone, wall) do
+    case TimeZoneDatabase.do_period_at_wall(zone, wall) do
       {:ambiguous, _first, _second} -> %{moved | shift: offset_as_written(offset, shift)}
       _single_or_none -> keep_offset(moved, offset, shift)
     end
@@ -1361,7 +1361,7 @@ defmodule Tempo.Math do
   # has no change of its clock to land past, so the value keeps the offset
   # it is read by.
   defp offset_at(zone, utc_seconds, otherwise) do
-    case TimeZoneDatabase.period_at_utc(zone, utc_seconds) do
+    case TimeZoneDatabase.do_period_at_utc(zone, utc_seconds) do
       {:ok, period} -> total_offset(period)
       {:error, _reason} -> otherwise
     end
@@ -1371,10 +1371,10 @@ defmodule Tempo.Math do
     trunc(Compare.to_wall_seconds(tempo))
   end
 
-  # `TimeZoneDatabase.total_offset/1` is typed `number()`; an offset is a
+  # `TimeZoneDatabase.do_total_offset/1` is typed `number()`; an offset is a
   # whole number of seconds.
   defp total_offset(period) do
-    case TimeZoneDatabase.total_offset(period) do
+    case TimeZoneDatabase.do_total_offset(period) do
       offset when is_integer(offset) -> offset
     end
   end
@@ -3714,7 +3714,7 @@ defmodule Tempo.Math do
   end
 
   defp coalesce_busy({:ok, %IntervalSet{} = set}) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       {:ok, IntervalSet.coalesce(set)}
     else
       {:ok, set}
@@ -3728,7 +3728,7 @@ defmodule Tempo.Math do
   # A lazy busy set cannot be validated up front — its members are
   # checked as the walk consumes them (`span_payload/1`).
   defp validate_busy_members(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       set
       |> IntervalSet.members()
       |> Enum.find_value(:ok, &busy_member_error/1)

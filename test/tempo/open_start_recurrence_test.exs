@@ -255,7 +255,7 @@ defmodule Tempo.OpenStartRecurrenceTest do
   end
 
   describe "endpoint transforms tolerate an unbounded endpoint" do
-    # `Operations.align/3` is public, so a caller can hand it a
+    # `Operations.do_align/3` is exported, so a caller can hand it a
     # set built by hand that never passed IntervalSet.new/2's
     # validation. The endpoint transforms must not crash on one.
     test "align/3 does not raise on a hand-built unbounded set" do
@@ -265,8 +265,8 @@ defmodule Tempo.OpenStartRecurrenceTest do
 
       bounded = %IntervalSet{intervals: [~o"2026Y6M1D/7M1D"]}
 
-      assert {:ok, {_a, _b}} = Operations.align(unbounded, bounded)
-      assert {:ok, {_a, _b}} = Operations.align(bounded, unbounded)
+      assert {:ok, {_a, _b}} = Operations.do_align(unbounded, bounded)
+      assert {:ok, {_a, _b}} = Operations.do_align(bounded, unbounded)
     end
   end
 

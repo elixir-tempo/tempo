@@ -73,22 +73,22 @@ defmodule Tempo.Operations do
 
   ### Examples
 
-      iex> {:ok, {a, b}} = Tempo.Operations.align(~o"2026-01", ~o"2026-03")
+      iex> {:ok, {a, b}} = Tempo.Operations.do_align(~o"2026-01", ~o"2026-03")
       iex> {Tempo.IntervalSet.count(a), Tempo.IntervalSet.count(b)}
       {1, 1}
 
-      iex> Tempo.Operations.align(~o"P1D", ~o"2026-01")
+      iex> Tempo.Operations.do_align(~o"P1D", ~o"2026-01")
       {:error, %Tempo.ConversionError{value: ~o"P1D", reason: :bare_duration}}
 
   """
-  @spec align(operand, operand, keyword()) ::
+  @spec do_align(operand, operand, keyword()) ::
           {:ok, {IntervalSet.t(), IntervalSet.t()}} | {:error, term()}
         when operand:
                Tempo.t()
                | Interval.t()
                | IntervalSet.t()
                | Tempo.Set.t()
-  def align(a, b, opts \\ []) do
+  def do_align(a, b, opts \\ []) do
     with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
          {:ok, a_set} <- split_crossers(a_set),
          {:ok, b_set} <- split_crossers(b_set) do
@@ -1097,7 +1097,7 @@ defmodule Tempo.Operations do
   ## to the finer resolution.
 
   defp align_resolution(a_set, b_set) do
-    if IntervalSet.empty?(a_set) or IntervalSet.empty?(b_set) do
+    if IntervalSet.do_empty?(a_set) or IntervalSet.do_empty?(b_set) do
       {:ok, a_set, b_set}
     else
       align_nonempty_resolution(a_set, b_set)
@@ -1215,16 +1215,16 @@ defmodule Tempo.Operations do
       1
 
   """
-  @spec union(operand, operand | [operand], keyword()) ::
+  @spec do_union(operand, operand | [operand], keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def union(a, b, opts \\ [])
+  def do_union(a, b, opts \\ [])
 
-  def union(a, operands, opts) when is_list(operands) do
-    fold_operands(a, operands, opts, &union/3)
+  def do_union(a, operands, opts) when is_list(operands) do
+    fold_operands(a, operands, opts, &do_union/3)
   end
 
-  def union(a, b, opts) do
+  def do_union(a, b, opts) do
     with {:ok, {a_set, b_set}} <- align_members(a, b, opts) do
       IntervalSet.new(IntervalSet.members(a_set) ++ IntervalSet.members(b_set),
         metadata: a_set.metadata
@@ -1300,16 +1300,16 @@ defmodule Tempo.Operations do
       [%{free: ["Alice", "Bob"]}]
 
   """
-  @spec intersection(operand, operand | [operand], keyword()) ::
+  @spec do_intersection(operand, operand | [operand], keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def intersection(a, b, opts \\ [])
+  def do_intersection(a, b, opts \\ [])
 
-  def intersection(a, operands, opts) when is_list(operands) do
-    fold_operands(a, operands, opts, &intersection/3)
+  def do_intersection(a, operands, opts) when is_list(operands) do
+    fold_operands(a, operands, opts, &do_intersection/3)
   end
 
-  def intersection(a, b, opts) do
+  def do_intersection(a, b, opts) do
     with {:ok, resolve} <- metadata_resolver(Keyword.get(opts, :metadata, :left)),
          {:ok, {a_set, b_set}} <- align_members(a, b, opts),
          {:ok, shared} <- shared(a_set, b_set, resolve) do
@@ -1345,10 +1345,10 @@ defmodule Tempo.Operations do
       [~o"2026Y1M5D/6D"]
 
   """
-  @spec members_overlapping(operand, operand, keyword()) ::
+  @spec do_members_overlapping(operand, operand, keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def members_overlapping(a, b, opts \\ []) do
+  def do_members_overlapping(a, b, opts \\ []) do
     with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
          {:ok, kept} <- kept_members(a_set, b_set, :overlapping) do
       IntervalSet.new(kept, metadata: a_set.metadata)
@@ -1541,9 +1541,9 @@ defmodule Tempo.Operations do
       [~o"2026Y6M15DT9H0M0S/T12H0M0S", ~o"2026Y6M15DT13H0M0S/T17H0M0S"]
 
   """
-  @spec complement(operand, keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
+  @spec do_complement(operand, keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def complement(set, opts) do
+  def do_complement(set, opts) do
     with :ok <- Tempo.check_within_option(opts, "Tempo.complement/2") do
       complement_within(set, Keyword.get(opts, :within), opts)
     end
@@ -1608,16 +1608,16 @@ defmodule Tempo.Operations do
       1
 
   """
-  @spec difference(operand, operand | [operand], keyword()) ::
+  @spec do_difference(operand, operand | [operand], keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def difference(a, b, opts \\ [])
+  def do_difference(a, b, opts \\ [])
 
-  def difference(a, operands, opts) when is_list(operands) do
-    fold_operands(a, operands, opts, &difference/3)
+  def do_difference(a, operands, opts) when is_list(operands) do
+    fold_operands(a, operands, opts, &do_difference/3)
   end
 
-  def difference(a, b, opts) do
+  def do_difference(a, b, opts) do
     with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
          {:ok, left} <- cut_members(a_set, b_set, &sweep_difference/2) do
       IntervalSet.new(left, metadata: a_set.metadata)
@@ -1671,10 +1671,10 @@ defmodule Tempo.Operations do
       [~o"2026Y1M20D/21D"]
 
   """
-  @spec members_outside(operand, operand, keyword()) ::
+  @spec do_members_outside(operand, operand, keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def members_outside(a, b, opts \\ []) do
+  def do_members_outside(a, b, opts \\ []) do
     with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
          {:ok, kept} <- kept_members(a_set, b_set, :outside) do
       IntervalSet.new(kept, metadata: a_set.metadata)
@@ -1775,12 +1775,12 @@ defmodule Tempo.Operations do
       [~o"2026Y1M/3M", ~o"2026Y4M/6M"]
 
   """
-  @spec symmetric_difference(operand, operand, keyword()) ::
+  @spec do_symmetric_difference(operand, operand, keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def symmetric_difference(a, b, opts \\ []) do
-    with {:ok, a_minus_b} <- difference(a, b, opts),
-         {:ok, b_minus_a} <- difference(b, a, opts) do
+  def do_symmetric_difference(a, b, opts \\ []) do
+    with {:ok, a_minus_b} <- do_difference(a, b, opts),
+         {:ok, b_minus_a} <- do_difference(b, a, opts) do
       IntervalSet.new(IntervalSet.members(a_minus_b) ++ IntervalSet.members(b_minus_a),
         metadata: a_minus_b.metadata
       )
@@ -1806,12 +1806,12 @@ defmodule Tempo.Operations do
       [~o"2026Y1M5D/6D", ~o"2026Y1M25D/26D"]
 
   """
-  @spec members_in_exactly_one(operand, operand, keyword()) ::
+  @spec do_members_in_exactly_one(operand, operand, keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def members_in_exactly_one(a, b, opts \\ []) do
-    with {:ok, a_minus_b} <- members_outside(a, b, opts),
-         {:ok, b_minus_a} <- members_outside(b, a, opts) do
+  def do_members_in_exactly_one(a, b, opts \\ []) do
+    with {:ok, a_minus_b} <- do_members_outside(a, b, opts),
+         {:ok, b_minus_a} <- do_members_outside(b, a, opts) do
       IntervalSet.new(IntervalSet.members(a_minus_b) ++ IntervalSet.members(b_minus_a),
         metadata: a_minus_b.metadata
       )
@@ -1833,13 +1833,13 @@ defmodule Tempo.Operations do
       {true, false}
 
   """
-  @spec disjoint?(operand, operand, keyword()) :: boolean()
+  @spec do_disjoint?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def disjoint?(a, b, opts \\ []) do
+  def do_disjoint?(a, b, opts \\ []) do
     Interval.reject_mixed_frame!(a, b)
 
-    case intersection(a, b, opts) do
-      {:ok, %IntervalSet{} = result} -> IntervalSet.empty?(result)
+    case do_intersection(a, b, opts) do
+      {:ok, %IntervalSet{} = result} -> IntervalSet.do_empty?(result)
       {:error, exception} -> raise exception
     end
   end
@@ -1854,10 +1854,10 @@ defmodule Tempo.Operations do
       {true, false}
 
   """
-  @spec overlaps?(operand, operand, keyword()) :: boolean()
+  @spec do_overlaps?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def overlaps?(a, b, opts \\ []) do
-    not disjoint?(a, b, opts)
+  def do_overlaps?(a, b, opts \\ []) do
+    not do_disjoint?(a, b, opts)
   end
 
   @doc """
@@ -1873,13 +1873,13 @@ defmodule Tempo.Operations do
       {true, false}
 
   """
-  @spec within?(operand, operand, keyword()) :: boolean()
+  @spec do_within?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def within?(a, b, opts \\ []) do
+  def do_within?(a, b, opts \\ []) do
     Interval.reject_mixed_frame!(a, b)
 
-    case difference(a, b, opts) do
-      {:ok, %IntervalSet{} = result} -> IntervalSet.empty?(result)
+    case do_difference(a, b, opts) do
+      {:ok, %IntervalSet{} = result} -> IntervalSet.do_empty?(result)
       {:error, exception} -> raise exception
     end
   end
@@ -1895,10 +1895,10 @@ defmodule Tempo.Operations do
       {true, false}
 
   """
-  @spec contains?(operand, operand, keyword()) :: boolean()
+  @spec do_contains?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def contains?(a, b, opts \\ []) do
-    within?(b, a, opts)
+  def do_contains?(a, b, opts \\ []) do
+    do_within?(b, a, opts)
   end
 
   @doc """
@@ -1915,10 +1915,10 @@ defmodule Tempo.Operations do
       false
 
   """
-  @spec equal?(operand, operand, keyword()) :: boolean()
+  @spec do_equal?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def equal?(a, b, opts \\ []) do
-    case align(a, b, opts) do
+  def do_equal?(a, b, opts \\ []) do
+    case do_align(a, b, opts) do
       {:ok, {a_set, b_set}} ->
         a_members = IntervalSet.members(IntervalSet.merged(a_set))
         b_members = IntervalSet.members(IntervalSet.merged(b_set))

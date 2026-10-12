@@ -239,14 +239,14 @@ defmodule Tempo.Enumeration.Zone do
   2011).
 
   The days a zone leaves out are kept
-  (`Tempo.TimeZoneDatabase.days_left_out/1`), so this asks nothing of the
+  (`Tempo.TimeZoneDatabase.do_days_left_out/1`), so this asks nothing of the
   zone database. They are Gregorian dates, and a value of another calendar
   is asked as the Gregorian date of its day (`in_gregorian/1`), in a zone
   that leaves one out.
   """
   @spec on_a_day_left_out?(Tempo.t()) :: boolean()
   def on_a_day_left_out?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
-    case TimeZoneDatabase.days_left_out(zone) do
+    case TimeZoneDatabase.do_days_left_out(zone) do
       [] ->
         false
 
@@ -308,7 +308,7 @@ defmodule Tempo.Enumeration.Zone do
   # time of day is skipped only beside a change of the clock, so a value
   # with none within a day or so of it is shown: the changes of a zone are
   # kept too, once a year of them has been asked of often enough to be
-  # worth finding (`Tempo.TimeZoneDatabase.clear_of_changes?/3`), and until
+  # worth finding (`Tempo.TimeZoneDatabase.do_clear_of_changes?/3`), and until
   # then the value is asked of the database itself. Nothing is then asked
   # of the zone database for nearly every value, which matters where each
   # member of a selection is asked.
@@ -320,7 +320,7 @@ defmodule Tempo.Enumeration.Zone do
     case value
          |> in_gregorian()
          |> first_reading() do
-      {:ok, reading} -> TimeZoneDatabase.clear_of_changes?(zone, reading, @a_day_or_so)
+      {:ok, reading} -> TimeZoneDatabase.do_clear_of_changes?(zone, reading, @a_day_or_so)
       :no_one_reading -> false
     end
   end
@@ -344,7 +344,7 @@ defmodule Tempo.Enumeration.Zone do
   A step from such a value by time passed lands on the reading its wall
   clock steps to, at the offset it started at, so nothing need be asked of
   the zone database. It is `false` where the zone's changes there have not
-  been found yet (`Tempo.TimeZoneDatabase.clear_of_changes?/3`), as where
+  been found yet (`Tempo.TimeZoneDatabase.do_clear_of_changes?/3`), as where
   one is near, and the caller then asks the database as it would have.
   `shown?/1` finds them, which every value a selection or a set makes is
   asked.
@@ -356,7 +356,7 @@ defmodule Tempo.Enumeration.Zone do
          |> in_gregorian()
          |> first_reading() do
       {:ok, reading} ->
-        TimeZoneDatabase.clear_of_changes?(zone, reading, abs(seconds) + @clear_of_a_change)
+        TimeZoneDatabase.do_clear_of_changes?(zone, reading, abs(seconds) + @clear_of_a_change)
 
       :no_one_reading ->
         false
@@ -441,7 +441,10 @@ defmodule Tempo.Enumeration.Zone do
        ) do
     reading = {{year, month, day}, time_of_day(clock)}
 
-    case TimeZoneDatabase.period_at_wall(zone, :calendar.datetime_to_gregorian_seconds(reading)) do
+    case TimeZoneDatabase.do_period_at_wall(
+           zone,
+           :calendar.datetime_to_gregorian_seconds(reading)
+         ) do
       {:gap, _before, {_later, shown}} -> %{value | time: units_at(value.time, shown)}
       _shown_or_not_known -> value
     end
@@ -551,7 +554,7 @@ defmodule Tempo.Enumeration.Zone do
     starts = :calendar.datetime_to_gregorian_seconds({{year, month, day}, {hour, 0, 0}})
 
     with {:ok, ending} <-
-           ending(zone, starts, TimeZoneDatabase.period_at_wall(zone, starts), shift) do
+           ending(zone, starts, TimeZoneDatabase.do_period_at_wall(zone, starts), shift) do
       {:ok, at_ending(value, ending)}
     end
   end
@@ -572,7 +575,7 @@ defmodule Tempo.Enumeration.Zone do
   # for the first 01:00 and the second 01:00 for the first 02:00.
   defp ending(zone, starts, {:ambiguous, first, second}, shift) do
     {first, second} =
-      {TimeZoneDatabase.total_offset(first), TimeZoneDatabase.total_offset(second)}
+      {TimeZoneDatabase.do_total_offset(first), TimeZoneDatabase.do_total_offset(second)}
 
     if is_list(shift) and Compare.offset_seconds(shift) == second do
       at_the_next_hour(zone, starts, second)
@@ -585,11 +588,11 @@ defmodule Tempo.Enumeration.Zone do
   # shows the hour at: the offset after the gap for one that starts in a
   # gap.
   defp ending(zone, starts, {:ok, period}, _shift) do
-    at_the_next_hour(zone, starts, TimeZoneDatabase.total_offset(period))
+    at_the_next_hour(zone, starts, TimeZoneDatabase.do_total_offset(period))
   end
 
   defp ending(zone, starts, {:gap, _before, {later, _limit}}, _shift) do
-    at_the_next_hour(zone, starts, TimeZoneDatabase.total_offset(later))
+    at_the_next_hour(zone, starts, TimeZoneDatabase.do_total_offset(later))
   end
 
   defp ending(_zone, _starts, {:error, _reason}, _shift) do
@@ -602,24 +605,24 @@ defmodule Tempo.Enumeration.Zone do
   defp at_the_next_hour(zone, starts, offset) do
     next = starts + @seconds_in_an_hour
 
-    case TimeZoneDatabase.period_at_wall(zone, next) do
+    case TimeZoneDatabase.do_period_at_wall(zone, next) do
       {:ok, period} ->
-        {:ok, {next, TimeZoneDatabase.total_offset(period), false}}
+        {:ok, {next, TimeZoneDatabase.do_total_offset(period), false}}
 
       {:ambiguous, first, second} ->
-        second = TimeZoneDatabase.total_offset(second)
+        second = TimeZoneDatabase.do_total_offset(second)
 
         shown =
           if offset == second do
             second
           else
-            TimeZoneDatabase.total_offset(first)
+            TimeZoneDatabase.do_total_offset(first)
           end
 
         {:ok, {next, shown, true}}
 
       {:gap, _before, {later, comes_out}} ->
-        {:ok, {gregorian_seconds(comes_out), TimeZoneDatabase.total_offset(later), false}}
+        {:ok, {gregorian_seconds(comes_out), TimeZoneDatabase.do_total_offset(later), false}}
 
       {:error, _reason} ->
         :error
@@ -628,9 +631,9 @@ defmodule Tempo.Enumeration.Zone do
 
   # What the clock shows at a moment.
   defp shown_at(zone, moment) do
-    case TimeZoneDatabase.period_at_utc(zone, moment) do
+    case TimeZoneDatabase.do_period_at_utc(zone, moment) do
       {:ok, period} ->
-        offset = TimeZoneDatabase.total_offset(period)
+        offset = TimeZoneDatabase.do_total_offset(period)
         {:ok, {moment + offset, offset, true}}
 
       {:error, _reason} ->
@@ -729,7 +732,7 @@ defmodule Tempo.Enumeration.Zone do
   # its zone and no offset, which gives each reading its own: the hours of
   # the day New York's clocks go forward are at two.
   defp at_one_offset_or_none(%Tempo{} = value) do
-    if Compare.validate_zone_offset(value) == :ok do
+    if Compare.do_validate_zone_offset(value) == :ok do
       value
     else
       %{value | shift: nil}
@@ -771,15 +774,15 @@ defmodule Tempo.Enumeration.Zone do
   # it shows twice, the one it comes out of a gap at for a reading it skips,
   # and none for a zone the database does not know.
   defp offsets_at(zone, reading) do
-    case TimeZoneDatabase.period_at_wall(zone, reading) do
+    case TimeZoneDatabase.do_period_at_wall(zone, reading) do
       {:ok, period} ->
-        [TimeZoneDatabase.total_offset(period)]
+        [TimeZoneDatabase.do_total_offset(period)]
 
       {:ambiguous, first, second} ->
-        [TimeZoneDatabase.total_offset(first), TimeZoneDatabase.total_offset(second)]
+        [TimeZoneDatabase.do_total_offset(first), TimeZoneDatabase.do_total_offset(second)]
 
       {:gap, _before, {later, _comes_out}} ->
-        [TimeZoneDatabase.total_offset(later)]
+        [TimeZoneDatabase.do_total_offset(later)]
 
       {:error, _reason} ->
         []

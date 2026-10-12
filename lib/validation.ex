@@ -2962,7 +2962,7 @@ defmodule Tempo.Validation do
   defp gap_at(zone, {date, {_hour, _minute, _second} = time}) do
     wall = :calendar.datetime_to_gregorian_seconds({date, time})
 
-    case TimeZoneDatabase.period_at_wall(zone, wall) do
+    case TimeZoneDatabase.do_period_at_wall(zone, wall) do
       {:gap, {_before, starts}, {_after, ends}} -> {starts, ends}
       _shown_or_not_known -> nil
     end

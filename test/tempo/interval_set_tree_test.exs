@@ -39,7 +39,7 @@ defmodule Tempo.IntervalSetTreeTest do
 
     test "an empty tree set answers like an empty list set" do
       {:ok, set} = IntervalSet.new([], backend: :tree)
-      assert IntervalSet.empty?(set)
+      assert Tempo.empty?(set)
       assert IntervalSet.count(set) == 0
       assert IntervalSet.first(set) == nil
       assert IntervalSet.members(set) == []
@@ -104,7 +104,7 @@ defmodule Tempo.IntervalSetTreeTest do
         assert IntervalSet.members(tree) == IntervalSet.members(list)
         assert IntervalSet.count(tree) == IntervalSet.count(list)
         assert IntervalSet.first(tree) == IntervalSet.first(list)
-        assert IntervalSet.empty?(tree) == IntervalSet.empty?(list)
+        assert Tempo.empty?(tree) == Tempo.empty?(list)
         assert Enum.to_list(IntervalSet.walk(tree)) == Enum.to_list(IntervalSet.walk(list))
 
         probe = day(probe_offset)

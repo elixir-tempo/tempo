@@ -266,7 +266,7 @@ defmodule Tempo.WithinWindowTest do
       assert {:ok, events} =
                JSCalendar.parse(json, within: ~o"2026-06-15/2026-06-22")
 
-      assert IntervalSet.empty?(events)
+      assert Tempo.empty?(events)
     end
   end
 

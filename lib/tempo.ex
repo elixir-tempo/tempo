@@ -927,7 +927,7 @@ defmodule Tempo do
   defp validate_against_calendar(%__MODULE__{calendar: calendar} = tempo) do
     with {:ok, validated} <- Validation.validate(tempo, calendar),
          :ok <- Validation.validate_zone_existence(validated),
-         :ok <- validate_zone_offset(validated) do
+         :ok <- Compare.do_validate_zone_offset(validated) do
       {:ok, validated}
     end
   end
@@ -2076,7 +2076,7 @@ defmodule Tempo do
   # `strict:` is a no-op for them.
   defp enforce_strict(%Tempo{} = tempo, options) do
     if Keyword.get(options, :strict, false) do
-      case Compare.validate_zone_offset(tempo) do
+      case Compare.do_validate_zone_offset(tempo) do
         :ok -> {:ok, tempo}
         {:error, _exception} = error -> error
       end
@@ -2213,7 +2213,7 @@ defmodule Tempo do
       Compare.no_local_offset?(shift) ->
         shown_on(value, zone)
 
-      Compare.validate_zone_offset(value) == :ok ->
+      Compare.do_validate_zone_offset(value) == :ok ->
         {:ok, value}
 
       zone_critical?(value) or strict? ->
@@ -2228,7 +2228,7 @@ defmodule Tempo do
   # which says more than that no offset of the zone's is the one stated.
   defp refused_beside_its_zone(value) do
     with :ok <- Validation.validate_zone_existence(value),
-         do: Compare.validate_zone_offset(value)
+         do: Compare.do_validate_zone_offset(value)
   end
 
   # A value that names several moments (a set or unspecified digits in a
@@ -2238,8 +2238,8 @@ defmodule Tempo do
   defp several_moments_beside_a_zone(%__MODULE__{shift: shift} = value, strict?) do
     cond do
       Compare.no_local_offset?(shift) -> {:error, several_moments_error(value)}
-      Compare.validate_zone_offset(value) == :ok -> {:ok, value}
-      zone_critical?(value) or strict? -> Compare.validate_zone_offset(value)
+      Compare.do_validate_zone_offset(value) == :ok -> {:ok, value}
+      zone_critical?(value) or strict? -> Compare.do_validate_zone_offset(value)
       true -> {:error, several_moments_error(value)}
     end
   end
@@ -3526,33 +3526,6 @@ defmodule Tempo do
     raise(not_one_value("anchored?/1", value))
   end
 
-  @doc false
-  # Check that an IXDTF value's explicit numeric offset agrees with its
-  # IANA time zone at the value's wall instant.
-  #
-  # A value may hold both a numeric offset and a zone, and the two may
-  # disagree: Paris is an hour ahead of UTC in November, so 10:37 there
-  # with an offset of five hours is inconsistent (RFC 9557 §3.4). A
-  # value read from text never is, since `from_iso8601/2` settles a
-  # disagreement where it reads one, and `new/1` refuses a `:shift` and a
-  # `:zone` that disagree, so this is for a value made in another way, as
-  # a struct built by hand. A zone written as an offset (`[+08:45]`) is
-  # checked as a named one is. The same check backs the `strict: true`
-  # option of `from_iso8601/2`.
-  #
-  # ### Arguments
-  #
-  # * `tempo` is a `t:t/0`.
-  #
-  # ### Returns
-  #
-  # * `:ok` when the offset agrees, or when there is nothing to check (no
-  #   zone, no explicit offset, or an unanchored value).
-  #
-  # * `{:error, t:Tempo.ZoneOffsetMismatchError.t/0}` on disagreement.
-  @spec validate_zone_offset(t()) :: :ok | {:error, Tempo.ZoneOffsetMismatchError.t()}
-  defdelegate validate_zone_offset(tempo), to: Tempo.Compare
-
   @doc """
   Truncates a tempo struct to the specified resolution.
 
@@ -4551,7 +4524,7 @@ defmodule Tempo do
   end
 
   defp the_one_selected(selected, high, low) do
-    case IntervalSet.bounded?(selected) && IntervalSet.members(selected) do
+    case IntervalSet.do_bounded?(selected) && IntervalSet.members(selected) do
       [%Tempo.Interval{} = one] ->
         {:ok, value_selected(one)}
 
@@ -4573,7 +4546,7 @@ defmodule Tempo do
   # A selected span that is one value's own is that value; any other, a
   # week of a month, is the span.
   defp value_selected(%Tempo.Interval{from: %__MODULE__{} = from, to: to} = selected) do
-    case Interval.next_unit_boundary(from) do
+    case Interval.do_next_unit_boundary(from) do
       {:ok, {_lower, upper}, _unit} ->
         if Compare.compare_endpoints(upper, to) == :same do
           from
@@ -6340,7 +6313,7 @@ defmodule Tempo do
     # Truncate the clock's microsecond so the result honours the
     # documented second resolution. For a sub-second reading, use
     # `Tempo.from_elixir(DateTime.utc_now())`.
-    Clock.utc_now()
+    Clock.do_utc_now()
     |> DateTime.truncate(:second)
     |> from_datetime()
     |> Calendars.outside()
@@ -6385,7 +6358,7 @@ defmodule Tempo do
 
   def now(zone) when is_binary(zone) do
     # Second resolution per the contract — see `utc_now/0`.
-    Clock.utc_now()
+    Clock.do_utc_now()
     |> DateTime.truncate(:second)
     |> zoned_now(zone)
     |> Calendars.outside()
@@ -6950,7 +6923,7 @@ defmodule Tempo do
   defp span_in_zone(tempo, target_zone) do
     {unit, _span} = resolution(tempo)
 
-    with {:ok, {lower, upper}, _walked_by} <- Interval.next_unit_boundary(tempo),
+    with {:ok, {lower, upper}, _walked_by} <- Interval.do_next_unit_boundary(tempo),
          {:ok, start} <- moment_in_zone(lower, target_zone),
          {:ok, finish} <- moment_in_zone(upper, target_zone) do
       case one_unit_there(start, finish, unit) do
@@ -6965,7 +6938,7 @@ defmodule Tempo do
   defp one_unit_there(start, finish, unit) do
     with %Tempo{} = value <- trunc(start, unit),
          value = in_the_zone_alone(value, unit),
-         {:ok, {lower, upper}, _walked_by} <- Interval.next_unit_boundary(value),
+         {:ok, {lower, upper}, _walked_by} <- Interval.do_next_unit_boundary(value),
          true <- same_moment?(lower, start) and same_moment?(upper, finish) do
       value
     else
@@ -7038,8 +7011,8 @@ defmodule Tempo do
   end
 
   defp zone_offset_at(zone, utc_seconds) do
-    case TimeZoneDatabase.period_at_utc(zone, utc_seconds) do
-      {:ok, period} -> {:ok, TimeZoneDatabase.total_offset(period)}
+    case TimeZoneDatabase.do_period_at_utc(zone, utc_seconds) do
+      {:ok, period} -> {:ok, TimeZoneDatabase.do_total_offset(period)}
       {:error, _reason} -> {:error, UnknownZoneError.exception(zone_id: zone)}
     end
   end
@@ -8170,7 +8143,7 @@ defmodule Tempo do
     if Calendars.outside?([value, options]) do
       to_string(Calendars.inside(value), Calendars.inside(options))
     else
-      Format.to_string(value, options)
+      Format.do_to_string(value, options)
     end
   end
 
@@ -8279,7 +8252,7 @@ defmodule Tempo do
     if Calendars.outside?([value, options]) do
       to_relative_string(Calendars.inside(value), Calendars.inside(options))
     else
-      Format.to_relative_string(value, options)
+      Format.do_to_relative_string(value, options)
     end
   end
 
@@ -8741,7 +8714,7 @@ defmodule Tempo do
   end
 
   defp between_points(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       members_between_points(set)
     else
       {:ok, set}
@@ -9003,7 +8976,7 @@ defmodule Tempo do
   # An open-ended window gives each start's occurrences lazily, and lazy sets
   # are not merged.
   defp gathered_from_each(set, starts, interval, opts, {occurrences, count}) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       own = IntervalSet.members(set)
       gathered = {Enum.reverse(own, occurrences), count + Enum.count(own)}
       occurrences_from_each(starts, interval, opts, gathered)
@@ -9506,7 +9479,7 @@ defmodule Tempo do
   end
 
   def read_in_utc(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       IntervalSet.with_intervals(set, Enum.map(IntervalSet.members(set), &read_in_utc/1))
     else
       set
@@ -10915,7 +10888,7 @@ defmodule Tempo do
   # the walk can cover (`shifted_by_its_clock/3`).
   defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}, time: time}, :day, _amount)
        when is_binary(zone) do
-    if not Keyword.has_key?(time, :hour) and Tempo.TimeZoneDatabase.days_left_out(zone) == [] do
+    if not Keyword.has_key?(time, :hour) and Tempo.TimeZoneDatabase.do_days_left_out(zone) == [] do
       :never
     else
       :a_day_on
@@ -10935,7 +10908,7 @@ defmodule Tempo do
 
   # The time a walk can cover that a zone's changes are looked for in: a
   # walk makes `@recurrence_safety_cap` periods at most, and the zone's
-  # changes are found a day at a time (`Tempo.TimeZoneDatabase.changes/3`),
+  # changes are found a day at a time (`Tempo.TimeZoneDatabase.do_changes/3`),
   # so one that could cover more than thirty years is not asked.
   @years_of_changes_asked 30
   @seconds_of_changes_asked @years_of_changes_asked * 366 * 86_400
@@ -11005,7 +10978,7 @@ defmodule Tempo do
   # Each offset a zone's clock is at between two moments, as its distance
   # from the offset at the first.
   defp clock_shifts(zone, from, to) do
-    case Tempo.TimeZoneDatabase.changes(zone, from, to) do
+    case Tempo.TimeZoneDatabase.do_changes(zone, from, to) do
       [] ->
         [0]
 
@@ -11647,7 +11620,7 @@ defmodule Tempo do
   # too. The two are one occurrence, and the later is the one that is kept:
   # it is the step that lands there, and its end is counted from where it is.
   defp each_start_once(candidates, %Tempo{extended: %{zone_id: zone}}) when is_binary(zone) do
-    if TimeZoneDatabase.days_left_out(zone) == [] do
+    if TimeZoneDatabase.do_days_left_out(zone) == [] do
       candidates
     else
       candidates
@@ -12302,7 +12275,7 @@ defmodule Tempo do
   end
 
   defp its_own_end_or(from, stepped) do
-    with {:ok, {_lower, %Tempo{} = own_end}, _unit} <- Interval.next_unit_boundary(from),
+    with {:ok, {_lower, %Tempo{} = own_end}, _unit} <- Interval.do_next_unit_boundary(from),
          :earlier <- Compare.compare_endpoints(own_end, stepped) do
       own_end
     else
@@ -12416,7 +12389,7 @@ defmodule Tempo do
          %Tempo.Duration{time: [{unit, _amount} | _]}
        )
        when is_binary(zone) and unit in [:week, :day] do
-    List.keymember?(time, :hour, 0) or TimeZoneDatabase.days_left_out(zone) != []
+    List.keymember?(time, :hour, 0) or TimeZoneDatabase.do_days_left_out(zone) != []
   end
 
   defp settled_by_the_clock?(_from, _cadence) do
@@ -12456,7 +12429,7 @@ defmodule Tempo do
   end
 
   defp bound_upper_from_set(set) do
-    if IntervalSet.empty?(set) do
+    if IntervalSet.do_empty?(set) do
       {:error,
        UnboundedRecurrenceError.exception(
          reason: "An empty `:within` window — nothing to end the recurrence against."
@@ -12485,7 +12458,7 @@ defmodule Tempo do
   end
 
   defp bound_lower_from_set(set) do
-    if IntervalSet.empty?(set) do
+    if IntervalSet.do_empty?(set) do
       nil
     else
       set
@@ -14448,7 +14421,7 @@ defmodule Tempo do
   end
 
   defp point_as_its_value(%Tempo.Interval{from: %Tempo{} = from} = occurrence) do
-    case Interval.next_unit_boundary(from) do
+    case Interval.do_next_unit_boundary(from) do
       {:ok, {lower, upper}, unit} -> %{occurrence | from: lower, to: upper, unit: unit}
       {:error, _reason} -> resize_to_resolution(occurrence)
     end
@@ -14835,8 +14808,8 @@ defmodule Tempo do
   defp masked_span(%Tempo{} = first, %Tempo{} = last) do
     with {:ok, first} <- normalise_member(first),
          {:ok, last} <- normalise_member(last),
-         {:ok, {lower, _upper}, _unit} <- Interval.next_unit_boundary(first),
-         {:ok, {_lower, upper}, _unit} <- Interval.next_unit_boundary(last) do
+         {:ok, {lower, _upper}, _unit} <- Interval.do_next_unit_boundary(first),
+         {:ok, {_lower, upper}, _unit} <- Interval.do_next_unit_boundary(last) do
       {:ok, %Tempo.Interval{from: lower, to: upper}}
     end
   end
@@ -14887,9 +14860,9 @@ defmodule Tempo do
 
   # The bounds keep the value's own resolution; the iteration granularity of
   # the implicit span travels on `:unit` (see
-  # `Tempo.Interval.next_unit_boundary/1`).
+  # `Tempo.Interval.do_next_unit_boundary/1`).
   defp single_span(tempo) do
-    case Interval.next_unit_boundary(tempo) do
+    case Interval.do_next_unit_boundary(tempo) do
       {:ok, {lower, upper}, unit} -> {:ok, %Tempo.Interval{from: lower, to: upper, unit: unit}}
       {:error, _} = err -> err
     end
@@ -14986,7 +14959,7 @@ defmodule Tempo do
         union(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
       )
     else
-      Operations.union(a, b, options)
+      Operations.do_union(a, b, options)
     end
   end
 
@@ -15058,7 +15031,7 @@ defmodule Tempo do
         intersection(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
       )
     else
-      Operations.intersection(a, b, options)
+      Operations.do_intersection(a, b, options)
     end
   end
 
@@ -15095,7 +15068,7 @@ defmodule Tempo do
     if Calendars.outside?([set, options]) do
       Calendars.outside(complement(Calendars.inside(set), Calendars.inside(options)))
     else
-      Operations.complement(set, options)
+      Operations.do_complement(set, options)
     end
   end
 
@@ -15155,7 +15128,7 @@ defmodule Tempo do
         difference(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
       )
     else
-      Operations.difference(a, b, options)
+      Operations.do_difference(a, b, options)
     end
   end
 
@@ -15199,7 +15172,7 @@ defmodule Tempo do
         symmetric_difference(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
       )
     else
-      Operations.symmetric_difference(a, b, options)
+      Operations.do_symmetric_difference(a, b, options)
     end
   end
 
@@ -15248,7 +15221,7 @@ defmodule Tempo do
         members_overlapping(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
       )
     else
-      Operations.members_overlapping(a, b, options)
+      Operations.do_members_overlapping(a, b, options)
     end
   end
 
@@ -15297,7 +15270,7 @@ defmodule Tempo do
         members_outside(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
       )
     else
-      Operations.members_outside(a, b, options)
+      Operations.do_members_outside(a, b, options)
     end
   end
 
@@ -15352,7 +15325,7 @@ defmodule Tempo do
         )
       )
     else
-      Operations.members_in_exactly_one(a, b, options)
+      Operations.do_members_in_exactly_one(a, b, options)
     end
   end
 
@@ -15388,7 +15361,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b, options]) do
       disjoint?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
     else
-      Operations.disjoint?(a, b, options)
+      Operations.do_disjoint?(a, b, options)
     end
   end
 
@@ -15424,7 +15397,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b, options]) do
       overlaps?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
     else
-      Operations.overlaps?(a, b, options)
+      Operations.do_overlaps?(a, b, options)
     end
   end
 
@@ -15460,7 +15433,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b, options]) do
       contains?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
     else
-      Operations.contains?(a, b, options)
+      Operations.do_contains?(a, b, options)
     end
   end
 
@@ -15496,7 +15469,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b, options]) do
       equal?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
     else
-      Operations.equal?(a, b, options)
+      Operations.do_equal?(a, b, options)
     end
   end
 
@@ -15557,7 +15530,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       relation(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.relation(a, b)
+      Interval.do_relation(a, b)
     end
   end
 
@@ -15633,7 +15606,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b, options]) do
       compare(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
     else
-      Compare.compare(a, b, options)
+      Compare.do_compare(a, b, options)
     end
   end
 
@@ -15904,7 +15877,7 @@ defmodule Tempo do
   end
 
   defp do_at_least?(value, duration) do
-    length_holds?(value, duration, &Interval.at_least?/2, [:gt, :eq])
+    length_holds?(value, duration, &Interval.do_at_least?/2, [:gt, :eq])
   end
 
   @doc """
@@ -15942,7 +15915,7 @@ defmodule Tempo do
   end
 
   defp do_at_most?(value, duration) do
-    length_holds?(value, duration, &Interval.at_most?/2, [:lt, :eq])
+    length_holds?(value, duration, &Interval.do_at_most?/2, [:lt, :eq])
   end
 
   @doc """
@@ -15983,7 +15956,7 @@ defmodule Tempo do
   end
 
   defp do_exactly?(value, duration) do
-    length_holds?(value, duration, &Interval.exactly?/2, [:eq])
+    length_holds?(value, duration, &Interval.do_exactly?/2, [:eq])
   end
 
   @doc """
@@ -16021,7 +15994,7 @@ defmodule Tempo do
   end
 
   defp do_longer_than?(value, duration) do
-    length_holds?(value, duration, &Interval.longer_than?/2, [:gt])
+    length_holds?(value, duration, &Interval.do_longer_than?/2, [:gt])
   end
 
   @doc """
@@ -16065,7 +16038,7 @@ defmodule Tempo do
   end
 
   defp do_shorter_than?(value, duration) do
-    length_holds?(value, duration, &Interval.shorter_than?/2, [:lt])
+    length_holds?(value, duration, &Interval.do_shorter_than?/2, [:lt])
   end
 
   # Whether a value's length stands in one of `orders` to `duration`. An
@@ -16086,7 +16059,7 @@ defmodule Tempo do
   end
 
   defp set_length_order(set, duration) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       covered_length_order(IntervalSet.first(set), set, duration)
     else
       :gt
@@ -16168,11 +16141,11 @@ defmodule Tempo do
   end
 
   def bounded?(%Interval{} = interval) do
-    Interval.bounded?(interval)
+    Interval.do_bounded?(interval)
   end
 
   def bounded?(%IntervalSet{} = set) do
-    IntervalSet.bounded?(set)
+    IntervalSet.do_bounded?(set)
   end
 
   def bounded?(value) do
@@ -16209,7 +16182,7 @@ defmodule Tempo do
   end
 
   def empty?(%IntervalSet{} = set) do
-    IntervalSet.empty?(set)
+    IntervalSet.do_empty?(set)
   end
 
   def empty?(value) do
@@ -16252,7 +16225,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       before?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.before?(a, b)
+      Interval.do_before?(a, b)
     end
   end
 
@@ -16284,7 +16257,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       after?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.after?(a, b)
+      Interval.do_after?(a, b)
     end
   end
 
@@ -16314,7 +16287,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       adjacent?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.adjacent?(a, b)
+      Interval.do_adjacent?(a, b)
     end
   end
 
@@ -16355,7 +16328,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b, options]) do
       within?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
     else
-      Operations.within?(a, b, options)
+      Operations.do_within?(a, b, options)
     end
   end
 
@@ -16390,7 +16363,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       overlap_certainty(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.overlap_certainty(a, b)
+      Interval.do_overlap_certainty(a, b)
     end
   end
 
@@ -16429,7 +16402,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       within_certainty(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.within_certainty(a, b)
+      Interval.do_within_certainty(a, b)
     end
   end
 
@@ -16470,7 +16443,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       relation_certainty(Calendars.inside(a), Calendars.inside(b), target)
     else
-      Interval.relation_certainty(a, b, target)
+      Interval.do_relation_certainty(a, b, target)
     end
   end
 
@@ -16500,7 +16473,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       certainly_overlaps?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.certainly_overlaps?(a, b)
+      Interval.do_certainly_overlaps?(a, b)
     end
   end
 
@@ -16530,7 +16503,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       possibly_overlaps?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.possibly_overlaps?(a, b)
+      Interval.do_possibly_overlaps?(a, b)
     end
   end
 
@@ -16560,7 +16533,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       certainly_within?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.certainly_within?(a, b)
+      Interval.do_certainly_within?(a, b)
     end
   end
 
@@ -16587,7 +16560,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       possibly_within?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.possibly_within?(a, b)
+      Interval.do_possibly_within?(a, b)
     end
   end
 
@@ -16617,7 +16590,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       certainly_before?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.certainly_before?(a, b)
+      Interval.do_certainly_before?(a, b)
     end
   end
 
@@ -16644,7 +16617,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       possibly_before?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.possibly_before?(a, b)
+      Interval.do_possibly_before?(a, b)
     end
   end
 
@@ -16674,7 +16647,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       certainly_after?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.certainly_after?(a, b)
+      Interval.do_certainly_after?(a, b)
     end
   end
 
@@ -16701,7 +16674,7 @@ defmodule Tempo do
     if Calendars.outside?([a, b]) do
       possibly_after?(Calendars.inside(a), Calendars.inside(b))
     else
-      Interval.possibly_after?(a, b)
+      Interval.do_possibly_after?(a, b)
     end
   end
 
@@ -16822,7 +16795,7 @@ defmodule Tempo do
       |> select(Calendars.inside_selector(selector))
       |> Calendars.outside()
     else
-      Select.select(base, selector)
+      Select.do_select(base, selector)
     end
   end
 
@@ -17641,7 +17614,7 @@ defmodule Tempo do
   end
 
   defp whole_days(%IntervalSet{} = set) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       set
       |> IntervalSet.members()
       |> Enum.flat_map(&days_of_member/1)
@@ -17704,7 +17677,7 @@ defmodule Tempo do
   end
 
   defp count_selected(selected) do
-    if IntervalSet.bounded?(selected) do
+    if IntervalSet.do_bounded?(selected) do
       IntervalSet.count(selected)
     else
       {:error, UnboundedSetError.exception(operation: "Tempo.count_workdays/2", set: selected)}

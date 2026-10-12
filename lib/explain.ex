@@ -264,7 +264,7 @@ defmodule Tempo.Explain do
   end
 
   defp classify(%Tempo.IntervalSet{} = set) do
-    if IntervalSet.empty?(set) do
+    if IntervalSet.do_empty?(set) do
       :empty_interval_set
     else
       :interval_set
@@ -1698,7 +1698,7 @@ defmodule Tempo.Explain do
   ## ------------------------------------------------------------
 
   defp interval_set_parts(%Tempo.IntervalSet{metadata: metadata} = set) do
-    if IntervalSet.empty?(set) do
+    if IntervalSet.do_empty?(set) do
       [
         {:headline, "An empty IntervalSet."},
         set_metadata_part(metadata)

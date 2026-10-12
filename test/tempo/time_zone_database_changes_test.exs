@@ -99,17 +99,17 @@ defmodule Tempo.TimeZoneDatabaseChangesTest do
                 |> List.flatten()
                 |> Enum.count()} == {zone, year, count}
 
-        asked = Enum.map(spans, fn {from, to} -> TimeZoneDatabase.changes(zone, from, to) end)
+        asked = Enum.map(spans, fn {from, to} -> TimeZoneDatabase.do_changes(zone, from, to) end)
         assert {zone, year, asked} == {zone, year, expected}
 
         # A span of more than half a year finds the year, and keeps it.
-        TimeZoneDatabase.changes(
+        TimeZoneDatabase.do_changes(
           zone,
           seconds(Date.new!(year, 1, 1)),
           seconds(Date.new!(year, 12, 31))
         )
 
-        again = Enum.map(spans, fn {from, to} -> TimeZoneDatabase.changes(zone, from, to) end)
+        again = Enum.map(spans, fn {from, to} -> TimeZoneDatabase.do_changes(zone, from, to) end)
         assert {zone, year, again} == {zone, year, expected}
       end
     end
@@ -119,24 +119,24 @@ defmodule Tempo.TimeZoneDatabaseChangesTest do
       {from, to} = spring(2053)
       [{change, before, later}] = measured("Europe/Madrid", from, to)
 
-      assert TimeZoneDatabase.changes("Europe/Madrid", change - 1, change) ==
+      assert TimeZoneDatabase.do_changes("Europe/Madrid", change - 1, change) ==
                [{change, before, later}]
 
-      assert TimeZoneDatabase.changes("Europe/Madrid", change, change + @day) == []
-      assert TimeZoneDatabase.changes("Europe/Madrid", change - @day, change - 1) == []
-      assert TimeZoneDatabase.changes("Europe/Madrid", change + @day, change - @day) == []
+      assert TimeZoneDatabase.do_changes("Europe/Madrid", change, change + @day) == []
+      assert TimeZoneDatabase.do_changes("Europe/Madrid", change - @day, change - 1) == []
+      assert TimeZoneDatabase.do_changes("Europe/Madrid", change + @day, change - @day) == []
 
-      assert TimeZoneDatabase.change_within?("Europe/Madrid", change + @hour, @hour)
-      refute TimeZoneDatabase.change_within?("Europe/Madrid", change + @hour + 1, @hour)
-      assert TimeZoneDatabase.change_within?("Europe/Madrid", change - @hour, @hour)
-      refute TimeZoneDatabase.change_within?("Europe/Madrid", change - @hour - 1, @hour)
+      assert TimeZoneDatabase.do_change_within?("Europe/Madrid", change + @hour, @hour)
+      refute TimeZoneDatabase.do_change_within?("Europe/Madrid", change + @hour + 1, @hour)
+      assert TimeZoneDatabase.do_change_within?("Europe/Madrid", change - @hour, @hour)
+      refute TimeZoneDatabase.do_change_within?("Europe/Madrid", change - @hour - 1, @hour)
     end
 
     test "are none for a zone the database does not know" do
       {from, to} = spring(2026)
 
-      assert TimeZoneDatabase.changes("Nowhere/Never", from, to) == []
-      refute TimeZoneDatabase.change_within?("Nowhere/Never", from, @day)
+      assert TimeZoneDatabase.do_changes("Nowhere/Never", from, to) == []
+      refute TimeZoneDatabase.do_change_within?("Nowhere/Never", from, @day)
     end
   end
 
@@ -150,7 +150,7 @@ defmodule Tempo.TimeZoneDatabaseChangesTest do
 
       found_at =
         Enum.find(1..200, fn _asking ->
-          TimeZoneDatabase.clear_of_changes?("Europe/Helsinki", midsummer, @day)
+          TimeZoneDatabase.do_clear_of_changes?("Europe/Helsinki", midsummer, @day)
         end)
 
       assert found_at in 2..123
@@ -159,15 +159,15 @@ defmodule Tempo.TimeZoneDatabaseChangesTest do
       {from, to} = autumn(2061)
       [{change, _before, _later}] = measured("Europe/Helsinki", from, to)
 
-      refute TimeZoneDatabase.clear_of_changes?("Europe/Helsinki", change + @hour, @day)
-      assert TimeZoneDatabase.clear_of_changes?("Europe/Helsinki", change + 2 * @day, @day)
+      refute TimeZoneDatabase.do_clear_of_changes?("Europe/Helsinki", change + @hour, @day)
+      assert TimeZoneDatabase.do_clear_of_changes?("Europe/Helsinki", change + 2 * @day, @day)
     end
 
     test "are never found for a zone the database does not know" do
       midsummer = seconds(~D[2061-07-10], ~T[12:00:00])
 
       refute Enum.any?(1..200, fn _asking ->
-               TimeZoneDatabase.clear_of_changes?("Nowhere/Never", midsummer, @day)
+               TimeZoneDatabase.do_clear_of_changes?("Nowhere/Never", midsummer, @day)
              end)
     end
   end

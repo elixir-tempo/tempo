@@ -39,9 +39,9 @@ defmodule Tempo.ZoneOffsetMismatchError do
         stated_offset: stated,
         zone_offsets: zone_offsets
       }) do
-    actual = Enum.map_join(zone_offsets, " or ", &format_offset/1)
+    actual = Enum.map_join(zone_offsets, " or ", &do_format_offset/1)
 
-    "Stated offset #{format_offset(stated)} disagrees with #{Calendars.inspect(zone_id)} " <>
+    "Stated offset #{do_format_offset(stated)} disagrees with #{Calendars.inspect(zone_id)} " <>
       "(#{actual})#{at_the_reading(wall_time)}."
   end
 
@@ -56,8 +56,8 @@ defmodule Tempo.ZoneOffsetMismatchError do
 
   @doc false
   # Format an offset in seconds as a signed `±HH:MM` string.
-  @spec format_offset(integer()) :: String.t()
-  def format_offset(seconds) when is_integer(seconds) do
+  @spec do_format_offset(integer()) :: String.t()
+  def do_format_offset(seconds) when is_integer(seconds) do
     sign =
       if seconds < 0 do
         "-"

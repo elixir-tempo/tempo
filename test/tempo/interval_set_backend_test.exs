@@ -77,7 +77,7 @@ defmodule Tempo.IntervalSetBackendTest do
       {:ok, set} = IntervalSet.new(members(), backend: TupleBackend)
 
       assert IntervalSet.count(set) == 2
-      refute IntervalSet.empty?(set)
+      refute Tempo.empty?(set)
       assert IntervalSet.first(set).from.time[:month] == 6
 
       assert set
@@ -90,7 +90,7 @@ defmodule Tempo.IntervalSetBackendTest do
     test "the use-provided defaults answer over the walk" do
       {:ok, empty} = IntervalSet.new([], backend: TupleBackend)
 
-      assert IntervalSet.empty?(empty)
+      assert Tempo.empty?(empty)
       assert IntervalSet.count(empty) == 0
       assert IntervalSet.first(empty) == nil
     end

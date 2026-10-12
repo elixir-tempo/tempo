@@ -41,7 +41,7 @@ defimpl Enumerable, for: Tempo.IntervalSet do
 
   @impl Enumerable
   def reduce(%Tempo.IntervalSet{} = set, acc, fun) do
-    if Tempo.IntervalSet.bounded?(set) do
+    if Tempo.IntervalSet.do_bounded?(set) do
       do_reduce(Tempo.IntervalSet.members(set), acc, fun)
     else
       # Flatten the member walk into its sub-points lazily: each member
@@ -55,7 +55,7 @@ defimpl Enumerable, for: Tempo.IntervalSet do
   end
 
   defp ensure_bounded!(set, operation) do
-    unless Tempo.IntervalSet.bounded?(set) do
+    unless Tempo.IntervalSet.do_bounded?(set) do
       raise Tempo.UnboundedSetError.exception(operation: operation, set: set)
     end
   end

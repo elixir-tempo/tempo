@@ -312,7 +312,7 @@ defimpl Enumerable, for: Tempo.Interval do
   # answers. The days a zone leaves out are kept, so this asks nothing of
   # the zone database.
   defp day_left_out?(%Tempo{extended: %{zone_id: zone}}, :day) when is_binary(zone) do
-    TimeZoneDatabase.days_left_out(zone) != []
+    TimeZoneDatabase.do_days_left_out(zone) != []
   end
 
   defp day_left_out?(_from, _unit) do

@@ -624,7 +624,7 @@ defmodule Tempo.ZoneValidationTest do
   describe "IXDTF offset/zone consistency (strict mode, RFC 9557 §3.4)" do
     test "validate_zone_offset accepts an offset that matches the zone" do
       {:ok, t} = Tempo.from_iso8601("2022-11-20T10:37:00+01:00[Europe/Paris]")
-      assert Tempo.validate_zone_offset(t) == :ok
+      assert Compare.do_validate_zone_offset(t) == :ok
     end
 
     test "validate_zone_offset flags an offset that disagrees with the zone" do
@@ -634,7 +634,9 @@ defmodule Tempo.ZoneValidationTest do
       {:ok, agreeing} = Tempo.from_iso8601("2022-11-20T10:37:00+01:00[Europe/Paris]")
       t = %{agreeing | shift: [hour: 5]}
 
-      assert {:error, %Tempo.ZoneOffsetMismatchError{} = error} = Tempo.validate_zone_offset(t)
+      assert {:error, %Tempo.ZoneOffsetMismatchError{} = error} =
+               Compare.do_validate_zone_offset(t)
+
       assert error.zone_id == "Europe/Paris"
       assert error.stated_offset == 5 * 3600
       assert error.zone_offsets == [3600]
@@ -666,15 +668,18 @@ defmodule Tempo.ZoneValidationTest do
       # (EDT, -04:00) and post-fall-back (EST, -05:00) offsets are valid.
       {:ok, edt} = Tempo.from_iso8601("2024-11-03T01:30:00-04:00[America/New_York]")
       {:ok, est} = Tempo.from_iso8601("2024-11-03T01:30:00-05:00[America/New_York]")
-      assert Tempo.validate_zone_offset(edt) == :ok
-      assert Tempo.validate_zone_offset(est) == :ok
+      assert Compare.do_validate_zone_offset(edt) == :ok
+      assert Compare.do_validate_zone_offset(est) == :ok
     end
 
     test "nothing to check: zone without an offset, or offset without a zone" do
-      assert Tempo.validate_zone_offset(Tempo.from_iso8601!("2022-11-20T10:37:00[Europe/Paris]")) ==
+      assert Compare.do_validate_zone_offset(
+               Tempo.from_iso8601!("2022-11-20T10:37:00[Europe/Paris]")
+             ) ==
                :ok
 
-      assert Tempo.validate_zone_offset(Tempo.from_iso8601!("2022-11-20T10:37:00+05:00")) == :ok
+      assert Compare.do_validate_zone_offset(Tempo.from_iso8601!("2022-11-20T10:37:00+05:00")) ==
+               :ok
     end
 
     test "calendar and strict options compose (both honored)" do

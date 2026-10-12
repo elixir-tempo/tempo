@@ -1,6 +1,6 @@
 defmodule Tempo.AllenAxiomsTest do
   @moduledoc """
-  Property-based verification that `Tempo.Interval.relation/2` satisfies
+  Property-based verification that `Tempo.relation/2` satisfies
   Allen's interval-algebra axioms and the bounded-meeting ontology
   axioms of Grüninger and Li (TIME 2017).
 

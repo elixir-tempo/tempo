@@ -8,7 +8,7 @@ if Code.ensure_loaded?(Table.Reader) do
     alias Tempo.IntervalSet
 
     def init(set) do
-      if IntervalSet.bounded?(set) do
+      if IntervalSet.do_bounded?(set) do
         members = IntervalSet.members(set)
         keys = metadata_keys(members)
         metadata = %{columns: [:from, :to | keys], count: length(members)}

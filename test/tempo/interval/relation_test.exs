@@ -182,8 +182,8 @@ defmodule Tempo.Interval.CompareTest do
     end
   end
 
-  describe "Tempo.relation/2 — top-level delegate" do
-    test "delegates to Tempo.Interval.relation/2" do
+  describe "Tempo.relation/2" do
+    test "relates two intervals" do
       a = %Interval{from: ~o"2026-06-01", to: ~o"2026-06-10"}
       b = %Interval{from: ~o"2026-06-05", to: ~o"2026-06-15"}
 

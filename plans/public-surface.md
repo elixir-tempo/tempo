@@ -105,7 +105,7 @@ About 160 functions outside the primary API and outside the two groups above: re
 
 The user, 2026-10-11, each asked with the census in hand:
 
-* **The names of the second forms go** — "Remove the names": a 1.x call of a function that is no longer documented fails by name, where it failed inside the engine.
+* **The names of the second forms go** — "Remove the names": a 1.x call of a function that is no longer documented fails by name, where it failed inside the engine. Asked again on 2026-10-12, once the way first decided for it was withdrawn: "Fail at compile time".
 
 * **A message says of a term what a caller holds** — "Every message site": `Tempo.Calendars.inspect/2` at every call of `inspect/1,2` in the library.
 
@@ -127,17 +127,17 @@ The user, 2026-10-11, each asked with the census in hand:
 
 * **No doc names what is hidden** — `mix docs` warned of 43 references to a hidden function, module or type after the decisions, and of none now.
 
-* **The surface now** — of 970 exported functions that NimbleParsec did not generate, 265 are documented (384 before), 139 of them the primary API; 235 are `@doc false` in a documented module (160 callbacks), 470 in a hidden module, and none is without a `@doc`. A documented function takes a caller's value by the guard `Tempo.Calendars.is_outside/1` (57 places) or by asking `Tempo.Calendars.outside?/1` (70). No documented function is called by the library alone, and none is in the engine.
+* **The surface now** — of 972 exported functions that NimbleParsec did not generate, 265 are documented (384 before), 139 of them the primary API; 236 are `@doc false` in a documented module (160 callbacks), 471 in a hidden module, and none is without a `@doc`. None of the 53 names that were documented and are not is exported any longer. A documented function takes a caller's value by the guard `Tempo.Calendars.is_outside/1` (57 places) or by asking `Tempo.Calendars.outside?/1` (70). No documented function is called by the library alone, and none is in the engine.
 
 ## Tasks
-
-* [ ] **The names of the second forms go** — a function that is no longer documented has no clause for a caller's value, so a 1.x caller of one with a value of `Calendar.ISO` fails inside the engine (`Tempo.Interval.at_least?/2` raises `UndefinedFunctionError` for `Calendar.ISO.calendar_base/0`). The user, 2026-10-11, of what such a caller is to get: "Remove the names", so that a stale call is a compile warning and an error that names the function called; the migration guide maps each to `Tempo` (its rows are written). 53 names: 22 on `Tempo.Interval`, 14 on `Tempo.Operations`, 7 on `Tempo.TimeZoneDatabase`, 2 each on `Tempo.Format`, `Tempo.IntervalSet` and `Tempo.Compare`, and `Tempo.Select.select/2`, `Tempo.Clock.utc_now/0`, `Tempo.validate_zone_offset/1` and `Tempo.ZoneOffsetMismatchError.format_offset/1`. How they go is to be asked again: the way decided with it, a hidden module behind each documented one, was built and withdrawn on 2026-10-12, and a rename of each in the module it is in is what is left of it. Not started.
 
 * [ ] **Exports only their own module calls** — 67 functions become `defp` (2 in documented modules, 65 in hidden ones).
 
 * [ ] **Dead exports** — 6 functions removed.
 
 ### Done
+
+* [x] **The names of the second forms are gone** — the user, 2026-10-12, asked again with what a 1.x caller gets today (`Tempo.Interval.at_least?/2` raised `UndefinedFunctionError` for `Calendar.ISO.calendar_base/0` from inside, where `Tempo.Interval.before?/2` happened to answer): "Fail at compile time". Each of the 53 is renamed where it is defined, to `do_<name>` (the prefix is mine), its body staying where it was: 22 on `Tempo.Interval`, 14 on `Tempo.Operations`, 7 on `Tempo.TimeZoneDatabase`, 2 each on `Tempo.Format`, `Tempo.IntervalSet` and `Tempo.Compare`, and `Tempo.Select.select/2`, `Tempo.Clock.utc_now/0` and `Tempo.ZoneOffsetMismatchError.format_offset/1`; `Tempo.validate_zone_offset/1`, a delegate nothing called, is removed. 48 of the 53 were documented in 1.6.4, and the migration guide maps each or says it has no replacement. A test that called an old name with a function of the same name on `Tempo` calls that one. 2026-10-12.
 
 * [x] **`Tempo.Iso8601.Tokenizer.Numbers`** — hidden with the engine, so its 27 combinators are no longer listed bare. 2026-10-11.
 

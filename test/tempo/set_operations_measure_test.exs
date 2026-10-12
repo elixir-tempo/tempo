@@ -1136,10 +1136,10 @@ defmodule Tempo.SetOperationsMeasureTest do
     assert Tempo.disjoint?(a, b) == not overlap?, "disjoint? of #{named}"
 
     {:ok, shared} = Tempo.intersection(a, b)
-    assert IntervalSet.empty?(shared) == not overlap?, "intersection of #{named}"
+    assert Tempo.empty?(shared) == not overlap?, "intersection of #{named}"
 
     {:ok, kept} = Tempo.members_overlapping(a, b)
-    assert IntervalSet.empty?(kept) == not overlap?, "members_overlapping of #{named}"
+    assert Tempo.empty?(kept) == not overlap?, "members_overlapping of #{named}"
 
     # Allen's relation, each way round.
     assert Tempo.relation(a, b) in @apart == not overlap?,
@@ -1150,7 +1150,7 @@ defmodule Tempo.SetOperationsMeasureTest do
 
     # A window's bound: a span is kept by a window it overlaps.
     {:ok, within} = Tempo.to_interval_set(RecurrenceSet.new!([a]), within: b)
-    assert IntervalSet.empty?(within) == not overlap?, "the window's keeping of #{named}"
+    assert Tempo.empty?(within) == not overlap?, "the window's keeping of #{named}"
   end
 
   # The backends: a point of the first span is looked up in a set that holds

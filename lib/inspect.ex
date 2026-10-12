@@ -820,7 +820,7 @@ defmodule Tempo.Inspect do
 
   """
   def inspect_interval_set(%Tempo.IntervalSet{metadata: metadata} = set, opts) do
-    if IntervalSet.empty?(set) do
+    if IntervalSet.do_empty?(set) do
       "#Tempo.IntervalSet<[]" <> set_metadata_tag(metadata) <> ">"
     else
       inspect_interval_set_members(set, metadata, opts)
@@ -858,7 +858,7 @@ defmodule Tempo.Inspect do
   # walk forever, so the default limit of 50 applies instead. Members are
   # taken from the walk, never `members/1`, so a lazy set inspects safely.
   defp take_within_limit(set, :infinity) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       {IntervalSet.members(set), false}
     else
       take_within_limit(set, 50)

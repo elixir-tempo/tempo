@@ -241,7 +241,7 @@ defmodule Tempo.Allen do
   # A relation error must surface, not read as `false` — a silent false
   # asserts "the relation does not hold", a claim the error could not make.
   defp holds?(a, b, relation) do
-    case Interval.relation(Calendars.inside(a), Calendars.inside(b)) do
+    case Interval.do_relation(Calendars.inside(a), Calendars.inside(b)) do
       held when is_atom(held) -> held == relation
       {:error, exception} when is_exception(exception) -> raise exception
       {:error, reason} -> raise ArgumentError, to_string(reason)

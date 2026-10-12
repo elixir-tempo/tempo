@@ -159,14 +159,14 @@ defmodule Tempo.DayLeftOutTest do
               do: date
 
         assert {zone, measured} == {zone, [day]}
-        assert {zone, TimeZoneDatabase.days_left_out(zone)} == {zone, [Date.to_erl(day)]}
+        assert {zone, TimeZoneDatabase.do_days_left_out(zone)} == {zone, [Date.to_erl(day)]}
       end
     end
 
     test "are none where a zone repeats a day or changes by an hour" do
       for {zone, year} <- @none_left_out do
         assert {zone, Enum.filter(days_of_year(year), &left_out?(&1, zone))} == {zone, []}
-        assert {zone, TimeZoneDatabase.days_left_out(zone)} == {zone, []}
+        assert {zone, TimeZoneDatabase.do_days_left_out(zone)} == {zone, []}
       end
     end
   end

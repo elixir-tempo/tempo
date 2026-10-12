@@ -65,7 +65,7 @@ defmodule Tempo.ZonedStepClearOfChangesTest do
   defp found_changes(zone) do
     from = :calendar.datetime_to_gregorian_seconds({{2025, 1, 1}, {0, 0, 0}})
     to = :calendar.datetime_to_gregorian_seconds({{2028, 1, 1}, {0, 0, 0}})
-    TimeZoneDatabase.changes(zone, from, to)
+    TimeZoneDatabase.do_changes(zone, from, to)
   end
 
   defp gregorian_seconds(date, time) do
@@ -99,19 +99,19 @@ defmodule Tempo.ZonedStepClearOfChangesTest do
         midwinter = gregorian_seconds(~D[2026-01-10], ~T[12:00:00])
         midsummer = gregorian_seconds(~D[2026-07-10], ~T[12:00:00])
 
-        assert TimeZoneDatabase.clear_of_changes?(zone, midwinter, 86_400)
-        assert TimeZoneDatabase.clear_of_changes?(zone, midsummer, 86_400)
-        refute TimeZoneDatabase.clear_of_changes?(zone, change + 3_600, 86_400)
-        refute TimeZoneDatabase.clear_of_changes?(zone, change - 86_400, 86_400)
-        assert TimeZoneDatabase.clear_of_changes?(zone, change - 86_401, 86_400)
+        assert TimeZoneDatabase.do_clear_of_changes?(zone, midwinter, 86_400)
+        assert TimeZoneDatabase.do_clear_of_changes?(zone, midsummer, 86_400)
+        refute TimeZoneDatabase.do_clear_of_changes?(zone, change + 3_600, 86_400)
+        refute TimeZoneDatabase.do_clear_of_changes?(zone, change - 86_400, 86_400)
+        assert TimeZoneDatabase.do_clear_of_changes?(zone, change - 86_401, 86_400)
       end
     end
 
     test "show nothing of a zone the database does not know, and nothing is asked for it" do
       midsummer = gregorian_seconds(~D[2026-07-10], ~T[12:00:00])
 
-      refute TimeZoneDatabase.change_within?("Nowhere/Never", midsummer, 86_400)
-      refute TimeZoneDatabase.clear_of_changes?("Nowhere/Never", midsummer, 86_400)
+      refute TimeZoneDatabase.do_change_within?("Nowhere/Never", midsummer, 86_400)
+      refute TimeZoneDatabase.do_clear_of_changes?("Nowhere/Never", midsummer, 86_400)
     end
 
     test "show a value clear of them for a step, by its first reading" do

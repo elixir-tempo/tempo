@@ -142,7 +142,7 @@ defmodule Tempo.SelectFromGroupsTest do
         {:ok, grouped} = Tempo.select(read("2026Y1Q/.."), selector)
         {:ok, plain} = Tempo.select(~o"2026-01/..", selector)
 
-        refute IntervalSet.bounded?(grouped)
+        refute Tempo.bounded?(grouped)
 
         assert {selector,
                 grouped

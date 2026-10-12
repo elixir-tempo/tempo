@@ -34,8 +34,8 @@ defmodule Tempo.IntervalSetLazyTest do
       set = mondays(~o"2026-01-05")
 
       assert IntervalSet.first(set).from.time[:day] == 5
-      refute IntervalSet.empty?(set)
-      refute IntervalSet.bounded?(set)
+      refute Tempo.empty?(set)
+      refute Tempo.bounded?(set)
     end
 
     test "covered? terminates by walking only to the probe" do

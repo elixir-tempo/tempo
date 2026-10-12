@@ -62,7 +62,7 @@ defmodule Tempo.Format do
 
   @doc false
   # What `Tempo.to_string/2` does, where it is documented.
-  @spec to_string(
+  @spec do_to_string(
           Tempo.t()
           | Tempo.Interval.t()
           | Tempo.IntervalSet.t()
@@ -71,9 +71,9 @@ defmodule Tempo.Format do
           | Tempo.Duration.t(),
           keyword()
         ) :: {:ok, String.t()} | {:error, Exception.t()}
-  def to_string(value, options \\ [])
+  def do_to_string(value, options \\ [])
 
-  def to_string(value, options) do
+  def do_to_string(value, options) do
     if Keyword.keyword?(options) do
       {window, options} = Keyword.split(options, [:within])
 
@@ -97,7 +97,7 @@ defmodule Tempo.Format do
           | Tempo.Duration.t()
         ) :: String.t()
   def string_chars(value) do
-    case to_string(value, []) do
+    case do_to_string(value, []) do
       {:ok, string} -> string
       {:error, _reason} -> iso8601_or_inspect(value)
     end
@@ -344,7 +344,7 @@ defmodule Tempo.Format do
   # members ("A, B, and C"), `:or` for alternatives. A set without an end has
   # no list to join.
   defp render_set(%IntervalSet{} = set, options, style) do
-    if IntervalSet.bounded?(set) do
+    if IntervalSet.do_bounded?(set) do
       set
       |> IntervalSet.members()
       |> render_each(&render_interval(&1, options))
@@ -451,11 +451,11 @@ defmodule Tempo.Format do
 
   @doc false
   # What `Tempo.to_relative_string/2` does, where it is documented.
-  @spec to_relative_string(Tempo.t() | Tempo.Interval.t(), keyword()) ::
+  @spec do_to_relative_string(Tempo.t() | Tempo.Interval.t(), keyword()) ::
           {:ok, String.t()} | {:error, Exception.t()}
-  def to_relative_string(value, options \\ [])
+  def do_to_relative_string(value, options \\ [])
 
-  def to_relative_string(value, options) do
+  def do_to_relative_string(value, options) do
     if Keyword.keyword?(options) do
       relative_string(value, options)
     else
@@ -530,7 +530,7 @@ defmodule Tempo.Format do
   # The moment a value is told from where no other is given: the clock's
   # reading to the second, as `Tempo.utc_now/0` answers a caller with it.
   defp now do
-    Clock.utc_now()
+    Clock.do_utc_now()
     |> DateTime.truncate(:second)
     |> Tempo.from_datetime()
   end

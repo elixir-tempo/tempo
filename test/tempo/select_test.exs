@@ -903,7 +903,7 @@ defmodule Tempo.Select.Test do
 
     test "the weekend days from a date on" do
       {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:US))
-      refute IntervalSet.bounded?(weekends)
+      refute Tempo.bounded?(weekends)
       assert first_days(weekends, 4) == [20, 21, 27, 28]
 
       {:ok, saudi} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:SA))
@@ -943,7 +943,7 @@ defmodule Tempo.Select.Test do
     test "a selection across a lazy set is lazy too" do
       {:ok, workdays} = Tempo.select(~o"2026-06-19/..", Tempo.workdays(:US))
       {:ok, hours} = Tempo.select(workdays, ~o"T09/T17")
-      refute IntervalSet.bounded?(hours)
+      refute Tempo.bounded?(hours)
       assert first_days(hours, 2) == [19, 22]
     end
 
