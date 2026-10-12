@@ -18,6 +18,8 @@ defmodule Tempo.Iso8601EncodeError do
   round-trips only through its RRULE string via `Tempo.RRule.to_string/1`.
   A cron **day-of-month OR day-of-week** union (`0 0 13 * 5`, the 13th or any Friday) fires when either field holds, where every part of an ISO 8601 selection holds at once; it round-trips only through its cron string. A recurrence's **end** (RFC 5545 `UNTIL`) has no form either: ISO 8601 bounds a recurrence only by its count, and its start/end form names the first occurrence's end; it round-trips through its RRULE string via `Tempo.RRule.to_string/1`.
 
+  An interval or a set whose parts are in **two zones** or **two calendars** has no form: a zone and a calendar are written once, after the whole expression, and are those of every part of it. What is read from text and what `Tempo.Interval.new/1` builds is in one, so this is a struct given two by hand; convert its parts with `Tempo.shift_zone/2` or `Tempo.to_calendar/2`.
+
   A value in a calendar ISO 8601 cannot name has no form either: IXDTF's `[u-ca=…]` names the CLDR calendars and Calendrical's registered ones, so a fiscal or composite calendar built at run time, or a consumer's own, would read back as another calendar. The error's `:calendar` is that calendar.
 
   """
@@ -68,6 +70,18 @@ defmodule Tempo.Iso8601EncodeError do
       "beside a day of the month a month lacks) as ISO 8601 — an ISO 8601 selection " <>
       "names the days it selects, and has no form for a day moved to another. It is " <>
       "expressible as an RRULE string; use `Tempo.RRule.to_string/1`."
+  end
+
+  def message(%__MODULE__{construct: :zones}) do
+    "Cannot encode a value whose parts are in two zones as ISO 8601 — a zone is written " <>
+      "once, after the whole expression, and is the zone of every part of it. Convert " <>
+      "the parts to one zone with `Tempo.shift_zone/2` first."
+  end
+
+  def message(%__MODULE__{construct: :calendars}) do
+    "Cannot encode a value whose parts are in two calendars as ISO 8601 — a calendar is " <>
+      "written once, after the whole expression, and is the calendar of every part of " <>
+      "it. Convert the parts to one calendar with `Tempo.to_calendar/2` first."
   end
 
   def message(%__MODULE__{construct: :recurrence_set}) do

@@ -1057,9 +1057,9 @@ Two production caveats. The tabular `islamic-civil` calendar is a planning appro
 A night-shift worker in New York works 21:00–05:00. On the night the clocks fall back (the first Sunday of November) the 01:00–02:00 hour happens twice, and US wage law pays non-exempt workers for hours *actually worked* — nine hours, not eight. On the spring-forward night the 02:00 hour never exists, and the same shift is seven. Naive `end - start` wall-clock arithmetic gets both wrong; Tempo's hour walk gets both right because the timezone database drives the enumeration:
 
 ```elixir
-normal      = ~o"2026-10-24T21[America/New_York]/2026-10-25T05[America/New_York]"
-fall_back   = ~o"2026-10-31T21[America/New_York]/2026-11-01T05[America/New_York]"
-spring_fwd  = ~o"2026-03-07T21[America/New_York]/2026-03-08T05[America/New_York]"
+normal      = ~o"2026-10-24T21/2026-10-25T05[America/New_York]"
+fall_back   = ~o"2026-10-31T21/2026-11-01T05[America/New_York]"
+spring_fwd  = ~o"2026-03-07T21/2026-03-08T05[America/New_York]"
 
 Enum.count(normal)     #=> 8
 Enum.count(fall_back)  #=> 9   (01:00 EDT and 01:00 EST both worked — both paid)

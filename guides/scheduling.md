@@ -170,7 +170,7 @@ This is the comparison corollary of "same wall clock is not the same instant" (s
 
 ### A zone on an interval
 
-When you write an interval as an ISO 8601 string, the zone may go once at the end, where IXDTF binds it to the upper endpoint — and it applies to the whole span. Tempo propagates that trailing zone backward onto a floating lower endpoint, so a single-zone interval never straddles the floating and universal time lines:
+An interval is in one zone. When you write it as an ISO 8601 string, the zone goes once, at the end, after the whole interval — and it is the zone of both endpoints, so an interval never straddles the floating and universal time lines:
 
 ```elixir
 {:ok, iv} = Tempo.from_iso8601("2030-03-01T08:00/2030-03-05T08:00[Europe/Paris]")
@@ -178,15 +178,15 @@ When you write an interval as an ISO 8601 string, the zone may go once at the en
 {Tempo.zoned?(from), Tempo.zoned?(to)}   #=> {true, true}
 ```
 
-A zone written on the lower endpoint applies to a floating upper one too, as ISO 8601-1 §5.5.1 says — "representations for time zones and UTC included with the component preceding the separator shall be assumed to apply to the component following the separator":
+A time shift is each endpoint's own, and one written on the lower endpoint applies to an upper one that has none, as ISO 8601-1 §5.5.1 says — "representations for time zones and UTC included with the component preceding the separator shall be assumed to apply to the component following the separator":
 
 ```elixir
-{:ok, iv} = Tempo.from_iso8601("2030-03-01T08:00[Europe/Paris]/2030-03-05T08:00")
+{:ok, iv} = Tempo.from_iso8601("2030-03-01T08:00+01:00/2030-03-05T08:00")
 {from, to} = Tempo.Interval.endpoints(iv)
-{Tempo.zoned?(from), Tempo.zoned?(to)}   #=> {true, true}
+{Tempo.floating?(from), Tempo.floating?(to)}   #=> {false, false}
 ```
 
-Propagation never overwrites a zone an endpoint already carries, so `2030-03-01T08:00[Europe/Paris]/2030-03-05T08:00[Europe/London]` keeps both zones as written. `Tempo.Interval.new/1` follows the same rule, so an interval you build and its ISO 8601 string agree.
+A zone written on an endpoint, as in `2030-03-01T08:00[Europe/Paris]/2030-03-05T08:00[Europe/London]`, is a `Tempo.ParseError`: it is written once, after the whole interval. `Tempo.Interval.new/1` follows the same rule and returns an error for two endpoints in different zones, so an interval you build and its ISO 8601 string agree. Convert one endpoint with `Tempo.shift_zone/2` first.
 
 ### Principle
 
@@ -357,7 +357,7 @@ Schedule.occurrences_in(retrospective, ~o"2025-07-01", ~o"2025-10-01")
 
 > **`Tempo.from_elixir/2` converts native Elixir date/time structs.** When a value arrives as a `Date`, `Time`, `NaiveDateTime`, or `DateTime` — from a database row, an API payload, a form — convert it with `from_elixir/2` rather than picking its fields apart by hand or re-formatting it to an ISO 8601 string and parsing it back. The time zone carries across faithfully, and the `:resolution` option lets you say how precise the value really is: a `DateTime` is second-precise, but a weekly meeting is a *to-the-minute* thing, so `resolution: :minute` makes the value — and every occurrence derived from it — a one-minute span rather than a one-second one. (For a value you are assembling from loose components rather than a struct, `Tempo.new/1` is the runtime companion to the `~o` sigil.)
 
-> **Store** the recurrence as a value — a zoned repeating interval, `~o"R/2025Y6M1DT14H0MZ1H[Europe/London]/P1W"`. **Convert** it to an IntervalSet only when you need concrete occurrences, bounded to the query window. **Display** by projecting each endpoint's wall time through the viewer's preferred zone. Nothing about the stored value changes when the zone data does.
+> **Store** the recurrence as a value — a zoned repeating interval, `~o"R/2025Y6M1DT14H0MZ1H/P1W[Europe/London]"`. **Convert** it to an IntervalSet only when you need concrete occurrences, bounded to the query window. **Display** by projecting each endpoint's wall time through the viewer's preferred zone. Nothing about the stored value changes when the zone data does.
 
 ## Related reading
 

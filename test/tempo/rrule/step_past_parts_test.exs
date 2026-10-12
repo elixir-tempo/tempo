@@ -336,11 +336,11 @@ defmodule Tempo.RRule.StepPastPartsTest do
       # 1 Tammuz 5786 is Tuesday 16 June 2026.
       assert Date.convert!(Date.new!(5786, 10, 1, Hebrew), Calendar.ISO) == ~D[2026-06-16]
 
-      assert starts("R3/5786-10-01[u-ca=hebrew]/P7D/FL1KN") == []
-      assert starts("R3/5786-10-01[u-ca=hebrew]/P7D/FL3KN") == []
-      assert starts("R3/5786-10-01T10[u-ca=hebrew]/PT12H/FLT9HN") == []
+      assert starts("R3/5786-10-01/P7D/FL1KN[u-ca=hebrew]") == []
+      assert starts("R3/5786-10-01/P7D/FL3KN[u-ca=hebrew]") == []
+      assert starts("R3/5786-10-01T10/PT12H/FLT9HN[u-ca=hebrew]") == []
 
-      assert Enum.map(starts("R3/5786-10-01[u-ca=hebrew]/P7D/FL2KN"), &gregorian/1) ==
+      assert Enum.map(starts("R3/5786-10-01/P7D/FL2KN[u-ca=hebrew]"), &gregorian/1) ==
                [~D[2026-06-16], ~D[2026-06-23], ~D[2026-06-30]]
     end
 
@@ -380,9 +380,9 @@ defmodule Tempo.RRule.StepPastPartsTest do
 
   describe "a rule in a zone" do
     test "is told so where it steps by days from a date" do
-      assert starts("R3/2026-06-16[Europe/Paris]/P7D/FL1KN") == []
+      assert starts("R3/2026-06-16/P7D/FL1KN[Europe/Paris]") == []
 
-      assert starts("R3/2026-06-16[Europe/Paris]/P7D/FL2KN") == [
+      assert starts("R3/2026-06-16/P7D/FL2KN[Europe/Paris]") == [
                ~o"2026-06-16[Europe/Paris]",
                ~o"2026-06-23[Europe/Paris]",
                ~o"2026-06-30[Europe/Paris]"
@@ -395,11 +395,11 @@ defmodule Tempo.RRule.StepPastPartsTest do
       # Tuesday at 10:00 has no Monday and no Thursday, whatever its zone.
       for zone <- ["Europe/Paris", "America/Nuuk", "Asia/Pyongyang", "Pacific/Apia"],
           day <- [1, 4, 5, 6, 7] do
-        rule = "R3/2026-06-16T10[#{zone}]/P7D/FL#{day}KN"
+        rule = "R3/2026-06-16T10/P7D/FL#{day}KN[#{zone}]"
         assert {rule, starts(rule)} == {rule, []}
       end
 
-      assert starts("R2/2026-06-16T10[Europe/Paris]/P7D/FL2KN") == [
+      assert starts("R2/2026-06-16T10/P7D/FL2KN[Europe/Paris]") == [
                ~o"2026-06-16T10[Europe/Paris]",
                ~o"2026-06-23T10[Europe/Paris]"
              ]
@@ -420,7 +420,7 @@ defmodule Tempo.RRule.StepPastPartsTest do
 
       assert rem(Date.diff(~D[2027-03-27], ~D[2026-03-21]), 7) == 0
 
-      assert starts("R2/2026-03-21T23:30[America/Nuuk]/P7D/FL7KN") == [
+      assert starts("R2/2026-03-21T23:30/P7D/FL7KN[America/Nuuk]") == [
                ~o"2026-03-29T00:30[America/Nuuk]",
                ~o"2027-03-28T00:30[America/Nuuk]"
              ]
@@ -434,7 +434,7 @@ defmodule Tempo.RRule.StepPastPartsTest do
 
       assert {DateTime.to_date(later), later.hour} == {~D[2026-10-25], 9}
 
-      assert starts("R3/2026-06-16T10[Europe/Paris]/PT24H/FLT9HN") == [
+      assert starts("R3/2026-06-16T10/PT24H/FLT9HN[Europe/Paris]") == [
                ~o"2026-10-25T09[Europe/Paris]",
                ~o"2026-10-26T09[Europe/Paris]",
                ~o"2026-10-27T09[Europe/Paris]"
@@ -453,12 +453,12 @@ defmodule Tempo.RRule.StepPastPartsTest do
       assert {Date.day_of_week(start), Date.day_of_week(~D[2011-12-31])} == {5, 6}
 
       assert {:ok, %Interval{} = occurrence} =
-               Tempo.to_interval(Tempo.from_iso8601!("R1/#{start}[Pacific/Apia]/P7D/FL6KN"))
+               Tempo.to_interval(Tempo.from_iso8601!("R1/#{start}/P7D/FL6KN[Pacific/Apia]"))
 
       assert Interval.from(occurrence) == ~o"2011-12-31[Pacific/Apia]"
 
       # It has no Monday, whether or not a date is moved.
-      assert starts("R3/#{start}[Pacific/Apia]/P7D/FL1KN") == []
+      assert starts("R3/#{start}/P7D/FL1KN[Pacific/Apia]") == []
     end
 
     test "is walked where it steps from a time of day, which a clock can move past midnight" do
@@ -472,7 +472,7 @@ defmodule Tempo.RRule.StepPastPartsTest do
 
       assert {:ok, %Interval{} = occurrence} =
                Tempo.to_interval(
-                 Tempo.from_iso8601!("R1/#{start}T23:45[Asia/Pyongyang]/P7D/FL6KN")
+                 Tempo.from_iso8601!("R1/#{start}T23:45/P7D/FL6KN[Asia/Pyongyang]")
                )
 
       assert Interval.from(occurrence) == ~o"2018-05-05T00:15[Asia/Pyongyang]"

@@ -320,7 +320,7 @@ defmodule Tempo.Iso8601.OffsetAndZoneTest do
   describe "each end of an interval, and each member of a set" do
     test "is shown on the clock of its zone" do
       interval =
-        read("2022-07-08T00:14:07+01:00[Europe/Paris]/2022-07-08T10:14:07+01:00[Europe/Paris]")
+        read("2022-07-08T00:14:07+01:00/2022-07-08T10:14:07+01:00[Europe/Paris]")
 
       assert held(Interval.from(interval)) ==
                held(shown("2022-07-08T00:14:07+01:00", "Europe/Paris"))
@@ -336,7 +336,7 @@ defmodule Tempo.Iso8601.OffsetAndZoneTest do
     end
 
     test "is an error where it disagrees with a critical zone, or is read strictly" do
-      text = "2022-07-08T00:14:07+02:00[Europe/Paris]/2022-07-08T10:14:07+01:00[!Europe/Paris]"
+      text = "2022-07-08T00:14:07+02:00/2022-07-08T10:14:07+01:00[!Europe/Paris]"
       assert {:error, %Tempo.ZoneOffsetMismatchError{}} = Tempo.from_iso8601(text)
 
       elective = String.replace(text, "!", "")

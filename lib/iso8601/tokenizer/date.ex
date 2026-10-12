@@ -20,9 +20,11 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
   # qualifier, when present, is merged into the tagged date's inner
   # keyword list so each interval endpoint retains its own
   # qualification. The extended-info segments are spliced into the
-  # endpoint's inner list as `{:extended, raw_segments}` and later
-  # validated by `Extended.split_extended/1`, which bubbles any
-  # critical-suffix error back up to the parser's return path.
+  # endpoint's inner list as `{:extended, raw_segments}`, and
+  # `Extended.split_extended/1` takes them for the whole expression
+  # where they follow its last endpoint and refuses them anywhere
+  # else: a suffix is written once, after the whole expression. The
+  # grammar reads one on any endpoint so that the refusal can say so.
   # Exported so the interval parser in `Tempo.Iso8601.Tokenizer.Set`
   # can reference it cross-module via `parsec/1`.
   defcombinator :qualified_endpoint,
@@ -39,9 +41,9 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
   # one of its components.
   #
   # And with the suffix of RFC 9557 a value written alone takes, as an end of
-  # an interval has: a member in a zone of its own
-  # (`{2026-06-15T10:30[Europe/Paris],2026-06-15T10:30[America/New_York]}`),
-  # which is how a set of values in two zones is written and was not read.
+  # an interval has. A suffix is written once, after the whole set, so
+  # `Extended.split_extended/1` refuses one on a member: the grammar reads
+  # it so that the refusal can say where it belongs.
   defcombinator :qualified_member,
                 optional(qualification())
                 |> parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_or_date_or_time})

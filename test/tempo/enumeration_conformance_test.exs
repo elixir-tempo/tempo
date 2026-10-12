@@ -238,20 +238,14 @@ defmodule Tempo.EnumerationConformance.Test do
       end
     end
 
-    test "IXDTF interval with per-endpoint zones parses and the zones survive enumeration" do
-      # Prior to this round, the grammar attached IXDTF suffixes only
-      # at the top level, so an interval with an IXDTF suffix on each
-      # endpoint failed to parse. This test pins the fix and confirms
-      # the per-endpoint zone_id is preserved through enumeration.
-      {:ok, interval} =
-        Tempo.from_iso8601("2022-06-15T10:00[Europe/Paris]/2022-06-15T13:00[Europe/London]")
+    test "an interval's zone, written once after it, survives enumeration" do
+      # An IXDTF suffix is written after the whole interval and is the
+      # zone of both its ends, and of each value the interval yields.
+      {:ok, interval} = Tempo.from_iso8601("2022-06-15T10:00/2022-06-15T13:00[Europe/Paris]")
 
       assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.to.extended.zone_id == "Europe/London"
+      assert interval.to.extended.zone_id == "Europe/Paris"
 
-      # Endpoint iteration: `from` is the anchor, so yielded values
-      # carry `from`'s zone_id. The `to` endpoint's zone is attached
-      # to the boundary, not the interior values.
       list = Enum.take(interval, 3)
 
       assert Enum.all?(list, fn v ->

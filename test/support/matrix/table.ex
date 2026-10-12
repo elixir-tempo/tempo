@@ -291,7 +291,7 @@ defmodule Tempo.Matrix.Table do
     interval_two_resolutions: "Interval, two resolutions",
     interval_two_axes: "Interval, week to date",
     interval_zoned: "Interval, zoned",
-    interval_two_zones: "Interval, two zones",
+    interval_two_shifts: "Interval, two time shifts",
     recurrence_count: "Recurrence, counted",
     recurrence_unending: "Recurrence, unending",
     recurrence_selection: "Recurrence, selecting",

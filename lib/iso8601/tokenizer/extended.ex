@@ -164,10 +164,12 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
   Split a raw token list into regular tokens and the parsed
   extended-information map.
 
-  The tokenizer emits an `{:extended, segments}` entry as the last
-  element of the token list when an IXDTF suffix is present.  This
-  function unpacks those segments into a validated map and returns
-  the remaining tokens.
+  An IXDTF suffix is written once, after the whole expression, and
+  applies to all of it. This function takes it off the end of the
+  tokens, unpacks its segments into a validated map and returns the
+  remaining tokens. One written anywhere inside the expression (on the
+  start of an interval, on a member of a set, on an end of a range) is
+  an error.
 
   ### Arguments
 
@@ -181,7 +183,8 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
     `:zone_offset` and `:tags`.
 
   * `{:error, reason}` when a critical suffix is unrecognised
-    or fails validation.
+    or fails validation, or when a suffix is written inside the
+    expression.
 
   ### Examples
 
@@ -193,114 +196,95 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
 
   """
   def split_extended(tokens) do
-    with {:ok, tokens} <- validate_embedded_extended(tokens) do
-      pop_trailing_extended(List.pop_at(tokens, -1), tokens)
+    {tokens, segments} = trailing_suffix(tokens)
+
+    with :ok <- no_suffix_inside(tokens),
+         {:ok, extended} <- suffix_of_the_expression(segments) do
+      {:ok, {tokens, extended}}
     end
   end
 
-  defp pop_trailing_extended({{:extended, segments}, rest}, _tokens) do
-    with {:ok, extended} <- build_extended(segments) do
-      {:ok, {rest, extended}}
-    end
-  end
+  # An extension is written once, after the whole expression, and applies to
+  # all of it. The grammar hands one written after a value, a set, a
+  # duration or a rule to the expression, and one written after the end of
+  # an interval to that end, which is the end of the expression too: it is
+  # lifted off it here, so that the reader has one suffix and one place it
+  # is in.
+  @dated [:date, :datetime, :time_of_day]
 
-  defp pop_trailing_extended(_popped, tokens) do
-    {:ok, {tokens, nil}}
-  end
-
-  # Interval endpoints produced by `qualified_endpoint` may carry
-  # per-endpoint `{:extended, raw_segments}` entries embedded in
-  # their inner lists. Walk the token tree, validate each embedded
-  # segment via `build_extended/1`, and replace the raw entry with a
-  # validated map. Errors (critical unknown zone, etc.) bubble up.
-  #
-  # The top-level `{:extended, _}` remains untouched here — it is
-  # handled by the List.pop_at branch above.
-
-  defp validate_embedded_extended(tokens) when is_list(tokens) do
-    reduce_while_ok(tokens, &validate_token/1)
-  end
-
-  defp validate_embedded_extended(other) do
-    {:ok, other}
-  end
-
-  defp validate_token({:interval, inner}) when is_list(inner) do
-    with {:ok, inner} <- reduce_while_ok(inner, &validate_interval_part/1) do
-      {:ok, {:interval, inner}}
-    end
-  end
-
-  # A set's member, or one it excludes, may be an interval, whose endpoints
-  # carry their suffixes as a top-level interval's do.
-  defp validate_token({set, members})
-       when set in [:all_of, :one_of, :except] and is_list(members) do
-    with {:ok, members} <- reduce_while_ok(members, &validate_token/1) do
-      {:ok, {set, members}}
-    end
-  end
-
-  # A member of a set that is a date or a time carries its own suffix as an
-  # end of an interval does, and so does each end of a range.
-  defp validate_token({tag, inner} = member)
-       when tag in [:date, :datetime, :time_of_day] and is_list(inner) do
-    validate_interval_part(member)
-  end
-
-  defp validate_token({:range, ends}) when is_list(ends) do
-    with {:ok, ends} <- reduce_while_ok(ends, &validate_range_end/1) do
-      {:ok, {:range, ends}}
-    end
-  end
-
-  defp validate_token(other) do
-    {:ok, other}
-  end
-
-  # An end of a range open at its other end is its units alone, with no tag
-  # (`Tempo.Iso8601.Tokenizer.Grammar.range/1`).
-  defp validate_range_end([{_unit, _value} | _units] = units) do
-    with {:ok, {:date, units}} <- validate_interval_part({:date, units}), do: {:ok, units}
-  end
-
-  defp validate_range_end(tagged_or_open) do
-    validate_token(tagged_or_open)
-  end
-
-  # A recurrence's domain is a set, read as one.
-  defp validate_interval_part({:domain_set, members}) when is_list(members) do
-    with {:ok, members} <- reduce_while_ok(members, &validate_token/1) do
-      {:ok, {:domain_set, members}}
-    end
-  end
-
-  defp validate_interval_part({tag, inner}) when tag in [:date, :datetime, :time_of_day] do
-    case List.keytake(inner, :extended, 0) do
-      nil ->
-        {:ok, {tag, inner}}
-
+  defp trailing_suffix(tokens) do
+    case List.pop_at(tokens, -1) do
       {{:extended, segments}, rest} ->
-        with {:ok, extended} <- build_extended(segments) do
-          {:ok, {tag, rest ++ [extended: extended]}}
-        end
+        {rest, segments}
+
+      {{:interval, parts}, rest} when is_list(parts) ->
+        {parts, segments} = last_part_suffix(parts)
+        {rest ++ [interval: parts], segments}
+
+      _no_suffix_there ->
+        {tokens, nil}
     end
   end
 
-  defp validate_interval_part(other) do
-    {:ok, other}
+  defp last_part_suffix(parts) do
+    case List.pop_at(parts, -1) do
+      {{tag, units}, rest} when tag in @dated and is_list(units) ->
+        {units, segments} = taken_suffix(List.keytake(units, :extended, 0), units)
+        {rest ++ [{tag, units}], segments}
+
+      _an_end_with_no_suffix ->
+        {parts, nil}
+    end
   end
 
-  defp reduce_while_ok(list, fun) do
-    Enum.reduce_while(list, {:ok, []}, fn item, {:ok, acc} ->
-      case fun.(item) do
-        {:ok, value} -> {:cont, {:ok, [value | acc]}}
-        {:error, _} = err -> {:halt, err}
-      end
-    end)
-    |> case do
-      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
-      {:error, _} = err -> err
+  defp taken_suffix({{:extended, segments}, units}, _all_units) do
+    {units, segments}
+  end
+
+  defp taken_suffix(nil, units) do
+    {units, nil}
+  end
+
+  # Whatever suffix is left in the tokens is written inside the expression:
+  # on the start of an interval, on a member of a set, on an end of a range,
+  # on the start of a recurrence. None of those is a place for one.
+  defp no_suffix_inside(tokens) do
+    if suffix_inside?(tokens) do
+      {:error,
+       ParseError.exception(
+         reason:
+           "An extension (`[Europe/Paris]`, `[u-ca=hebrew]`, a tag) is written once, after " <>
+             "the whole expression, and applies to all of it: one is written inside this one"
+       )}
+    else
+      :ok
     end
+  end
+
+  defp suffix_inside?({:extended, segments}) when is_list(segments) do
+    true
+  end
+
+  defp suffix_inside?([head | tail]) do
+    suffix_inside?(head) or suffix_inside?(tail)
+  end
+
+  defp suffix_inside?(token) when is_tuple(token) do
+    token
+    |> Tuple.to_list()
+    |> suffix_inside?()
+  end
+
+  defp suffix_inside?(_token) do
+    false
+  end
+
+  defp suffix_of_the_expression(nil) do
+    {:ok, nil}
+  end
+
+  defp suffix_of_the_expression(segments) do
+    build_extended(segments)
   end
 
   @empty_extended %{

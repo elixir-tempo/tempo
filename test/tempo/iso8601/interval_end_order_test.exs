@@ -140,14 +140,19 @@ defmodule Tempo.Iso8601.IntervalEndOrderTest do
 
       new_york = DateTime.new!(~D[2026-06-15], ~T[00:00:00], "America/New_York")
 
+      # An interval is in one zone, written once after it, so two ends in
+      # two named zones are written with the offset each zone has there.
       for time <- @paris_times do
-        text =
-          "2026-06-15T#{Calendar.strftime(time, "%H:%M")}[Europe/Paris]/2026-06-15[America/New_York]"
-
+        text = "2026-06-15T#{Calendar.strftime(time, "%H:%M")}+02:00/2026-06-15T00:00-04:00"
         paris = DateTime.new!(~D[2026-06-15], time, "Europe/Paris")
 
         assert {text, said(Tempo.from_iso8601(text))} ==
                  {text, to_say(paris, new_york, &DateTime.compare/2)}
+
+        in_two_zones =
+          "2026-06-15T#{Calendar.strftime(time, "%H:%M")}[Europe/Paris]/2026-06-15[America/New_York]"
+
+        assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601(in_two_zones)
       end
 
       # Two of the four are refused: half past six and half past ten.

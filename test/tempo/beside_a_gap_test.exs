@@ -223,7 +223,7 @@ defmodule Tempo.BesideAGapTest do
 
   describe "a recurrence of days from a week" do
     test "has no occurrence on the day its zone leaves out" do
-      {:ok, occurrences} = Tempo.to_interval(~o"R6/2011Y52W[Pacific/Apia]/P1D")
+      {:ok, occurrences} = Tempo.to_interval(~o"R6/2011Y52W/P1D[Pacific/Apia]")
 
       starts =
         occurrences

@@ -155,7 +155,7 @@ defmodule Tempo.SubSecondTest do
     # aligning the coarser endpoints to `:microsecond` had no unit
     # path and the resulting error tuple leaked into the sweep.
     defp work_day do
-      Tempo.from_iso8601!("2026-12-01T08:00[Europe/Helsinki]/2026-12-01T16:00[Europe/Helsinki]")
+      Tempo.from_iso8601!("2026-12-01T08:00/2026-12-01T16:00[Europe/Helsinki]")
     end
 
     defp sub_second_shift do

@@ -61,9 +61,11 @@ These keep their names and change their meaning:
 
 * **`Tempo.IntervalSet.new/2` given intervals of several calendars** — brings each to the first interval's calendar, as the set operations do, where 1.x kept each in its own.
 
-* **A calendar on an end of a range** — an error: `[u-ca=…]` is written once, after the set the range is in.
+* **A zone, a calendar or a tag written inside an expression** — an error: an IXDTF suffix (`[Europe/Paris]`, `[u-ca=hebrew]`, `[key=value]`) is written once, after the whole expression, and applies to all of it. Write `2026-06-15T10:00/2026-06-15T12:00[Europe/Paris]`, `{2026-06-15,2026-06-16}[Europe/Paris]` and `R/2026-05-30T23:30/P1D[America/New_York]`, where 1.x took a suffix on an end of an interval, on a member of a set and on a recurrence's start.
 
-* **An interval with ends of two calendars** — an error, where 1.x kept each end in its own: `Tempo.Interval.new/1` refuses the pair, and in text a `[u-ca=…]` on either end names the calendar of both. Convert one end with `Tempo.to_calendar/2` first.
+* **An interval with ends of two calendars or two zones** — an error, where 1.x kept each end in its own: `Tempo.Interval.new/1` refuses the pair. Convert one end with `Tempo.to_calendar/2` or `Tempo.shift_zone/2` first. A time shift (`+02:00`) is still each end's own.
+
+* **A recurrence's domain beside a calendar** — its years are years of the calendar written after the recurrence (`R/{5787Y..5788Y}/P1Y/FL1M1DN[u-ca=hebrew]`), where they were Gregorian years. Give the Gregorian years a rule of another calendar falls in as a `:within` window.
 
 * **`duration/1` and `duration/2`** — counted in the unit the endpoints are written in, where 1.x counted seconds.
 
@@ -920,7 +922,7 @@ true
 A `:within` window with no zone bounds a value in a zone in that zone, where it was read as UTC. A window written with a zone or an offset is the moments it names.
 
 ```elixir
-iex> late_show = Tempo.from_iso8601!("R/2026-05-30T23:30[America/New_York]/P1D")
+iex> late_show = Tempo.from_iso8601!("R/2026-05-30T23:30/P1D[America/New_York]")
 iex> {:ok, shows} = Tempo.to_interval(late_show, within: ~o"2026-06-01/2026-06-03")
 iex> shows
 ...> |> Tempo.IntervalSet.members()

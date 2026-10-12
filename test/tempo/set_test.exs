@@ -73,8 +73,8 @@ defmodule Tempo.SetTest do
       assert {:error, %IntervalEndpointsError{}} = Tempo.from_iso8601("{2021Y/2020Y}")
       assert {:error, %InvalidDateError{}} = Tempo.from_iso8601("{2026-02-30/2026-03-01}")
 
-      # A zone on one end is the other end's too, as it is outside a set.
-      {:ok, zoned} = Tempo.from_iso8601("{2026-06-15T10:00/2026-06-15T12:00[Europe/Paris]}")
+      # A zone written after the set is the zone of both ends of a member.
+      {:ok, zoned} = Tempo.from_iso8601("{2026-06-15T10:00/2026-06-15T12:00}[Europe/Paris]")
       assert [%Interval{from: from, to: to}] = zoned.set
       assert {from.extended.zone_id, to.extended.zone_id} == {"Europe/Paris", "Europe/Paris"}
 
@@ -82,12 +82,12 @@ defmodule Tempo.SetTest do
       # is an error, in a member the set excludes too.
       assert {:error, %Tempo.ZoneOffsetMismatchError{}} =
                Tempo.from_iso8601(
-                 "{2022-01-01T00:00:00+05:00[!America/New_York]/2022-01-02T00:00:00+05:00}"
+                 "{2022-01-01T00:00:00+05:00/2022-01-02T00:00:00+05:00}[!America/New_York]"
                )
 
       assert {:error, %Tempo.ZoneGapError{}} =
                Tempo.from_iso8601(
-                 "{2024-03-09,^2024-03-10T02:30[America/New_York]/2024-03-10T05:00}"
+                 "{2024-03-09,^2024-03-10T02:30/2024-03-10T05:00}[America/New_York]"
                )
     end
 

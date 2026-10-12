@@ -283,7 +283,7 @@ defmodule Tempo.DayLeftOutTest do
     test "has the occurrence that lands on it on the day after, once" do
       for {zone, day} <- @left_out, cadence <- [1, 2, 3, 7] do
         start = Date.add(day, -cadence)
-        text = "R5/#{Date.to_iso8601(start)}[#{zone}]/P#{cadence}D"
+        text = "R5/#{Date.to_iso8601(start)}/P#{cadence}D[#{zone}]"
 
         # Each step from the start, a step onto the day moved to the day
         # after, where the step after it lands too when the cadence is a day.
@@ -304,7 +304,7 @@ defmodule Tempo.DayLeftOutTest do
     test "of weeks keeps its day of the week after it" do
       for {zone, day} <- @left_out do
         start = Date.add(day, -7)
-        text = "R4/#{Date.to_iso8601(start)}[#{zone}]/P1W"
+        text = "R4/#{Date.to_iso8601(start)}/P1W[#{zone}]"
 
         # The week after the start is moved a day on, and the weeks after it
         # are on the start's day of the week again.
@@ -318,7 +318,7 @@ defmodule Tempo.DayLeftOutTest do
     test "of months has it on the day after, and the months after as they were" do
       for {zone, day} <- @left_out do
         start = Date.shift(day, month: -2)
-        text = "R4/#{Date.to_iso8601(start)}[#{zone}]/P1M"
+        text = "R4/#{Date.to_iso8601(start)}/P1M[#{zone}]"
 
         starts = for step <- 0..3, do: settled(Date.shift(start, month: step), 1, zone)
 
@@ -334,7 +334,7 @@ defmodule Tempo.DayLeftOutTest do
 
         window =
           Tempo.from_iso8601!(
-            "#{Date.to_iso8601(Date.beginning_of_month(day))}[#{zone}]/" <>
+            "#{Date.to_iso8601(Date.beginning_of_month(day))}/" <>
               "#{Date.to_iso8601(Date.shift(day, month: 4))}[#{zone}]"
           )
 
@@ -352,7 +352,7 @@ defmodule Tempo.DayLeftOutTest do
     test "selects no day it does not have" do
       # The 29th, 30th and 31st of each month, of the days of December 2011.
       selected =
-        Tempo.to_interval(~o"R/2011-12-01[Pacific/Apia]/P1D/FL{29,30,31}DN",
+        Tempo.to_interval(~o"R/2011-12-01/P1D/FL{29,30,31}DN[Pacific/Apia]",
           within: ~o"2011-12[Pacific/Apia]"
         )
 
@@ -497,7 +497,7 @@ defmodule Tempo.DayLeftOutTest do
                day_spans(weekdays, "Pacific/Apia")
 
       # The Fridays from Monday the 26th on: the first is in January.
-      {:ok, fridays} = Tempo.select(~o"2011-12-26[Pacific/Apia]/..", ~o"5K")
+      {:ok, fridays} = Tempo.select(~o"2011-12-26/..[Pacific/Apia]", ~o"5K")
 
       expected =
         ~D[2011-12-26]

@@ -94,14 +94,14 @@ defmodule Tempo.ZonedShiftTest do
 
     test "a start and a number of hours ends that many hours later" do
       {:ok, night} =
-        Tempo.to_interval(Tempo.from_iso8601!("2026-03-07T23[America/New_York]/PT5H"))
+        Tempo.to_interval(Tempo.from_iso8601!("2026-03-07T23/PT5H[America/New_York]"))
 
       assert night.to == ~o"2026-03-08T05[America/New_York]"
     end
 
     test "an hourly recurrence steps over the hour the clocks skip" do
       {:ok, hours} =
-        Tempo.to_interval(Tempo.from_iso8601!("R4/2026-03-08T00[America/New_York]/PT1H"))
+        Tempo.to_interval(Tempo.from_iso8601!("R4/2026-03-08T00/PT1H[America/New_York]"))
 
       starts =
         hours

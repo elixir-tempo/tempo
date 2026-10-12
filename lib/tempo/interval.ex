@@ -229,6 +229,7 @@ defmodule Tempo.Interval do
          to <- Keyword.get(options, :to),
          :ok <- validate_endpoint_types(from, to),
          :ok <- validate_one_calendar(from, to),
+         :ok <- validate_one_zone(from, to),
          {from, to} = propagate_zone({from, to}),
          :ok <- validate_from_to_order(from, to),
          {:ok, unit} <- validate_unit(Keyword.get(options, :unit), from),
@@ -462,6 +463,30 @@ defmodule Tempo.Interval do
     :ok
   end
 
+  # An interval is in one zone, as it is in one calendar: a zone is written
+  # once, after the whole interval, and is the zone of both its ends. Two
+  # values in different zones are converted by the caller, who knows which
+  # zone the interval is to be in. A time shift is another matter: ISO 8601
+  # writes one on each end, and each end keeps its own.
+  defp validate_one_zone(
+         %Tempo{extended: %{zone_id: from_zone}},
+         %Tempo{extended: %{zone_id: to_zone}}
+       )
+       when is_binary(from_zone) and is_binary(to_zone) and from_zone != "" and to_zone != "" and
+              from_zone != to_zone do
+    {:error,
+     IntervalEndpointsError.exception(
+       operation: :new,
+       reason:
+         "The start is in #{from_zone} and the end in #{to_zone}. An interval is in one " <>
+           "zone: convert one end with `Tempo.shift_zone/2`."
+     )}
+  end
+
+  defp validate_one_zone(_from, _to) do
+    :ok
+  end
+
   @doc false
   # A single interval names one span, and a span cannot straddle the
   # floating and universal time lines — so a zone or offset on either
@@ -470,25 +495,18 @@ defmodule Tempo.Interval do
   # included with the component preceding the separator shall be assumed
   # to apply to the component following the separator" —
   # `2018-01-15T10:00+05:00/2018-02-20T10:00` ends at +05:00 too. Backward,
-  # from the end to the start, is where IXDTF binds a trailing `[zone]`.
-  # Propagation never overwrites a frame an endpoint carries, so two zoned
-  # endpoints keep their own. The zone's rule serves the parser and `new/1`,
-  # so a constructed interval and its re-parsed ISO 8601 string cannot
-  # disagree.
+  # from the end to the start, is for two values given to `new/1` of which
+  # the end alone is placed. Propagation never overwrites a frame an
+  # endpoint carries: two ends written with different time shifts keep
+  # their own, and two in different named zones are refused before this
+  # (`validate_one_zone/2`). The rule serves the parser and `new/1`, so a
+  # constructed interval and its re-parsed ISO 8601 string cannot disagree.
   #
-  # The calendar's rule is the parser's alone. In text a `[u-ca=…]` on
-  # either end is how both ends are written; two values given to `new/1` are
-  # each in the calendar they have, which must be one calendar
-  # (`validate_one_calendar/2`), since naming the start's units as the end's
-  # calendar would make 1 January 2025 a day of the Hebrew year 2025. The
-  # rule reads the name a suffix gave an endpoint, which an endpoint holds
-  # only while its text is being read: the parser drops it once the
-  # calendars are settled, so for any other pair of values this rule does
-  # nothing.
+  # In text a zone and a calendar are written once, after the whole
+  # interval, and the reader gives them to both ends itself: nothing is
+  # carried from one end to the other for them here.
   def propagate_endpoint_frame(%Tempo{} = from, %Tempo{} = to) do
-    {from, to}
-    |> propagate_zone()
-    |> propagate_calendar()
+    propagate_zone({from, to})
   end
 
   def propagate_endpoint_frame(from, to) do
@@ -567,61 +585,6 @@ defmodule Tempo.Interval do
       :ok -> zoned
       {:error, _another_frame} -> target
     end
-  end
-
-  @doc false
-  # A `[u-ca=…]` on either end names the calendar the interval is written
-  # in: an interval is in one calendar, so an end carrying no name of its
-  # own takes the other's. Without this, `1448Y9M24D/25D[u-ca=islamic-civil]`
-  # and `1448Y9M24D[u-ca=islamic-civil]/25D` would each be read as a pair of
-  # two calendars, which neither can mean: the abbreviated `25D` is only
-  # readable against the start's own year and month.
-  #
-  # Never overwrites: two ends that each name a calendar keep what they
-  # name, and the reader refuses the pair where the two differ.
-  @spec propagate_calendar({Tempo.t(), Tempo.t()}) :: {Tempo.t(), Tempo.t()}
-  def propagate_calendar({%Tempo{} = from, %Tempo{} = to}) do
-    propagate_calendar(from, to, tagged_calendar(from), tagged_calendar(to))
-  end
-
-  def propagate_calendar({from, to}) do
-    {from, to}
-  end
-
-  defp propagate_calendar(from, to, nil, tagged) when not is_nil(tagged) do
-    {copy_calendar(to, from), to}
-  end
-
-  defp propagate_calendar(from, to, tagged, nil) when not is_nil(tagged) do
-    {from, copy_calendar(from, to)}
-  end
-
-  defp propagate_calendar(from, to, _from_tagged, _to_tagged) do
-    {from, to}
-  end
-
-  defp tagged_calendar(%Tempo{extended: %{calendar: calendar}}) when not is_nil(calendar) do
-    calendar
-  end
-
-  defp tagged_calendar(%Tempo{}) do
-    nil
-  end
-
-  defp copy_calendar(%Tempo{} = source, %Tempo{} = target) do
-    %{
-      target
-      | calendar: source.calendar,
-        extended: put_calendar_field(target.extended, tagged_calendar(source))
-    }
-  end
-
-  defp put_calendar_field(nil, calendar) do
-    %{zone_id: nil, zone_offset: nil, zone_critical: false, calendar: calendar, tags: %{}}
-  end
-
-  defp put_calendar_field(target_extended, calendar) do
-    Map.put(target_extended, :calendar, calendar)
   end
 
   # Overlay `source`'s zone frame — its numeric `shift` and the zone

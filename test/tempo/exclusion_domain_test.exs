@@ -134,8 +134,10 @@ defmodule Tempo.ExclusionDomainTest do
     end
 
     test "a calendar recurrence's domain narrows to the window" do
+      # The years of the domain are of the recurrence's calendar: 4663 of
+      # the Chinese calendar starts on 17 February 2026.
       {:ok, set} =
-        Tempo.to_interval(~o"R/{2024Y..2027Y}/P1Y/FL1m1DN[u-ca=chinese]", within: ~o"2026Y")
+        Tempo.to_interval(~o"R/{4661Y..4664Y}/P1Y/FL1m1DN[u-ca=chinese]", within: ~o"2026Y")
 
       assert [interval] = IntervalSet.members(set)
 
@@ -147,10 +149,11 @@ defmodule Tempo.ExclusionDomainTest do
       assert Date.convert!(date, Calendar.ISO) == ~D[2026-02-17]
     end
 
-    test "a domain's years gate a recurrence in another calendar by when it falls" do
-      # Rosh Hashanah 5786 fell on 23 September 2025, before the domain's
-      # years; 5787's and 5788's fall in 2026 and 2027.
-      {:ok, set} = Tempo.to_interval(~o"R/{2026Y..2027Y}/P1Y/FL1M1DN[u-ca=hebrew]")
+    test "a domain's years are of the calendar written after the recurrence" do
+      # A calendar is written once, after the whole expression, and is the
+      # calendar of every part of it: the domain's years are Hebrew years.
+      # Rosh Hashanah 5787 and 5788 fall in 2026 and 2027.
+      {:ok, set} = Tempo.to_interval(~o"R/{5787Y..5788Y}/P1Y/FL1M1DN[u-ca=hebrew]")
 
       dates =
         for interval <- IntervalSet.members(set) do
@@ -163,6 +166,14 @@ defmodule Tempo.ExclusionDomainTest do
         end
 
       assert dates == [~D[2026-09-12], ~D[2027-10-02]]
+
+      # The Gregorian years a rule of another calendar falls in are a
+      # window, which is another expression.
+      {:ok, windowed} =
+        Tempo.to_interval(~o"R/../P1Y/FL1M1DN[u-ca=hebrew]", within: ~o"2026Y/2028Y")
+
+      assert Enum.map(IntervalSet.members(windowed), &Interval.from/1) ==
+               Enum.map(IntervalSet.members(set), &Interval.from/1)
     end
   end
 

@@ -92,7 +92,7 @@ defmodule Tempo.SelectedTimeBesideAGapTest do
       days = [~D[2026-10-03], ~D[2026-10-04], ~D[2026-10-05]]
       expected = Enum.map(days, &hour_shown(&1, 2, @zone))
 
-      for text <- ["R3/2026-10-03T00[#{@zone}]/P1D/FLT2HN", "R3/2026-10-03[#{@zone}]/P1D/FLT2HN"] do
+      for text <- ["R3/2026-10-03T00/P1D/FLT2HN[#{@zone}]", "R3/2026-10-03/P1D/FLT2HN[#{@zone}]"] do
         assert {text, spans(Tempo.to_interval(read(text)))} == {text, expected}
       end
 

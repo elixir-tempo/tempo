@@ -986,20 +986,15 @@ defmodule Tempo.Operations.Test do
       assert_round_trips(hebrew)
     end
 
-    test "per-endpoint u-ca suffixes determine each endpoint's calendar on re-parse" do
-      {:ok, interval} =
-        Tempo.from_iso8601("1447Y9M1D[u-ca=islamic-civil]/10M1D[u-ca=islamic-civil]")
+    test "a u-ca suffix names the calendar of both endpoints on re-parse" do
+      {:ok, interval} = Tempo.from_iso8601("1447Y9M1D/10M1D[u-ca=islamic-civil]")
 
       assert interval.from.calendar == Calendrical.Islamic.Civil
       assert interval.to.calendar == Calendrical.Islamic.Civil
     end
 
-    test "an explicit calendar argument still wins over per-endpoint u-ca suffixes" do
-      {:ok, interval} =
-        Tempo.from_iso8601(
-          "1447Y9M1D[u-ca=islamic-civil]/10M1D[u-ca=islamic-civil]",
-          Calendar.ISO
-        )
+    test "an explicit calendar argument still wins over a u-ca suffix" do
+      {:ok, interval} = Tempo.from_iso8601("1447Y9M1D/10M1D[u-ca=islamic-civil]", Calendar.ISO)
 
       assert interval.from.calendar == Calendar.ISO
       assert interval.to.calendar == Calendar.ISO

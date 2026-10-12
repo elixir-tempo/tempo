@@ -133,7 +133,7 @@ defmodule Tempo.IntervalShiftTest do
       zone = "Europe/Paris"
 
       shifted =
-        Tempo.shift(~o"2026-03-28T12:00[Europe/Paris]/2026-03-30T12:00[Europe/Paris]", day: 1)
+        Tempo.shift(~o"2026-03-28T12:00/2026-03-30T12:00[Europe/Paris]", day: 1)
 
       epoch = :calendar.datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}})
 

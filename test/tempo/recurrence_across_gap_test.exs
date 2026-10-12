@@ -61,27 +61,27 @@ defmodule Tempo.RecurrenceAcrossGapTest do
 
   @recurrences [
     # A spring-forward in New York on 10 March 2024, 02:00 to 03:00.
-    {"R6/2024-03-08T02:30:00[America/New_York]/P1D", ~N[2024-03-08 02:30:00], "America/New_York",
+    {"R6/2024-03-08T02:30:00/P1D[America/New_York]", ~N[2024-03-08 02:30:00], "America/New_York",
      1, 6},
-    {"R4/2024-03-03T02:30:00[America/New_York]/P1W", ~N[2024-03-03 02:30:00], "America/New_York",
+    {"R4/2024-03-03T02:30:00/P1W[America/New_York]", ~N[2024-03-03 02:30:00], "America/New_York",
      7, 4},
-    {"R5/2024-03-08T02:00:00[America/New_York]/P2D", ~N[2024-03-08 02:00:00], "America/New_York",
+    {"R5/2024-03-08T02:00:00/P2D[America/New_York]", ~N[2024-03-08 02:00:00], "America/New_York",
      2, 5},
-    {"R5/2024-03-09T02:30:00[America/New_York]/P2D", ~N[2024-03-09 02:30:00], "America/New_York",
+    {"R5/2024-03-09T02:30:00/P2D[America/New_York]", ~N[2024-03-09 02:30:00], "America/New_York",
      2, 5},
     # In Paris on 29 March 2026, and on Lord Howe Island, by half an hour.
-    {"R5/2026-03-27T02:15:00[Europe/Paris]/P1D", ~N[2026-03-27 02:15:00], "Europe/Paris", 1, 5},
-    {"R5/2026-10-02T02:10:00[Australia/Lord_Howe]/P1D", ~N[2026-10-02 02:10:00],
+    {"R5/2026-03-27T02:15:00/P1D[Europe/Paris]", ~N[2026-03-27 02:15:00], "Europe/Paris", 1, 5},
+    {"R5/2026-10-02T02:10:00/P1D[Australia/Lord_Howe]", ~N[2026-10-02 02:10:00],
      "Australia/Lord_Howe", 1, 5},
     # A day the zone leaves out: Samoa had no 30 December 2011.
-    {"R5/2011-12-28T10:00:00[Pacific/Apia]/P1D", ~N[2011-12-28 10:00:00], "Pacific/Apia", 1, 5},
-    {"R4/2011-12-28T10:00:00[Pacific/Apia]/P2D", ~N[2011-12-28 10:00:00], "Pacific/Apia", 2, 4},
-    {"R4/2011-12-23T10:00:00[Pacific/Apia]/P1W", ~N[2011-12-23 10:00:00], "Pacific/Apia", 7, 4},
+    {"R5/2011-12-28T10:00:00/P1D[Pacific/Apia]", ~N[2011-12-28 10:00:00], "Pacific/Apia", 1, 5},
+    {"R4/2011-12-28T10:00:00/P2D[Pacific/Apia]", ~N[2011-12-28 10:00:00], "Pacific/Apia", 2, 4},
+    {"R4/2011-12-23T10:00:00/P1W[Pacific/Apia]", ~N[2011-12-23 10:00:00], "Pacific/Apia", 7, 4},
     # A fall-back, where the clock shows the reading twice.
-    {"R5/2024-11-01T01:30:00[America/New_York]/P1D", ~N[2024-11-01 01:30:00], "America/New_York",
+    {"R5/2024-11-01T01:30:00/P1D[America/New_York]", ~N[2024-11-01 01:30:00], "America/New_York",
      1, 5},
     # No change of the clock at all.
-    {"R5/2024-06-10T02:30:00[America/New_York]/P1D", ~N[2024-06-10 02:30:00], "America/New_York",
+    {"R5/2024-06-10T02:30:00/P1D[America/New_York]", ~N[2024-06-10 02:30:00], "America/New_York",
      1, 5}
   ]
 
@@ -95,7 +95,7 @@ defmodule Tempo.RecurrenceAcrossGapTest do
     end
 
     test "returns to its time of day after the occurrence the clock moved" do
-      {:ok, occurrences} = Tempo.to_interval(~o"R4/2024-03-09T02:30:00[America/New_York]/P1D")
+      {:ok, occurrences} = Tempo.to_interval(~o"R4/2024-03-09T02:30:00/P1D[America/New_York]")
 
       assert Enum.map(IntervalSet.members(occurrences), &Tempo.to_iso8601!(Interval.from(&1))) ==
                [
@@ -108,8 +108,8 @@ defmodule Tempo.RecurrenceAcrossGapTest do
 
     test "has each occurrence end where the next starts, and after it starts" do
       for text <- [
-            "R4/2024-03-09T02:30:00[America/New_York]/P1D",
-            "R5/2011-12-28T10:00:00[Pacific/Apia]/P1D"
+            "R4/2024-03-09T02:30:00/P1D[America/New_York]",
+            "R5/2011-12-28T10:00:00/P1D[Pacific/Apia]"
           ] do
         {:ok, occurrences} = Tempo.to_interval(Tempo.from_iso8601!(text))
         members = IntervalSet.members(occurrences)
@@ -122,7 +122,7 @@ defmodule Tempo.RecurrenceAcrossGapTest do
     end
 
     test "is so within a window, and for a rule read from an RRULE" do
-      unbounded = ~o"R/2024-03-08T02:30:00[America/New_York]/P1D"
+      unbounded = ~o"R/2024-03-08T02:30:00/P1D[America/New_York]"
       within = Tempo.to_interval(unbounded, within: ~o"2024-03-08/2024-03-14")
 
       assert starts(within) == expected(~N[2024-03-08 02:30:00], "America/New_York", 1, 6)
@@ -136,7 +136,7 @@ defmodule Tempo.RecurrenceAcrossGapTest do
   end
 
   describe "a recurrence with no year, placed on a window that starts where the clock skips it" do
-    @night_of_the_change ~o"2024-03-10[America/New_York]/2024-03-14[America/New_York]"
+    @night_of_the_change ~o"2024-03-10/2024-03-14[America/New_York]"
 
     test "starts on the reading that long after, and is at its time of day from then" do
       placed = Tempo.to_interval(~o"R3/T02H30M0S/P1D", within: @night_of_the_change)
@@ -174,7 +174,7 @@ defmodule Tempo.RecurrenceAcrossGapTest do
     test "is as it was where the window starts a day before" do
       placed =
         Tempo.to_interval(~o"R3/T02H30M0S/P1D",
-          within: ~o"2024-03-09[America/New_York]/2024-03-14[America/New_York]"
+          within: ~o"2024-03-09/2024-03-14[America/New_York]"
         )
 
       assert starts(placed) == expected(~N[2024-03-09 02:30:00], "America/New_York", 1, 3)
@@ -183,14 +183,14 @@ defmodule Tempo.RecurrenceAcrossGapTest do
 
   describe "a recurrence the clock does not move" do
     test "of hours counts the time that passes" do
-      {:ok, occurrences} = Tempo.to_interval(~o"R4/2024-03-09T02:30:00[America/New_York]/PT24H")
+      {:ok, occurrences} = Tempo.to_interval(~o"R4/2024-03-09T02:30:00/PT24H[America/New_York]")
       [first | _rest] = instants = starts({:ok, occurrences})
 
       assert instants == for(step <- 0..3, do: first + step * 86_400)
     end
 
     test "of days from a date, or from a time with an offset, is each day" do
-      {:ok, dates} = Tempo.to_interval(~o"R3/2024-03-09[America/New_York]/P1D")
+      {:ok, dates} = Tempo.to_interval(~o"R3/2024-03-09/P1D[America/New_York]")
 
       assert Enum.map(IntervalSet.members(dates), &Tempo.to_iso8601!/1) == [
                "2024Y3M9D/10D[America/New_York]",

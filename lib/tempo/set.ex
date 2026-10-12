@@ -35,10 +35,11 @@ defmodule Tempo.Set do
   and each member it excludes is a value in the calendar the set is
   written for — the one given to `Tempo.from_iso8601/2`, or named by a
   `[u-ca=…]` suffix after the set — and is checked as a value on its
-  own is, so `{2026-02-30}` is an error. An end of a range names no
-  calendar of its own, and one written there is an error. A recurrence's
-  domain is the exception: its years are Gregorian whatever calendar the
-  recurrence's selection is in.
+  own is, so `{2026-02-30}` is an error. A zone written after the set is
+  each member's in the same way. A member and an end of a range name no
+  calendar and no zone of their own, and one written there is an error:
+  both are written once, after the set. A recurrence's domain is in the
+  recurrence's calendar, as a set's members are in the set's.
 
   """
 

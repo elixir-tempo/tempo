@@ -55,7 +55,7 @@ defmodule Tempo.ZonedWalkPastItsPartsTest do
   end
 
   defp walk(zone, cadence, rule, time \\ "T10") do
-    Tempo.from_iso8601!("R5/2026-06-16#{time}[#{zone}]/#{cadence}/F#{rule}")
+    Tempo.from_iso8601!("R5/2026-06-16#{time}/#{cadence}/F#{rule}[#{zone}]")
   end
 
   describe "a rule of hours in a zone that names an hour its walk never stops at" do

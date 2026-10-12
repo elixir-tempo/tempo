@@ -200,6 +200,12 @@ defmodule Tempo.GeneratedSets do
     end)
   end
 
+  # A zone is written once, after the whole set, and is each member's: a
+  # member with one of its own is refused.
+  defp as_they_are_read(_entries, family) when family in [:date_zone, :datetime_zone] do
+    {:refused, Tempo.ParseError}
+  end
+
   defp as_they_are_read(entries, _family) do
     {:read, entries}
   end
@@ -239,20 +245,38 @@ defmodule Tempo.GeneratedSets do
     true
   end
 
-  # A set of whole values with a zone after it, which each member takes.
+  # A set of whole values with a zone after it, which each member and each
+  # end of a range takes: a zone is written once, after the whole set.
   defp zoned_sets do
     for family <- [:date, :datetime, :date_explicit, :datetime_explicit],
-        [first, second | _third] = @families[family],
-        {open, close} <- @braces do
+        [first, second, third] = @families[family],
+        {open, close} <- @braces,
+        entries <- shapes(first, second, third) do
       zone = "[Europe/Paris]"
 
       %{
-        text: open <> first <> "," <> second <> close <> zone,
+        text: open <> Enum.map_join(entries, ",", &entry_text/1) <> close <> zone,
         family: {:zoned, family},
         expect: :read,
-        entries: [{:member, first <> zone}, {:member, second <> zone}]
+        entries: Enum.map(entries, &in_zone(&1, zone))
       }
     end
+  end
+
+  defp in_zone({:member, text}, zone) do
+    {:member, text <> zone}
+  end
+
+  defp in_zone({:range, first, last}, zone) do
+    {:range, first <> zone, last <> zone}
+  end
+
+  defp in_zone({:to, last}, zone) do
+    {:to, last <> zone}
+  end
+
+  defp in_zone({:from, first}, zone) do
+    {:from, first <> zone}
   end
 
   # A set of two families: its members may be of different precisions
@@ -286,12 +310,10 @@ defmodule Tempo.GeneratedSets do
         [first | _rest] = @families[one],
         [second | _others] = @families[other],
         members <- [[first, second], [second, first]] do
-      %{
-        text: open <> Enum.join(members, ",") <> close,
-        family: {one, other},
-        expect: :read,
-        entries: Enum.map(members, &{:member, &1})
-      }
+      members
+      |> Enum.map(&{:member, &1})
+      |> as_they_are_read(other)
+      |> generated(open <> Enum.join(members, ",") <> close, {one, other})
     end
   end
 

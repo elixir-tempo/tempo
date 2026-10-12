@@ -360,7 +360,7 @@ defmodule Tempo.RoundTripTest do
     test "a selection RRULE cannot express is an error naming it, never dropped" do
       for {iso, named} <- [
             {"R/2026-01-05/P1Y/FL10wN", "a calendar week (w)"},
-            {"R/4662Y1M1D[u-ca=chinese]/P1Y/FL6m15DN", "a traditional month (m)"},
+            {"R/4662Y1M1D/P1Y/FL6m15DN[u-ca=chinese]", "a traditional month (m)"},
             {"R/2026-01-01/P1Y/FL(easter)eN", "a computed event (e)"},
             {"R/2026-01-01/P1Y/FL2027Y1M1DN", "a year (Y)"},
             {"R/2026-01-01/P1Y/FLLL2K2IN/P10DN4K2IN", "a selection window"}
@@ -579,19 +579,23 @@ defmodule Tempo.RoundTripTest do
       assert Tempo.to_iso8601!(yearly) == "R/5786Y1M1D/P1Y/FL7M1DN[u-ca=hebrew]"
       assert calendars(read_back(yearly)) == [Calendrical.Hebrew, Calendrical.Hebrew]
 
-      # A start that alone is in another calendar keeps the name to itself.
-      start_only = Tempo.from_iso8601!("R/5786Y1M1D[u-ca=hebrew]/P1Y/FL7M1DN")
+      # A recurrence is in one calendar, so a start that alone names one is
+      # refused, and a start and a rule given in two have no text.
+      assert {:error, %Tempo.ParseError{}} =
+               Tempo.from_iso8601("R/5786Y1M1D[u-ca=hebrew]/P1Y/FL7M1DN")
 
-      assert Tempo.to_iso8601!(start_only) == "R/5786Y1M1D[u-ca=hebrew]/P1Y/FL7M1DN"
-      assert calendars(read_back(start_only)) == [Calendrical.Hebrew, Calendar.ISO]
+      in_two = %{yearly | repeat_rule: %{yearly.repeat_rule | calendar: Calendar.ISO}}
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :calendars}} = Tempo.to_iso8601(in_two)
     end
 
-    test "a recurrence with a domain, whose years stay Gregorian" do
-      gated = Tempo.from_iso8601!("R/{2026Y..2027Y}/P1Y/FL1M1DN[u-ca=hebrew]")
-      gregorian = Calendar.ISO
+    test "a recurrence with a domain, whose years are of its calendar" do
+      gated = Tempo.from_iso8601!("R/{5786Y..5787Y}/P1Y/FL1M1DN[u-ca=hebrew]")
+      hebrew = Calendrical.Hebrew
 
-      assert Tempo.to_iso8601!(gated) == "R/{2026Y..2027Y}/P1Y/FL1M1DN[u-ca=hebrew]"
-      assert calendars(read_back(gated)) == [gregorian, gregorian, Calendrical.Hebrew]
+      assert Tempo.to_iso8601!(gated) == "R/{5786Y..5787Y}/P1Y/FL1M1DN[u-ca=hebrew]"
+      assert calendars(read_back(gated)) == [hebrew, hebrew, hebrew]
+      assert gated == Tempo.from_iso8601!("R/{5786Y..5787Y}/P1Y/FL1M1DN", hebrew)
     end
 
     test "an annotation naming another calendar than the value's is not written" do

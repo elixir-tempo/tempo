@@ -120,42 +120,34 @@ defmodule Tempo.Iso8601.SetFormsTest do
     end
   end
 
-  describe "a member of a set with a suffix of its own" do
-    # RFC 9557's suffix (a zone, a calendar, a tag) is written after a date
-    # or a time, and a member of a set is one. A set of values in two zones
-    # is written with each member's zone after it, and that text was a parse
-    # error: an end of an interval took a suffix and a member did not.
-    @suffixed [
-      ["2026-06-15T10:30[Europe/Paris]", "2026-06-15T10:30[America/New_York]"],
-      ["2026-06-15T10:30[Europe/Paris]", "2026-06-15T11:00[Europe/Paris]"],
-      ["2026-06-15[Europe/Paris]", "2026-06-16"],
-      ["2026-06-15T10:30:00Z[Europe/Paris]", "2026-06-16T10:30:00+02:00[Europe/Paris]"],
-      ["5786-06-15[u-ca=hebrew]", "2026-06-16"],
-      ["2026-06-15?[Europe/Paris]", "2026-06-16"],
-      ["T10:30[Europe/Paris]", "T11:00"],
-      ["2026-06-15[foo=bar]", "2026-06-16"]
+  describe "a suffix written after a set" do
+    # RFC 9557's suffix (a zone, a calendar, a tag) is written once, after
+    # the whole expression, and is each member's. A member with a suffix of
+    # its own is refused, as an end of an interval with one is.
+    @suffixes ["[Europe/Paris]", "[u-ca=hebrew]", "[Europe/Paris][u-ca=hebrew]", "[foo=bar]"]
+
+    @members [
+      ["2026-06-15T10:30", "2026-06-15T11:00"],
+      ["2026-06-15", "2026-06-16"],
+      ["2026-06-15T10:30:00Z", "2026-06-16T10:30:00+02:00"],
+      ["2026-06-15?", "2026-06-16"],
+      ["T10:30", "T11:00"]
     ]
 
-    test "is the member its text reads as alone" do
-      for members <- @suffixed, {_open, _close} = braces <- @braces do
-        assert %Tempo.Set{set: read_members} = set_of(members, braces)
-        assert {members, read_members} == {members, Enum.map(members, &read/1)}
+    test "is the suffix of each member" do
+      for members <- @members, suffix <- @suffixes, {open, close} <- @braces do
+        text = open <> Enum.join(members, ",") <> close <> suffix
+
+        assert %Tempo.Set{set: read_members} = read(text)
+        assert {text, read_members} == {text, Enum.map(members, &read(&1 <> suffix))}
       end
     end
 
     test "reads back from its own text" do
-      for members <- @suffixed, braces <- @braces do
-        set = set_of(members, braces)
-        assert {members, reads_back?(set)} == {members, true}
+      for members <- @members, suffix <- @suffixes, {open, close} <- @braces do
+        text = open <> Enum.join(members, ",") <> close <> suffix
+        assert {text, reads_back?(read(text))} == {text, true}
       end
-    end
-
-    test "takes the set's suffix where it has none of its own" do
-      assert read("{2026-06-15[Europe/Paris],2026-06-16}[America/New_York]") ==
-               %Tempo.Set{
-                 type: :all,
-                 set: [read("2026-06-15[Europe/Paris]"), read("2026-06-16[America/New_York]")]
-               }
     end
 
     test "is each end of a range" do
@@ -163,37 +155,82 @@ defmodule Tempo.Iso8601.SetFormsTest do
       last = read("2026-06-20[Europe/Paris]")
 
       assert %Tempo.Set{set: [%Tempo.Range{first: ^first, last: ^last}]} =
-               read("{2026-06-15[Europe/Paris]..2026-06-20[Europe/Paris]}")
+               read("{2026-06-15..2026-06-20}[Europe/Paris]")
 
       assert %Tempo.Set{set: [%Tempo.Range{first: :undefined, last: ^first}]} =
-               read("[..2026-06-15[Europe/Paris]]")
+               read("[..2026-06-15][Europe/Paris]")
 
       assert %Tempo.Set{set: [%Tempo.Range{first: ^first, last: :undefined}]} =
-               read("[2026-06-15[Europe/Paris]..]")
+               read("[2026-06-15..][Europe/Paris]")
+    end
+
+    test "is refused inside the set" do
+      for text <- [
+            "{2026-06-15T10:30[Europe/Paris],2026-06-15T10:30[America/New_York]}",
+            "{2026-06-15T10:30[Europe/Paris],2026-06-15T11:00[Europe/Paris]}",
+            "{2026-06-15[Europe/Paris],2026-06-16}",
+            "{2026-06-15,2026-06-16[Europe/Paris]}",
+            "[2026-06-15[Europe/Paris],2026-06-16]",
+            "{5786-06-15[u-ca=hebrew],2026-06-16}",
+            "{2026-06-15?[Europe/Paris],2026-06-16}",
+            "{T10:30[Europe/Paris],T11:00}",
+            "{2026-06-15[foo=bar],2026-06-16}",
+            "{2026-06-15[Europe/Paris],2026-06-16}[America/New_York]",
+            "{2026-06-15[Europe/Paris]..2026-06-20[Europe/Paris]}",
+            "{2026-06-15[Europe/Paris]..2026-06-20}",
+            "[..2026-06-15[Europe/Paris]]",
+            "[2026-06-15[Europe/Paris]..]",
+            "{2026-06-15[!Nowhere/Land],2026-06-16}"
+          ] do
+        assert {^text, {:error, %ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+
+        assert {text, Exception.message(error) =~ "written once, after the whole expression"} ==
+                 {text, true}
+      end
     end
 
     test "is held to its zone and its calendar, as a value written alone is" do
       assert {:error, %Tempo.UnknownZoneError{}} =
-               Tempo.from_iso8601("{2026-06-15[!Nowhere/Land],2026-06-16}")
+               Tempo.from_iso8601("{2026-06-15,2026-06-16}[!Nowhere/Land]")
 
       assert {:error, %Tempo.ZoneGapError{}} =
-               Tempo.from_iso8601("{2011-12-29[Pacific/Apia],2011-12-30[Pacific/Apia]}")
+               Tempo.from_iso8601("{2011-12-29,2011-12-30}[Pacific/Apia]")
 
       # The sixth month of a Hebrew year has twenty-nine days.
       assert {:error, %Tempo.InvalidDateError{}} =
-               Tempo.from_iso8601("{5786-06-30[u-ca=hebrew],2026-06-16}")
+               Tempo.from_iso8601("{5786-06-30,5786-07-01}[u-ca=hebrew]")
     end
 
-    test "is how a set of values in two zones is written" do
-      set = %Tempo.Set{
+    test "a set given members in two zones, or in two calendars, has no text" do
+      in_two_zones = %Tempo.Set{
         type: :all,
         set: [read("2026-06-15T10:30[Europe/Paris]"), read("2026-06-15T10:30[America/New_York]")]
       }
 
-      assert Tempo.to_iso8601!(set) ==
-               "{2026Y6M15DT10H30M[Europe/Paris],2026Y6M15DT10H30M[America/New_York]}"
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :zones} = error} =
+               Tempo.to_iso8601(in_two_zones)
 
-      assert reads_back?(set)
+      assert Exception.message(error) =~ "parts are in two zones"
+      assert inspect(in_two_zones) == "#Tempo.Set<not ISO 8601 expressible>"
+
+      # A member in a zone beside one in none is no set of one zone either.
+      beside_none = %Tempo.Set{
+        type: :all,
+        set: [read("2026-06-15[Europe/Paris]"), read("2026-06-16")]
+      }
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :zones}} =
+               Tempo.to_iso8601(beside_none)
+
+      in_two_calendars = %Tempo.Set{
+        type: :all,
+        set: [read("5786-06-15[u-ca=hebrew]"), read("2026-06-16")]
+      }
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :calendars} = error} =
+               Tempo.to_iso8601(in_two_calendars)
+
+      assert Exception.message(error) =~ "parts are in two calendars"
     end
   end
 
@@ -788,7 +825,7 @@ defmodule Tempo.Iso8601.SetFormsTest do
        "{2026-01-01T10:00+01:00,2026-03-01T10:00Z}"},
       # Before the set's suffix, as a value's is before its own.
       {"{2026-01-01T10:00,2026-07-01T10:00}Z[Europe/Paris]",
-       "{2026-01-01T10:00Z[Europe/Paris],2026-07-01T10:00Z[Europe/Paris]}"}
+       "{2026-01-01T10:00Z,2026-07-01T10:00Z}[Europe/Paris]"}
     ]
 
     test "is the shift of each member that has none" do

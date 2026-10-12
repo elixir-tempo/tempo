@@ -136,7 +136,7 @@ Time zone and tagged suffixes attach to the `:extended` field, and a calendar su
 | Zone only | `2022-06-15T10:30[Europe/Paris]` |
 | Calendar only | `2022-06-15T10:30[u-ca=hebrew]` |
 | Zone + offset + calendar | `2022-06-15T10:30[+05:30][u-ca=hebrew]` |
-| Per-endpoint on interval | `10:00[Europe/Paris]/12:00[Europe/London]` |
+| After an interval, for both its endpoints | `2022-06-15T10:00/2022-06-15T12:00[Europe/Paris]` |
 
 The endpoint iteration starts from (`from`) provides the metadata carried on each yielded value.
 
@@ -397,7 +397,7 @@ When the interval is enumerated forward from its start, each yielded value keeps
 
 ### 5.3. IXDTF metadata propagation on intervals
 
-Per-endpoint IXDTF suffixes (`[Europe/Paris]`) attach to that endpoint. A top-level IXDTF suffix on an interval propagates to each endpoint that does not already carry its own. A calendar is the interval's: an interval is in one calendar, so `[u-ca=hebrew]` written on either endpoint names the calendar of both, and two endpoints that name different calendars are an error. Iteration walks forward from `:from`, so yielded values carry `:from`'s zone, offset, and calendar.
+An IXDTF suffix (`[Europe/Paris]`, `[u-ca=hebrew]`, a tag) is written once, after the whole interval, and is the zone and the calendar of both its endpoints: an interval is in one zone and one calendar. A suffix written on an endpoint is a `Tempo.ParseError`, and `Tempo.Interval.new/1` returns an error for two endpoints in different zones or calendars; convert one with `Tempo.shift_zone/2` or `Tempo.to_calendar/2` first. A time shift (`+02:00`, `Z`) is each endpoint's own. Iteration walks forward from `:from`, so yielded values carry the interval's zone and calendar, and `:from`'s offset.
 
 ### 5.4. Calendar-aware increment
 

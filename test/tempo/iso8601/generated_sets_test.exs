@@ -44,7 +44,7 @@ defmodule Tempo.Iso8601.GeneratedSetsTest do
     # A generator that makes nothing holds to every property.
     assert Enum.count(texts) > 1_900
     assert Enum.count(texts, &(&1.expect == :read)) > 1_900
-    assert Enum.count(texts, &match?({:refused, _error}, &1.expect)) > 40
+    assert Enum.count(texts, &match?({:refused, _error}, &1.expect)) > 90
     assert Enum.uniq_by(texts, & &1.text) == texts
   end
 

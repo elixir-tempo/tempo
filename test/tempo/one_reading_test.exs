@@ -342,7 +342,7 @@ defmodule Tempo.OneReadingTest do
   # bounds. Read as UTC, 1 to 3 June kept the occurrence of 30 May in New
   # York and dropped that of 2 June.
   describe "a :within window with no zone" do
-    @new_york Tempo.from_iso8601!("R/2026-05-30T23:30[America/New_York]/P1D")
+    @new_york Tempo.from_iso8601!("R/2026-05-30T23:30/P1D[America/New_York]")
 
     defp starts(value, window) do
       {:ok, occurrences} = Tempo.to_interval(value, within: window)

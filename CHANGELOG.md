@@ -8,9 +8,13 @@
 
 * `Calendar.ISO`'s own weeks are ISO 8601's, and its weeks of a month TR35's, the first the one that holds four or more of the month's days: `~o"2023Y1w1K"` is 2 January 2023 and `~o"2026Y8M1W"` is 3 to 10 August. A value written `[u-ca=gregory]` keeps the Gregorian calendar's rules, which gave 26 December 2022 and 27 July to 3 August.
 
-* An interval is in one calendar. `Tempo.Interval.new/1` returns a `Tempo.IntervalEndpointsError` for two ends of different calendars, where it answered an interval of both, and in text a `[u-ca=…]` on either end names the calendar of both ends, two that name different calendars being a `Tempo.ParseError`.
+* An IXDTF suffix (`[Europe/Paris]`, `[u-ca=hebrew]`, `[key=value]`) is written once, after the whole expression, and is the zone and the calendar of every part of it: `2026-06-15T10:00/2026-06-15T12:00[Europe/Paris]`, `{2026-06-15,2026-06-16}[u-ca=hebrew]`, `R/2026-05-30T23:30/P1D[America/New_York]`. One written on an end of an interval, on a member of a set or an end of its range, or on a recurrence's start is a `Tempo.ParseError`, where each was read as that part's own.
 
-* A calendar is written for a whole expression: `[u-ca=…]` on an end of a range of a set is a `Tempo.ParseError`, where two ends naming the same calendar were read. It is written once, after the set, as `[5786-06-15..5786-07-01][u-ca=hebrew]`.
+* An interval is in one calendar and one zone. `Tempo.Interval.new/1` returns a `Tempo.IntervalEndpointsError` for two ends of different calendars or of different zones, where it answered an interval of both; convert one end with `Tempo.to_calendar/2` or `Tempo.shift_zone/2`.
+
+* A recurrence's domain is in the calendar written after the recurrence: `R/{5787Y..5788Y}/P1Y/FL1M1DN[u-ca=hebrew]` is the first day of two Hebrew years, where a domain's years were Gregorian whatever the rule's calendar. The Gregorian years such a rule falls in are given as a `:within` window.
+
+* `Tempo.to_iso8601/1` returns a `Tempo.Iso8601EncodeError` for an interval or a set given parts in two zones or two calendars by hand, and `inspect/1` shows it as not expressible, where each part was written with a suffix of its own.
 
 * A set's members are in one calendar. `Tempo.IntervalSet.new/2` brings an interval of another calendar to its first interval's, as a set operation brings its second operand to its first's, where it kept each member in the calendar it was given in.
 
@@ -617,11 +621,9 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * An end of an interval that is a group of a unit takes its higher order components from the start, as an end written with a month does: `2026Y1G3MU/3G3MU` ends at the third quarter of 2026. It took none, so an interval of two quarters (`2026-33/2026-35`), which is written with its end's year left out, was read back as another value.
 
-* A season keeps what its value holds beside its units: `2026-21?` is the spring of 2026 with each end uncertain (`2026Y3M?/6M?` north of the equator), where the qualifier was dropped, and a season written with a suffix of its own as a member of a set keeps its zone. At an end of an interval a season is where its span starts, as a month is: `2026-21/2026-23` is March to the start of September there, where it was an interval of two intervals that nothing read.
+* A season keeps what its value holds beside its units: `2026-21?` is the spring of 2026 with each end uncertain (`2026Y3M?/6M?` north of the equator), where the qualifier was dropped. At an end of an interval a season is where its span starts, as a month is: `2026-21/2026-23` is March to the start of September there, where it was an interval of two intervals that nothing read.
 
 * A zone the time zone database does not have, which RFC 9557 has passed over unless it is marked critical, is written as it was written and in the zone's place (`2026Y6M15D[Made/Up_Zone]`), and reads back as the same value. It was written `[unknown_zone=Made/Up_Zone]`, which no suffix reads.
-
-* A member of a set, and an end of a range in one, is read with a suffix of its own, as an end of an interval is: `{2026-06-15T10:30[Europe/Paris],2026-06-15T10:30[America/New_York]}`, which is how a set of values in two zones is written, was a parse error. A member's zone, calendar and tags are its own, and the set's suffix is each member's that has none.
 
 * A range from one division of a year to another in a set (`{2026-21..2026-23}`, `{2026-33..2027-34}`: seasons, quarters, quadrimesters and semesters) is each division between them, where it was a range whose ends were intervals, which nothing walked and whose own text was not read. One that is no run in time (the southern seasons of one year, 29 to 32, whose autumn and winter come before its spring), from one kind to another, or open at an end is an `InvalidDateError`.
 
@@ -637,7 +639,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * Nothing gives a day its zone leaves out. In Samoa, which had no 30 December 2011, the 29th ends where the 31st begins and meets it, a step of days, months or years that lands on the 30th is the 31st (the 29th where it runs back), a recurrence has that occurrence on the 31st, once, and a walk, `Tempo.round/2` and `Tempo.select/2` pass over the day, where each gave a date that is then not read.
 
-* A recurrence of days or weeks from a time of day in a zone keeps that time of day after an occurrence the clock moves: `R4/2024-03-09T02:30[America/New_York]/P1D` is 02:30, 03:30 on the night clocks go forward, then 02:30 again, where every occurrence after that night was 03:30. A rule read from an RRULE (`FREQ=DAILY`) is so too.
+* A recurrence of days or weeks from a time of day in a zone keeps that time of day after an occurrence the clock moves: `R4/2024-03-09T02:30/P1D[America/New_York]` is 02:30, 03:30 on the night clocks go forward, then 02:30 again, where every occurrence after that night was 03:30. A rule read from an RRULE (`FREQ=DAILY`) is so too.
 
 * A qualifier after a value that holds a group qualifies the unit the group is counted in with every other component (ISO 8601-2 §8.2.1): `2026Y1G3MU?` is an uncertain first quarter of an uncertain 2026 and `20G100YU?` an uncertain century. The first qualified its year alone and was written `2026?Y1G3MU`, and the second lost its qualifier, so a qualified century (`19?`) did not read back from its own text.
 
@@ -771,7 +773,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * An explicit time shift with seconds (`Z7H33M14S`, ISO 8601-2 §7.4's own example) is written back, where `inspect/1` failed.
 
-* An interval whose ends are on two axes, in two zones or in two calendars is walked and counted as the moments its ends are, and `Tempo.Interval.new/2` keeps each end in its own calendar, where the start was named as a day of the end's.
+* An interval whose ends are on two axes (a week date and a calendar date) or at two time shifts is walked and counted as the moments its ends are.
 
 * `Tempo.difference/2` cuts each member of its first operand by every member of the second that overlaps it, where a member that ended inside one was dropped before the next: two bookings that overlap each lost only one.
 
@@ -811,7 +813,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.to_calendar/2` keeps a value's qualification, metadata, zone and tags, and a qualified year, month or day qualifies every unit of the converted date, where the converted value was rebuilt from a `Date` without them.
 
-* A set's `[zone]` and `[key=value]` suffix is each member's that has none of its own, and is written once after the set, as a recurrence's domain's is after the recurrence: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]` is two times in Paris, where its members were floating and its tags dropped.
+* A set's `[zone]` and `[key=value]` suffix is each member's, and is written once after the set, as a recurrence's is after the recurrence: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]` is two times in Paris, where its members were floating and its tags dropped.
 
 * The `[zone]` suffix of a recurrence with no start (`R/../P1Y/FL3M20DN[+09:00]`) is kept on its rule, written back after the recurrence and given to the occurrences a `:within` window supplies, where it was parsed and dropped.
 
@@ -863,7 +865,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * An interval's duration or a recurrence's cadence that cannot be counted from its start returns the error of the step, where `2M28D/P1D` held the error as its end and `R3/12M31D/P1M` raised a `FunctionClauseError`. An end that would be a set of candidates (`202XY/P1D`) is an error too, and enumerating an interval whose next step counts from a set raises `Tempo.ConversionError`.
 
-* A set's members — each end of a range, each excluded member and each interval among them — are checked as a value on its own is and are in the calendar the set is written for, so `{2026-02-30}` is an error and `{5786-06-15,5786-07-01}[u-ca=hebrew]` is two Hebrew dates, where a set took any member and held it as a Gregorian date. A recurrence's domain is checked too, and keeps its Gregorian years.
+* A set's members — each end of a range, each excluded member and each interval among them — are checked as a value on its own is and are in the calendar the set is written for, so `{2026-02-30}` is an error and `{5786-06-15,5786-07-01}[u-ca=hebrew]` is two Hebrew dates, where a set took any member and held it as a Gregorian date. A recurrence's domain is checked too, in the recurrence's calendar.
 
 * `Tempo.to_iso8601/1` and `inspect/1` write a set's calendar once after it (`{5786Y6M15D,5786Y7M1D}[u-ca=hebrew]`) and a recurrence's after its rule (`R/5786Y1M1D/P1Y/FL7M1DN[u-ca=hebrew]`, with a start or a domain), so both read back in it, where a recurrence's rule read back as Gregorian.
 
@@ -1280,7 +1282,6 @@ The first stable release. Time as an interval, not an instant: one `%Tempo{}` ty
 ### Fixed
 
 * The certainty API (`relation_certainty/3`, `overlap_certainty/2`, `possibly_*`/`certainly_*`) reads a non-contiguous mask such as `~o"1985-XX-15"` as its finite candidate set, like a one-of set. Previously it raised a `FunctionClauseError`.
-
 
 ## [v0.21.0] — 2026-07-15
 

@@ -69,14 +69,17 @@ defmodule Tempo.Matrix.Corpus do
     ],
     interval_two_axes: ["2026-W25/2026-07-01", "2026-166/2026-07-01", "2026-06-15/2026-W27"],
     interval_zoned: [
-      "2026-06-15T09:00[Europe/Paris]/2026-06-15T17:00[Europe/Paris]",
-      "2026-03-28T12:00[Europe/Paris]/2026-03-30T12:00[Europe/Paris]",
+      "2026-06-15T09:00/2026-06-15T17:00[Europe/Paris]",
+      "2026-03-28T12:00/2026-03-30T12:00[Europe/Paris]",
       "2026-06-15T09:00Z/2026-06-15T17:00Z",
-      "2026-06-15[Europe/Paris]/2026-06-17[Europe/Paris]"
+      "2026-06-15/2026-06-17[Europe/Paris]"
     ],
-    interval_two_zones: [
+    # An interval is in one zone, written once after it. A time shift is
+    # each end's own, and two ends may have two.
+    interval_two_shifts: [
       "2026-06-15T10:00+02:00/2026-06-15T12:00Z",
-      "2026-06-15T10:00[Europe/Paris]/2026-06-15T12:00[Europe/London]"
+      "2026-06-15T10:00+02:00/2026-06-15T12:00+01:00",
+      "2026-03-28T12:00+01:00/2026-03-30T12:00+02:00[Europe/Paris]"
     ],
     duration: ["P1D", "P1M", "P1Y2M3D", "PT1H30M", "P1W", "PT0.5S", "-P1D", "P1Y2M3DT4H5M6S"],
     # Durations, all of them or one of them (ISO 8601-2 §6.5): lengths of

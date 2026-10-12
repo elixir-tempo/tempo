@@ -131,23 +131,29 @@ defmodule Tempo.Iso8601.InspectTest do
       assert inspect(iv) == "~o\"2011Y12M29DT12H0M0S/31DT12H0M0S[Pacific/Apia]\""
     end
 
-    test "the single-suffix form re-parses to the same value" do
-      both =
-        Tempo.from_iso8601!("2011-12-29T12:00:00[Pacific/Apia]/2011-12-31T12:00:00[Pacific/Apia]")
-
+    test "a zone written once, after the interval, is the zone of both its ends" do
       once = Tempo.from_iso8601!("2011-12-29T12:00:00/2011-12-31T12:00:00[Pacific/Apia]")
 
-      assert both == once
-      assert Tempo.from_iso8601!(Tempo.to_iso8601!(both)) == both
+      assert once.from.extended.zone_id == "Pacific/Apia"
+      assert once.to.extended.zone_id == "Pacific/Apia"
+      assert Tempo.from_iso8601!(Tempo.to_iso8601!(once)) == once
+
+      assert {:error, %Tempo.ParseError{}} =
+               Tempo.from_iso8601(
+                 "2011-12-29T12:00:00[Pacific/Apia]/2011-12-31T12:00:00[Pacific/Apia]"
+               )
     end
 
-    test "Interval with mixed zones shows each endpoint's zone" do
+    test "an interval given ends in two zones has no ISO 8601 form" do
+      # A zone is written once, after the whole interval, so a struct given
+      # an end in each of two zones has no text that reads back as it.
       {:ok, from} = Tempo.from_iso8601("2026-06-15T10:00:00[Europe/Paris]")
       {:ok, to} = Tempo.from_iso8601("2026-06-15T17:00:00[America/New_York]")
       iv = %Tempo.Interval{from: from, to: to}
 
-      assert inspect(iv) ==
-               "~o\"2026Y6M15DT10H0M0S[Europe/Paris]/T17H0M0S[America/New_York]\""
+      assert inspect(iv) == "#Tempo.Interval<not ISO 8601 expressible>"
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :zones}} = Tempo.to_iso8601(iv)
     end
 
     test "Interval with one shared calendar writes [u-ca=…] once, at the end" do
@@ -166,28 +172,32 @@ defmodule Tempo.Iso8601.InspectTest do
 
       assert iv.from.calendar == Calendrical.Hebrew
       assert iv.to.calendar == Calendrical.Hebrew
-      assert iv == Tempo.from_iso8601!("5786Y9M30D[u-ca=hebrew]/10M1D[u-ca=hebrew]")
+      assert Tempo.to_iso8601!(iv) == "5786Y9M30D/10M1D[u-ca=hebrew]"
     end
 
-    test "a calendar written on the start alone applies to both endpoints" do
-      # An interval is in one calendar, so a suffix on either end names it.
-      # This was read as a pair of two calendars, an Islamic start and an
-      # end in `Calendar.ISO`.
-      iv = Tempo.from_iso8601!("1447Y9M1D[u-ca=islamic-civil]/10M1D")
+    test "a calendar written on an end of an interval is refused" do
+      # A calendar is written once, after the whole interval, and is the
+      # calendar of both its ends.
+      for text <- [
+            "1447Y9M1D[u-ca=islamic-civil]/10M1D",
+            "5786Y9M30D[u-ca=hebrew]/10M1D[u-ca=hebrew]",
+            "1447Y9M1D[u-ca=islamic-civil]/5786Y10M1D[u-ca=hebrew]"
+          ] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
 
-      assert iv.from.calendar == Calendrical.Islamic.Civil
-      assert iv.to.calendar == Calendrical.Islamic.Civil
-      assert iv == Tempo.from_iso8601!("1447Y9M1D/10M1D[u-ca=islamic-civil]")
-      assert Tempo.to_iso8601!(iv) == "1447Y9M1D/10M1D[u-ca=islamic-civil]"
+        assert {text, Exception.message(error) =~ "written once, after the whole expression"} ==
+                 {text, true}
+      end
     end
 
-    test "two endpoints that name different calendars are refused" do
-      assert {:error, %Tempo.ParseError{} = error} =
-               Tempo.from_iso8601("1447Y9M1D[u-ca=islamic-civil]/5786Y10M1D[u-ca=hebrew]")
+    test "an interval given ends in two calendars has no ISO 8601 form" do
+      {:ok, from} = Tempo.from_iso8601("1447Y9M1D[u-ca=islamic-civil]")
+      {:ok, to} = Tempo.from_iso8601("5786Y10M1D[u-ca=hebrew]")
+      iv = %Tempo.Interval{from: from, to: to}
 
-      assert Exception.message(error) ==
-               "An interval is in one calendar, and its ends name two: " <>
-                 "Calendrical.Islamic.Civil and Calendrical.Hebrew"
+      assert inspect(iv) == "#Tempo.Interval<not ISO 8601 expressible>"
+
+      assert {:error, %Tempo.Iso8601EncodeError{construct: :calendars}} = Tempo.to_iso8601(iv)
     end
 
     test "Interval with no extended info renders cleanly (no empty brackets)" do

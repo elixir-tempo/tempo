@@ -321,7 +321,8 @@ defmodule Tempo.BesideAGap do
 
   defp recurrence(value, cadence) do
     with {:ok, text} <- Tempo.to_iso8601(value),
-         {:ok, recurrence} <- Tempo.from_iso8601("R4/" <> text <> "/" <> cadence) do
+         {from, suffix} = before_its_suffix(text),
+         {:ok, recurrence} <- Tempo.from_iso8601("R4/" <> from <> "/" <> cadence <> suffix) do
       Tempo.to_interval(recurrence)
     end
   end
@@ -333,12 +334,16 @@ defmodule Tempo.BesideAGap do
     with %Tempo{} = later <- Tempo.shift(value, step),
          {:ok, from} <- Tempo.to_iso8601(value),
          {:ok, to} <- Tempo.to_iso8601(later) do
+      {from, _suffix} = before_its_suffix(from)
       read_and_converted(from <> "/" <> to)
     end
   end
 
   defp interval_for(value, duration) do
-    with {:ok, from} <- Tempo.to_iso8601(value), do: read_and_converted(from <> "/" <> duration)
+    with {:ok, text} <- Tempo.to_iso8601(value) do
+      {from, suffix} = before_its_suffix(text)
+      read_and_converted(from <> "/" <> duration <> suffix)
+    end
   end
 
   defp interval_ending(value, duration) do
@@ -347,6 +352,15 @@ defmodule Tempo.BesideAGap do
 
   defp read_and_converted(text) do
     with {:ok, interval} <- Tempo.from_iso8601(text), do: [interval, Tempo.to_interval(interval)]
+  end
+
+  # A zone and a calendar are written once, after the whole expression, so
+  # a text built from a value's own keeps them for its end.
+  defp before_its_suffix(text) do
+    case String.split(text, "[", parts: 2) do
+      [value, suffix] -> {value, "[" <> suffix}
+      [value] -> {value, ""}
+    end
   end
 
   defp union(value) do

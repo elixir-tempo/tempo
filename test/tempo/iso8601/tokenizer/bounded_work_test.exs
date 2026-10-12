@@ -120,8 +120,10 @@ defmodule Tempo.Iso8601.Tokenizer.BoundedWorkTest do
       assert {:ok, _set} = read("{" <> String.duplicate("2026YL1K1IN,", 40) <> "2026YL1K1IN}")
 
       # The `L` of a zone's name opens none.
-      in_london = "2026-06-15T10:30[Europe/London]"
-      assert {:ok, _set} = read("{" <> String.duplicate(in_london <> ",", 40) <> in_london <> "}")
+      time = "2026-06-15T10:30"
+
+      assert {:ok, _set} =
+               read("{" <> String.duplicate(time <> ",", 40) <> time <> "}[Europe/London]")
     end
 
     test "refuse a number of more than 128 digits" do

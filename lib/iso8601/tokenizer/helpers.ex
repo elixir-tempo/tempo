@@ -345,8 +345,9 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
   # (§8.2.3). Each goes into the member's own tokens, where
   # `Tempo.Iso8601.AST.build/2` reads it.
   #
-  # A member's own suffix (`[Europe/Paris]`) goes there too, as an end of an
-  # interval's does (`merge_endpoint_qualification/1`).
+  # A suffix written on a member (`[Europe/Paris]`) goes there too, as one on
+  # an end of an interval does (`merge_endpoint_qualification/1`), where
+  # `Tempo.Iso8601.Tokenizer.Extended.split_extended/1` finds and refuses it.
   def merge_member_qualification(tokens) do
     case Enum.split_with(tokens, &match?({:extended, _segments}, &1)) do
       {[], tokens} -> member_with_qualifiers(tokens)

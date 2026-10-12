@@ -376,8 +376,8 @@ defmodule Tempo.Parser.Interval.Test do
       assert Tempo.from_iso8601!("2026-06-15T10:30Z/45") ==
                Tempo.from_iso8601!("2026-06-15T10:30Z/2026-06-15T10:45Z")
 
-      assert Tempo.from_iso8601!("2026-06-15T10:30[Europe/Paris]/45") ==
-               Tempo.from_iso8601!("2026-06-15T10:30[Europe/Paris]/2026-06-15T10:45")
+      assert Tempo.from_iso8601!("2026-06-15T10:30/45[Europe/Paris]") ==
+               Tempo.from_iso8601!("2026-06-15T10:30/2026-06-15T10:45[Europe/Paris]")
     end
 
     test "a bare number that is before the start, or is no value of its unit, is an error" do
@@ -626,7 +626,7 @@ defmodule Tempo.Parser.Interval.Test do
                DateTime.to_unix(DateTime.new!(~D[2024-03-09], ~T[12:00:00], zone))
 
       # And forward, from the start to an end with none.
-      {:ok, span} = Tempo.from_iso8601("2024-11-03T01-04:00[America/New_York]/2024-11-03T03")
+      {:ok, span} = Tempo.from_iso8601("2024-11-03T01-04:00/2024-11-03T03[America/New_York]")
 
       assert zone_and_offset(Interval.to(span)) == {zone, nil}
     end
@@ -657,24 +657,36 @@ defmodule Tempo.Parser.Interval.Test do
       assert zone_and_offset(Interval.to(span)) == {zone, [hour: -4, minute: 0]}
 
       {:ok, span} =
-        Tempo.from_iso8601("2024-03-10T01-05:00[America/New_York]/2024-03-10T03-04:00")
+        Tempo.from_iso8601("2024-03-10T01-05:00/2024-03-10T03-04:00[America/New_York]")
 
       assert zone_and_offset(Interval.to(span)) == {zone, [hour: -4, minute: 0]}
     end
 
-    test "is not the zone of an end written with an offset the zone does not show there" do
-      {:ok, span} = Tempo.from_iso8601("2024-03-09T12+02:00/2024-03-10T12[America/New_York]")
+    test "places an end written with an offset the zone does not show there, as it does a value" do
+      # The zone is the whole interval's, so an end with another offset is
+      # that moment on the zone's clock, as the value written alone is, and
+      # an error where the text is read strictly.
+      text = "2024-03-09T12+02:00/2024-03-10T12[America/New_York]"
+      {:ok, span} = Tempo.from_iso8601(text)
 
-      assert zone_and_offset(Interval.from(span)) == {nil, [hour: 2, minute: 0]}
+      assert Interval.from(span) == Tempo.from_iso8601!("2024-03-09T12+02:00[America/New_York]")
+      assert zone_and_offset(Interval.from(span)) == {"America/New_York", [hour: -5, minute: 0]}
       assert zone_and_offset(Interval.to(span)) == {"America/New_York", nil}
+
+      assert {:error, %Tempo.ZoneOffsetMismatchError{}} = Tempo.from_iso8601(text, strict: true)
     end
 
-    test "is each end's own where both name one" do
-      {:ok, span} =
-        Tempo.from_iso8601("2024-03-09T12[Europe/Paris]/2024-03-10T12[America/New_York]")
+    test "is written once, and is refused on an end" do
+      for text <- [
+            "2024-03-09T12[Europe/Paris]/2024-03-10T12[America/New_York]",
+            "2024-03-09T12[America/New_York]/2024-03-10T12[America/New_York]",
+            "2024-03-09T12[America/New_York]/2024-03-10T12"
+          ] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
 
-      assert zone_and_offset(Interval.from(span)) == {"Europe/Paris", nil}
-      assert zone_and_offset(Interval.to(span)) == {"America/New_York", nil}
+        assert {text, Exception.message(error) =~ "written once, after the whole expression"} ==
+                 {text, true}
+      end
     end
 
     test "an offset alone is both ends', as ISO 8601-1 §5.5.1 has it" do

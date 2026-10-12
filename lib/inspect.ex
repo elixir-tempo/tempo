@@ -82,35 +82,33 @@ defmodule Tempo.Inspect do
     {value, []}
   end
 
-  # The zone and tags a set's members share are written once, after the set,
-  # where they read back as each member's — in IXDTF's order, the zone before
-  # the calendar and the tags after it. A recurrence's domain is a set, whose
-  # zone is written after the recurrence. Members in different zones keep
-  # their own, each written after its member, as it is read there.
+  # The zone and the tags of an expression are written once, after the whole
+  # of it, where they read back as each part's — in IXDTF's order, the zone
+  # before the calendar and the tags after it. An interval's two ends are in
+  # one zone, as a set's members and a recurrence's domain are, so the zone
+  # of the first part that has one is the expression's. A value alone
+  # writes its own, which is after the whole of it.
   defp hoist_shared_zone(%Tempo.Set{} = set) do
     hoist_zone(set)
   end
 
-  defp hoist_shared_zone(%Tempo.Interval{from: %Tempo.Set{} = domain} = interval) do
-    {domain, zone, tags} = hoist_zone(domain)
-    {%{interval | from: domain}, zone, tags}
+  defp hoist_shared_zone(%Tempo.Interval{} = interval) do
+    hoist_zone(interval)
   end
 
   defp hoist_shared_zone(value) do
     {value, [], []}
   end
 
-  defp hoist_zone(set) do
-    case set
-         |> named_values()
-         |> Enum.map(&zone_of/1)
-         |> Enum.uniq() do
-      [%{} = shared] ->
-        {map_named(set, &without_zone/1), [zone_id_trailer(shared), zone_offset_trailer(shared)],
-         tags_trailer(shared)}
+  defp hoist_zone(expression) do
+    parts = named_values(expression)
+    zone = Enum.find_value(parts, &zone_of/1)
 
-      _none_or_several ->
-        {set, [], []}
+    if zone do
+      {map_named(expression, &without_zone/1), [zone_id_trailer(zone), zone_offset_trailer(zone)],
+       tags_trailer(zone)}
+    else
+      {expression, [], []}
     end
   end
 
@@ -250,12 +248,10 @@ defmodule Tempo.Inspect do
     []
   end
 
-  # A suffix inside a set's braces does not parse, so the calendar a set's
-  # members share is written once, after the set, where it reads back as the
-  # calendar of each. A recurrence's rule takes its calendar from the suffix
-  # after the whole recurrence, which a start in the same calendar shares; its
-  # domain counts Gregorian years whatever the rule's calendar, and is written
-  # without one. Parts in different calendars keep their own names.
+  # A calendar is written once, after the whole expression, and is the
+  # calendar of every part of it: a set's members, an interval's two ends,
+  # a recurrence's start, its domain and its rule. A recurrence with no
+  # start writes its rule's calendar where it writes the rule.
   defp hoist_calendar_name(%Tempo.Set{} = set, _implied) do
     hoist_shared_name(set, written_names(set))
   end
@@ -264,30 +260,12 @@ defmodule Tempo.Inspect do
     {interval, []}
   end
 
-  defp hoist_calendar_name(
-         %Tempo.Interval{from: %Tempo.Set{} = domain, repeat_rule: rule} = interval,
-         implied
-       ) do
-    if Enum.all?(written_names(domain), &is_nil/1) do
-      {interval, rule_trailer(rule, implied)}
-    else
-      {interval, []}
-    end
-  end
-
-  defp hoist_calendar_name(%Tempo.Interval{repeat_rule: %Tempo{} = rule} = interval, implied) do
+  defp hoist_calendar_name(%Tempo.Interval{repeat_rule: rule} = interval, implied) do
     hoist_shared_name(interval, written_names(interval) ++ rule_names(rule, implied))
   end
 
   defp hoist_calendar_name(value, _implied) do
     {value, []}
-  end
-
-  defp rule_trailer(rule, implied) do
-    case rule_names(rule, implied) do
-      [name] when name not in [nil, :unnamed] -> calendar_trailer(%{calendar: name})
-      _no_rule_or_no_name -> []
-    end
   end
 
   defp hoist_shared_name(value, names) do
@@ -394,10 +372,14 @@ defmodule Tempo.Inspect do
   the value is encoded: an ordinal BYDAY across distinct weekdays
   (`:byday`), a cron nearest-weekday (`:nearest_weekday`), a cron
   day-of-month OR day-of-week union (`:or_day`) or a rule's skip (RFC
-  7529 `SKIP`, `:skip`), anywhere in its selections, or a recurrence's
-  end (RFC 5545 `UNTIL`, `:until`). `nil` when the value has none.
+  7529 `SKIP`, `:skip`), anywhere in its selections, a recurrence's
+  end (RFC 5545 `UNTIL`, `:until`), or parts that are in two zones
+  (`:zones`) or two calendars (`:calendars`), where a zone and a calendar
+  are written once, after the whole expression. `nil` when the value has
+  none.
   """
-  @spec unencodable(term()) :: :byday | :nearest_weekday | :or_day | :skip | :until | nil
+  @spec unencodable(term()) ::
+          :byday | :nearest_weekday | :or_day | :skip | :until | :zones | :calendars | nil
   def unencodable(%Tempo{time: time}) do
     unencodable_in(time)
   end
@@ -409,15 +391,48 @@ defmodule Tempo.Inspect do
     :until
   end
 
-  def unencodable(%Tempo.Interval{} = interval) do
-    Enum.find_value([interval.from, interval.to, interval.repeat_rule], &unencodable/1)
+  def unencodable(%Tempo.Interval{repeat_rule: rule} = interval) do
+    Enum.find_value([interval.from, interval.to, rule], &unencodable/1) ||
+      in_two(named_values(interval), named_values(rule))
   end
 
-  def unencodable(%Tempo.Set{set: members}) do
-    Enum.find_value(members, &unencodable/1)
+  def unencodable(%Tempo.Set{set: members} = set) do
+    Enum.find_value(members, &unencodable/1) || in_two(named_values(set), [])
   end
 
   def unencodable(_value) do
+    nil
+  end
+
+  # A zone and a calendar are written once, after the whole expression, and
+  # are those of every part of it. An expression whose parts are in two has
+  # no text that reads back as it: a struct given two by hand, since what
+  # is read and what `Tempo.Interval.new/1` builds is in one. A rule has no
+  # zone of its own, and is in the calendar of its recurrence.
+  defp in_two(parts, rule) do
+    cond do
+      several?(parts, &zone_name/1) -> :zones
+      several?(parts ++ rule, & &1.calendar) -> :calendars
+      true -> nil
+    end
+  end
+
+  defp several?(parts, named) do
+    case Enum.uniq_by(parts, named) do
+      [_one, _another | _rest] -> true
+      _one_or_none -> false
+    end
+  end
+
+  defp zone_name(%Tempo{extended: %{zone_id: zone}}) when is_binary(zone) do
+    zone
+  end
+
+  defp zone_name(%Tempo{extended: %{zone_offset: offset}}) when is_integer(offset) do
+    offset
+  end
+
+  defp zone_name(%Tempo{}) do
     nil
   end
 
@@ -726,21 +741,6 @@ defmodule Tempo.Inspect do
 
   defp cldr_calendar_identifier(calendar) do
     encode_calendar(calendar.cldr_calendar_type())
-  end
-
-  # Render a recurrence's written start with its IXDTF `[u-ca=…]` calendar
-  # lifted off into a separate trailing suffix, so a whole-value calendar reads
-  # as `R/5787Y3M25D/P1Y[u-ca=hebrew]` — one trailer on the recurrence — rather
-  # than mid-string on the start date. Any zone/tags stay on the endpoint,
-  # where they belong; only the calendar, which qualifies the whole value,
-  # hoists. Returns `{endpoint_iodata, calendar_suffix_iodata}`.
-  defp hoist_calendar_suffix(%Tempo{extended: %{calendar: calendar} = extended} = tempo)
-       when is_atom(calendar) and not is_nil(calendar) do
-    {inspect_value(%{tempo | extended: %{extended | calendar: nil}}), calendar_trailer(extended)}
-  end
-
-  defp hoist_calendar_suffix(endpoint) do
-    {inspect_value(endpoint), []}
   end
 
   # The suffix kept as it was written is in the zone's place where the value
@@ -1217,12 +1217,7 @@ defmodule Tempo.Inspect do
   end
 
   defp inspect_value(%Tempo.Interval{recurrence: 1, from: from, to: to, duration: nil}) do
-    written_from =
-      from
-      |> in_its_own_calendar(to)
-      |> drop_shared_suffix(to)
-
-    [inspect_value(written_from), ?/, inspect_value(abbreviate(to, from))]
+    [inspect_value(from), ?/, inspect_value(abbreviate(to, from))]
   end
 
   defp inspect_value(%Tempo.Interval{recurrence: 1, from: from, to: nil, duration: duration}) do
@@ -1288,8 +1283,7 @@ defmodule Tempo.Inspect do
          to: nil,
          duration: duration
        }) do
-    {from_body, calendar_suffix} = hoist_calendar_suffix(from)
-    [?R, recurrence(recurrence), ?/, from_body, ?/, inspect_value(duration), calendar_suffix]
+    [?R, recurrence(recurrence), ?/, inspect_value(from), ?/, inspect_value(duration)]
   end
 
   # The zero duration has no components to imply the `T`/units, and a
@@ -1750,66 +1744,6 @@ defmodule Tempo.Inspect do
 
   defp recurrence(recurrence) do
     Integer.to_string(recurrence)
-  end
-
-  # IXDTF binds an interval's extended suffix to its *end*, and
-  # `Tempo.Interval.propagate_endpoint_frame/2` flows a zone between the
-  # endpoints (either way) and a calendar backward onto a floating `from`.
-  # So when both endpoints carry the same *zone*, writing it twice is
-  # redundant — the single-suffix form re-parses to the same value.
-  #
-  # Both the zone and a `u-ca` calendar reach `from` from the end, so
-  # either may be written once. Arbitrary IXDTF tags do not propagate — they are
-  # per-endpoint metadata — so a suffix carrying any is kept on both ends.
-  #
-  # That flow is why a start in another calendar than its end's has to say
-  # so: `Tempo.Interval.new/2` of a Gregorian day and a Hebrew one is written
-  # with `[u-ca=gregory]` on the start, or the end's calendar would be read
-  # as the start's too.
-  defp in_its_own_calendar(
-         %Tempo{calendar: from_calendar, extended: from_extended} = from,
-         %Tempo{calendar: to_calendar, extended: %{calendar: to_tag}}
-       )
-       when not is_nil(to_tag) and from_calendar != to_calendar and
-              not is_nil(from_calendar) do
-    with nil <- from_extended && Map.get(from_extended, :calendar),
-         {:ok, type} <- cldr_calendar_type(from_calendar) do
-      %{from | extended: tagged_with_calendar(from_extended, type)}
-    else
-      _named_or_unnameable -> from
-    end
-  end
-
-  defp in_its_own_calendar(from, _to) do
-    from
-  end
-
-  defp tagged_with_calendar(nil, type) do
-    %{zone_id: nil, zone_offset: nil, zone_critical: false, calendar: type, tags: %{}}
-  end
-
-  defp tagged_with_calendar(%{} = extended, type) do
-    %{extended | calendar: type}
-  end
-
-  defp drop_shared_suffix(%Tempo{extended: same} = from, %Tempo{extended: same})
-       when not is_nil(same) do
-    if propagating_suffix?(same) do
-      %{from | extended: nil}
-    else
-      from
-    end
-  end
-
-  defp drop_shared_suffix(from, _to) do
-    from
-  end
-
-  defp propagating_suffix?(%{} = extended) do
-    Map.get(extended, :tags, %{}) == %{} and
-      (is_binary(Map.get(extended, :zone_id)) or
-         not is_nil(Map.get(extended, :zone_offset)) or
-         not is_nil(Map.get(extended, :calendar)))
   end
 
   # ISO 8601-1 §5.5.1 lets an interval omit from its end the higher

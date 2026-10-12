@@ -435,7 +435,7 @@ defmodule Tempo.ZoneValidationTest do
 
     test "is refused at an end of an interval and as a member of a set" do
       for text <- [
-            "2024-03-10T02[America/New_York]/2024-03-10T05[America/New_York]",
+            "2024-03-10T02/2024-03-10T05[America/New_York]",
             "2011-12-30/2011-12-31[Pacific/Apia]",
             "{2011-12-29,2011-12-30}[Pacific/Apia]"
           ] do
@@ -567,16 +567,12 @@ defmodule Tempo.ZoneValidationTest do
   describe "zone-gap check applies recursively to intervals" do
     test "interval with gap endpoint is rejected" do
       assert {:error, _} =
-               Tempo.from_iso8601(
-                 "2024-03-10T02:30:00[America/New_York]/2024-03-10T05:00:00[America/New_York]"
-               )
+               Tempo.from_iso8601("2024-03-10T02:30:00/2024-03-10T05:00:00[America/New_York]")
     end
 
     test "interval with both valid endpoints is accepted" do
       assert {:ok, _} =
-               Tempo.from_iso8601(
-                 "2024-03-10T01:30:00[America/New_York]/2024-03-10T05:00:00[America/New_York]"
-               )
+               Tempo.from_iso8601("2024-03-10T01:30:00/2024-03-10T05:00:00[America/New_York]")
     end
   end
 

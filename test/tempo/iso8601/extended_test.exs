@@ -95,8 +95,8 @@ defmodule Tempo.Iso8601.Extended.Test do
             "2022-11-20[Made/Up_Zone]",
             "2022-11-20[Made/Up_Zone][u-ca=hebrew]",
             "2022-11-20[Made/Up_Zone][foo=bar]",
-            "2022-11-20[Made/Up_Zone]/2022-11-21",
-            "{2022-11-20[Made/Up_Zone],2022-11-21}",
+            "2022-11-20/2022-11-21[Made/Up_Zone]",
+            "{2022-11-20,2022-11-21}[Made/Up_Zone]",
             "2022-11-20[Europe/Paris][u-nu-latn]",
             "2022-11-20[u-nu-latn]"
           ] do
@@ -256,8 +256,8 @@ defmodule Tempo.Iso8601.Extended.Test do
             "2022-11-20T10:30:00[foo=bar][Europe/Paris]",
             "2022-11-20T10:30:00[foo=bar][!Europe/Paris]",
             "2022-11-20T10:30:00[foo=bar][u-ca=gregory][Europe/Paris]",
-            "2022-11-20T10:30:00[u-ca=gregory][Europe/Paris]/2022-11-21T10:30:00",
-            "{2022-11-20T10:30:00[u-ca=gregory][Europe/Paris],2022-11-21T10:30:00}"
+            "2022-11-20T10:30:00/2022-11-21T10:30:00[u-ca=gregory][Europe/Paris]",
+            "{2022-11-20T10:30:00,2022-11-21T10:30:00}[u-ca=gregory][Europe/Paris]"
           ] do
         assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
         assert {text, Exception.message(error) =~ "the first suffix of a value"} == {text, true}
@@ -488,43 +488,117 @@ defmodule Tempo.Iso8601.Extended.Test do
     end
   end
 
-  ## Per-endpoint IXDTF on intervals.
+  ## An extension on an interval.
   ##
-  ## Prior to this round, any interval where an endpoint carried an
-  ## IXDTF suffix failed to parse — the grammar attached the suffix
-  ## only at the top level, so the first `/` inside the string ended
-  ## up unmatched. The fix adds an optional `extended_suffix()` to
-  ## `qualified_endpoint` and validates the embedded segments in
-  ## post-processing. These tests pin the new behaviour.
+  ## A zone, a calendar and a tag are written once, after the whole
+  ## expression, and apply to all of it: an interval's are its two ends'.
+  ## One written inside an expression is refused.
 
-  describe "IXDTF on interval endpoints" do
-    test "both endpoints carry their own zone" do
-      assert {:ok, interval} =
-               Tempo.from_iso8601("2022-06-15T10:00[Europe/Paris]/2022-06-15T12:00[Europe/Paris]")
-
-      assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.to.extended.zone_id == "Europe/Paris"
-    end
-
-    test "endpoints may carry different zones" do
-      assert {:ok, interval} =
-               Tempo.from_iso8601(
-                 "2022-06-15T10:00[Europe/Paris]/2022-06-15T12:00[Europe/London]"
-               )
-
-      assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.to.extended.zone_id == "Europe/London"
-    end
-
-    test "a zone on the upper endpoint propagates backward to a floating lower" do
+  describe "an extension on an interval" do
+    test "a zone written after an interval is the zone of both its ends" do
       assert {:ok, interval} =
                Tempo.from_iso8601("2022-06-15T10:00/2022-06-15T12:00[Europe/Paris]")
 
-      # IXDTF writes the zone once, at the end of the interval, binding it
-      # to the upper endpoint; it applies to the whole span, so the
-      # floating lower endpoint is placed in the same zone.
       assert interval.from.extended.zone_id == "Europe/Paris"
       assert interval.to.extended.zone_id == "Europe/Paris"
+    end
+
+    test "a zone written after an interval with one end is that end's" do
+      assert {:ok, interval} = Tempo.from_iso8601("2022-06-15T10:00/..[Europe/Paris]")
+
+      assert interval.from.extended.zone_id == "Europe/Paris"
+      assert interval.to == :undefined
+
+      assert {:ok, interval} = Tempo.from_iso8601("../2022-06-15T10:00[Europe/Paris]")
+
+      assert interval.from == :undefined
+      assert interval.to.extended.zone_id == "Europe/Paris"
+    end
+
+    test "a zone written after a start and a duration is the zone of the start" do
+      assert {:ok, interval} = Tempo.from_iso8601("2022-06-15T10:00/PT2H[Europe/Paris]")
+
+      assert interval.from.extended.zone_id == "Europe/Paris"
+    end
+
+    test "a qualifier is each end's own, and a zone the interval's" do
+      assert {:ok, interval} = Tempo.from_iso8601("2022?/2023~[Europe/London]")
+
+      assert Tempo.qualification(interval.from) == :uncertain
+      assert Tempo.qualification(interval.to) == :approximate
+      assert interval.from.extended.zone_id == "Europe/London"
+      assert interval.to.extended.zone_id == "Europe/London"
+    end
+
+    test "a calendar written after an interval is the calendar of both its ends" do
+      assert {:ok, interval} =
+               Tempo.from_iso8601("2022-06-15T10:00/2022-06-15T12:00[Europe/Paris][u-ca=hebrew]")
+
+      assert interval.from.extended.zone_id == "Europe/Paris"
+      assert interval.from.calendar == Calendrical.Hebrew
+      assert interval.to.extended.zone_id == "Europe/Paris"
+      assert interval.to.calendar == Calendrical.Hebrew
+
+      # Regression (OTP ≤ 28): the Hebrew-read units resolve to a
+      # pre-common-era Gregorian instant (year −1738), which used to
+      # crash the `:calendar`-based conversions inside endpoint-order
+      # validation and UTC projection on OTP 27/28. Parsing above and
+      # both projections below must work on every supported OTP.
+      assert Tempo.relation(interval.from, interval.to) == :precedes
+      assert Compare.to_utc_seconds(interval.from) < 0
+    end
+
+    test "an extension written inside an interval is refused" do
+      for text <- [
+            "2022-06-15T10:00[Europe/Paris]/2022-06-15T12:00[Europe/Paris]",
+            "2022-06-15T10:00[Europe/Paris]/2022-06-15T12:00[Europe/London]",
+            "2022-06-15T10:00[Europe/Paris]/2022-06-15T12:00",
+            "2022-06-15T10:00[Europe/Paris]/..",
+            "2022-06-15T10:00[Europe/Paris]/PT2H",
+            "2022?[Europe/Paris]/2023~[Europe/London]",
+            "2022-06-15T10:00[Europe/Paris][u-ca=hebrew]/2022-06-15T12:00[Europe/Paris]",
+            "2022-06-15T10:00[u-ca=hebrew]/2022-06-15T12:00",
+            "2022-06-15T10:00[u-ca=hebrew]/2022-06-15T12:00[u-ca=hebrew]",
+            "2022-06-15T10:00[!Continent/Imaginary]/2022-06-15T12:00",
+            "2022-06-15T10:00[foo=bar]/2022-06-15T12:00"
+          ] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+
+        assert {text, Exception.message(error) =~ "written once, after the whole expression"} ==
+                 {text, true}
+      end
+    end
+
+    test "an extension written after a recurrence is its start's, its domain's and its rule's" do
+      daily = Tempo.from_iso8601!("R3/2026-06-15T10:00/P1D[Europe/Paris]")
+      assert daily.from.extended.zone_id == "Europe/Paris"
+
+      yearly = Tempo.from_iso8601!("R/5786Y1M1D/P1Y/FL7M1DN[u-ca=hebrew]")
+
+      assert {yearly.from.calendar, yearly.repeat_rule.calendar} ==
+               {Calendrical.Hebrew, Calendrical.Hebrew}
+
+      gated = Tempo.from_iso8601!("R/{5786Y..5787Y}/P1Y/FL1M1DN[u-ca=hebrew]")
+      assert %Tempo.Set{set: [%Tempo.Range{first: first, last: last}]} = gated.from
+
+      assert {first.calendar, last.calendar, gated.repeat_rule.calendar} ==
+               {Calendrical.Hebrew, Calendrical.Hebrew, Calendrical.Hebrew}
+
+      for text <- [
+            "R3/2026-06-15T10:00[Europe/Paris]/P1D",
+            "R3/2026-06-15T10:00[Europe/Paris]/2026-06-15T11:00[Europe/Paris]",
+            "R/5786Y1M1D[u-ca=hebrew]/P1Y/FL7M1DN",
+            "R/5786Y1M1D[u-ca=hebrew]/P1Y/FL7M1DN[u-ca=hebrew]"
+          ] do
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
+
+        assert {text, Exception.message(error) =~ "written once, after the whole expression"} ==
+                 {text, true}
+      end
+
+      # A domain takes no suffix of its own either.
+      assert {:error, %Tempo.ParseError{}} =
+               Tempo.from_iso8601("R/{5786Y..5787Y}[u-ca=hebrew]/P1Y/FL1M1DN")
     end
 
     test "an offset on the upper endpoint propagates backward to a floating lower" do
@@ -533,14 +607,6 @@ defmodule Tempo.Iso8601.Extended.Test do
 
       assert interval.from.shift == [hour: 0]
       assert interval.to.shift == [hour: 0]
-    end
-
-    test "a zone on the lower endpoint applies to the upper (ISO 8601-1 §5.5.1)" do
-      assert {:ok, interval} =
-               Tempo.from_iso8601("2022-06-15T10:00[Europe/Paris]/2022-06-15T12:00")
-
-      assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.to.extended.zone_id == "Europe/Paris"
     end
 
     test "an offset on the lower endpoint applies to the upper (ISO 8601-1 §5.5.1)" do
@@ -559,20 +625,10 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert reparsed == interval
     end
 
-    test "endpoints with different zones are left as written" do
-      assert {:ok, interval} =
-               Tempo.from_iso8601(
-                 "2022-06-15T10:00[Europe/Paris]/2022-06-15T12:00[Europe/London]"
-               )
-
-      assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.to.extended.zone_id == "Europe/London"
-    end
-
-    test "Interval.new/1 applies the same propagation as the parser" do
-      # The constructor and the parser share the propagation rule, so a
-      # constructed interval and the re-parse of its own ISO 8601 string
-      # agree about their endpoint frames.
+    test "Interval.new/1 places an end in no zone in the zone of the other" do
+      # The constructor and the parser share the rule, so a constructed
+      # interval and the re-parse of its own ISO 8601 string agree about
+      # the zone of their ends.
       {:ok, from} = Tempo.from_iso8601("2022-06-15")
       {:ok, to} = Tempo.from_iso8601("2022-06-20[Europe/Paris]")
       {:ok, built} = Interval.new(from: from, to: to)
@@ -582,18 +638,36 @@ defmodule Tempo.Iso8601.Extended.Test do
       {:ok, reparsed} = Tempo.from_iso8601(Tempo.to_iso8601!(built))
       assert reparsed.from.extended == built.from.extended
       assert reparsed.to.extended == built.to.extended
-    end
 
-    test "Interval.new/1 flows a :from frame forward and never overwrites" do
       {:ok, paris} = Tempo.from_iso8601("2022-06-15[Europe/Paris]")
       {:ok, floating} = Tempo.from_iso8601("2022-06-20")
       {:ok, forward} = Interval.new(from: paris, to: floating)
-      assert forward.to.extended.zone_id == "Europe/Paris"
 
-      {:ok, london} = Tempo.from_iso8601("2022-06-20[Europe/London]")
-      {:ok, both} = Interval.new(from: paris, to: london)
-      assert both.from.extended.zone_id == "Europe/Paris"
-      assert both.to.extended.zone_id == "Europe/London"
+      assert forward.to.extended.zone_id == "Europe/Paris"
+    end
+
+    test "Interval.new/1 refuses ends in two zones, and takes one of them converted" do
+      {:ok, paris} = Tempo.from_iso8601("2022-06-15T10:00[Europe/Paris]")
+      {:ok, london} = Tempo.from_iso8601("2022-06-20T10:00[Europe/London]")
+
+      assert {:error, %Tempo.IntervalEndpointsError{} = error} =
+               Interval.new(from: paris, to: london)
+
+      assert Exception.message(error) =~
+               "The start is in Europe/Paris and the end in Europe/London. " <>
+                 "An interval is in one zone"
+
+      {:ok, in_paris} = Tempo.shift_zone(london, "Europe/Paris")
+      {:ok, interval} = Interval.new(from: paris, to: in_paris)
+
+      assert Tempo.to_iso8601!(interval) ==
+               "2022Y6M15DT10H0M/2022Y6M20DT11H0MZ2H[Europe/Paris]"
+
+      assert Tempo.from_iso8601(Tempo.to_iso8601!(interval)) == {:ok, interval}
+
+      # Two ends in the one zone are an interval.
+      {:ok, later} = Tempo.from_iso8601("2022-06-20T10:00[Europe/Paris]")
+      assert {:ok, %Interval{}} = Interval.new(from: paris, to: later)
     end
 
     test "a fully floating interval stays floating" do
@@ -603,58 +677,9 @@ defmodule Tempo.Iso8601.Extended.Test do
       assert interval.to.extended == nil
     end
 
-    test "open-upper interval with IXDTF on the lower endpoint" do
-      assert {:ok, interval} = Tempo.from_iso8601("2022-06-15T10:00[Europe/Paris]/..")
-
-      assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.to == :undefined
-    end
-
-    test "open-lower interval with IXDTF on the upper endpoint" do
-      assert {:ok, interval} = Tempo.from_iso8601("../2022-06-15T10:00[Europe/Paris]")
-
-      assert interval.from == :undefined
-      assert interval.to.extended.zone_id == "Europe/Paris"
-    end
-
-    test "endpoint qualifier and IXDTF suffix may coexist" do
-      assert {:ok, interval} =
-               Tempo.from_iso8601("2022?[Europe/Paris]/2023~[Europe/London]")
-
-      assert Tempo.qualification(interval.from) == :uncertain
-      assert interval.from.extended.zone_id == "Europe/Paris"
-      assert Tempo.qualification(interval.to) == :approximate
-      assert interval.to.extended.zone_id == "Europe/London"
-    end
-
-    test "a `u-ca` calendar identifier on one endpoint names the interval's calendar" do
-      assert {:ok, interval} =
-               Tempo.from_iso8601(
-                 "2022-06-15T10:00[Europe/Paris][u-ca=hebrew]/2022-06-15T12:00[Europe/Paris]"
-               )
-
-      assert interval.from.extended.zone_id == "Europe/Paris"
-      assert interval.from.calendar == Calendrical.Hebrew
-      assert interval.to.extended.zone_id == "Europe/Paris"
-      assert interval.to.calendar == Calendrical.Hebrew
-
-      # Regression (OTP ≤ 28): the Hebrew-read units resolve to a
-      # pre-common-era Gregorian instant (year −1738), which used to
-      # crash the `:calendar`-based conversions inside endpoint-order
-      # validation and UTC projection on OTP 27/28. Parsing above and
-      # both projections below must work on every supported OTP.
-      assert Tempo.relation(interval.from, interval.to) == :precedes
-      assert Compare.to_utc_seconds(interval.from) < 0
-    end
-
-    test "critical unknown zone on an endpoint bubbles up to the error result" do
-      # Prior behaviour (before the interval grammar change) would
-      # report a generic "could not parse" because the grammar never
-      # reached the endpoint suffix. With per-endpoint extended-info
-      # validation in place, the specific `Unknown IANA time zone`
-      # error is surfaced.
+    test "a critical zone that is not known, written after an interval, is an error" do
       assert {:error, msg} =
-               Tempo.from_iso8601("2022-06-15T10:00[!Continent/Imaginary]/2022-06-15T12:00")
+               Tempo.from_iso8601("2022-06-15T10:00/2022-06-15T12:00[!Continent/Imaginary]")
 
       assert Exception.message(msg) =~ "Unknown IANA time zone"
       assert Exception.message(msg) =~ "Continent/Imaginary"

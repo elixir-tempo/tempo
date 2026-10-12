@@ -84,14 +84,14 @@ defmodule Tempo.Iso8601.SeasonTest do
   describe "a season with a suffix of its own" do
     test "is its span in that zone" do
       assert north("2026-21[Europe/Paris]") ==
-               read("2026-03[Europe/Paris]/2026-06[Europe/Paris]")
+               read("2026-03/2026-06[Europe/Paris]")
     end
 
-    test "keeps it as a member of a set" do
-      assert %Tempo.Set{set: [spring, summer]} = north("{2026-21[Europe/Paris],2026-22}")
+    test "is each member's, written after a set" do
+      assert %Tempo.Set{set: [spring, summer]} = north("{2026-21,2026-22}[Europe/Paris]")
 
       assert {spring, summer} ==
-               {read("2026-03[Europe/Paris]/2026-06[Europe/Paris]"), read("2026-06/2026-09")}
+               {read("2026-03/2026-06[Europe/Paris]"), read("2026-06/2026-09[Europe/Paris]")}
     end
 
     test "is not given a hemisphere by its zone or by a region override" do

@@ -87,13 +87,13 @@ defmodule Tempo.CalendarTest do
     end
 
     test "[u-ca=julian] round-trips losslessly through to_iso8601/1" do
-      # The calendar qualifies the whole recurrence, so it renders as one
-      # trailing IXDTF suffix, not mid-string on the anchor date. The
-      # mid-string spelling still parses (below), canonicalising to this form.
+      # The calendar is the whole recurrence's, so it is written once, after
+      # it, and is refused mid-string on the start.
       iso = "R/2025Y12M25D/P1Y[u-ca=julian]"
       {:ok, tempo} = Tempo.from_iso8601(iso)
       assert Tempo.to_iso8601!(tempo) == iso
-      assert {:ok, ^tempo} = Tempo.from_iso8601("R/2025Y12M25D[u-ca=julian]/P1Y")
+
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("R/2025Y12M25D[u-ca=julian]/P1Y")
     end
 
     # `iso8601` names the calendar ISO 8601's own text is in: `Calendar.ISO`,
@@ -567,8 +567,8 @@ defmodule Tempo.CalendarTest do
             Tempo.from_iso8601!("5786-06-15/5786-07-01", Calendrical.Hebrew),
             Tempo.from_iso8601!("{5786-06-15,5786-07-01}", Calendrical.Hebrew),
             Tempo.from_iso8601!("R3/5787Y3M25D/P1Y", Calendrical.Hebrew),
-            Tempo.from_iso8601!("5786-06-01[u-ca=hebrew]/5786-10-01[u-ca=hebrew]"),
-            Tempo.from_iso8601!("1447Y9M1D[u-ca=islamic-civil]/1447Y10M1D")
+            Tempo.from_iso8601!("5786-06-01/5786-10-01[u-ca=hebrew]"),
+            Tempo.from_iso8601!("1447Y9M1D/1447Y10M1D[u-ca=islamic-civil]")
           ] do
         assert Tempo.from_iso8601(Tempo.to_iso8601!(value)) == {:ok, value}
       end
@@ -584,9 +584,9 @@ defmodule Tempo.CalendarTest do
       assert Tempo.to_iso8601!(set) == "[5786Y6M15D..5786Y7M1D][u-ca=hebrew]"
       assert set == Tempo.from_iso8601!("[5786-06-15..5786-07-01]", Calendrical.Hebrew)
 
-      # A calendar is written for a whole expression. One on a range's end
-      # was read where both ends named the same one, and one on a single
-      # end was an error that said the ends had different units.
+      # A calendar is written once, after the whole expression. One on a
+      # range's end was read where both ends named the same one, and one on
+      # a single end was an error that said the ends had different units.
       for text <- [
             "[5786-06-15[u-ca=hebrew]..5786-07-01]",
             "[5786-06-15..5786-07-01[u-ca=hebrew]]",
@@ -595,25 +595,28 @@ defmodule Tempo.CalendarTest do
             "[..5786-07-01[u-ca=hebrew]]",
             "{5786-06-15[u-ca=hebrew]..}"
           ] do
-        assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601(text)
+        assert {^text, {:error, %Tempo.ParseError{} = error}} = {text, Tempo.from_iso8601(text)}
 
-        assert Exception.message(error) ==
-                 "A calendar is written for a whole expression, and an end of a range is " <>
-                   "none: write `[u-ca=…]` once, after the expression"
+        assert {text, Exception.message(error)} ==
+                 {text,
+                  "An extension (`[Europe/Paris]`, `[u-ca=hebrew]`, a tag) is written once, " <>
+                    "after the whole expression, and applies to all of it: one is written " <>
+                    "inside this one"}
       end
     end
 
-    test "an interval is in one calendar, whichever end names it" do
-      on_the_start = Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]/5786-10-01")
-      on_the_end = Tempo.from_iso8601!("5786-06-15/5786-10-01[u-ca=hebrew]")
-      on_both = Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]/5786-10-01[u-ca=hebrew]")
+    test "an interval is in the one calendar written after it" do
+      written = Tempo.from_iso8601!("5786-06-15/5786-10-01[u-ca=hebrew]")
 
-      assert on_the_start == Tempo.from_iso8601!("5786-06-15/5786-10-01", Calendrical.Hebrew)
-      assert on_the_end == on_the_start
-      assert on_both == on_the_start
+      assert written == Tempo.from_iso8601!("5786-06-15/5786-10-01", Calendrical.Hebrew)
 
-      assert {:error, %Tempo.ParseError{}} =
-               Tempo.from_iso8601("2026-06-01[u-ca=gregory]/5786-10-01[u-ca=hebrew]")
+      for text <- [
+            "5786-06-15[u-ca=hebrew]/5786-10-01",
+            "5786-06-15[u-ca=hebrew]/5786-10-01[u-ca=hebrew]",
+            "2026-06-01[u-ca=gregory]/5786-10-01[u-ca=hebrew]"
+          ] do
+        assert {^text, {:error, %Tempo.ParseError{}}} = {text, Tempo.from_iso8601(text)}
+      end
     end
 
     test "what a value gives is equal however the value was made" do

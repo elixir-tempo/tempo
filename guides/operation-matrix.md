@@ -88,8 +88,8 @@ The three tables are three levels of guarantee.
 | Interval, no year, open end `T10H/..` | 2 of 11 | 2 of 4 | 8 of 9 | 1 of 21 | none | 5 of 11 | 2 of 9 | 3 of 5 | 10 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.UnanchoredError` |
 | Interval, two resolutions `2026/2026-03` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 5 of 19 | `ArgumentError`, `Tempo.ConversionError` |
 | Interval, week to date `2026-W25/2026-07-01` | 3 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 9 of 19 | `ArgumentError`, `Tempo.ConversionError` |
-| Interval, zoned `2026-06-15T09:00[Europe/Paris]/2026-06-15T17:00[Europe/Paris]` | 4 of 11 | all | 8 of 9 | all | all | 5 of 11 | 2 of 9 | all | 8 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError` |
-| Interval, two zones `2026-06-15T10:00+02:00/2026-06-15T12:00Z` | 4 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 8 of 19 | `ArgumentError`, `Tempo.ConversionError` |
+| Interval, zoned `2026-06-15T09:00/2026-06-15T17:00[Europe/Paris]` | 4 of 11 | all | 8 of 9 | all | all | 5 of 11 | 2 of 9 | all | 8 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.IntervalEndpointsError` |
+| Interval, two time shifts `2026-06-15T10:00+02:00/2026-06-15T12:00Z` | 4 of 11 | all | 8 of 9 | all | all | 7 of 11 | 2 of 9 | all | 8 of 19 | `ArgumentError`, `Tempo.ConversionError` |
 | Duration `P1D` | 1 of 11 | none | none | 1 of 21 | none | none | none | 4 of 5 | none | `ArgumentError`, `Protocol.UndefinedError`, `Tempo.ConversionError` |
 | Set of durations `{P1D,P2D}` | none | all | none | none | none | none | none | 3 of 5 | none | `ArgumentError`, `Tempo.ConversionError` |
 | Recurrence, counted `R3/2026-06-01/P1D` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 3 of 11 | 2 of 9 | all | 3 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |

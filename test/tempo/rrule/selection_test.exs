@@ -1252,13 +1252,13 @@ defmodule Tempo.RRule.SelectionTest do
       # to the first Shabbat: 5 Tishri 5786, 1 Tishri 5787 and 5788 (both
       # Saturdays, so week 1 is that day alone) and 3 Tishri 5789.
       assert holiday_dates(
-               "R/5786Y1M1D[u-ca=hebrew]/P1Y/FL1w6KN",
+               "R/5786Y1M1D/P1Y/FL1w6KN[u-ca=hebrew]",
                Tempo.from_iso8601!("5786Y/5790Y[u-ca=hebrew]")
              ) == ["2025-09-27", "2026-09-12", "2027-10-02", "2028-09-23"]
 
       # 1 Tishri 5787 is week 1's only day, so it has no Monday
       assert holiday_dates(
-               "R/5787Y1M1D[u-ca=hebrew]/P1Y/FL1w1KN",
+               "R/5787Y1M1D/P1Y/FL1w1KN[u-ca=hebrew]",
                Tempo.from_iso8601!("5787Y[u-ca=hebrew]")
              ) == []
     end

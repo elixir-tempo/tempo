@@ -270,7 +270,7 @@ defmodule Tempo.WeekOfMonthTest do
 
     test "keeps its zone, and is walked by its days" do
       assert Tempo.from_iso8601!("2026Y6M2W[Europe/Paris]") ==
-               ~o"2026-06-08[Europe/Paris]/2026-06-15[Europe/Paris]"
+               ~o"2026-06-08/2026-06-15[Europe/Paris]"
 
       assert Enum.to_list(Tempo.from_iso8601!("2026Y7M1W")) ==
                Enum.map(Date.range(~D[2026-06-29], ~D[2026-07-05]), &Tempo.from_date/1)

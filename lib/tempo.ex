@@ -974,18 +974,22 @@ defmodule Tempo do
   ### Arguments
 
   * `string` is any ISO 8601 formatted string, optionally
-    followed by an IXDTF suffix.
+    followed by an IXDTF suffix (`[Europe/Paris]`, `[u-ca=hebrew]`,
+    `[key=value]`). A suffix is written once, after the whole
+    expression, and applies to all of it: one written inside an
+    interval, a set or a recurrence is a `Tempo.ParseError`.
 
   * `calendar_or_options` (optional) is a calendar module or a
     keyword list of options. A calendar module always wins over any
     `[u-ca=NAME]` tag in the IXDTF suffix. When omitted, the
     `[u-ca=NAME]` tag names the calendar, and with no tag
-    `Calendrical.Gregorian` is used. A calendar of weeks, such as
+    `Calendar.ISO` is used. A calendar of weeks, such as
     `Calendrical.ISOWeek`, has no months, so a whole date written
     with a month and a day, or as a day of the year, is read as the
     Gregorian day and converted into it; a month alone is an error.
-    Every member of a set is in the calendar; the years of a
-    recurrence's domain (`R/{2026Y..2027Y}/…`) stay Gregorian.
+    Every part of an expression is in the calendar: both ends of an
+    interval, every member of a set, and the start, the domain and
+    the rule of a recurrence.
 
   ### Options
 
@@ -1234,18 +1238,18 @@ defmodule Tempo do
   defp from_tokens(tokens, extended, requested_calendar, strict?) do
     with {:ok, effective_calendar} <- resolve_calendar(requested_calendar, extended),
          {:ok, parsed} <- Parser.parse(tokens, effective_calendar),
-         # Endpoint calendars first: a group is expanded in its value's own
-         # calendar, so a Hebrew endpoint's quarter holds Hebrew months.
-         parsed = maybe_resolve_endpoint_calendars(parsed, requested_calendar),
-         :ok <- in_one_calendar(parsed),
          {:ok, expanded} <- Group.expand_groups(parsed, effective_calendar),
-         # Propagate before validating. `2026-09-02T18:00/2026-09-02T20:00[Australia/Melbourne]`
-         # binds the suffix to the `to` endpoint, so an unpropagated pair reaches
-         # `validate_endpoint_order/2` as a floating `from` against a zoned `to` and
-         # is rejected as out of order. Propagation never overwrites, so running it
-         # again after `attach_extended/2` (which applies a *top-level* suffix) is a
-         # no-op for the endpoints this pass already placed in a zone.
-         expanded = propagate_endpoint_frame(expanded),
+         # An interval's suffix is both its ends', and they hold it before
+         # anything is asked of them: `2024-03-09T12/2024-03-10T12-04:00[America/New_York]`
+         # is two ends in New York, of which the end alone is written with an
+         # offset, and no end with an offset beside a floating start that
+         # would take it. Then a time shift written on one end is carried to
+         # a floating other, as ISO 8601-1 has it (`T10:00+05:00/T12:00`), so
+         # that the pair reaches `validate_endpoint_order/2` on one time line.
+         expanded =
+           expanded
+           |> with_its_suffix(extended)
+           |> propagate_endpoint_frame(),
          {:ok, validated} <- Validation.validate(expanded, effective_calendar),
          attached = attach_extended(validated, extended),
          propagated = propagate_endpoint_frame(attached),
@@ -1258,9 +1262,9 @@ defmodule Tempo do
     end
   end
 
-  # A `[u-ca=NAME]` suffix names a calendar, and by here it has: the value's
-  # `:calendar` is the module the name resolves to, each endpoint's is its
-  # own, and a trailing suffix has reached the start it is also written for.
+  # A `[u-ca=NAME]` suffix names a calendar, and by here it has: the
+  # `:calendar` of the value, and of each part of an expression that has
+  # parts, is the module the name resolves to.
   # The name is dropped, so a value's calendar is recorded once, as its
   # module, and a value read from text is equal to the same value made with a
   # calendar module. What is left of a suffix is its zone and its tags, or
@@ -1320,79 +1324,6 @@ defmodule Tempo do
     %{set | set: Enum.map(members, fun), except: Enum.map(except, fun)}
   end
 
-  # An IXDTF `u-ca` suffix on an end of an interval
-  # (`1447Y9M1D[u-ca=islamic-civil]/…`) names the calendar of the interval:
-  # an interval is in one calendar, so an end that names none takes the
-  # other's, and each end's units are read in it, as a top-level suffix has
-  # a whole value's read. Two ends that name different calendars are
-  # refused (`in_one_calendar/1`). Applies only when the caller didn't
-  # choose a calendar explicitly: an explicit calendar always wins.
-  defp maybe_resolve_endpoint_calendars(%Tempo.Interval{} = interval, :from_ixdtf_or_default) do
-    {from, to} = Interval.propagate_calendar({interval.from, interval.to})
-
-    %{interval | from: resolve_endpoint_calendar(from), to: resolve_endpoint_calendar(to)}
-  end
-
-  defp maybe_resolve_endpoint_calendars(%Tempo.Set{} = set, :from_ixdtf_or_default) do
-    map_members(set, &maybe_resolve_endpoint_calendars(&1, :from_ixdtf_or_default))
-  end
-
-  # A member of a set is in the calendar its own suffix names. A range's
-  # ends name none (the reader refuses one there), and are in the calendar
-  # the set is written for.
-  defp maybe_resolve_endpoint_calendars(%__MODULE__{} = member, :from_ixdtf_or_default) do
-    resolve_endpoint_calendar(member)
-  end
-
-  defp maybe_resolve_endpoint_calendars(other, _requested_calendar) do
-    other
-  end
-
-  # An interval is in one calendar: its ends name one between them, and two
-  # that name different ones are no one expression.
-  defp in_one_calendar(%Interval{
-         from: %__MODULE__{calendar: from_calendar},
-         to: %__MODULE__{calendar: to_calendar}
-       })
-       when from_calendar != to_calendar do
-    {:error, two_calendars(from_calendar, to_calendar)}
-  end
-
-  defp in_one_calendar(%Tempo.Set{set: members, except: except}) do
-    Enum.find_value(members ++ except, :ok, &not_in_one_calendar/1)
-  end
-
-  defp in_one_calendar(_other) do
-    :ok
-  end
-
-  defp not_in_one_calendar(member) do
-    case in_one_calendar(member) do
-      :ok -> nil
-      {:error, _exception} = error -> error
-    end
-  end
-
-  defp two_calendars(first, second) do
-    ParseError.exception(
-      reason:
-        "An interval is in one calendar, and its ends name two: " <>
-          "#{Calendars.name(first)} and #{Calendars.name(second)}"
-    )
-  end
-
-  defp resolve_endpoint_calendar(%__MODULE__{extended: %{calendar: type}} = endpoint)
-       when is_atom(type) and not is_nil(type) do
-    case Calendars.named(type) do
-      {:ok, calendar} -> %{endpoint | calendar: calendar}
-      {:error, _reason} -> endpoint
-    end
-  end
-
-  defp resolve_endpoint_calendar(endpoint) do
-    endpoint
-  end
-
   # Resolve the effective calendar for a parse.
   #
   # * Explicit user calendar always wins.
@@ -1426,19 +1357,28 @@ defmodule Tempo do
          do: {:error, InvalidCalendarError.exception(calendar: calendar)}
   end
 
+  # The suffix of an interval, on both its ends, before they are compared.
+  defp with_its_suffix(%Tempo.Interval{} = interval, extended) do
+    attach_extended(interval, extended)
+  end
+
+  defp with_its_suffix(other, _extended) do
+    other
+  end
+
   defp attach_extended(result, nil) do
     result
   end
 
-  defp attach_extended(%__MODULE__{extended: existing} = tempo, extended) do
-    # An endpoint-local `:extended` parsed from a per-endpoint IXDTF
-    # suffix (`2022-06-15T10:00[Europe/Paris]/…`) takes precedence
-    # over a top-level suffix. The top-level suffix is only used as
-    # a default when the endpoint carries none of its own.
-    case existing do
-      nil -> %{tempo | extended: extended}
-      _map -> tempo
-    end
+  # A suffix is written once, after the whole expression, and is each
+  # part's. An interval's ends hold it already (`with_its_suffix/2`), and
+  # keep what has been settled in it since.
+  defp attach_extended(%__MODULE__{extended: nil} = tempo, extended) do
+    %{tempo | extended: extended}
+  end
+
+  defp attach_extended(%__MODULE__{} = tempo, _extended) do
+    tempo
   end
 
   defp attach_extended(%Tempo.Range{} = range, extended) do
@@ -1450,9 +1390,7 @@ defmodule Tempo do
   end
 
   defp attach_extended(%Tempo.Interval{} = interval, extended) do
-    # A top-level suffix on an interval propagates to each endpoint
-    # unless that endpoint carries its own IXDTF info (which the
-    # parser has already attached to `endpoint.extended`).
+    # The suffix of an interval is the suffix of both its ends.
     %{
       interval
       | from: attach_extended(interval.from, extended),
@@ -1461,9 +1399,9 @@ defmodule Tempo do
     }
   end
 
-  # A set's suffix is each member's that has none of its own, as an
-  # interval's is each endpoint's: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]`
-  # is two times in Paris. Its calendar is already the members' calendar.
+  # A set's suffix is each member's, as an interval's is each endpoint's:
+  # `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]` is two times in
+  # Paris. Its calendar is already the members' calendar.
   defp attach_extended(%Tempo.Set{} = set, extended) do
     map_members(set, &attach_extended(&1, %{extended | calendar: nil}))
   end
@@ -2550,9 +2488,10 @@ defmodule Tempo do
     form: an interval set, a recurrence set, a conditional member, anything
     that is not a Tempo value, a value holding a cron nearest-weekday, a cron
     day-of-month OR day-of-week union or an ordinal BYDAY across distinct
-    weekdays, a recurrence with an end (RFC 5545 `UNTIL`), or a value in a calendar IXDTF
+    weekdays, a recurrence with an end (RFC 5545 `UNTIL`), a value in a calendar IXDTF
     cannot name (a fiscal year, say) whose dates the Gregorian calendar
-    numbers differently.
+    numbers differently, or an interval or a set given parts in two zones or
+    two calendars, which are written once, after the whole expression.
 
   ### Examples
 
@@ -2589,7 +2528,8 @@ defmodule Tempo do
        |> Tempo.Inspect.to_iodata()
        |> IO.iodata_to_binary()}
     else
-      construct when construct in [:byday, :nearest_weekday, :or_day, :skip, :until] ->
+      construct
+      when construct in [:byday, :nearest_weekday, :or_day, :skip, :until, :zones, :calendars] ->
         {:error, Iso8601EncodeError.exception(construct: construct, value: value)}
 
       calendar ->
@@ -9794,7 +9734,7 @@ defmodule Tempo do
       |> filter_domain_years(domain.filter)
       |> step_domain_periods(domain, interval.duration)
       |> domain_periods_to_walk(interval, reach)
-      |> reduce_domain_occurrences(interval, opts)
+      |> reduce_domain_occurrences(interval)
       |> first_occurrences(interval)
       |> keep_occurrences_in_window(window)
     end
@@ -13212,11 +13152,11 @@ defmodule Tempo do
   # interval from the domain set), unioning the occurrences. Adjacent domain
   # periods — each starting where the one before ends, as the years of
   # `{2020Y..2024Y}` do — run as one recurrence across them.
-  defp reduce_domain_occurrences(domain_intervals, %Tempo.Interval{} = interval, opts) do
+  defp reduce_domain_occurrences(domain_intervals, %Tempo.Interval{} = interval) do
     domain_intervals
     |> adjacent_periods()
     |> Enum.reduce_while({:ok, []}, fn {first, last}, {:ok, acc} ->
-      case run_occurrences(interval, Interval.from(first), Interval.to(last), opts) do
+      case run_occurrences(interval, Interval.from(first), Interval.to(last)) do
         {:ok, own} -> {:cont, {:ok, acc ++ own}}
         {:error, _reason} = error -> {:halt, error}
       end
@@ -13227,23 +13167,17 @@ defmodule Tempo do
     end
   end
 
-  # The occurrences a run's periods select. In the calendar the domain counts
-  # its years in, the run's periods are the recurrence's own: a walk from the
-  # period the run starts in, at the grain the recurrence starts at, while a
-  # period starts before the run ends, keeps all they give, wherever a §12.10
-  # window, a week or an occurrence's span carries them. A recurrence in
-  # another calendar has periods that straddle the domain's years, which gate
-  # it instead: it keeps the occurrences that start in the run.
-  defp run_occurrences(%Tempo.Interval{} = interval, run_from, run_to, opts) do
-    with {:ok, %Tempo{calendar: run_calendar} = start} <-
-           start_at_unit(run_from, start_unit(interval)) do
-      case start_in_repeat_calendar(start, interval) do
-        %Tempo{calendar: ^run_calendar} = first_period ->
-          walk_run(first_period, interval, run_to)
-
-        _other_calendar ->
-          gated_run_occurrences(interval, run_from, run_to, opts)
-      end
+  # The occurrences a run's periods select. A domain is in the calendar of
+  # its recurrence, as every part of an expression is, so the run's periods
+  # are the recurrence's own: a walk from the period the run starts in, at
+  # the grain the recurrence starts at, while a period starts before the run
+  # ends, keeps all they give, wherever a §12.10 window, a week or an
+  # occurrence's span carries them.
+  defp run_occurrences(%Tempo.Interval{} = interval, run_from, run_to) do
+    with {:ok, %Tempo{} = start} <- start_at_unit(run_from, start_unit(interval)) do
+      start
+      |> start_in_repeat_calendar(interval)
+      |> walk_run(interval, run_to)
     end
   end
 
@@ -13260,31 +13194,6 @@ defmodule Tempo do
     )
     |> Enum.to_list()
     |> walked(from)
-  end
-
-  defp gated_run_occurrences(interval, run_from, run_to, opts) do
-    run = %Tempo.Interval{from: run_from, to: run_to}
-    open_start = %{interval | from: nil, recurrence: :infinity}
-
-    case to_interval(open_start, Keyword.put(opts, :within, run)) do
-      {:ok, %Tempo.IntervalSet{} = set} ->
-        {:ok,
-         set
-         |> IntervalSet.members()
-         |> Enum.filter(&starts_in_run?(&1, run_from, run_to))}
-
-      {:error, _reason} = error ->
-        error
-    end
-  end
-
-  # Whether an occurrence starts in the half-open run `[run_from, run_to)`.
-  defp starts_in_run?(%Tempo.Interval{from: %Tempo{} = from}, run_from, run_to) do
-    at_or_after_bound?(from, run_from) and under_bound?(from, run_to)
-  end
-
-  defp starts_in_run?(_occurrence, _run_from, _run_to) do
-    true
   end
 
   # A counted recurrence (`R3/{…}/…`) counts its occurrences from the

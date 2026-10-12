@@ -583,7 +583,7 @@ defmodule Tempo.Iso8601.Parser do
     if Keyword.has_key?(units, :time_shift) do
       {tag, units}
     else
-      {tag, shifted_before_its_suffix(units, shift)}
+      {tag, units ++ [time_shift: shift]}
     end
   end
 
@@ -594,17 +594,11 @@ defmodule Tempo.Iso8601.Parser do
 
   # An end of a range open at its other end is its units alone.
   defp at_the_shift([{unit, _value} | _units] = units, shift) when is_atom(unit) do
-    shifted_before_its_suffix(units, shift)
+    units ++ [time_shift: shift]
   end
 
   defp at_the_shift(other, _shift) do
     other
-  end
-
-  # A value's shift is written before its suffix, and is read there.
-  defp shifted_before_its_suffix(units, shift) do
-    {suffix, units} = Enum.split_with(units, &match?({:extended, _suffix}, &1))
-    units ++ [time_shift: shift] ++ suffix
   end
 
   defp has_one_of_component?(tokens) when is_list(tokens) do
@@ -671,17 +665,17 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   defp parse_set_member({:range, [{_, from}, {_, to}]}) do
-    from = end_of_a_range(parse_date(from))
-    to = end_of_a_range(parse_date(to))
+    from = parse_date(from)
+    to = parse_date(to)
     validate_range(from, to)
   end
 
   defp parse_set_member({:range, [from, :undefined]}) do
-    {:range, [end_of_a_range(parse_date(from)), :undefined]}
+    {:range, [parse_date(from), :undefined]}
   end
 
   defp parse_set_member({:range, [:undefined, to]}) do
-    {:range, [:undefined, end_of_a_range(parse_date(to))]}
+    {:range, [:undefined, parse_date(to)]}
   end
 
   # A range of one unit (`[1900..2000]`, `{19C..20C}`), each end read as the
@@ -1335,21 +1329,6 @@ defmodule Tempo.Iso8601.Parser do
     step == 1 and first <= last and same_end?(first, last)
   end
 
-  # A calendar is written for a whole expression, and an end of a range is
-  # none: a range is in the calendar the set is written for, the one a
-  # `[u-ca=…]` after the set names.
-  defp end_of_a_range(tokens) do
-    case Keyword.get(tokens, :extended) do
-      %{calendar: calendar} when not is_nil(calendar) ->
-        raise ParseError,
-              "A calendar is written for a whole expression, and an end of a range is none: " <>
-                "write `[u-ca=…]` once, after the expression"
-
-      _no_calendar ->
-        tokens
-    end
-  end
-
   # Ranges must have the same units. One written backwards never reaches
   # here (`backwards_range/1`). A qualifier of an end is no unit of it:
   # `{2020Y?..2030Y}` runs from an uncertain 2020 to 2030.
@@ -1397,16 +1376,6 @@ defmodule Tempo.Iso8601.Parser do
     %{tempo | calendar: calendar}
   end
 
-  # A recurrence's domain counts Gregorian years, as a holiday's year gates do,
-  # whatever calendar its selection is in: the years gate the occurrences that
-  # fall in them. The domain keeps its own calendar.
-  defp put_calendar(
-         %Tempo.Interval{from: %Tempo.Set{}, to: to, repeat_rule: repeat_rule} = interval,
-         calendar
-       ) do
-    %{interval | to: put_calendar(to, calendar), repeat_rule: put_calendar(repeat_rule, calendar)}
-  end
-
   defp put_calendar(
          %Tempo.Interval{from: from, to: to, repeat_rule: repeat_rule} = interval,
          calendar
@@ -1414,7 +1383,9 @@ defmodule Tempo.Iso8601.Parser do
     # A recurrence's selection lives in `repeat_rule` (a `%Tempo{}`), not in
     # `from`/`to`, so the effective calendar — an IXDTF `[u-ca=…]` suffix on the
     # whole expression — must reach it there for the selection to resolve in
-    # that calendar. `nil`/`:undefined` endpoints fall through unchanged.
+    # that calendar. A recurrence's domain is a part of the expression as its
+    # start is, and its years are that calendar's. `nil`/`:undefined`
+    # endpoints fall through unchanged.
     %{
       interval
       | from: put_calendar(from, calendar),

@@ -46,6 +46,24 @@ The exception is an explicit iteration unit: `%Tempo.Interval{}` carries a `:uni
 
 Any new span, interval, comparison, or set-operation code **must honour this convention**. Code that treats the upper bound as inclusive is a bug.
 
+## One expression, one calendar — extensions come last
+
+An **expression** is one thing as it is written or built: a value, an interval (a recurrence among them), a duration, a set. These rules are the user's, given on 2026-10-12, and the reader, the constructors and every new function hold to them. Code that is more permissive than they are is a defect to simplify, not a feature to keep.
+
+* **An expression is in a single calendar** — "An expression (a tempo, an interval or duration) can only be in a single calendar. No mixing calendars across endpoints." The two ends of an interval are of one calendar (`Tempo.Interval.new/1` returns an error for two), and the members of an interval set are (`Tempo.IntervalSet.new/2` brings them to its first member's). A recurrence is one expression: its start, its end, its domain and its rule are of one calendar, so a domain's years are years of the calendar written after the recurrence, with no exception for the Gregorian (decided 2026-10-12). The Gregorian years a rule of another calendar falls in are another expression, a `:within` window.
+
+* **Extensions are only valid after all date/time expressions** — "edtf and ixdtf extensions are only valid after all date/time expressions." An IXDTF suffix (`[Europe/Paris]`, `[u-ca=hebrew]`, `[key=value]`) is written once, at the end of the whole expression: after the end of an interval, after a set, after a recurrence's rule. One written anywhere inside (on the start of an interval, on a member of a set, on an end of a range, on a recurrence's start) is an error that says where it belongs.
+
+* **Extensions apply to the whole expression, always** — "The extensions apply to the whole expression, always." A zone or a calendar written after an interval is the zone and the calendar of both its ends; one written after a set is that of every member.
+
+* **An interval is in one zone** — decided 2026-10-12, as for two calendars: `Tempo.Interval.new/1` returns an error for two ends in different named zones, and the caller converts one with `Tempo.shift_zone/2`. A time shift (`+02:00`, `Z`) is not an extension: ISO 8601 writes one on each end, and each end keeps its own.
+
+* **Qualifiers are not extensions** — decided 2026-10-12: the rule covers the bracketed suffixes only. EDTF's `?`, `~` and `%` stay where ISO 8601-2 §8 puts them, on an end of an interval, a member of a set or a single component.
+
+* **What cannot be written is an error, never another value** — `Tempo.to_iso8601/1` returns a `Tempo.Iso8601EncodeError` for a struct given parts in two zones or two calendars by hand, where the writer once wrote a suffix on each part.
+
+* **Explicit conversion to another calendar is permitted** — a caller who holds values of two calendars converts one (`Tempo.to_calendar/2`), and the operations that take two expressions may convert for them, as the set operations bring their second operand to the calendar of their first. Two separate expressions of different calendars may be compared and combined; one expression may not hold both.
+
 ## Documentation and example style
 
 **Every example in Tempo docs, guides, cookbook recipes, livebooks, and module docs should read aloud as English prose a product manager would say.** This is the test of whether the abstractions are doing their job — if a snippet can't be translated to a sentence a non-programmer would understand, there's a missing predicate or operation, and it should be added before the example is written.
