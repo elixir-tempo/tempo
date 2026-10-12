@@ -303,6 +303,23 @@ The census sorts the 40 functions it lists, called at 202 places, by how each st
 
 * **Branches on a callback's answer about a year or a date** (16 functions, 38 places) — complies, on the user's word ("They comply"): where a year or a month starts, a month or a day named otherwise than by its field, a year 0, months numbered by the year, the kinds of a year. Each calls `calendar.function` and asks nothing of what calendar it is.
 
+### Decided, 2026-10-13: a calendar of weeks holds its own month
+
+The user, 2026-10-13: "All calendars respond to the same behaviour", so `2026Y12M2D`, `2026Y25W2K` and `2026Y25M1D` (a season) are to be read in a calendar of weeks as in one of months, and "15 functions and 80 places is evidence of poor design choices in this area." Asked what a month means in a calendar of weeks, they chose its own month: Calendrical's week calendars become month-shaped, a date's fields the year, the month of its pattern of weeks and the day of that month, with the week reached through the week-date callbacks as in every calendar. This replaces the ruling of 2026-10-12 above, and the refusal of a month for a calendar of weeks (`f9a9f0f`) is undone with it.
+
+The cause of every one of the 80 places is one fact, measured on `Calendrical.NRF`: its dates hold the week in the month field and the day of the week in the day field, and it answers some month questions about that week (`valid_date?(2026, 12, 2)` is week 12; `days_in_month(2026, 6)` is 7) and others about the months of its pattern (`months_in_year(2026)` is 12; `month(2026, 12)` is weeks 49 to 52; `plus/6` with `:months` adds one of them). So `2026Y12M2D` there names 4 January 2027 by its own month, 20 April 2026 by its fields and 2 December 2026 as the Gregorian date converted, and each place in Tempo chooses among them. By what it chooses:
+
+| Why the place asks | Places |
+|---|---|
+| Which units a date's fields become, or go back into | 25 |
+| Whether a year is made of weeks or of months | 20 |
+| Whether a year starts where its first week does | 12 |
+| Refusing a month in a calendar of weeks | 11 |
+| What number a day of the week is | 4 |
+| Wording and writing | 8 |
+
+The work, in order: Calendrical's week calendars (`Calendrical.Compiler.Week`, `Calendrical.Base.Week`, and the five places of its own that ask `calendar_base/0`), a breaking change there; what Localize reads of such a date, which asks callbacks and never `calendar_base/0`; then Tempo, where 79 of the 80 places go (the 80th asks a CLDR type for wording) and the tests of 57 files that name a calendar of weeks are read again. tempo_holidays names no calendar of weeks.
+
 ### Tried and withdrawn, 2026-10-12
 
 The user first chose to hold a date of a calendar of weeks as every calendar's is, by its `Date` fields (a year, a month and a day, the week in the month), from a preview of mine that showed `2026Y25M2D[u-ca=nrf]`. All 78 calls of `Tempo.week_based_calendar?/1` and the 6 of the written-calendar question were taken out and the library compiled. It cannot stand, and the preview was wrong:
