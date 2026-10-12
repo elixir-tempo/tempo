@@ -28,6 +28,7 @@ defmodule Tempo.Matrix.Runner do
           | {:bad_error, String.t()}
           | :inspect_error
           | :inside_calendar
+          | :mixed_calendars
           | {:raised, module()}
           | :builtin_raise
           | :timeout
@@ -59,6 +60,10 @@ defmodule Tempo.Matrix.Runner do
     names the module Tempo works with in place of `Calendar.ISO` inside a
     call: a public function replaces it in what it answers
     (`Tempo.Calendars.outside/1`), so a caller never sees it.
+
+  * `:mixed_calendars` for an answer that holds an interval whose two ends
+    are of different calendars, or a set whose members are: an expression
+    is in one calendar.
 
   * `{:raised, module}` for a raise or an Erlang error.
 
@@ -154,10 +159,10 @@ defmodule Tempo.Matrix.Runner do
   @inside_name inspect(@inside)
 
   defp classify(answer) do
-    if holds_inside?(answer) do
-      {:inside_calendar, describe(answer)}
-    else
-      classified(answer)
+    cond do
+      holds_inside?(answer) -> {:inside_calendar, describe(answer)}
+      mixes_calendars?(answer) -> {:mixed_calendars, describe(answer)}
+      true -> classified(answer)
     end
   end
 
@@ -266,6 +271,57 @@ defmodule Tempo.Matrix.Runner do
     else
       {{:raised, ArgumentError}, message}
     end
+  end
+
+  # Whether an answer holds an expression of two calendars anywhere in it:
+  # an interval whose ends differ, or a set whose members do. A lazy set's
+  # members are still to be given, and are not read.
+  defp mixes_calendars?(%Tempo.Interval{
+         from: %Tempo{calendar: from_calendar},
+         to: %Tempo{calendar: to_calendar}
+       })
+       when from_calendar != to_calendar do
+    true
+  end
+
+  defp mixes_calendars?(%Tempo.IntervalSet{} = set) do
+    Tempo.bounded?(set) and mixed_members?(Tempo.IntervalSet.members(set))
+  end
+
+  defp mixes_calendars?(%Stream{}) do
+    false
+  end
+
+  defp mixes_calendars?([head | tail]) do
+    mixes_calendars?(head) or mixes_calendars?(tail)
+  end
+
+  defp mixes_calendars?(term) when is_tuple(term) do
+    mixes_calendars?(Tuple.to_list(term))
+  end
+
+  defp mixes_calendars?(%_{} = struct) do
+    struct
+    |> Map.from_struct()
+    |> Map.values()
+    |> mixes_calendars?()
+  end
+
+  defp mixes_calendars?(term) when is_map(term) do
+    mixes_calendars?(Map.values(term))
+  end
+
+  defp mixes_calendars?(_term) do
+    false
+  end
+
+  defp mixed_members?(members) do
+    calendars =
+      for %Tempo.Interval{from: %Tempo{calendar: calendar}} <- members, uniq: true do
+        calendar
+      end
+
+    length(calendars) > 1 or Enum.any?(members, &mixes_calendars?/1)
   end
 
   defp raised(%{__struct__: module} = exception) do
@@ -380,6 +436,10 @@ defmodule Tempo.Matrix.Runner do
 
   def label(:inside_calendar) do
     "holds the calendar Tempo works with"
+  end
+
+  def label(:mixed_calendars) do
+    "holds two calendars in one expression"
   end
 
   def label({:raised, module}) do

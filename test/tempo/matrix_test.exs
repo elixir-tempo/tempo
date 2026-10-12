@@ -5,6 +5,7 @@ defmodule Tempo.Matrix.Test do
   alias Tempo.Matrix.Census
   alias Tempo.Matrix.Checks
   alias Tempo.Matrix.Corpus
+  alias Tempo.Matrix.Runner
   alias Tempo.Matrix.Table
 
   # The matrix of `plans/validated-core.md`: every public operation against
@@ -26,6 +27,31 @@ defmodule Tempo.Matrix.Test do
     end
 
     %{cells: cells}
+  end
+
+  # Two outcomes are of every operation alike, and are held here on answers
+  # made by hand, since no operation gives one: an answer that holds the
+  # module Tempo works with in place of `Calendar.ISO`, and one that holds
+  # an expression of two calendars.
+  test "an answer that holds the inside calendar, or two calendars, breaks the contract" do
+    hebrew = Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]")
+    day = Tempo.from_iso8601!("2026-07-01")
+    {:ok, hebrew_span} = Tempo.to_interval(hebrew)
+    {:ok, span} = Tempo.to_interval(day)
+
+    assert Runner.outcome(fn -> {:ok, Tempo.Calendars.inside(day)} end) == :inside_calendar
+    assert Runner.outcome(fn -> inspect(Tempo.Calendars.default()) end) == :inside_calendar
+
+    assert Runner.outcome(fn -> {:ok, %Tempo.Interval{from: hebrew, to: day}} end) ==
+             :mixed_calendars
+
+    assert Runner.outcome(fn -> %Tempo.IntervalSet{intervals: [hebrew_span, span]} end) ==
+             :mixed_calendars
+
+    assert Runner.outcome(fn -> Tempo.IntervalSet.new([hebrew_span, span]) end) == :ok
+
+    refute Runner.passes?(:inside_calendar, :deliberate)
+    refute Runner.passes?(:mixed_calendars, :deliberate)
   end
 
   test "every text of the corpus is read" do
