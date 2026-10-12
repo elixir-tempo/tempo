@@ -307,15 +307,16 @@ defmodule Tempo.Select do
   ## A calendar of weeks
 
   A base in a calendar of weeks, such as `Calendrical.ISOWeek`, is
-  selected in by week and day of the week (`~o"25W"`, `~o"2K"`) and by
-  time of day. Its year is the calendar's own, not the Gregorian year a
-  month and a day belong to, so a selector naming a month, a day of one
-  or a day of the year returns a `Tempo.ConversionError`.
+  selected in as a base of any calendar is: by week and day of the week
+  (`~o"25W"`, `~o"2K"`), by time of day, and by the calendar's own months
+  and days. Its year and its months are the calendar's own, not the
+  Gregorian ones, so a selector naming a month, a day of one or a day of
+  the year is written in that calendar (below).
 
-  A day of the week is a day of the week of the value that holds it: the
-  calendar's own week in a calendar of weeks, and ISO 8601's, which starts
-  on Monday, in a calendar of months. So a selector is read in the calendar
-  it is written in. `~o"3K"`, written in `Calendar.ISO`, selects
+  A day of the week is a day of the week of the value that holds it,
+  counted from the day its calendar's weeks begin on: Monday, as ISO
+  8601's do, or the calendar's own first day. So a selector is read in the
+  calendar it is written in. `~o"3K"`, written in `Calendar.ISO`, selects
   Wednesdays from a base in any calendar, as `Tempo.workdays/1` selects
   the weekdays it names; `~o"3K[u-ca=nrf]"`, written in a calendar whose
   weeks start on Sunday, selects Tuesdays.
@@ -1019,7 +1020,6 @@ defmodule Tempo.Select do
        )
        when is_integer(year) do
     with true <- names_week?(selector),
-         false <- Tempo.week_based_calendar?(calendar),
          {:ok, first} <- week_time_to_date([year: year, week: 1], calendar),
          {:ok, next} <- week_time_to_date([year: year + 1, week: 1], calendar) do
       %Interval{
@@ -1428,16 +1428,14 @@ defmodule Tempo.Select do
   # span of many periods costs each of them one question, and the period kept
   # is the period as it is written.
   defp kept_or_dropped(
-         %Interval{from: %Tempo{calendar: calendar} = from} = period,
-         %Tempo{time: [selection: selection]} = rule,
+         %Interval{from: %Tempo{} = from} = period,
+         %Tempo{time: [selection: _selection]} = rule,
          freq
        ) do
-    with :ok <- filters_in(selection, calendar) do
-      case Selection.apply(period, read_in_its_period(rule, from), freq) do
-        {:error, _reason} = error -> error
-        [] -> IntervalSet.new([], coalesce: false)
-        [_kept | _] -> IntervalSet.new([period], coalesce: false)
-      end
+    case Selection.apply(period, read_in_its_period(rule, from), freq) do
+      {:error, _reason} = error -> error
+      [] -> IntervalSet.new([], coalesce: false)
+      [_kept | _] -> IntervalSet.new([period], coalesce: false)
     end
   end
 
@@ -1454,17 +1452,6 @@ defmodule Tempo.Select do
       Selection.read_in_its_period(%{from | time: time ++ [selection: selection]})
 
     %{rule | time: [List.last(read)]}
-  end
-
-  # What a merged constraint is asked before it is merged
-  # (`merged_constraint_tempo/2`): a calendar of weeks has no month to
-  # filter by.
-  defp filters_in(selection, calendar) do
-    if Validation.months_in_a_calendar_of_weeks?(selection, calendar) do
-      {:error, selects_by_month_error(calendar, selection)}
-    else
-      :ok
-    end
   end
 
   # A week selected from a month is a week of the month, which the resolver
@@ -1688,10 +1675,8 @@ defmodule Tempo.Select do
     UnitValues.day_after(date)
   end
 
-  # A day in the units its calendar holds a date in: a month and a day, or a
-  # calendar of weeks' week and day of the week.
   defp build_day_tempo(%Tempo{} = source, y, m, d, calendar) do
-    %Tempo{source | time: Tempo.date_units(y, m, d, calendar), calendar: calendar}
+    %Tempo{source | time: [year: y, month: m, day: d], calendar: calendar}
   end
 
   ## -----------------------------------------------------------
@@ -2087,14 +2072,9 @@ defmodule Tempo.Select do
 
   # A day with no month, selected from a year, is a day of the year, as a
   # value's is (`2026Y45D`) and a selection's (`Tempo.RRule.Selection`): the
-  # 45th is 14 February and the last 31 December. A calendar of weeks has no
-  # months, and refuses a day of one where it is merged.
-  defp read_in(c_time, %Interval{from: %Tempo{time: [{:year, _year}], calendar: calendar}}) do
-    if Tempo.week_based_calendar?(calendar) do
-      c_time
-    else
-      Selection.days_of_year_where_no_month(c_time)
-    end
+  # 45th is 14 February and the last 31 December.
+  defp read_in(c_time, %Interval{from: %Tempo{time: [{:year, _year}]}}) do
+    Selection.days_of_year_where_no_month(c_time)
   end
 
   defp read_in(c_time, _period) do
@@ -2151,8 +2131,7 @@ defmodule Tempo.Select do
   # (`Tempo.NotBuilt.week_of_month/2`): a week that is no one whole number,
   # and a week merged with finer units onto a period within a month. A week
   # alone selected from a day or a time is a filter and is not merged
-  # (`select_constraint/2`). A calendar of weeks has no other axis, and
-  # refuses a month or a day of one where it is merged.
+  # (`select_constraint/2`).
   defp on_each_period(%Interval{} = base, c_time, project) do
     case periods_on_axis(base, c_time) do
       {:ok, [^base]} ->
@@ -2176,12 +2155,8 @@ defmodule Tempo.Select do
     error
   end
 
-  defp periods_on_axis(%Interval{from: %Tempo{time: time, calendar: calendar}} = base, c_time) do
-    if Tempo.week_based_calendar?(calendar) do
-      {:ok, [base]}
-    else
-      periods_on_axis(written_on(c_time), written_on(time), base, c_time)
-    end
+  defp periods_on_axis(%Interval{from: %Tempo{time: time}} = base, c_time) do
+    periods_on_axis(written_on(c_time), written_on(time), base, c_time)
   end
 
   defp periods_on_axis(:ordinal, period_axis, base, _c_time)
@@ -2399,23 +2374,7 @@ defmodule Tempo.Select do
   # ordinal-shaped list no calendar math accepts. Fill to the unit
   # first (`[year: 2026, month: 1]`), exactly the start the walk
   # itself takes.
-  #
-  # A calendar of weeks has no months, and its year is not the Gregorian
-  # year a month and a day belong to (the NRF year 2026 holds January 2027),
-  # so a month, a day of one or a day of the year selects nothing it could be
-  # held to: it is an error, as it is in a recurrence's selection.
-  defp merged_constraint_tempo(
-         %Interval{from: %Tempo{calendar: calendar} = from} = base,
-         c_time
-       ) do
-    if Validation.months_in_a_calendar_of_weeks?(c_time, calendar) do
-      {:error, selects_by_month_error(calendar, c_time)}
-    else
-      merged_onto(base, from, c_time)
-    end
-  end
-
-  defp merged_onto(base, from, c_time) do
+  defp merged_constraint_tempo(%Interval{from: %Tempo{} = from} = base, c_time) do
     if week_of_month?(from, c_time) do
       week_of_month(from, c_time)
     else
@@ -2527,44 +2486,17 @@ defmodule Tempo.Select do
     false
   end
 
-  # A span in a calendar of weeks keeps the error that says what such a
-  # calendar is selected by.
-  defp another_calendar_error(%Tempo{time: time} = selector, written, span_calendar) do
-    if Tempo.week_based_calendar?(span_calendar) and selects_by_month?(time) do
-      selects_by_month_error(span_calendar, time)
-    else
-      ConversionError.exception(
-        value: selector,
-        target: span_calendar,
-        reason:
-          "#{Calendars.inspect(selector)} is a selector written in #{Calendars.name(written)}, and the span it " <>
-            "selects from is in #{Calendars.name(span_calendar)}. A month, a week and a day are " <>
-            "numbered by their calendar, so a selector that holds one selects only from a " <>
-            "span of its own: write it in the span's calendar, which `Tempo.from_iso8601/2` " <>
-            "takes and a `[u-ca=…]` suffix names. A time of day and a day of the week select " <>
-            "from a span in any calendar."
-      )
-    end
-  end
-
-  @by_month [:month, :traditional_month, :day, :day_of_year]
-
-  defp selects_by_month?(time) do
-    Enum.any?(time, fn
-      {:selection, selection} -> selects_by_month?(selection)
-      entry when is_tuple(entry) -> elem(entry, 0) in @by_month
-      _other -> false
-    end)
-  end
-
-  defp selects_by_month_error(calendar, c_time) do
+  defp another_calendar_error(%Tempo{} = selector, written, span_calendar) do
     ConversionError.exception(
-      value: c_time,
-      target: calendar,
+      value: selector,
+      target: span_calendar,
       reason:
-        "#{Calendars.name(calendar)} is a calendar of weeks, with no months, so a selection in it " <>
-          "cannot be by a month, a day of one or a day of the year; select by week (W) " <>
-          "and day of the week (K)."
+        "#{Calendars.inspect(selector)} is a selector written in #{Calendars.name(written)}, and the span it " <>
+          "selects from is in #{Calendars.name(span_calendar)}. A month, a week and a day are " <>
+          "numbered by their calendar, so a selector that holds one selects only from a " <>
+          "span of its own: write it in the span's calendar, which `Tempo.from_iso8601/2` " <>
+          "takes and a `[u-ca=…]` suffix names. A time of day and a day of the week select " <>
+          "from a span in any calendar."
     )
   end
 
@@ -2740,8 +2672,8 @@ defmodule Tempo.Select do
   # A time of day alone is on no one of them and goes with any, so it takes
   # no unit from what it is merged onto. It was held to be on the month's
   # axis, and the day of a week was taken from the last day of a week,
-  # whose span ends in the next: 09:00 of the Sunday of a week, in a
-  # calendar of weeks, was 09:00 of its Monday, and so no time of the day.
+  # whose span ends in the next: 09:00 of the Sunday of a week was 09:00 of
+  # its Monday, and so no time of the day.
   @date_units [:year, :month, :day, :week, :day_of_week, :day_of_year]
 
   defp axis_for_constraint(c_time) do
@@ -2976,8 +2908,8 @@ defmodule Tempo.Select do
   #
   # A day of the week is read in the calendar of the value that holds it,
   # which is the selector's: the third day is Wednesday in a selector
-  # written in a calendar of months, and Tuesday in one written in a
-  # calendar of weeks that start on Sunday. The weekdays it names are
+  # written in a calendar whose weeks start on Monday, and Tuesday in one
+  # written in a calendar whose weeks start on Sunday. The weekdays it names are
   # given as ISO 8601 numbers them, which is how a day of any span's
   # calendar is asked for its weekday (`weekdays_in/2`), so a selector
   # selects the same weekdays in whatever calendar the span is in.

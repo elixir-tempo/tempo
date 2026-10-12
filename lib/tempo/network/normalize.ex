@@ -727,8 +727,7 @@ defmodule Tempo.Network.Normalize do
 
     case date_of_day(days, calendar) do
       {:ok, %Date{year: year, month: month, day: day}} ->
-        year
-        |> Tempo.date_units(month, day, calendar)
+        [year: year, month: month, day: day]
         |> Kernel.++(
           hour: div(time_of_day, 3600),
           minute: div(rem(time_of_day, 3600), 60),

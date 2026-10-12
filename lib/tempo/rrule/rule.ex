@@ -548,8 +548,8 @@ defmodule Tempo.RRule.Rule do
 
       # A recurrence is in one calendar, its rule with it: the calendar the
       # rule names, or else the one its start is in. RFC 5545 names its days
-      # of the week, which a calendar of weeks counts from the day its own
-      # weeks begin on, so they are written as that calendar counts them.
+      # of the week, which a calendar counts from the day its weeks begin
+      # on, so they are written as that calendar counts them.
       calendar = recurrence_calendar(rule, dtstart)
 
       %Tempo{time: [{:selection, counted_in(selection, calendar)} | units], calendar: calendar}

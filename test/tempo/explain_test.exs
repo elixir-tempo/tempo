@@ -102,7 +102,7 @@ defmodule Tempo.Explain.Test do
     end
 
     # In the Gregorian calendar a week and a day of it are the calendar date
-    # they name, so it is explained as one. A week calendar's keep their terms.
+    # they name, so it is explained as one, and so is a week calendar's.
     test "a Gregorian week date is explained as the calendar date it is" do
       day = Tempo.explain(Tempo.new!(year: 2026, week: 25, day_of_week: 2))
 
@@ -111,28 +111,42 @@ defmodule Tempo.Explain.Test do
       assert day == Tempo.explain(~o"2026-W25-2")
     end
 
-    test "a week calendar's values are written in its own notation" do
+    # A day of a calendar of weeks is a date of its own months, named as
+    # CLDR's generic calendar names them, and a week of one is written as a
+    # week of any calendar is, with the day it starts on.
+    test "a week calendar's values are explained as any calendar's are" do
       assert Tempo.explain(~o"2026"W) =~ "Span: [2026, 2027)."
 
       week = Tempo.explain(~o"2026-W25"W)
       assert week =~ "Week 25 of 2026."
-      assert week =~ "Span: [2026-W25, 2026-W26)."
-      refute week =~ "Starts on"
+      assert week =~ "Span: [2026-W25, 2026-W26).\nStarts on 2026-06-15."
 
       day = Tempo.explain(~o"2026-W25-2"W)
-      assert day =~ "Tuesday of week 25 of 2026."
-      assert day =~ "Span: [2026-W25-2, 2026-W25-3)."
+      assert day =~ "M06 16, 2026."
+      assert day =~ "Span: [2026-06-16, 2026-06-17)."
 
       minute = Tempo.explain(~o"2026-W25-2T10:30"W)
-      assert minute =~ "Tuesday of week 25 of 2026 at 10:30."
-      assert minute =~ "Span: [2026-W25-2T10:30, 2026-W25-2T10:31)."
+      assert minute =~ "M06 16, 2026 at 10:30."
+      assert minute =~ "Span: [2026-06-16T10:30, 2026-06-16T10:31)."
     end
 
+    # The retail calendar starts its weeks on a Sunday, so its day 2 is a
+    # Monday and its days 1 and 7 a Sunday and a Saturday: the calendar is
+    # asked which weekday a day of its week is. Every day was named as ISO
+    # 8601 numbers it, a Tuesday.
     test "a week calendar's weekday is the one its calendar gives" do
-      # The retail calendar starts its weeks on a Sunday, so its day 2 is a Monday.
-      day = Tempo.new!(year: 2026, week: 25, day_of_week: 2, calendar: Calendrical.NRF)
+      retail = &Tempo.from_iso8601!(&1, Calendrical.NRF)
 
-      assert Tempo.explain(day) =~ "Monday of week 25 of 2026."
+      assert Tempo.explain(retail.("25W2K")) =~ "Monday of week 25, in any year"
+      assert Tempo.explain(retail.("2K")) =~ "Monday of any week"
+      assert Tempo.explain(retail.("25W{1,7}K")) =~ "Sunday and Saturday of week 25, in any year"
+
+      assert Tempo.explain(retail.("R/2026Y25W/P1W/FL{1,7}KN")) =~
+               "Selects: on a Sunday or Saturday."
+
+      # With its year a day of a week is the date it names.
+      day = Tempo.new!(year: 2026, week: 25, day_of_week: 2, calendar: Calendrical.NRF)
+      assert Tempo.explain(day) =~ "M06 16, 2026."
     end
 
     test "a week in another month-based calendar spans that calendar's days" do
@@ -146,7 +160,7 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(~o"25W") =~ "Week 25 of any year"
       assert Tempo.explain(~o"25W2K") =~ "Tuesday of week 25, in any year"
       assert Tempo.explain(~o"2K") =~ "Tuesday of any week"
-      assert Tempo.explain(~o"25W2K"W) =~ "Day 2 of week 25, in any year"
+      assert Tempo.explain(~o"25W2K"W) =~ "Tuesday of week 25, in any year"
     end
 
     # An end is written as far as the value is, and no further (decided
@@ -176,11 +190,12 @@ defmodule Tempo.Explain.Test do
       assert Tempo.explain(weeks) =~
                "2. 2026-W30 (starts on 2026-07-20) → 2026-W31 (starts on 2026-07-27)"
 
-      # A calendar of weeks writes a week in its own notation, which says
-      # where it starts.
+      # A week of a calendar of weeks is written the same way, and the day it
+      # starts on is a date of the calendar's own months: its week 27 is the
+      # first of its seventh month.
       week_calendar = Tempo.from_iso8601!("2026-W25/2026-W27", Calendrical.ISOWeek)
-      assert Tempo.explain(week_calendar) =~ "From: 2026-W25."
-      assert Tempo.explain(week_calendar) =~ "To:   2026-W27 (exclusive"
+      assert Tempo.explain(week_calendar) =~ "From: 2026-W25 (starts on 2026-06-15)."
+      assert Tempo.explain(week_calendar) =~ "To:   2026-W27 (starts on 2026-07-01; exclusive"
     end
 
     test "a time of day is worded with the units it is written to, and no others" do
@@ -200,7 +215,7 @@ defmodule Tempo.Explain.Test do
       end
 
       week_date = Tempo.from_iso8601!("2026-W25-2T10", Calendrical.ISOWeek)
-      assert Tempo.explain(week_date) =~ "Tuesday of week 25 of 2026 at hour 10."
+      assert Tempo.explain(week_date) =~ "M06 16, 2026 at hour 10."
 
       # Its ends are written the same way: a minute with no hour by its unit.
       assert Tempo.explain(~o"T30M") =~ "Span: [T30M, T31M)."
@@ -579,7 +594,11 @@ defmodule Tempo.Explain.Test do
       end
 
       assert headline("25W2KT10H30M", Calendrical.ISOWeek) ==
-               "Day 2 of week 25 at 10:30, in any year (no year — it recurs)."
+               "Tuesday of week 25 at 10:30, in any year (no year — it recurs)."
+
+      # NRF's weeks begin on Sunday, and its second day is a Monday.
+      assert headline("25W2KT10H30M", Calendrical.NRF) ==
+               "Monday of week 25 at 10:30, in any year (no year — it recurs)."
     end
 
     test "is written at its ends as the value is, where its date has no ISO spelling" do

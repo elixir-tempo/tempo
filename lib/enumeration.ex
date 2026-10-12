@@ -288,9 +288,8 @@ defmodule Tempo.Enumeration do
   end
 
   # A value of the walk: the components read, as the value walked holds them.
-  # A week and a day of it are the date they name in a calendar of months, as
-  # they are when a value is read, so the days of a Gregorian week are walked
-  # as the dates they are and a calendar of weeks keeps its own.
+  # A week and a day of it are the date they name, as they are when a value
+  # is read, so the days of a week are walked as the dates they are.
   defp yielded(tempo, [{:year, _year}, {:week, _week}, {:day_of_week, _day} | _rest] = time) do
     Validation.calendar_date_from_week_date(%{tempo | time: time})
   end

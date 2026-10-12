@@ -163,7 +163,8 @@ defmodule Tempo.ExplainWordsTest do
       assert interval =~ "From: 0800-06."
       assert interval =~ "To:   0900-06 (exclusive"
 
-      assert explain("0800Y25W3K[u-ca=iso-week]") =~ "Span: [0800-W25-3, 0800-W25-4)."
+      # A day of a week is the date it names, in a calendar of weeks too.
+      assert explain("0800Y25W3K[u-ca=iso-week]") =~ "Span: [0800-06-17, 0800-06-18)."
     end
   end
 
@@ -294,9 +295,11 @@ defmodule Tempo.ExplainWordsTest do
       assert explain("R/5786-01-01/P1Y/FL6MN[u-ca=hebrew]") =~ "Selects: in month 6."
     end
 
-    test "is the notation's for a month of a rule in a calendar of weeks" do
+    # A calendar of weeks has months of its own, named as CLDR's generic
+    # calendar names them. The notation's name was given, March.
+    test "is the calendar's own for a month of a rule in a calendar of weeks" do
       rule = Tempo.from_iso8601!("R/2026-W01-1/P1Y/FL3MN", calendar: Calendrical.ISOWeek)
-      assert Tempo.explain(rule) =~ "Selects: in March."
+      assert Tempo.explain(rule) =~ "Selects: in M03."
     end
 
     test "is its number for a month past those its calendar has" do

@@ -685,23 +685,35 @@ defmodule Tempo.Matrix.Extent do
     end
   end
 
-  # A calendar of weeks holds the week where a date holds its month. In a
-  # calendar of months the week is ISO 8601's: weeks from Monday, the first
-  # the one that holds 4 January.
-  defp week_date(year, week, day, calendar) do
-    if calendar.calendar_base() == :week do
-      calendar_date(year, week, day, calendar)
+  # A week date of a calendar of weeks is the calendar's to place, with its
+  # `date_from_week_date/3`. In the Gregorian calendar the week is ISO
+  # 8601's, worked out here: weeks from Monday, the first the one that holds
+  # 4 January.
+  defp week_date(year, week, day, calendar)
+       when calendar in [Calendrical.ISOWeek, Calendrical.NRF] do
+    with %Date{} = date <- calendar.date_from_week_date(year, week, day),
+         {:ok, iso} <- Date.convert(date, Calendar.ISO) do
+      {:ok, iso}
     else
-      with Calendrical.Gregorian <- calendar,
-           {:ok, fourth} <- Date.new(year, 1, 4) do
+      _no_date -> :none
+    end
+  end
+
+  defp week_date(year, week, day, Calendrical.Gregorian) do
+    case Date.new(year, 1, 4) do
+      {:ok, fourth} ->
         {:ok,
          fourth
          |> Date.beginning_of_week(:monday)
          |> Date.add((week - 1) * 7 + day - 1)}
-      else
-        _no_date -> :none
-      end
+
+      _no_date ->
+        :none
     end
+  end
+
+  defp week_date(_year, _week, _day, _calendar) do
+    :none
   end
 
   defp day_of_year(year, day, Calendrical.Gregorian) do
@@ -949,6 +961,7 @@ defmodule Tempo.Matrix.Extent do
     case calendar.days_in_month(month) do
       days when is_integer(days) -> {:ok, days}
       {:ambiguous, %Range{first: first, last: last}} -> {:ok, max(first, last)}
+      {:ambiguous, [_ | _] = counts} -> {:ok, Enum.max(counts)}
       _undefined -> :none
     end
   end

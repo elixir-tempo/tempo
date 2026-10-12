@@ -19,24 +19,20 @@ defmodule Tempo.Iso8601.Group do
 
   # This module expands groups into base time units. For example, it
   # expands:
-  #  * quarters, quadrimesters and semesters, into the months (or, in a
-  #    week-based calendar, the weeks) the calendar's periods span
+  #  * quarters, quadrimesters and semesters, into the months the
+  #    calendar's periods span
   #  * groups of a unit (`2G3MU`), into the range of values they cover
   #  * seasons, astronomical and meteorological
 
   def expand_groups(tempo, calendar \\ Calendars.default())
 
   # A value is grouped in its own calendar, so a Hebrew quarter holds the
-  # Hebrew months Calendrical puts in it. A month, a day of a month or a day
-  # of the year written for a calendar of weeks is refused before anything
-  # is expanded, so a day after a season is too (`2026Y25M2D`).
+  # Hebrew months Calendrical puts in it.
   def expand_groups(%Tempo{time: time} = tempo, calendar) do
-    calendar = tempo.calendar || calendar
-
-    if Validation.months_in_a_calendar_of_weeks?(time, calendar) do
-      {:error, Validation.no_months_error(time, calendar)}
-    else
-      expanded_in(tempo, calendar)
+    case expand_groups(time, tempo.calendar || calendar) do
+      {:error, reason} -> {:error, reason}
+      %Tempo.Interval{} = interval -> {:ok, as_the_value_is(interval, tempo)}
+      time -> {:ok, %{tempo | time: time}}
     end
   end
 
@@ -182,8 +178,7 @@ defmodule Tempo.Iso8601.Group do
 
   # A calendar week (`w`, Tempo's extension) is a week of the calendar's own
   # numbering, as `W` is an ISO 8601 week. With a day of the week it is that
-  # day's date; alone it is the span of its seven days. A week-based
-  # calendar's own weeks are its ISO 8601 weeks.
+  # day's date; alone it is the span of its seven days.
   def expand_groups([{:year, year}, {:calendar_week, week} | rest], calendar)
       when is_integer(year) and is_integer(week) do
     calendar_week(year, week, rest, calendar)
@@ -486,14 +481,6 @@ defmodule Tempo.Iso8601.Group do
   # and are not asked: they have no dates until they are given a hemisphere.
   @divisions [21..24, 25..28, 29..32, 33..36, 37..39, 40..41]
 
-  @doc false
-  # Whether a number written as a month is ISO 8601-2's code for a season or
-  # a division of the year (§4.8), and so no month.
-  @spec season_or_division?(integer()) :: boolean()
-  def season_or_division?(number) when is_integer(number) do
-    Enum.any?(@divisions, &(number in &1))
-  end
-
   # The most divisions a range names: a range of seasons across every year
   # of the calendar is not expanded.
   @most_divisions 1_000
@@ -673,14 +660,6 @@ defmodule Tempo.Iso8601.Group do
     error
   end
 
-  defp expanded_in(%Tempo{time: time} = tempo, calendar) do
-    case expand_groups(time, calendar) do
-      {:error, reason} -> {:error, reason}
-      %Tempo.Interval{} = interval -> {:ok, as_the_value_is(interval, tempo)}
-      time -> {:ok, %{tempo | time: time}}
-    end
-  end
-
   ## Sub-year divisions
 
   defp expand_year_division([{:year, year} | rest], division, number, calendar) do
@@ -695,14 +674,14 @@ defmodule Tempo.Iso8601.Group do
 
   @doc false
   # The `number`th `division` (`:quarter`, `:quadrimester` or `:semester`)
-  # of `year` as the group of months the calendar's period spans, or of
-  # weeks in a week-based calendar.
+  # of `year` as the group of months the calendar's period spans: the
+  # months its first and its last date hold.
   @spec year_division_group(module(), integer(), :quarter | :quadrimester | :semester, integer()) ::
-          {:ok, {:month | :week, {:group, Range.t()}}} | {:error, :not_defined | :invalid_date}
+          {:ok, {:month, {:group, Range.t()}}} | {:error, :not_defined | :invalid_date}
   def year_division_group(calendar, year, division, number) do
     with {:ok, %Date.Range{first: first, last: last}} <-
            year_division_date_range(calendar, year, division, number) do
-      {:ok, {year_division_unit(calendar), {:group, first.month..last.month//1}}}
+      {:ok, {:month, {:group, first.month..last.month//1}}}
     end
   end
 
@@ -746,15 +725,6 @@ defmodule Tempo.Iso8601.Group do
 
   defp year_division_date_range_result({:error, reason}) do
     {:error, reason}
-  end
-
-  # A week-based calendar numbers its weeks in the date's `month` field.
-  defp year_division_unit(calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      :week
-    else
-      :month
-    end
   end
 
   ## The container of a group
@@ -1333,13 +1303,11 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  # A Gregorian date's components in `calendar`, followed by `rest`. A
-  # week-based calendar numbers its weeks in the date's `month` field and
-  # the day of the week in its `day`.
+  # A Gregorian date's components in `calendar`, followed by `rest`.
   defp calendar_date_components(date, rest, calendar) do
     case Date.convert(date, calendar) do
       {:ok, %Date{year: year, month: month, day: day}} ->
-        date_components(year_division_unit(calendar), year, month, day) ++ rest
+        [year: year, month: month, day: day] ++ rest
 
       {:error, _reason} ->
         {:error,
@@ -1347,24 +1315,17 @@ defmodule Tempo.Iso8601.Group do
     end
   end
 
-  defp date_components(:month, year, month, day) do
-    [year: year, month: month, day: day]
-  end
-
-  defp date_components(:week, year, week, day) do
-    [year: year, week: week, day_of_week: day]
-  end
-
   ## Weeks of a month
 
   # A negative week counts back from the month's last, as `-1W` does in a
-  # year. A calendar of weeks has no month to number a week in.
+  # year.
   defp week_of_month(year, month, week, rest, calendar) do
-    with false <- Validation.months_in_a_calendar_of_weeks?([month: month], calendar),
-         {:ok, %Date.Range{} = dates} <- UnitValues.week_of_month(year, month, week, calendar) do
-      week_of_month_days(dates, rest, calendar, {year, month, week})
-    else
-      _no_such_week -> {:error, no_week_of_month(year, month, week, calendar)}
+    case UnitValues.week_of_month(year, month, week, calendar) do
+      {:ok, %Date.Range{} = dates} ->
+        week_of_month_days(dates, rest, calendar, {year, month, week})
+
+      _no_such_week ->
+        {:error, no_week_of_month(year, month, week, calendar)}
     end
   end
 
@@ -1451,16 +1412,8 @@ defmodule Tempo.Iso8601.Group do
 
   ## Calendar weeks
 
-  defp calendar_week(year, week, rest, calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      [{:year, year}, {:week, week} | rest]
-    else
-      month_calendar_week(year, week, rest, calendar)
-    end
-  end
-
   # A negative week counts back from the year's last, as `-1W` does.
-  defp month_calendar_week(year, week, rest, calendar) do
+  defp calendar_week(year, week, rest, calendar) do
     with {:ok, weeks} <- UnitValues.in_period(:calendar_week, [year: year], calendar),
          {:ok, week} <- Validation.conform(week, weeks) do
       calendar_week_days(year, week, rest, calendar)

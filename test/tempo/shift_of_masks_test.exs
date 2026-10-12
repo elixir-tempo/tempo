@@ -327,7 +327,14 @@ defmodule Tempo.ShiftOfMasksTest do
 
       assert Tempo.shift(week.("2026Y25WX*K"), day: 1) == week.("[2026Y25W2K..2026Y26W1K]")
       assert Tempo.shift(week.("2026YX*W"), week: 1) == week.("[2026Y2W..2027Y1W]")
-      assert Tempo.shift(week.("2026Y25WX*K"), year: 1) == week.("2027Y25WX*K")
+
+      # A week and a day of it are stepped by years as the dates they name,
+      # in a calendar of weeks as in any: the days of week 25 of 2027.
+      assert %IntervalSet{} = a_year_on = Tempo.shift(week.("2026Y25WX*K"), year: 1)
+      assert [days] = IntervalSet.members(a_year_on)
+
+      assert {Interval.from(days), Interval.to(days)} ==
+               {week.("2027Y25W1K"), week.("2027Y26W1K")}
     end
   end
 

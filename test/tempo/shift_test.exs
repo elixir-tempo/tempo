@@ -3,6 +3,7 @@ defmodule Tempo.ShiftTest do
 
   import Tempo.Sigils
 
+  alias Calendrical.ISOWeek
   alias Tempo.Test.Engine.Math
 
   describe "Tempo.shift/2" do
@@ -93,9 +94,10 @@ defmodule Tempo.ShiftTest do
 
     test "of weeks, days or hours in a calendar of weeks is the calendar's" do
       # The measure is `Date` and `NaiveDateTime` in `Calendrical.ISOWeek`,
-      # whose dates are a year, a week and a day of the week.
+      # whose dates are a year, a month of its weeks and a day of that month,
+      # and which says the date a day of a week is.
       for {week, day} <- [{1, 1}, {25, 3}, {53, 7}], count <- [1, 7, 53, 1_000, -1, -400] do
-        date = Date.new!(2026, week, day, Calendrical.ISOWeek)
+        date = ISOWeek.date_from_week_date(2026, week, day)
         value = Tempo.from_date(date)
 
         assert {week, day, count,
@@ -120,7 +122,11 @@ defmodule Tempo.ShiftTest do
       end
 
       at_ten = Tempo.from_iso8601!("2026-W25-3T10", Calendrical.ISOWeek)
-      naive = NaiveDateTime.new!(2026, 25, 3, 10, 0, 0, {0, 0}, Calendrical.ISOWeek)
+
+      naive =
+        2026
+        |> ISOWeek.date_from_week_date(25, 3)
+        |> NaiveDateTime.new!(Time.new!(10, 0, 0, {0, 0}, ISOWeek))
 
       for count <- [1, 14, 15, 60_000, -11, -60_000] do
         expected = NaiveDateTime.add(naive, count, :hour)
@@ -128,7 +134,7 @@ defmodule Tempo.ShiftTest do
 
         assert {count, Tempo.to_iso8601!(shifted)} ==
                  {count,
-                  "#{expected.year}Y#{expected.month}W#{expected.day}KT#{expected.hour}H[u-ca=iso-week]"}
+                  "#{expected.year}Y#{expected.month}M#{expected.day}DT#{expected.hour}H[u-ca=iso-week]"}
       end
     end
 

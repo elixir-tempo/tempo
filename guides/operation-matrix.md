@@ -101,7 +101,7 @@ The three tables are three levels of guarantee.
 | One of a set `[2026,2027]` | none | all | none | 11 of 21 | none | none | none | 4 of 5 | none | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Range of values `{2020Y..2022Y}` | 3 of 11 | all | 8 of 9 | 5 of 21 | all | none | 2 of 9 | 4 of 5 | none | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Hebrew calendar `5786Y6M15D[u-ca=hebrew]` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
-| Week calendar `2026Y25W3K` | 7 of 11 | all | all | all | all | all | 8 of 9 | all | 18 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.ResolutionError` |
+| Week calendar `2026Y25W3K` | 7 of 11 | all | all | all | all | all | all | all | all | `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 
 ### Extended
 

@@ -1800,10 +1800,9 @@ defmodule Tempo.Math do
     end
   end
 
-  defp week_date_stepped_as_a_date?(%Tempo{time: time, calendar: calendar}, duration_time) do
+  defp week_date_stepped_as_a_date?(%Tempo{time: time}, duration_time) do
     List.keymember?(time, :week, 0) and List.keymember?(time, :day_of_week, 0) and
-      Enum.any?(duration_time, &month_or_year_step?/1) and
-      not Tempo.week_based_calendar?(calendar)
+      Enum.any?(duration_time, &month_or_year_step?/1)
   end
 
   # Whether a step counts elapsed time for a value in a zone whose offset
@@ -1999,7 +1998,7 @@ defmodule Tempo.Math do
     calendar = tempo.calendar
 
     duration_time =
-      if week_axis?(crisp_time, tempo.calendar) do
+      if week_axis?(crisp_time) do
         translate_week_axis_duration(duration_time, calendar)
       else
         normalise_duration(duration_time, calendar)
@@ -2018,10 +2017,9 @@ defmodule Tempo.Math do
   end
 
   # A value on the week axis names a week, or a day of the week of no week
-  # (`7K`), and no day of a month. Every value of a calendar of weeks is on
-  # it, a year alone included: its year is counted in weeks.
-  defp week_axis?(time, calendar) do
-    Tempo.week_based_calendar?(calendar) or Keyword.has_key?(time, :week) or
+  # (`7K`), and no day of a month.
+  defp week_axis?(time) do
+    Keyword.has_key?(time, :week) or
       (Keyword.has_key?(time, :day_of_week) and not Keyword.has_key?(time, :month))
   end
 
@@ -2478,8 +2476,8 @@ defmodule Tempo.Math do
   # The values a step landed on, as one value where the product of what each
   # unit then holds is those values and no others, each alike in everything
   # but its units, and as the set of their spans otherwise.
-  defp gathered(landed, %Tempo{time: time, calendar: calendar}, annotations) do
-    axis = written_on(time, calendar)
+  defp gathered(landed, %Tempo{time: time}, annotations) do
+    axis = written_on(time)
 
     with [frame] <-
            landed
@@ -2514,14 +2512,13 @@ defmodule Tempo.Math do
   end
 
   # The axis a value's dates are written on, where the walk yields them as
-  # calendar dates: the days of a year, or the weeks of one in a calendar of
-  # months.
-  defp written_on([{:year, _years}, {:day_of_year, _days} | _rest], _calendar) do
+  # calendar dates: the days of a year, or the weeks of one.
+  defp written_on([{:year, _years}, {:day_of_year, _days} | _rest]) do
     :ordinal
   end
 
-  defp written_on(time, calendar) do
-    if List.keymember?(time, :week, 0) and not Tempo.week_based_calendar?(calendar) do
+  defp written_on(time) do
+    if List.keymember?(time, :week, 0) do
       :week
     else
       :as_it_is
@@ -2907,8 +2904,7 @@ defmodule Tempo.Math do
     # ambiguous day — e.g. `~o"2M29D"` shifted by an hour keeps its 29th.
     stepped =
       {:ok, time}
-      |> apply_units(@calendar_units, duration_time, calendar)
-      |> maybe_clamp(duration_time, calendar)
+      |> apply_calendar_units(duration_time, calendar)
       |> apply_units(@counted_units, duration_time, calendar)
       |> thread_microsecond(Keyword.get(duration_time, :microsecond), calendar)
 
@@ -2980,6 +2976,48 @@ defmodule Tempo.Math do
       :several -> {:error, :grouped_component}
       _no_full_date -> {:error, :unanchored}
     end
+  end
+
+  # A whole date a count of years on is the date its calendar steps to
+  # (`plus/6`), which brings the day into the year it lands in as the
+  # calendar itself does: the last of February for a 29th, and in a calendar
+  # of weeks the same day of the last week for a day of a 53rd week the year
+  # lacks, where the day brought into the month by its number was the
+  # month's last whatever day of the week it was. Years and months together,
+  # and a value that is no one date, are stepped a unit at a time, and the
+  # day brought into the month they land in once (`maybe_clamp/3`).
+  defp apply_calendar_units({:ok, time} = started, duration_time, calendar) do
+    case years_on_by_the_calendar(time, Keyword.take(duration_time, @calendar_units), calendar) do
+      {:ok, stepped} ->
+        {:ok, stepped}
+
+      :by_units ->
+        started
+        |> apply_units(@calendar_units, duration_time, calendar)
+        |> maybe_clamp(duration_time, calendar)
+    end
+  end
+
+  defp years_on_by_the_calendar(time, [year: years], calendar) when is_integer(years) do
+    with {:ok, year} <- year_of(time),
+         {:ok, month} <- component(time, :month),
+         {:ok, day} <- component(time, :day),
+         true <- calendar.valid_date?(year, month, day),
+         {on_year, on_month, on_day} <-
+           calendar.plus(year, month, day, :years, years, coerce: true),
+         true <- calendar.valid_date?(on_year, on_month, on_day) do
+      {:ok,
+       time
+       |> put_component(:year, on_year)
+       |> put_component(:month, on_month)
+       |> put_component(:day, on_day)}
+    else
+      _no_one_date_or_no_answer -> :by_units
+    end
+  end
+
+  defp years_on_by_the_calendar(_time, _years_and_months, _calendar) do
+    :by_units
   end
 
   defp maybe_clamp({:error, _reason} = error, _duration_time, _calendar) do
@@ -3151,11 +3189,10 @@ defmodule Tempo.Math do
   # its days. Only the year and the month are taken from the answer, and the
   # day is clamped once every unit is applied. A value with no one year or
   # no one month and a month its year lacks are stepped a month at a time
-  # still, and so is a calendar of weeks, which has no months.
+  # still.
   defp months_by_count(time, n, calendar) do
     with {:ok, year} <- year_of(time),
          {:ok, month} <- component(time, :month),
-         false <- Tempo.week_based_calendar?(calendar),
          {:ok, first} <- UnitValues.first(:day, [year: year, month: month], calendar),
          true <- calendar.valid_date?(year, month, first),
          {new_year, new_month, _day} <- calendar.plus(year, month, first, :months, n, []) do
@@ -3247,16 +3284,10 @@ defmodule Tempo.Math do
   # that were present are written back, preserving the value's
   # resolution. Wall clock, like the stepper — the zone rides on `shift`,
   # untouched.
-  #
-  # A date of a calendar of weeks is its year, its week and its day of the
-  # week, which the calendar's `plus/6` takes as a month calendar's takes a
-  # year, a month and a day.
   defp fast_add_time_of_day(time, unit, n, calendar) do
-    {middle, day_unit} = units_of_a_date(time, calendar)
-
     with {:ok, year} <- year_of(time),
-         {:ok, month} <- component(time, middle),
-         {:ok, day} <- component(time, day_unit),
+         {:ok, month} <- component(time, :month),
+         {:ok, day} <- component(time, :day),
          {:ok, hour} <- component(time, :hour),
          {:ok, minute} <- clock_or_zero(time, :minute),
          {:ok, second} <- clock_or_zero(time, :second),
@@ -3270,21 +3301,13 @@ defmodule Tempo.Math do
       new_time =
         time
         |> put_component(:year, year)
-        |> put_component(middle, month)
-        |> put_component(day_unit, day)
+        |> put_component(:month, month)
+        |> put_component(:day, day)
         |> put_time_of_day(Integer.mod(total, @seconds_in_day))
 
       {:ok, new_time}
     else
       _ -> :fallback
-    end
-  end
-
-  defp units_of_a_date(time, calendar) do
-    if List.keymember?(time, :week, 0) and Tempo.week_based_calendar?(calendar) do
-      {:week, :day_of_week}
-    else
-      {:month, :day}
     end
   end
 
@@ -3386,8 +3409,7 @@ defmodule Tempo.Math do
   # After a year step a week may be past the last of the year it lands in:
   # week 53, a year on from a year that has one, in a year that has 52. It
   # is that year's last week, as a day past the end of its month is the
-  # month's last day, and as a calendar of weeks steps its own dates
-  # (`Calendrical.ISOWeek.plus/6`). With no year a week is left as it is
+  # month's last day. With no year a week is left as it is
   # written, and so is one that holds several values.
   defp clamp_week_to_year(time, calendar) do
     case {component(time, :week), year_of(time)} do

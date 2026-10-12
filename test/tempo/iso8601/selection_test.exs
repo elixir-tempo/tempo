@@ -261,7 +261,9 @@ defmodule Tempo.Parser.Selection.Test do
       # The Monday of the last week of 2026, a date in a calendar of months.
       assert starts("2026Y53WL1KN") == [Tempo.from_iso8601!("2026-12-28")]
 
-      assert [%Tempo{time: [year: 2026, week: 53, day_of_week: 1]}] =
+      # The same day in the calendar of ISO 8601's weeks, the 29th day of
+      # its twelfth month, which has five weeks in a year of fifty-three.
+      assert [%Tempo{time: [year: 2026, month: 12, day: 29]}] =
                "2026Y53WL1KN"
                |> Tempo.from_iso8601!(Calendrical.ISOWeek)
                |> Tempo.to_interval()

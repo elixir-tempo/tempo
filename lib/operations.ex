@@ -462,11 +462,10 @@ defmodule Tempo.Operations do
   end
 
   # The days a window touches, its last included when the window ends part
-  # of the way through it. Each is a value of whole units down to its day:
-  # a calendar date, or in a calendar of weeks a week and a day of it. The
-  # window's ends may be written in any units (a year, a month, a week, a
-  # day of the year): a day is read from where the end is, not from a month
-  # and a day it may not hold.
+  # of the way through it. Each is a value of whole units down to its day,
+  # a calendar date. The window's ends may be written in any units (a year,
+  # a month, a week, a day of the year): a day is read from where the end
+  # is, not from a month and a day it may not hold.
   defp days_in(%Interval{from: from, to: to}) do
     with {:ok, first} <- day_of(from) do
       {:ok,
@@ -485,13 +484,9 @@ defmodule Tempo.Operations do
   end
 
   # The day an end of a window is in.
-  defp day_of(%Tempo{calendar: calendar} = endpoint) do
-    if Tempo.week_based_calendar?(calendar) do
-      {:ok, %{endpoint | time: week_date(endpoint.time)}}
-    else
-      with {:ok, %Tempo{time: time} = dated} <- month_axis_endpoint(endpoint) do
-        {:ok, %{dated | time: calendar_date(time)}}
-      end
+  defp day_of(%Tempo{} = endpoint) do
+    with {:ok, %Tempo{time: time} = dated} <- month_axis_endpoint(endpoint) do
+      {:ok, %{dated | time: calendar_date(time)}}
     end
   end
 
@@ -500,14 +495,6 @@ defmodule Tempo.Operations do
       year: Keyword.fetch!(time, :year),
       month: Keyword.get(time, :month, 1),
       day: Keyword.get(time, :day, 1)
-    ]
-  end
-
-  defp week_date(time) do
-    [
-      year: Keyword.fetch!(time, :year),
-      week: Keyword.get(time, :week, 1),
-      day_of_week: Keyword.get(time, :day_of_week, 1)
     ]
   end
 
@@ -917,7 +904,7 @@ defmodule Tempo.Operations do
 
     with {:ok, source_date} <- Tempo.to_date(%{extended | time: day, shift: nil}),
          {:ok, date} <- Date.convert(source_date, target_calendar) do
-      time = Tempo.date_units(date.year, date.month, date.day, target_calendar) ++ time_of_day
+      time = [year: date.year, month: date.month, day: date.day] ++ time_of_day
 
       {:ok, %{extended | time: time, calendar: target_calendar}}
     else
@@ -950,41 +937,10 @@ defmodule Tempo.Operations do
 
   defp canonicalize_axes(a_set, b_set) do
     case {week_axis?(a_set), week_axis?(b_set)} do
-      {true, false} -> one_axis(a_set, b_set, :first, years_of_weeks?(b_set))
-      {false, true} -> one_axis(a_set, b_set, :second, years_of_weeks?(a_set))
+      {true, false} -> month_axis_operands(a_set, b_set, :first)
+      {false, true} -> month_axis_operands(a_set, b_set, :second)
       _same_axis -> {:ok, a_set, b_set}
     end
-  end
-
-  # In a calendar of weeks a year is made of its weeks, and starts where its
-  # first week does, so a year and a week of it are on one axis as they
-  # stand: the year is extended to the week, or to the day of the week, as
-  # any coarser operand is (`align_resolution/2`). They were taken for two
-  # axes, and the week could not be written as a date of a month, which
-  # such a calendar need not have.
-  defp one_axis(a_set, b_set, _week_operand, true) do
-    {:ok, a_set, b_set}
-  end
-
-  defp one_axis(a_set, b_set, week_operand, false) do
-    month_axis_operands(a_set, b_set, week_operand)
-  end
-
-  defp years_of_weeks?(%IntervalSet{} = set) do
-    endpoints =
-      for %Interval{from: from, to: to} <- IntervalSet.members(set),
-          %Tempo{} = endpoint <- [from, to],
-          do: endpoint
-
-    endpoints != [] and Enum.all?(endpoints, &year_of_weeks?/1)
-  end
-
-  defp year_of_weeks?(%Tempo{time: [{:year, year}], calendar: calendar}) when is_integer(year) do
-    Tempo.week_based_calendar?(calendar)
-  end
-
-  defp year_of_weeks?(%Tempo{}) do
-    false
   end
 
   defp month_axis_operands(a_set, b_set, :first) do
@@ -1068,10 +1024,10 @@ defmodule Tempo.Operations do
 
   # An end on the week axis becomes a date where the other operand is written
   # in dates (`canonicalize_axes/2`) and where it is extended below its week
-  # in a calendar of months (`Tempo.extend_resolution/2`). A member walked by
+  # (`Tempo.extend_resolution/2`). A member walked by
   # the days of its week, as a week converted to an interval is, is then
   # walked by days: the days of the week are a unit of the week axis alone.
-  # Whole weeks stay weeks, and a calendar of weeks keeps its own.
+  # Whole weeks stay weeks.
   defp walked_by_dates(%IntervalSet{} = set) do
     members = IntervalSet.members(set)
 

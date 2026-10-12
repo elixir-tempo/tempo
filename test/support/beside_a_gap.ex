@@ -84,8 +84,8 @@ defmodule Tempo.BesideAGap do
   year is the Gregorian one 543 on with the same months and days, so every
   value but a week date and a day of the year has a Buddhist twin. A date,
   and a date with a time of day, has a Hebrew one, whose month and day are
-  others, and one in the calendar of ISO 8601's weeks, where it is a day of
-  a week.
+  others, and one in the calendar of ISO 8601's weeks, where it is written
+  as a day of a week and held as a day of that calendar's month.
   """
   @spec twins() :: [{String.t(), String.t(), String.t()}]
   def twins do
@@ -523,8 +523,8 @@ defmodule Tempo.BesideAGap do
   end
 
   # A value of another calendar as the Gregorian units and offset it names,
-  # worked out here: a Buddhist year is 543 on, and a Hebrew date is asked
-  # of Elixir's `Date`.
+  # worked out here: a Buddhist year is 543 on, and a Hebrew date and a date
+  # of the calendar of ISO 8601's weeks are asked of Elixir's `Date`.
   defp gregorian(%Tempo{time: [{:year, year} | rest], shift: shift}, "buddhist")
        when is_integer(year) do
     {[{:year, year - @buddhist_years_on} | rest], shift}
@@ -541,11 +541,11 @@ defmodule Tempo.BesideAGap do
   end
 
   defp gregorian(
-         %Tempo{time: [{:year, year}, {:week, week}, {:day_of_week, day} | clock], shift: shift},
+         %Tempo{time: [{:year, year}, {:month, month}, {:day, day} | clock], shift: shift},
          "iso-week"
        )
-       when is_integer(year) and is_integer(week) and is_integer(day) do
-    {:ok, date} = Date.new(year, week, day, Calendrical.ISOWeek)
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    {:ok, date} = Date.new(year, month, day, Calendrical.ISOWeek)
     {:ok, date} = Date.convert(date, Calendar.ISO)
     {[year: date.year, month: date.month, day: date.day] ++ clock, shift}
   end

@@ -1925,13 +1925,19 @@ defmodule Tempo.Select.Test do
                [~o"2026-07-21"]
     end
 
-    test "a span in a calendar of weeks keeps the error that says what selects in it" do
+    # A month and a day are numbered by their calendar, in a calendar of
+    # weeks as in any other, so a selector that holds one selects only from
+    # a span of its own calendar, and the error says to write it there.
+    test "a span in a calendar of weeks takes a month written in its own calendar" do
       for selector <- [~o"6M", ~o"L6M15DN"] do
-        assert {:error, %ConversionError{reason: reason}} =
+        assert {:error, %ConversionError{target: NRF, reason: reason}} =
                  Tempo.select(read("2026Y", NRF), selector)
 
-        assert reason =~ "is a calendar of weeks"
+        assert reason =~ "write it in the span's calendar"
       end
+
+      assert selected_starts(Tempo.select(read("2026Y", NRF), read("6M", NRF))) ==
+               [read("2026Y6M", NRF)]
     end
   end
 end

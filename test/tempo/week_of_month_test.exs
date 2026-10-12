@@ -291,12 +291,16 @@ defmodule Tempo.WeekOfMonthTest do
       assert {:error, %ParseError{}} = Tempo.from_iso8601("6M2W")
     end
 
-    test "is read in a year that begins within a month, and has no calendar of weeks" do
+    test "is read in a year that begins within a month, and in a calendar of weeks" do
       # `Calendrical.Julian.March25` counts its months from 25 March, and
       # the week is the one Calendrical gives of the month it counts sixth.
       assert Tempo.from_iso8601("1750Y6M2W", March25) == {:ok, march25_week(1750, 6, 2)}
 
-      assert {:error, %InvalidDateError{}} = Tempo.from_iso8601("2026Y6M2W[u-ca=iso-week]")
+      # A month of a calendar of weeks is whole weeks of it, so the second
+      # week of its sixth month is that month's eighth to fourteenth day.
+      assert {:ok, week} = Tempo.from_iso8601("2026Y6M2W[u-ca=iso-week]")
+      assert Interval.from(week).time == [year: 2026, month: 6, day: 8]
+      assert Interval.to(week).time == [year: 2026, month: 6, day: 15]
     end
   end
 
@@ -891,10 +895,22 @@ defmodule Tempo.WeekOfMonthTest do
       assert Enum.map(weeks, &{&1.first, &1.last}) == expected
     end
 
-    test "are not a value's to name in a calendar of weeks, which has no month" do
-      assert {:error,
-              %Tempo.InvalidDateError{unit: :month, value: 6, calendar: Calendrical.ISOWeek}} =
-               Tempo.from_iso8601("2026Y6M2W", Calendrical.ISOWeek)
+    # A month of a calendar of weeks is four of its weeks or five, and each
+    # is seven days of the month.
+    test "are whole weeks of a month of a calendar of weeks" do
+      for calendar <- [Calendrical.ISOWeek, Calendrical.NRF] do
+        assert {:ok, weeks} = UnitValues.weeks_of_month(2026, 6, calendar)
+
+        assert Enum.map(weeks, &{&1.first.day, &1.last.day}) == [
+                 {1, 7},
+                 {8, 14},
+                 {15, 21},
+                 {22, 28}
+               ]
+
+        assert {:ok, second} = Tempo.from_iso8601("2026Y6M2W", calendar)
+        assert Interval.from(second).time == [year: 2026, month: 6, day: 8]
+      end
     end
   end
 end

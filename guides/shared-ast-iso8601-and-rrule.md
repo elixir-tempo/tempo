@@ -120,7 +120,7 @@ RRULE `BYSETPOS=-1` ("take the last element of the resolved per-period set") is 
 
 RRULE lets a rule override the week start (`WKST=SU`), which shifts `BYWEEKNO`/`BYDAY`-weekly boundaries. Tempo holds it as a `:wkst` token: `Tempo.RRule.to_string/1` emits `WKST=SU`, and `Tempo.to_iso8601/1` renders it as `7q` (7 = Sunday), so it round-trips both ways. (A non-default `WKST` alone is enough to produce a `:repeat_rule`, since it changes weekly boundaries.)
 
-A recurrence in a calendar of weeks counts its weeks as the calendar does, whatever week start its rule holds, so the `WKST` written for one that steps by weeks is the day the calendar's weeks begin: `WKST=SU` in `Calendrical.NRF`, and none in `Calendrical.ISOWeek`, whose weeks begin on Monday as an RRULE's do.
+A recurrence counts its weeks as its calendar does. A calendar whose weeks begin on Monday, as ISO 8601's do, counts them from the day the rule holds, so a `WKST` read is the `WKST` written, in `Calendrical.ISOWeek` as in the Gregorian calendar. A calendar whose weeks begin on another day counts them from that day, whatever week start its rule holds, so the `WKST` written for one that steps by weeks is the calendar's own: `WKST=SU` in `Calendrical.NRF`.
 
 ## What is lossy in the encoders
 

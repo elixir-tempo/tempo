@@ -135,21 +135,18 @@ defmodule Tempo.UnitValuesTest do
       end
     end
 
-    test "a date of a calendar of weeks holds its week where a month is held" do
-      {2026, weeks} = :calendar.iso_week_number({2026, 12, 28})
-
+    # A month of a calendar of weeks is four of its weeks or five, and its
+    # year has twelve: both of these lay their weeks out 4-5-4 in a quarter.
+    test "a month of a calendar of weeks has the days of its weeks" do
       for calendar <- [Calendrical.ISOWeek, Calendrical.NRF] do
-        assert UnitValues.in_period(:day, [year: 2026, month: 25], calendar) == {:ok, 1..7//1}
+        assert UnitValues.in_period(:day, [year: 2026, month: 1], calendar) == {:ok, 1..28//1}
+        assert UnitValues.in_period(:day, [year: 2026, month: 2], calendar) == {:ok, 1..35//1}
 
-        assert UnitValues.in_period(:day, [year: 2026, month: 0], calendar) ==
-                 {:error, :no_period}
+        for month <- [0, 13, 25] do
+          assert UnitValues.in_period(:day, [year: 2026, month: month], calendar) ==
+                   {:error, :no_period}
+        end
       end
-
-      assert UnitValues.in_period(:day, [year: 2026, month: weeks], Calendrical.ISOWeek) ==
-               {:ok, 1..7//1}
-
-      assert UnitValues.in_period(:day, [year: 2026, month: weeks + 1], Calendrical.ISOWeek) ==
-               {:error, :no_period}
     end
   end
 
@@ -657,7 +654,8 @@ defmodule Tempo.UnitValuesTest do
     # converted to Elixir's calendar: every week of a calendar of weeks
     # starts on the same day.
     defp weekday_of_week_day(calendar, {year, week}, day) do
-      Date.new!(year, week, day, calendar)
+      year
+      |> calendar.date_from_week_date(week, day)
       |> Date.convert!(Calendar.ISO)
       |> Date.day_of_week()
     end
@@ -688,11 +686,13 @@ defmodule Tempo.UnitValuesTest do
       end
     end
 
-    test "a week's days are counted from the calendar's own first day or from Monday" do
-      assert UnitValues.week_counted_from(Calendrical.NRF) == :default
-      assert UnitValues.week_counted_from(Calendrical.ISOWeek) == :default
-      assert UnitValues.week_counted_from(Calendrical.Gregorian) == :monday
-      assert UnitValues.week_counted_from(Calendrical.Hebrew) == :monday
+    # A calendar by sighting counts no year far from now, and is asked of a
+    # year it has: the year 2000 of its own is five centuries on.
+    test "a calendar worked out from the moon answers, of a year it can count" do
+      for day <- 1..7 do
+        assert UnitValues.iso_weekday_from_day_of_week(day, Calendrical.Islamic.Observational) ==
+                 day
+      end
     end
   end
 end

@@ -465,10 +465,12 @@ defmodule Tempo.Iso8601.Parser.Test do
     assert Tempo.from_iso8601("1985Y15W7K") ==
              {:ok, %Tempo{calendar: Calendar.ISO, time: [year: 1985, month: 4, day: 14]}}
 
-    # Section 7.2.4 Example 1 with week based calendar
+    # Section 7.2.4 Example 1 with week based calendar: the same day, the
+    # fourteenth of that calendar's fourth month, which week 14 begins.
     assert Tempo.from_iso8601("1985Y15W7K", Calendrical.ISOWeek) ==
-             {:ok,
-              %Tempo{calendar: Calendrical.ISOWeek, time: [year: 1985, week: 15, day_of_week: 7]}}
+             {:ok, %Tempo{calendar: Calendrical.ISOWeek, time: [year: 1985, month: 4, day: 14]}}
+
+    assert Tempo.to_calendar(~o"1985Y15W7K"W, Calendar.ISO) == Tempo.from_iso8601("1985Y15W7K")
   end
 
   test "Section 7.3 Time" do
@@ -806,10 +808,12 @@ defmodule Tempo.Iso8601.Parser.Test do
     assert Tempo.from_iso8601("2022Y1w7K[u-ca=gregory]") ==
              Tempo.from_iso8601("2022-01-02[u-ca=gregory]")
 
+    # In a calendar of weeks the last day of the first week is the seventh
+    # day of its first month.
     assert Tempo.from_iso8601("2022Y1W7K", Calendrical.ISOWeek) ==
              {:ok,
               %Tempo{
-                time: [year: 2022, week: 1, day_of_week: 7],
+                time: [year: 2022, month: 1, day: 7],
                 shift: nil,
                 calendar: Calendrical.ISOWeek
               }}

@@ -3,6 +3,7 @@ defmodule Tempo.SelectionFromEndTest do
 
   import Tempo.Sigils
 
+  alias Calendrical.NRF
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule
@@ -98,8 +99,17 @@ defmodule Tempo.SelectionFromEndTest do
       assert starts("2026YL-1W-1KN") == starts("2026YL53W7KN")
     end
 
+    # The last day of week 25 is the twenty-first of the calendar's sixth
+    # month, and NRF's weeks, which begin on Sunday, end on Saturday.
     test "a weekday is counted in a week calendar's week" do
-      assert starts("2026Y25WL-1KN", Calendrical.ISOWeek) == ["2026Y25W7K[u-ca=iso-week]"]
+      assert starts("2026Y25WL-1KN", Calendrical.ISOWeek) == ["2026Y6M21D[u-ca=iso-week]"]
+      assert starts("2026Y25WL-1KN", Calendrical.NRF) == ["2026Y6M21D[u-ca=nrf]"]
+
+      assert NRF.date_from_week_date(2026, 25, 7) == Date.new!(2026, 6, 21, NRF)
+
+      assert Date.day_of_week(
+               Date.convert!(Date.new!(2026, 6, 21, Calendrical.NRF), Calendar.ISO)
+             ) == 6
     end
 
     test "an hour, a minute and a second are counted in the day, the hour and the minute" do

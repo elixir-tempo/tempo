@@ -644,7 +644,7 @@ defmodule Tempo.Compare do
   @spec structural?(Tempo.t(), Tempo.t()) :: boolean()
   def structural?(%Tempo{} = a, %Tempo{} = b) do
     a.calendar == b.calendar and zones_compatible?(a, b) and
-      comparable_axes?(a.time, b.time, a.calendar) and fields_in_day_order?(a, b)
+      comparable_axes?(a.time, b.time) and fields_in_day_order?(a, b)
   end
 
   # Two values with no year are ordered by their fields, and by nothing else:
@@ -709,44 +709,40 @@ defmodule Tempo.Compare do
   # UTC projection instead. Unanchored lists stay on the structural
   # path: they have no year to project through, and the set-operations
   # layer already rejects cross-axis unanchored operands upstream.
-  defp comparable_axes?(time_a, time_b, calendar) do
+  defp comparable_axes?(time_a, time_b) do
     if Keyword.has_key?(time_a, :year) and Keyword.has_key?(time_b, :year) do
-      same_axis?(date_axis(time_a), date_axis(time_b), calendar)
+      same_axis?(date_axis(time_a), date_axis(time_b))
     else
       true
     end
   end
 
   # A value with no unit under its year starts where the year's first month
-  # does, and its first day. It starts where the year's first week does only
-  # in a calendar of weeks: ISO 8601's first week of 2027 starts on 4 January,
-  # so `2027` and `2027-W01` are not one moment.
-  defp same_axis?(axis, axis, _calendar) do
+  # does, and its first day. It does not start where the year's first week
+  # does: ISO 8601's first week of 2027 starts on 4 January, so `2027` and
+  # `2027-W01` are not one moment.
+  defp same_axis?(axis, axis) do
     true
   end
 
-  defp same_axis?(:none, :week, calendar) do
-    week_based?(calendar)
-  end
-
-  defp same_axis?(:week, :none, calendar) do
-    week_based?(calendar)
-  end
-
-  defp same_axis?(:none, _axis, _calendar) do
-    true
-  end
-
-  defp same_axis?(_axis, :none, _calendar) do
-    true
-  end
-
-  defp same_axis?(_axis, _another_axis, _calendar) do
+  defp same_axis?(:none, :week) do
     false
   end
 
-  defp week_based?(calendar) do
-    Tempo.week_based_calendar?(calendar)
+  defp same_axis?(:week, :none) do
+    false
+  end
+
+  defp same_axis?(:none, _axis) do
+    true
+  end
+
+  defp same_axis?(_axis, :none) do
+    true
+  end
+
+  defp same_axis?(_axis, _another_axis) do
+    false
   end
 
   # `:week` marks the week-of-year axis only when no `:month` qualifies

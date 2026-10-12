@@ -19,6 +19,10 @@ defmodule Tempo.CalendarCensusTest do
   as a test. It found a month with days missing walked as a run of days, a
   year that starts within its months read from its January, and a week
   selected in a calendar of weeks that was the whole year.
+
+  A calendar of weeks is asked what every calendar is, its dates being a
+  year, a month and a day, and a week, a day of one and a selection in one
+  besides, placed by the calendar's own week dates.
   """
   use ExUnit.Case, async: true
 
@@ -204,28 +208,37 @@ defmodule Tempo.CalendarCensusTest do
   end
 
   describe "the census itself" do
-    test "holds every full form of a calendar of months, and of a calendar of weeks" do
+    test "holds every full form of a date, and of a week besides in a calendar of weeks" do
       assert Enum.count(CalendarCensus.forms(Calendrical.Gregorian)) == 33
       assert Enum.count(CalendarCensus.forms(Calendrical.Reform.England)) == 44
-      assert Enum.count(CalendarCensus.forms(Calendrical.ISOWeek)) == 18
+
+      # Eleven forms of a date and five of a week, on each of three dates.
+      assert Enum.count(CalendarCensus.forms(Calendrical.ISOWeek)) == 3 * (11 + 5)
     end
 
-    test "holds thirty-five selections in a calendar of months and twenty in a calendar of weeks" do
+    test "holds thirty-five selections in every calendar, and twenty of weeks besides in a calendar of weeks" do
       assert Enum.count(CalendarCensus.selections(Calendrical.Hebrew)) == 35
-      assert Enum.count(CalendarCensus.selections(Calendrical.NRF)) == 20
+      assert Enum.count(CalendarCensus.selections(Calendrical.NRF)) == 35 + 20
 
       # A year that starts within a month is counted by its months as any
       # other is, and is measured with the rest (Calendrical, 2026-10-10).
       assert Enum.count(CalendarCensus.selections(Calendrical.Julian.March25)) == 35
     end
 
-    test "holds every month and day with no year of a calendar of months, and its weekdays" do
+    test "holds every month and day with no year of a calendar, and its weekdays" do
       # Twelve months and a thirteenth no year has, each month's days and
       # the day after its last, and seven weekdays and an eighth.
       days = Enum.sum([31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31])
 
       assert Enum.count(CalendarCensus.no_year(Calendrical.Gregorian)) == 13 + days + 12 + 8
-      assert Enum.count(CalendarCensus.no_year(Calendrical.ISOWeek)) == 8
+
+      # A calendar of weeks lays its months out 4-5-4 in each quarter, and
+      # the last is five weeks in its longest year.
+      days_of_weeks = Enum.sum([28, 35, 28, 28, 35, 28, 28, 35, 28, 28, 35, 35])
+
+      assert Enum.count(CalendarCensus.no_year(Calendrical.ISOWeek)) ==
+               13 + days_of_weeks + 12 + 8
+
       assert Enum.count(CalendarCensus.no_year(Calendrical.Reform.England)) == 6 + 8
     end
 

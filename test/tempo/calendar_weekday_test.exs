@@ -149,12 +149,17 @@ defmodule Tempo.CalendarWeekdayTest do
       assert Tempo.qualification(shifted) == :uncertain
     end
 
-    test "a calendar of weeks keeps its week and its day" do
+    # A week of a calendar of weeks steps to a date of that calendar's own
+    # months, as a week of any calendar does: its week 32 begins on the eighth
+    # day of its eighth month.
+    test "a calendar of weeks steps to a date of its own months" do
       week = Tempo.from_iso8601!("2026Y32W", Calendrical.ISOWeek)
+      read = &Tempo.from_iso8601!(&1, Calendrical.ISOWeek)
 
-      assert Tempo.shift(week, day: 2).time == [year: 2026, week: 32, day_of_week: 3]
-      assert Tempo.shift(week, day: 7).time == [year: 2026, week: 33, day_of_week: 1]
-      assert Tempo.shift(week, hour: 25).time == [year: 2026, week: 32, day_of_week: 2, hour: 1]
+      assert Tempo.shift(week, day: 2).time == [year: 2026, month: 8, day: 10]
+      assert Tempo.shift(week, day: 2) == read.("2026Y32W3K")
+      assert Tempo.shift(week, day: 7) == read.("2026Y33W1K")
+      assert Tempo.shift(week, hour: 25) == read.("2026Y32W2KT1H")
     end
 
     test "a week with no year keeps its day of the week" do
@@ -244,21 +249,24 @@ defmodule Tempo.CalendarWeekdayTest do
       assert Tempo.qualification(monday) == :uncertain
     end
 
-    test "a calendar of weeks walks its week by its own days" do
+    # Week 40 is the first of the calendar's tenth month.
+    test "a calendar of weeks walks its week by the dates of its own months" do
       week = Tempo.from_iso8601!("2026Y40W", Calendrical.ISOWeek)
 
       assert week
              |> Enum.take(2)
              |> Enum.map(& &1.time) == [
-               [year: 2026, week: 40, day_of_week: 1],
-               [year: 2026, week: 40, day_of_week: 2]
+               [year: 2026, month: 10, day: 1],
+               [year: 2026, month: 10, day: 2]
              ]
 
       {:ok, interval} = Tempo.to_interval(week)
 
+      assert Enum.at(interval, 3) == Tempo.from_iso8601!("2026Y40W4K", Calendrical.ISOWeek)
+
       assert interval
              |> Enum.at(3)
-             |> Map.fetch!(:time) == [year: 2026, week: 40, day_of_week: 4]
+             |> Map.fetch!(:time) == [year: 2026, month: 10, day: 4]
     end
 
     test "a week with no year is walked by its days of the week" do
@@ -308,10 +316,13 @@ defmodule Tempo.CalendarWeekdayTest do
       assert Tempo.extend_resolution(~o"2026-W40", :hour) == ~o"2026-09-28T00"
     end
 
-    test "a calendar of weeks is extended to its first day of the week" do
+    test "a calendar of weeks is extended to the date of its first day too" do
       week = Tempo.from_iso8601!("2026Y40W", Calendrical.ISOWeek)
 
-      assert Tempo.extend_resolution(week, :day).time == [year: 2026, week: 40, day_of_week: 1]
+      assert Tempo.extend_resolution(week, :day).time == [year: 2026, month: 10, day: 1]
+
+      assert Tempo.extend_resolution(week, :day) ==
+               Tempo.from_iso8601!("2026Y40W1K", Calendrical.ISOWeek)
     end
   end
 
@@ -384,13 +395,13 @@ defmodule Tempo.CalendarWeekdayTest do
       assert Interval.granularity(hebrew) == :day
     end
 
-    test "a calendar of weeks keeps its day of the week, which its walk yields" do
+    test "a week of a calendar of weeks is walked by days too, the dates of its own months" do
       week = Tempo.from_iso8601!("2026Y25W", Calendrical.ISOWeek)
       {:ok, interval} = Tempo.to_interval(week)
 
-      assert Interval.granularity(interval) == :day_of_week
+      assert Interval.granularity(interval) == :day
       assert Enum.take(interval, 1) == [Tempo.from_iso8601!("2026Y25W1K", Calendrical.ISOWeek)]
-      assert to_string(Tempo.explain(week)) =~ "Iterates at :day_of_week granularity."
+      assert to_string(Tempo.explain(week)) =~ "Iterates at :day granularity."
     end
   end
 end

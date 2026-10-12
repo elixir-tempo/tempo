@@ -169,14 +169,9 @@ defmodule Tempo.Inspect do
   # A value in a calendar without a name reads back as Gregorian, which names
   # the same days when the two number them alike from where its span starts —
   # a calendar that differs only in its week, say. A value without a year
-  # names no days in any calendar, and a week-based calendar's weeks are not
-  # Gregorian months.
-  defp reads_as_gregorian?(%Tempo{calendar: calendar} = tempo) do
-    cond do
-      not Tempo.anchored?(tempo) -> true
-      week_based?(calendar) -> false
-      true -> same_start_in_gregorian?(tempo)
-    end
+  # names no days in any calendar.
+  defp reads_as_gregorian?(%Tempo{} = tempo) do
+    not Tempo.anchored?(tempo) or same_start_in_gregorian?(tempo)
   end
 
   defp same_start_in_gregorian?(tempo) do
@@ -328,10 +323,6 @@ defmodule Tempo.Inspect do
     else
       faithful_name(calendar)
     end
-  end
-
-  defp week_based?(calendar) do
-    Tempo.week_based_calendar?(calendar)
   end
 
   defp faithful_name(calendar) do

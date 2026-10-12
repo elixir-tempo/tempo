@@ -1307,7 +1307,7 @@ defmodule Tempo.Interval do
   # fills the start to it at iteration time (`Steps.fill_to_unit/3`).
   defp implicit_span(tempo, time, unit, next_unit, calendar) do
     with {:ok, bounds} <- span_bounds(tempo, time, unit, calendar) do
-      {:ok, bounds, Unit.walked_by(next_unit, calendar)}
+      {:ok, bounds, Unit.walked_by(next_unit)}
     end
   end
 

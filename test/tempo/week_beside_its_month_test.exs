@@ -213,16 +213,23 @@ defmodule Tempo.WeekBesideItsMonthTest do
   end
 
   describe "a week selected from a week, and in a calendar of weeks" do
-    test "is the week of the year, as it was" do
+    test "is the week of the year from a week, and the week of its month from a day" do
       {:ok, week} = Tempo.to_interval(~o"2026-W24")
       {:ok, set} = Tempo.select(~o"2026-W24", ~o"24W")
       assert IntervalSet.members(set) == [week]
 
+      # A day of a calendar of weeks is a date of its months, so a week is
+      # selected from it as from a day of any calendar, as the week of its
+      # month: the third day of week 24 is the tenth of the sixth month, in
+      # that month's second week. It was the week of the year.
       day = Tempo.from_iso8601!("2026Y24W3K", Calendrical.ISOWeek)
-      selector = Tempo.from_iso8601!("24W", Calendrical.ISOWeek)
+      assert day.time == [year: 2026, month: 6, day: 10]
 
-      assert {:ok, set} = Tempo.select(day, selector)
-      assert IntervalSet.count(set) == 1
+      assert {:ok, second} = Tempo.select(day, Tempo.from_iso8601!("2W", Calendrical.ISOWeek))
+      assert IntervalSet.count(second) == 1
+
+      assert {:ok, none} = Tempo.select(day, Tempo.from_iso8601!("24W", Calendrical.ISOWeek))
+      assert IntervalSet.count(none) == 0
     end
   end
 

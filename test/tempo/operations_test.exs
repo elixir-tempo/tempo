@@ -500,7 +500,9 @@ defmodule Tempo.Operations.Test do
       assert {:ok, hours} = Tempo.intersection(~o"T09/T17", week, within: week)
       assert IntervalSet.count(hours) == 7
 
-      assert hd(texts({:ok, hours})) == "2026Y25W1KT9H/T17H[u-ca=iso-week]"
+      # The first day of week 25 is the fifteenth of the calendar's sixth
+      # month, and the hours are written on its dates.
+      assert hd(texts({:ok, hours})) == "2026Y6M15DT9H/T17H[u-ca=iso-week]"
     end
 
     test "a month of another calendar is its days, in that calendar" do
@@ -630,9 +632,9 @@ defmodule Tempo.Operations.Test do
   end
 
   describe "a year and a week of it in a calendar of weeks" do
-    # A calendar of weeks makes its years of weeks, so a year and a week of
-    # it are on one axis as they stand. They were taken for two, and the
-    # week could not be written as a date of a month.
+    # A calendar of weeks makes its years of weeks, and a year and a week of
+    # it meet on the calendar's dates, as a year and a week of any calendar
+    # do: the ends of what is left are the days the weeks begin on.
     defp ends(set) do
       for(member <- IntervalSet.members(set), do: {Interval.from(member), Interval.to(member)})
     end
@@ -643,14 +645,13 @@ defmodule Tempo.Operations.Test do
       test "a year less a week of it is the weeks before and after, in #{inspect(calendar)}" do
         year = Tempo.from_iso8601!("2026", @calendar)
         week = Tempo.from_iso8601!("2026-W25", @calendar)
-        {:ok, before_it} = Tempo.from_iso8601("2026-W01/2026-W25", @calendar)
-        {:ok, after_it} = Tempo.from_iso8601("2026-W26/2027-W01", @calendar)
+        day = &Tempo.from_iso8601!(&1, @calendar)
 
         {:ok, rest} = Tempo.difference(year, week)
 
         assert ends(rest) == [
-                 {Interval.from(before_it), Interval.to(before_it)},
-                 {Interval.from(after_it), Interval.to(after_it)}
+                 {day.("2026-W01-1"), day.("2026-W25-1")},
+                 {day.("2026-W26-1"), day.("2027-W01-1")}
                ]
 
         assert Tempo.complement(week, within: year) == {:ok, rest}
@@ -660,10 +661,10 @@ defmodule Tempo.Operations.Test do
       test "a week is within its year, in #{inspect(calendar)}" do
         year = Tempo.from_iso8601!("2026", @calendar)
         week = Tempo.from_iso8601!("2026-W25", @calendar)
-        {:ok, span} = Tempo.to_interval(week)
+        day = &Tempo.from_iso8601!(&1, @calendar)
 
         assert {:ok, within} = Tempo.intersection(year, week)
-        assert ends(within) == [{Interval.from(span), Interval.to(span)}]
+        assert ends(within) == [{day.("2026-W25-1"), day.("2026-W26-1")}]
         assert Tempo.intersection(week, year) == {:ok, within}
 
         assert {:ok, nothing} = Tempo.difference(week, year)

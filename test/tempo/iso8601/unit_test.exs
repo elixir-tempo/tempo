@@ -158,7 +158,7 @@ defmodule Tempo.Iso8601.UnitTest do
         [first] = Enum.take(value, 1)
 
         assert {text, calendar, Tempo.resolution(first)} ==
-                 {text, calendar, {Unit.walked_by(stepped_on, calendar), 1}}
+                 {text, calendar, {Unit.walked_by(stepped_on), 1}}
       end
     end
 

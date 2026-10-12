@@ -83,14 +83,6 @@ defmodule Tempo.Iso8601.Unit do
   the last unit in the struct.
 
   """
-  def implicit_enumerator(:year = unit, calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      {:week, 1..-1//1}
-    else
-      Map.get(@unit_after, unit)
-    end
-  end
-
   # A week is walked by its days, which the calendar counts.
   def implicit_enumerator(unit, calendar) when unit in [:week, :calendar_week] do
     {:day_of_week, 1..calendar.days_in_week()//1}
@@ -110,22 +102,16 @@ defmodule Tempo.Iso8601.Unit do
   @doc false
   # The unit a value's span is said to be walked by, given the unit its walk
   # steps on (`implicit_enumerator/2`). A week's walk steps through its days
-  # of the week, and in a calendar of months yields each as the date it is
-  # (`2026-W25` is walked by 15 to 21 June), so such a week is walked by
-  # days. A calendar of weeks, whose dates hold the day of the week, is
-  # walked by that. The stepper fills a week to either unit as its first day
-  # of the week (`Tempo.Interval.Steps.fill_to_unit/3`), so both walk the
-  # same days.
-  @spec walked_by(atom(), module() | nil) :: atom()
-  def walked_by(:day_of_week, calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      :day_of_week
-    else
-      :day
-    end
+  # of the week, and yields each as the date it is (`2026-W25` is walked by
+  # 15 to 21 June), so a week is walked by days. The stepper fills a week to
+  # either unit as its first day of the week
+  # (`Tempo.Interval.Steps.fill_to_unit/3`), so both walk the same days.
+  @spec walked_by(atom()) :: atom()
+  def walked_by(:day_of_week) do
+    :day
   end
 
-  def walked_by(unit, _calendar) do
+  def walked_by(unit) do
     unit
   end
 

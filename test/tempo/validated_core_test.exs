@@ -369,7 +369,7 @@ defmodule Tempo.ValidatedCoreTest do
     # A year had no path to a day, so a day or a week could not be added to
     # it and it had no length in either.
     test "counts its year in weeks and days", %{year: year} do
-      assert Tempo.shift(year, week: 1) == Tempo.from_iso8601!("2026Y2W", ISOWeek)
+      assert Tempo.shift(year, week: 1) == Tempo.from_iso8601!("2026Y2W1K", ISOWeek)
       assert Tempo.shift(year, day: 1) == Tempo.from_iso8601!("2026Y1W2K", ISOWeek)
       assert Tempo.shift(year, day: -1) == Tempo.from_iso8601!("2025Y52W7K", ISOWeek)
 

@@ -343,22 +343,24 @@ defmodule Tempo.RollToWorkdayTest do
       end
     end
 
-    test "is a day of a calendar of weeks by a modified convention, which has no month" do
+    # A modified convention stays in the month the day is in, which in a
+    # calendar of weeks is the calendar's own. Saturday 30 May 2026 is in the
+    # last week of its fifth month and the Monday after in its sixth, so the
+    # day rolls back to the Friday either way. It was an error, a calendar of
+    # weeks having had no month.
+    test "is a day of a calendar of weeks by a modified convention, in its own month" do
       saturday = Tempo.from_iso8601!("2026-W22-6[u-ca=iso-week]")
       friday = Tempo.from_iso8601!("2026-W22-5[u-ca=iso-week]")
 
-      for roll <- [:modified_following, :modified_preceding], day <- [saturday, friday] do
-        assert {:error,
-                %Tempo.ResolutionError{
-                  operation: :roll_to_workday,
-                  target: :month,
-                  calendar: Calendrical.ISOWeek
-                } = error} = Tempo.roll_to_workday(day, :US, roll: roll)
+      assert Tempo.to_date(saturday) == {:ok, Date.convert!(~D[2026-05-30], Calendrical.ISOWeek)}
+      assert Date.convert!(~D[2026-05-30], Calendrical.ISOWeek).month == 5
+      assert Date.convert!(~D[2026-06-01], Calendrical.ISOWeek).month == 6
 
-        assert Exception.message(error) =~ "calendar of weeks"
+      for roll <- [:modified_following, :modified_preceding], day <- [saturday, friday] do
+        assert {roll, Tempo.roll_to_workday(day, :US, roll: roll)} == {roll, friday}
       end
 
-      # The conventions that ask no month are answered there.
+      # The conventions that ask no month cross it.
       assert Tempo.roll_to_workday(saturday, :US, roll: :following) ==
                Tempo.from_iso8601!("2026-W23-1[u-ca=iso-week]")
 

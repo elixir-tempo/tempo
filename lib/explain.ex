@@ -783,17 +783,22 @@ defmodule Tempo.Explain do
     "#{noun} #{value}"
   end
 
-  # Without a year there is no date to ask for its weekday. ISO 8601 numbers a
-  # month-based calendar's days of the week from Monday; a calendar of weeks'
-  # day is given by its number.
-  defp yearless_weekday(%Tempo{time: time} = tempo) do
-    day = find_unit(time, :day_of_week)
+  # Without a year there is no date to ask for its weekday, and the calendar
+  # says which weekday a day of its week is (`weekday_in/2`).
+  defp yearless_weekday(%Tempo{time: time, calendar: calendar}) do
+    time
+    |> find_unit(:day_of_week)
+    |> weekday_in(calendar)
+  end
 
-    if Tempo.week_based_calendar?(tempo.calendar) do
-      "Day #{day}"
-    else
-      weekday_name(day)
-    end
+  # The name of the weekday a day of the week is in a calendar, which counts
+  # the days of its week dates from the day its weeks begin on: the second
+  # day is Tuesday where they begin on Monday, as ISO 8601's do, and Monday
+  # where they begin on Sunday.
+  defp weekday_in(day, calendar) do
+    day
+    |> UnitValues.iso_weekday_from_day_of_week(calendar)
+    |> weekday_name()
   end
 
   # The precision a value states, the first whose units it has. Those with no
@@ -1040,16 +1045,11 @@ defmodule Tempo.Explain do
     numbered("week", weeks)
   end
 
-  # ISO 8601 numbers a month-based calendar's days of the week from Monday; a
-  # calendar of weeks' days are given by their numbers.
-  defp weekdays_phrase(%Tempo{time: time} = tempo) do
-    days = find_unit(time, :day_of_week)
-
-    if Tempo.week_based_calendar?(tempo.calendar) do
-      numbered("day", days)
-    else
-      component_phrase(days, &weekday_name/1)
-    end
+  # Each day of the week is named as the weekday its calendar makes it.
+  defp weekdays_phrase(%Tempo{time: time, calendar: calendar}) do
+    time
+    |> find_unit(:day_of_week)
+    |> component_phrase(&weekday_in(&1, calendar))
   end
 
   defp numbered(word, values) do
@@ -1424,19 +1424,19 @@ defmodule Tempo.Explain do
   # answers exactly that question: its map's keys *are* `@units`.
   defp enumerator_text(unit, calendar) do
     case Unit.fetch_sort_key(unit) do
-      {:ok, _key} -> describe_enumerator(Unit.implicit_enumerator(unit, calendar), calendar)
+      {:ok, _key} -> describe_enumerator(Unit.implicit_enumerator(unit, calendar))
       :error -> nil
     end
   end
 
-  defp describe_enumerator(nil, _calendar) do
+  defp describe_enumerator(nil) do
     "At finest supported resolution — cannot be enumerated further."
   end
 
   # The unit is the one the value's interval says it is walked by: a week
-  # of a calendar of months by days, the dates its walk yields.
-  defp describe_enumerator({next_unit, _range}, calendar) do
-    "Iterates at #{Calendars.inspect(Unit.walked_by(next_unit, calendar))} granularity."
+  # by days, the dates its walk yields.
+  defp describe_enumerator({next_unit, _range}) do
+    "Iterates at #{Calendars.inspect(Unit.walked_by(next_unit))} granularity."
   end
 
   ## ------------------------------------------------------------
@@ -2304,17 +2304,15 @@ defmodule Tempo.Explain do
   end
 
   # The day a value starts on, where it is written to no day and its
-  # writing does not say which: a week of a calendar of months, and a year
-  # or a month of a calendar whose year does not begin on the first day of
-  # its first month. An end is written as far as the value is and no
-  # further (decided 2026-10-08), and this is told beside it.
+  # writing does not say which: a week, and a year or a month of a calendar
+  # whose year does not begin on the first day of its first month. An end is
+  # written as far as the value is and no further (decided 2026-10-08), and
+  # this is told beside it.
   defp starts_on(%Tempo{time: time} = tempo) do
     with [_ | _] <- time,
          true <- Enum.all?(time, &plain_date_unit?/1),
-         year when is_integer(year) <- find_unit(time, :year),
-         calendar = tempo.calendar,
-         false <- Tempo.week_based_calendar?(calendar) do
-      start_not_written(year, find_unit(time, :month), find_unit(time, :week), calendar)
+         year when is_integer(year) <- find_unit(time, :year) do
+      start_not_written(year, find_unit(time, :month), find_unit(time, :week), tempo.calendar)
     else
       _a_day_a_time_or_no_one_year -> nil
     end
@@ -2618,7 +2616,7 @@ defmodule Tempo.Explain do
   # and Adar I in the next. Such a month has no one name without a year, where
   # a month of a calendar whose months are the same every year has.
   defp fetch_month_name(month, {calendar, year}) when is_integer(month) do
-    with %{} = fields <- month_fields(month, calendar_of_months(calendar), year),
+    with %{} = fields <- month_fields(month, calendar, year),
          {:ok, name} <- Localize.Date.to_string(fields, format: "MMMM", locale: :en) do
       {:ok, name}
     else
@@ -2628,16 +2626,6 @@ defmodule Tempo.Explain do
 
   defp fetch_month_name(_set_or_group, _naming) do
     :error
-  end
-
-  # A calendar of weeks has no named months of its own, so a month written in
-  # one keeps the name it was written with, which is the notation's.
-  defp calendar_of_months(calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      Calendars.default()
-    else
-      calendar
-    end
   end
 
   defp month_fields(month, calendar, year) when is_integer(year) do

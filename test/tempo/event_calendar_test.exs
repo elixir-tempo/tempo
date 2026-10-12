@@ -175,22 +175,14 @@ defmodule Tempo.EventCalendarTest do
   end
 
   describe "a computed event in a month or a week of another calendar" do
-    # The calendars of months whose years begin with their first month, and
-    # the two of weeks, whose dates hold a week where another's hold a month.
-    @months [Hebrew, Persian, Coptic, UmmAlQura, Buddhist, Julian]
-    @weeks [NRF, ISOWeek]
+    # The calendars whose years begin with their first month, the two of
+    # weeks among them: their dates hold a month of their pattern of weeks.
+    @months [Hebrew, Persian, Coptic, UmmAlQura, Buddhist, Julian, NRF, ISOWeek]
 
-    for {calendar, year} <- @years, calendar in @months or calendar in @weeks do
-      test "is selected from the period of #{inspect(calendar)} it falls in" do
+    for {calendar, year} <- @years, calendar in @months do
+      test "is selected from the month of #{inspect(calendar)} it falls in" do
         calendar = unquote(calendar)
         year = unquote(year)
-
-        unit =
-          if calendar in @weeks do
-            "W"
-          else
-            "M"
-          end
 
         for event <- @events,
             date <-
@@ -198,8 +190,8 @@ defmodule Tempo.EventCalendarTest do
               |> event_dates(year, calendar)
               |> in_year(year) do
           selector = read("L(#{event})eN", calendar)
-          period = read("#{year}Y#{date.month}#{unit}", calendar)
-          before = read("#{year}Y#{max(date.month - 1, 1)}#{unit}", calendar)
+          period = read("#{year}Y#{date.month}M", calendar)
+          before = read("#{year}Y#{max(date.month - 1, 1)}M", calendar)
 
           assert {event, dates(Tempo.select(period, selector))} == {event, [date]}
 

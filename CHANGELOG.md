@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+* A value of a calendar of weeks (`Calendrical.ISOWeek`, `Calendrical.NRF`, a retail calendar) is a year, a month of the calendar's weeks and a day of that month, as a value of any calendar is: `~o"2026-W25-2"W` is `~o"2026Y6M16D"W`, a date written with a month is that calendar's own (`~o"2026-06-15"W` is the first day of its week 25), and a year walks its twelve months, where each kept its week and its day of the week and a year walked its weeks. Tempo asks no calendar whether it is one of weeks or of months, and needs Calendrical 1.4, whose calendars of weeks hold a date so.
+
 * A value that names no calendar is in `Calendar.ISO`, Elixir's own, where it was in `Calendrical.Gregorian`: `(~o"2026-06-15").calendar` is `Calendar.ISO`, and one written by hand with `calendar: nil` is read as it. `Calendrical.Gregorian` is a calendar like any other, read from `[u-ca=gregory]` and written with it, and `[u-ca=iso8601]` names `Calendar.ISO` and is written with no suffix.
 
 * `Calendar.ISO`'s own weeks are ISO 8601's, and its weeks of a month TR35's, the first the one that holds four or more of the month's days: `~o"2023Y1w1K"` is 2 January 2023 and `~o"2026Y8M1W"` is 3 to 10 August. A value written `[u-ca=gregory]` keeps the Gregorian calendar's rules, which gave 26 December 2022 and 27 July to 3 August.
@@ -110,13 +112,13 @@
 
 * A rule read from an RRULE, iCalendar or JSCalendar with a start states what RFC 5545 takes from it, as ISO 8601-2 Annex C has a converted rule do: `Tempo.RRule.parse("FREQ=MONTHLY", from: ~o"2026-01-31")` is `~o"R/2026-01-31/P1M/FL31DN"`, a weekly rule states its weekday and a yearly rule its month and day. A day a month or a year lacks is then passed over, as RFC 5545 §3.3.10 has it (31 January, 31 March and 31 May, where 28 February and 30 April were listed), and an occurrence is as long as its start is precise, a day for a date and an hour for a time written to the hour (`FREQ=DAILY` from 10:00 is that hour of each day), where it was a cadence long; an ISO 8601 recurrence is unchanged, and JSCalendar's `skip` is read (`backward` keeps the last day, `forward` is an error).
 
-* `Tempo.RRule.to_string/1` writes a recurrence of another calendar than the Gregorian only where a reader of RFC 5545 finds the same occurrences: one that steps or selects by a month, a year, a week of the year or a day of one returns a `Tempo.ConversionError` whose `:reason` is `:not_built` and whose `:target` is `:rrule`, where a Hebrew `R2/5786Y6M/P1M/FL3KN` was written `COUNT=2;FREQ=MONTHLY;BYDAY=WE`, a rule of Gregorian months. One that steps by weeks, days or less and selects by weekday and time of day is written, its end (`UNTIL`) as the Gregorian date it is and, in a calendar of weeks, its week start as the calendar's (`FREQ=WEEKLY;BYDAY=TU;WKST=SU` for the third day of each `Calendrical.NRF` week), where a rule of every other week was read with weeks that start on Monday.
+* `Tempo.RRule.to_string/1` writes a recurrence of another calendar than the Gregorian only where a reader of RFC 5545 finds the same occurrences: one that steps or selects by a month, a year, a week of the year or a day of one returns a `Tempo.ConversionError` whose `:reason` is `:not_built` and whose `:target` is `:rrule`, where a Hebrew `R2/5786Y6M/P1M/FL3KN` was written `COUNT=2;FREQ=MONTHLY;BYDAY=WE`, a rule of Gregorian months. One that steps by weeks, days or less and selects by weekday and time of day is written, its end (`UNTIL`) as the Gregorian date it is and, in a calendar whose weeks begin on another day than Monday, its week start as the calendar's (`FREQ=WEEKLY;BYDAY=TU;WKST=SU` for the third day of each `Calendrical.NRF` week), where a rule of every other week was read with weeks that start on Monday.
 
-* A week of a calendar of months converts to an interval walked by days: `Tempo.to_interval(~o"2026-W25")` is `#Tempo.Interval<~o"2026Y25W/26W" unit: day>`, `Tempo.Interval.granularity/1` is `:day` and `Tempo.explain/1` says "Iterates at :day granularity", where each said `day_of_week` while the walk yields dates. A calendar of weeks keeps `day_of_week`, which its walk yields.
+* A week converts to an interval walked by days: `Tempo.to_interval(~o"2026-W25")` is `#Tempo.Interval<~o"2026Y25W/26W" unit: day>`, `Tempo.Interval.granularity/1` is `:day` and `Tempo.explain/1` says "Iterates at :day granularity", where each said `day_of_week` while the walk yields dates.
 
 * `Tempo.select/2` returns a `Tempo.ConversionError` naming both calendars for a selector that holds a year, a month, a day of one, a day of the year or a week of another calendar than the span's, as `Tempo.at/2` and `Tempo.on/2` do, where it read the selector's numbers in the span's calendar: `Tempo.select(hebrew_year, ~o"6M15D")` selected the fifteenth of the Hebrew year's sixth month, and `~o"6M-1D"`, already June's 30th, nothing. A time of day and a day of the week select from a span in any calendar, a week of the Gregorian or the ISO week calendar from a span in the other, and a rule of another calendar that selects by them answers in the span's calendar, where it answered in its own.
 
-* A day of the week (`K`) is a day of the week of the value that holds it, the calendar's own week in a calendar of weeks and ISO 8601's in a calendar of months, in a selection and a recurrence's rule as in a value: in `Calendrical.NRF`, whose weeks start on Sunday, `2026Y25WL3KN` and `R/2026Y25W/P1W/FL3KN` select Tuesday, the value `2026Y25W3K`, where they selected Wednesday. A selector given to `Tempo.select/2` is read in the calendar it is written in (`~o"3K[u-ca=nrf]"` selects Tuesdays from any span, and `~o"3K"` and `Tempo.workdays/1` the weekdays they name), and `Tempo.explain/1` and `Tempo.RRule.to_string/1` name the weekday the calendar gives the day.
+* A day of the week (`K`) is a day of the week of the value that holds it, counted from the day its calendar's weeks begin on, in a selection and a recurrence's rule as in a value: in `Calendrical.NRF`, whose weeks start on Sunday, `2026Y25WL3KN` and `R/2026Y25W/P1W/FL3KN` select Tuesday, the value `2026Y25W3K`, where they selected Wednesday. A selector given to `Tempo.select/2` is read in the calendar it is written in (`~o"3K[u-ca=nrf]"` selects Tuesdays from any span, and `~o"3K"` and `Tempo.workdays/1` the weekdays they name), and `Tempo.explain/1` and `Tempo.RRule.to_string/1` name the weekday the calendar gives the day.
 
 * A day of the year from a value is the calendar date, as it is read: `Enum.to_list(~o"2026Y{100,200}O")` is `[~o"2026-04-10", ~o"2026-07-19"]`, a masked or an unspecified one (`2026Y1XXO`, `2026YX*O`) is walked by its dates too, and `~o"2026-04-10" in ~o"2026Y{100,200}O"` is true, where the walk gave `2026Y100O`, a value read as that date and not equal to it. A shift reaches each date such a value names and writes them again as days of the year where one value holds them (`Tempo.shift(~o"2026Y{100,200}O", day: 1)` is `~o"2026Y{101,201}O"`, a month on `~o"2026Y{130,231}O"`, and two days that land in two years are an interval set), where a step by days or weeks was a `Tempo.ResolutionError` and one by months left the value as it was.
 
@@ -124,7 +126,7 @@
 
 * In a calendar whose year begins on another day than 1 January (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`, and `Calendrical.Reform.England` to 1750) a year starts on that day and its months are those the calendar counts from it, as Calendrical numbers its dates: in `March25` `1750Y1M1D` is 25 March 1750, `1750Y1M` the seven days from it and `1750Y13M` the twenty-four before the next, where the year started on 1 January and a month was the Julian month of that number. `Tempo.to_string/2` and `Tempo.explain/1` name a date by the month and the day it is called ("Mar 25, 1750"), and a selection, a season, a week of a month and a step there are answered as in any other calendar.
 
-* A week's days are calendar dates in a calendar of months wherever a value gives one, as a week date is read: `Enum.to_list(~o"2026-W25")` is `~o"2026-06-15"` to `~o"2026-06-21"` and `Tempo.shift(~o"2026-W25", day: 1)` is `~o"2026-06-16"`, where each gave a week and a day of it (`2026Y25W2K`) and `~o"2026-06-16" in ~o"2026-W25"` was false. `Tempo.extend_resolution/2`, an interval's end counted by a duration (`2026-W25/P3D`), a recurrence's occurrences and a set operation's members are written so too, while a step of whole weeks gives a week and a calendar of weeks keeps its week dates.
+* A week's days are calendar dates wherever a value gives one, as a week date is read: `Enum.to_list(~o"2026-W25")` is `~o"2026-06-15"` to `~o"2026-06-21"` and `Tempo.shift(~o"2026-W25", day: 1)` is `~o"2026-06-16"`, where each gave a week and a day of it (`2026Y25W2K`) and `~o"2026-06-16" in ~o"2026-W25"` was false. `Tempo.extend_resolution/2`, an interval's end counted by a duration (`2026-W25/P3D`), a recurrence's occurrences and a set operation's members are written so too, while a step of whole weeks gives a week.
 
 * A `:within` window bounds where a time of day is placed: on a window from noon to noon `~o"T09/T17"` is noon to five on the first day and nine to noon on the last, for every set operation, where it was placed on the whole of every day the window touches and a union or an intersection reached outside the window. A dated window places every operand with no year, with an empty or a time-of-day partner too, and each placed span keeps its time of day's metadata.
 
@@ -361,7 +363,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * The `w` designator names a week in the calendar's own numbering, where `W` is ISO 8601's: `~o"2027Y1w1K"` is 28 December 2026 in `Calendrical.Gregorian`, which counts from the week holding January 1, and `R/../P1Y/FL10wN` is the calendar's week 10 of each year.
 
-* `Tempo.new/1` takes `:quarter`, the span the calendar's `quarter/2` gives it, held as the months (in a week-based calendar, the weeks) `2026-34` parses to; `Tempo.parse/2` reads `"Q2 2026"` through it.
+* `Tempo.new/1` takes `:quarter`, the span the calendar's `quarter/2` gives it, held as the months `2026-34` parses to; `Tempo.parse/2` reads `"Q2 2026"` through it.
 
 * A value after a group of its own unit counts within the group (ISO 8601-2 §5.4.2): `2018Y9M2DT3GT8HU0H30M` is 16:30, `2018Y2G3MU2M` is May and `2026Y2G13WU3W` is week 16.
 
@@ -427,7 +429,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A `SKIP` beside `BYYEARDAY=366` is read, and the day passed over in a year of 365 days: RFC 7529 moves a day of the month, and not a day of the year.
 
-* `Tempo.to_string/2` shows a week of a calendar of weeks as the locale's words for it, "week 25 of 2026" and "Woche 25 des Jahres 2026" (CLDR's `yw`), and a span of weeks from its first to its last, where it showed the first and last days in the calendar's notation ("2026-W25-1 – 2026-W25-7"). A week of a calendar of months is its days still.
+* `Tempo.to_string/2` shows a week of a calendar of weeks as its days, in the locale's formats of the calendar ("M06 15 – 21, 2026 AD"), as a week of any calendar is, where it showed the first and last days in the calendar's notation ("2026-W25-1 – 2026-W25-7").
 
 * A `:within` window with no start (`~o"../2027"`) is refused as one: "a :within window needs a start". It was refused further on, as an open-ended interval that cannot be a member of a set, and a value that needs no window was converted as if none were given.
 
@@ -561,7 +563,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A time of day `Tempo.select/2` selects by a selection, where the clock skips part of it, is the part the clock shows, as a constraint's is: `~o"LT2HN"` from 4 October 2026 on Lord Howe, whose clocks go from 02:00 to 02:30, is 02:30 to 03:00, where it ran to 03:30.
 
-* The workday functions take a day and a time of day in a calendar of weeks, which keeps its week and day beside a time: `Tempo.add_workdays(Tempo.from_iso8601!("2024-W10-7T01[u-ca=iso-week]"), 1, :US)` is `~o"2024Y11W1KT1H"W`, and so with `next_workday/2`, `previous_workday/2`, `nearest_workday/2` and `roll_to_workday/3`, where each was a `Tempo.ResolutionError` that said the value denoted no day. `Tempo.workday?/2` and `Tempo.weekend?/2` answer it, where they raised.
+* The workday functions take a day and a time of day in a calendar of weeks: `Tempo.add_workdays(Tempo.from_iso8601!("2024-W10-7T01[u-ca=iso-week]"), 1, :US)` is `~o"2024Y3M8DT1H"W`, the Monday of week 11, and so with `next_workday/2`, `previous_workday/2`, `nearest_workday/2` and `roll_to_workday/3`, where each was a `Tempo.ResolutionError` that said the value denoted no day. `Tempo.workday?/2` and `Tempo.weekend?/2` answer it, where they raised.
 
 * A time zone written after another suffix is a `Tempo.ParseError`, as RFC 9557 §4.1 has a time zone first or not at all: `2022-11-20T10:30[u-ca=hebrew][Europe/Paris]` was read with its zone dropped, as a value in no zone. A second time zone after a first is still dropped where it is elective, the value having the zone it was given first.
 
@@ -611,7 +613,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.explain/1` words a window of hours or minutes in them: `R/2027-01-01/P1D/FLLT22HN/PT4HN` selects "the 4 hours from 22:00", where it was "the PT4H window from at 22:00".
 
-* A year and a week of it are combined in a calendar of weeks: `Tempo.difference/2` of 2026 and its week 25 in `Calendrical.ISOWeek` is the weeks before and after, where every set operation between a year and a week or a day of one returned a `Tempo.ResolutionError`. Such a calendar makes its years of weeks, so the two are on one axis as they stand.
+* A year and a week of it are combined in a calendar of weeks: `Tempo.difference/2` of 2026 and its week 25 in `Calendrical.ISOWeek` is the weeks before and after, where every set operation between a year and a week or a day of one returned a `Tempo.ResolutionError`. They meet on the calendar's dates, as a year and a week of any calendar do.
 
 * The basic format is read where a number goes on into unspecified digits or a set: a minute after an hour alone (`T10XX`, `T10{30,45}`) and a week after a year (`2026WXX1`, `2026W{25,26}`), as each is in the extended format (`T10:XX`, `2026-W{25,26}`). They were read as far as the hour, and as a week alone, with the rest left over.
 
@@ -673,7 +675,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.shift/3` of a value that holds unspecified digits lands each value they stand for and names no other: a day on from some day of week 25 (`~o"2026Y25WX*K"`) is one of the seven days from the Tuesday, where it was the next Monday alone, and an unspecified week steps so too. An hour on from some day of June is `~o"2026Y6MXXDT1H"`, where it was any hour from 01:00 on the 1st to 01:00 on the 30th, a mask whose values are not one run (`~o"2026Y6MX5D"`) gives the set of their spans, and each is stepped in its zone and by its calendar.
 
-* A week stepped by years is the last week of a year that has no week of its number, as a day past the end of its month is the month's last: `Tempo.shift(~o"2026Y53W", year: 1)` is `~o"2027Y52W"`, where it was `~o"2027Y53W"`, a week 2027 does not have. A calendar of weeks steps its week dates so too, and a recurrence of years from week 53 (`R3/2026Y53W/P1Y`) no longer ends an occurrence on such a week.
+* A week stepped by years is the last week of a year that has no week of its number, as a day past the end of its month is the month's last: `Tempo.shift(~o"2026Y53W", year: 1)` is `~o"2027Y52W"`, where it was `~o"2027Y53W"`, a week 2027 does not have. A day of a calendar of weeks a count of years on is the day its calendar steps to, the same day of the last week for a day of a 53rd, and a recurrence of years from week 53 (`R3/2026Y53W/P1Y`) no longer ends an occurrence on such a week.
 
 * A selection within a time of day is written: `inspect/1`, `Tempo.to_iso8601/1` and `Tempo.to_iso8601!/1` raised a `FunctionClauseError` for a value such as `2026Y6M15DT10HLT30MN`, the thirtieth minute of an hour, which reads and converts.
 
@@ -715,7 +717,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A week kept whole by a set operation beside a date is walked by its seven days, where the first member of `Tempo.union(~o"2026-W25", ~o"2026-06-20")` walked its 168 hours. A weekday selected in a Gregorian week (`2026Y25WL3KN`) is that day, in a value and in a recurrence's rule, where it was the week's Monday.
 
-* A time of day is placed on each day of a `:within` window whatever units the window is written in: `Tempo.intersection(~o"T09/T17", ~o"2026-W25", within: ~o"2026-W25")` is the hours of the week's seven days, where it was empty, and `Tempo.complement/2` there the time outside them, where it was the whole week. In a window of another calendar the time is placed on that calendar's days (a Hebrew month's twenty-nine, a week calendar's week dates), where the day's numbers were read in the Gregorian calendar and nothing was placed.
+* A time of day is placed on each day of a `:within` window whatever units the window is written in: `Tempo.intersection(~o"T09/T17", ~o"2026-W25", within: ~o"2026-W25")` is the hours of the week's seven days, where it was empty, and `Tempo.complement/2` there the time outside them, where it was the whole week. In a window of another calendar the time is placed on that calendar's days (a Hebrew month's twenty-nine, the seven of a week of a calendar of weeks), where the day's numbers were read in the Gregorian calendar and nothing was placed.
 
 * A set's members written out of order beside a count from the end are joined as far as they run on: `{0,2,1..7,-1}` is `{0..7,-1}`, where one pass of the joining left `0` beside `1..7`.
 
@@ -765,7 +767,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.to_relative_string/2` counts to where an interval written as a duration and an end starts (`P1M/2026-07-01`), and to the first occurrence of a counted recurrence written so, where each was an error.
 
-* A year of a calendar of weeks is shifted by weeks and days and has a length in them (`Tempo.exactly?(year, ~o"P53W")`), where each was a `Tempo.ResolutionError`. `:day` truncates, rounds and extends a week date of a calendar of weeks to its day of the week.
+* A year of a calendar of weeks is shifted by weeks and days and has a length in them (`Tempo.exactly?(year, ~o"P53W")`), where each was a `Tempo.ResolutionError`. `:day` truncates, rounds and extends a value of a calendar of weeks to its day, a date of the calendar's own months.
 
 * `Tempo.duration/1` measures a set written as its members (`{2026Y,2030Y}`) as it measures the same set written in one value, where it returned an `ArgumentError`.
 
@@ -833,7 +835,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A recurrence whose start has no year starts on a dated `:within` window, as `Tempo.at/2` places a value: `R/T22H/PT1H` within 15 June is 22:00 and 23:00 that day, and a day of the week starts on the first one in the window, where such a recurrence gave nothing.
 
-* A value in a calendar of weeks takes day resolution as its day of the week, so `Tempo.at_resolution/2` to `:day` gives `2026-W25-1`, and a value's selection (`2026YL1K1IN`), a `:within` window and `select/2` select in it, where they gave the whole span or a `Tempo.ResolutionError`.
+* A value in a calendar of weeks takes day resolution as the day it names, so `Tempo.at_resolution/2` to `:day` gives the first day of a week (`~o"2026-W25-1"W`), and a value's selection (`2026YL1K1IN`), a `:within` window and `select/2` select in it, where they gave the whole span or a `Tempo.ResolutionError`.
 
 * A recurrence's selection by day of the week applies in a calendar of weeks: in `Calendrical.ISOWeek`, `R3/2026-W01-1/P1W/FL2KN` is each week's Tuesday and `R3/2026-W25-1/P1Y/FL25W2KN` the Tuesday of week 25, where they gave each week's Monday and nothing.
 
@@ -877,21 +879,19 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.union/2`, `intersection/2` and `difference/2` take a set whose member is a range (`{2026-06-15..2026-06-20}`), where they raised.
 
-* A month, a day of a month or a day of the year written or given for a calendar of weeks is a `Tempo.InvalidDateError` that names the week form (`2026Y25W2K`): `~o"2026-06-15"W` and `Tempo.new(year: 2026, month: 6, day: 15, calendar: Calendrical.ISOWeek)` are errors, where each held a month and a day its calendar has none of. A date of another calendar is brought to one with `Tempo.to_calendar/2`, and a month or a day of one placed on (`at/2`, `on/2`) or selected in (`select/2`) a week calendar's value is a `Tempo.ConversionError`.
-
 * `Tempo.InvalidDateError`'s message is its written reason whenever it has one, where an error that also named a unit said only the unit and the value (`Invalid week: 6`).
 
 * `Tempo.at/2`, `on/2` and `extend/1` check a value in its own calendar, so a Hebrew leap year takes its thirteenth month and a week date keeps its shape when a time is placed in it, where each was checked as a Gregorian date.
 
-* `Tempo.to_interval/2` returns an error for a recurrence whose start its cadence cannot step (a month from a week date, months from a quarter) and for a selection by a month, a day of one or a day of the year in a calendar of weeks, where it raised or left the selection out.
+* `Tempo.to_interval/2` returns an error for a recurrence whose start its cadence cannot step (a month from a week, months from a quarter), where it raised.
 
-* `Tempo.select/2` gives a week calendar's days as week dates, where it built them with a month, and skips a span either end of which cannot land (29 February, in a common year), where it raised.
+* `Tempo.select/2` skips a span either end of which cannot land (29 February, in a common year), where it raised.
 
 * `explain/1` names a month as its calendar does (a Hebrew `5786-06-15` is "Adar 15, 5786", a Persian selection "in Farvardin"), where every calendar's months took the Gregorian calendar's names. A lunisolar month with no year, which no one name fits, is given by its number.
 
 * `explain/1` headlines a value holding a set or a group by what it names — "June and July 2026", "The 1st and 15th of June 2026", "January to March 2026" for a quarter — where it named only the units before it ("The year 2026"). A set of years is no longer called a value with no year, and a set of hours is written as its clock times, not `??`.
 
-* `explain/1` describes a week, a week date and every value in a week calendar by its week and the days it spans (`~o"2026-W25"` is "Week 25 of 2026", spanning `[2026-06-15, 2026-06-22)`), where it called each "The year 2026" with an empty span. A week calendar's dates are written in its own notation (`2026-W25-2`).
+* `explain/1` describes a week, a week date and every value in a week calendar by its week and the days it spans (`~o"2026-W25"` is "Week 25 of 2026", spanning `[2026-06-15, 2026-06-22)`), where it called each "The year 2026" with an empty span. A week calendar's dates are worded as its own months and days ("M06 16, 2026").
 
 * `Tempo.to_string/2` takes a skeleton or a pattern for a span of several values (`format: :yMMMd` on `2026-06-15/2026-06-18` is "Jun 15 – 17, 2026"), where it returned Localize's error.
 
@@ -923,11 +923,11 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.to_iso8601/1` writes a value's calendar however the value was made, so a Hebrew date from `Tempo.to_calendar/2` reads back as Hebrew, where it read back as Gregorian; a calendar IXDTF cannot name whose days the Gregorian calendar numbers differently, such as a fiscal year, is an error.
 
-* A week-based calendar's value (the ISO week or NRF calendar's, or a retail one's) has ISO 8601's week date shape however it is made, and `Tempo.to_iso8601/1` writes it as ISO 8601-2's `2026Y25W2K[u-ca=iso-week]`, which reads back, where it wrote `2026Y25W2D` or `2026Y25M2D`. Such values compare, shift by days and weeks, round and convert, where comparing a parsed one raised, and a month added to any week date is an error, where it raised.
+* A week-based calendar's value (the ISO week or NRF calendar's, or a retail one's) is one shape however it is made, a date of the calendar's own months, and `Tempo.to_iso8601/1` writes it `2026Y6M16D[u-ca=iso-week]`, which reads back, where it wrote `2026Y25W2D` or `2026Y25M2D`. Such values compare, shift, round and convert, where comparing a parsed one raised.
 
 * `Tempo.day_of_week/1`, `day_of_year/1`, `quarter_of_year/1`, `split/1` and `round/2` read a week date as the day it names, where they read it as 1 January of its year or split its day off as a time.
 
-* `Tempo.to_string/2` renders a week date as the day it names and a week, or a range of weeks, as its first and last day ("Jun 15 – 21, 2026"), where it rendered the year alone. A week calendar's day is written in that calendar's own notation ("2026-W25-2").
+* `Tempo.to_string/2` renders a week date as the day it names and a week, or a range of weeks, as its first and last day ("Jun 15 – 21, 2026"), where it rendered the year alone. A week calendar's day is written in the locale's formats of its calendar ("M06 16, 2026 AD").
 
 * A network's relation delays set its axis, so a six-month gap between year-dated periods is six months, where it rounded to a year, and a bound on a finer axis is the span it names, so `{:not_after, ~o"1300Y"}` allows all of 1300. A network counting only weeks is placed in days, where it raised.
 
@@ -971,7 +971,7 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * A week (`W`) is an ISO 8601 week throughout — dates, week counts, arithmetic, rounding, groups and selections — counted over the calendar's own year in a non-Gregorian calendar. `2026Y53W` is valid, `Tempo.shift(~o"2026Y52W", week: 2)` is `2027Y1W` and Hebrew `5787Y10W1K` is 6 Kislev, where week counts were the Gregorian calendar's and Hebrew week dates came from the Gregorian year 5787.
 
-* The ISO 8601-2 quarters, quadrimesters and semesters (codes 33–41) are the value's calendar's own periods, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II and its Q4 runs to Elul, and a week-based calendar's are groups of weeks.
+* The ISO 8601-2 quarters, quadrimesters and semesters (codes 33–41) are the value's calendar's own periods, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II and its Q4 runs to Elul, and a week-based calendar's are groups of its months.
 
 * A group of hours, minutes or seconds holds clock values from 0: `T16H1GT15MU` is 16:00–16:15 and `6GT2HU` 10:00–12:00, where both started an hour or minute late.
 

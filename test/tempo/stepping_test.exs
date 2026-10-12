@@ -143,10 +143,13 @@ defmodule Tempo.SteppingTest do
 
     test "is the week its calendar steps to, in a calendar of weeks" do
       for year <- [2020, 2026], week <- [1, 52, 53], day <- [1, 7], by <- [-1, 1, 6] do
-        {to_year, to_week, to_day} = ISOWeek.plus(year, week, day, :years, by)
+        %Date{} = date = ISOWeek.date_from_week_date(year, week, day)
+        {to_year, to_month, to_day} = ISOWeek.plus(date.year, date.month, date.day, :years, by)
 
-        assert Tempo.shift(Tempo.from_iso8601!("#{year}Y#{week}W#{day}K", ISOWeek), year: by) ==
-                 Tempo.from_iso8601!("#{to_year}Y#{to_week}W#{to_day}K", ISOWeek)
+        assert {year, week, day, by,
+                Tempo.shift(Tempo.from_iso8601!("#{year}Y#{week}W#{day}K", ISOWeek), year: by)} ==
+                 {year, week, day, by,
+                  Tempo.from_date(Date.new!(to_year, to_month, to_day, ISOWeek))}
       end
     end
 

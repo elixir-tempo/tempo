@@ -36,7 +36,7 @@ The tables are grouped by subject, and within a table the terms a later one buil
 | a reading the clock skips | A reading no moment has, on the day the clock goes forward. It is refused. | `Tempo.ZoneGapError` |
 | a reading the clock shows twice | A reading two moments have, on the day the clock goes back. | `Tempo.in_zone/2` |
 | calendar | A module that implements `Calendar`, in which a value's units are counted. Never a CLDR calendar type. | `Tempo.to_calendar/2` |
-| calendar of weeks | A calendar whose year is counted in weeks and whose dates are a week and a day of it. | `Calendrical.ISOWeek` |
+| calendar of weeks | A calendar whose year is a whole number of weeks and whose months are four or five of them. Its dates are a year, a month and a day, as any calendar's are, and a week date written for it is placed in its own weeks. | `Calendrical.ISOWeek` |
 | territory | A CLDR territory code (`:AU`, `:SA`), which decides the weekend and the first day of the week. Never "region". | `Tempo.Territory` |
 
 ## Several values at once

@@ -107,7 +107,7 @@ These keep their names and change their meaning:
 
 * **`Tempo.new/1` of a week and a day of it** — the calendar date they name, as the parser reads them, where 1.x kept the week date.
 
-* **A month, a day of a month or a day of the year for a calendar of weeks** — a `Tempo.InvalidDateError` that names the week form (`~o"2026-W25-1"W`), written or given to `Tempo.new/1`, where 1.x held a month and a day such a calendar has none of; a date of another calendar is brought to one with `Tempo.to_calendar/2`.
+* **A value of a calendar of weeks** — a year, a month of the calendar's weeks and a day of that month, as a value of any calendar is: `~o"2026-W25-2"W` is `~o"2026Y6M16D"W`, a date written with a month is that calendar's own month, and a year walks its twelve months, where 1.x kept the week and the day of the week and walked a year by its weeks. It needs Calendrical 1.4, whose calendars of weeks hold a date so.
 
 * **`shift/3` by months and days** — the months, then the days from the day they land on, as `Date.shift/2` counts; and an unknown unit is an error, where 1.x passed it over.
 

@@ -130,17 +130,17 @@ defmodule Tempo.SetTest do
       assert {:ok, %Tempo.Set{}} = Tempo.from_iso8601("{5787-13-01}", Hebrew)
     end
 
-    test "takes week dates for a calendar of weeks, and no date written with a month" do
+    # A week date is the date it names, and the same days written with the
+    # calendar's own month are the same set: week 25 begins on the fifteenth
+    # of the ISO week calendar's sixth month.
+    test "takes week dates for a calendar of weeks, and dates written with its months" do
       set = Tempo.from_iso8601!("{2026-W25-1,2026-W25-2..2026-W25-4}", ISOWeek)
 
       assert Enum.uniq(calendars(set)) == [ISOWeek]
-      assert [%Tempo{time: [year: 2026, week: 25, day_of_week: 1]}, %Tempo.Range{}] = set.set
+      assert [%Tempo{time: [year: 2026, month: 6, day: 15]}, %Tempo.Range{}] = set.set
 
-      for text <- ["{2026-06-15,2026-06-16..2026-06-18}", "{2026-06}"] do
-        assert {:error, %InvalidDateError{unit: :month, calendar: ISOWeek}} =
-                 Tempo.from_iso8601(text, ISOWeek),
-               text
-      end
+      assert Tempo.from_iso8601("{2026-06-15,2026-06-16..2026-06-18}", ISOWeek) == {:ok, set}
+      assert {:ok, %Tempo.Set{}} = Tempo.from_iso8601("{2026-06}", ISOWeek)
     end
   end
 

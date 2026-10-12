@@ -877,16 +877,18 @@ defmodule Tempo.Reference.Test do
     end
   end
 
-  # A calendar of weeks counts its year in weeks and its week in days, and
-  # `Date` in that calendar is the reference: its month is the week and its
-  # day the day of the week.
+  # A calendar of weeks counts its year in weeks and its week in days. The
+  # calendar is the reference: it says which date a day of a week is
+  # (`date_from_week_date/3`), a year, a month and a day as every calendar's
+  # dates are, and `Date` in that calendar moves it.
   describe "a calendar of weeks" do
-    property "reads a week date as the day Date gives" do
+    property "reads a week date as the date its calendar gives" do
       check all({year, week, day} <- week_date()) do
         value = week_value([year, "Y", week, "W", day, "K"])
-        date = Date.new!(year, week, day, ISOWeek)
+        date = ISOWeek.date_from_week_date(year, week, day)
 
         assert Tempo.to_date(value) == {:ok, date}
+        assert value == Tempo.from_date(date)
         assert covered(value) == covered(Tempo.from_date(Date.convert!(date, Calendar.ISO)))
       end
     end
@@ -897,42 +899,40 @@ defmodule Tempo.Reference.Test do
               {weeks, days} <- tuple({integer(-60..60), integer(-20..20)})
             ) do
         value = week_value([year, "Y", week, "W", day, "K"])
-        moved = add_days(Date.new!(year, week, day, ISOWeek), weeks * 7 + days)
+        moved = add_days(ISOWeek.date_from_week_date(year, week, day), weeks * 7 + days)
 
-        assert Tempo.shift(value, week: weeks, day: days) ==
-                 week_value([moved.year, "Y", moved.month, "W", moved.day, "K"])
+        assert Tempo.shift(value, week: weeks, day: days) == Tempo.from_date(moved)
       end
     end
 
-    property "moves a year and a week by weeks, and to the day by days" do
+    property "moves a year by weeks and a week by days, to the day it lands on" do
       check all({year, week, _day} <- week_date(), count <- integer(1..120)) do
         first = Date.new!(year, 1, 1, ISOWeek)
         weeks_on = add_days(first, count * 7)
-        days_on = add_days(Date.new!(year, week, 1, ISOWeek), count)
+        days_on = add_days(ISOWeek.date_from_week_date(year, week, 1), count)
 
-        assert Tempo.shift(week_value([year, "Y"]), week: count) ==
-                 week_value([weeks_on.year, "Y", weeks_on.month, "W"])
+        assert Tempo.shift(week_value([year, "Y"]), week: count) == Tempo.from_date(weeks_on)
 
         assert Tempo.shift(week_value([year, "Y", week, "W"]), day: count) ==
-                 week_value([days_on.year, "Y", days_on.month, "W", days_on.day, "K"])
+                 Tempo.from_date(days_on)
       end
     end
 
-    property "a year is as long as its weeks" do
+    property "a year is as long as its weeks, and is walked by its months" do
       check all(year <- integer(1990..2060)) do
         days = Date.diff(Date.new!(year + 1, 1, 1, ISOWeek), Date.new!(year, 1, 1, ISOWeek))
         value = week_value([year, "Y"])
 
         assert Tempo.exactly?(value, read!("P#{days}D"))
         assert Tempo.exactly?(value, read!("P#{div(days, 7)}W"))
-        assert Enum.count(value) == div(days, 7)
+        assert Enum.count(value) == ISOWeek.months_in_year(year)
       end
     end
 
     property "truncates and rounds a time to its day" do
       check all({year, week, day} <- week_date(), hour <- integer(0..23)) do
         value = week_value([year, "Y", week, "W", day, "K", "T", hour, "H"])
-        today = Date.new!(year, week, day, ISOWeek)
+        today = ISOWeek.date_from_week_date(year, week, day)
 
         nearest =
           if hour < 12 do
@@ -941,10 +941,8 @@ defmodule Tempo.Reference.Test do
             add_days(today, 1)
           end
 
-        assert Tempo.trunc(value, :day) == week_value([year, "Y", week, "W", day, "K"])
-
-        assert Tempo.round(value, :day) ==
-                 week_value([nearest.year, "Y", nearest.month, "W", nearest.day, "K"])
+        assert Tempo.trunc(value, :day) == Tempo.from_date(today)
+        assert Tempo.round(value, :day) == Tempo.from_date(nearest)
       end
     end
   end

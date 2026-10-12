@@ -2,12 +2,12 @@ defmodule Tempo.WorkdayInACalendarOfWeeksTest do
   @moduledoc """
   A workday counted from a day and a time of day in a calendar of weeks.
 
-  A calendar of weeks keeps a value's week and day of the week beside a
-  time of day, where a week date of the Gregorian calendar is read as a
-  month and a day. The workday functions read a day's date only where it
-  was written alone, so `2024-W10-7T01[u-ca=iso-week]` was a
-  `Tempo.ResolutionError` that said it denoted no day, and `workday?/2` and
-  `weekend?/2` raised.
+  A week date of a calendar of weeks is the date it names, a year, a month
+  and a day of that calendar, as a week date of the Gregorian calendar is.
+  It kept its week and day of the week beside a time of day, and the
+  workday functions read a day's date only where it was written alone, so
+  `2024-W10-7T01[u-ca=iso-week]` was a `Tempo.ResolutionError` that said it
+  denoted no day, and `workday?/2` and `weekend?/2` raised.
 
   The measure is Elixir's own `Date` and Erlang's `:calendar`: a Gregorian
   date's week and day of the week, the weekend written here, and the
@@ -74,14 +74,18 @@ defmodule Tempo.WorkdayInACalendarOfWeeksTest do
     end
   end
 
-  # A Gregorian date as the units a calendar of weeks writes it in.
+  # A Gregorian date as the units a value of the calendar of weeks holds:
+  # the year, the month and the day of that calendar, as `Date` converts it.
   defp week_units(%Date{} = date) do
-    {year, week} = :calendar.iso_week_number(Date.to_erl(date))
-    [year: year, week: week, day_of_week: Date.day_of_week(date)]
+    %Date{year: year, month: month, day: day} = Date.convert!(date, Calendrical.ISOWeek)
+    [year: year, month: month, day: day]
   end
 
+  # A Gregorian date written as the week date it is, as Erlang counts ISO
+  # 8601's weeks.
   defp in_weeks(%Date{} = date, clock, suffix \\ "") do
-    [year: year, week: week, day_of_week: day] = week_units(date)
+    {year, week} = :calendar.iso_week_number(Date.to_erl(date))
+    day = Date.day_of_week(date)
 
     week =
       week
@@ -184,18 +188,28 @@ defmodule Tempo.WorkdayInACalendarOfWeeksTest do
       assert time == week_units(~D[2024-03-11]) ++ [hour: 1]
     end
 
-    test "is still refused where it denotes no one day, and by a modified roll" do
+    test "is still refused where it denotes no one day" do
       for text <- ["2024-W10", "2024-W10-{6,7}T01", "2024-W10-XT01"] do
         value = Tempo.from_iso8601!(text <> "[u-ca=iso-week]")
 
         assert {^text, {:error, %Tempo.ResolutionError{operation: :next_workday, target: :day}}} =
                  {text, Tempo.next_workday(value, :US)}
       end
+    end
 
-      assert {:error, %Tempo.ResolutionError{operation: :roll_to_workday, target: :month}} =
-               Tempo.roll_to_workday(in_weeks(~D[2024-03-10], "T01"), :US,
-                 roll: :modified_following
-               )
+    # A modified roll stays in the month the day is in, which is the
+    # calendar's own. Sunday 10 March 2024 rolls on to the Monday, in the
+    # same month of the calendar of weeks; Sunday 28 January is the last day
+    # of its first month, so it rolls back to the Friday, where the Monday
+    # is in its second. It was refused, a calendar of weeks having no month.
+    test "is rolled by a modified convention within the calendar's own month" do
+      roll = &Tempo.roll_to_workday(in_weeks(&1, "T01"), :US, roll: :modified_following)
+
+      assert roll.(~D[2024-03-10]) == in_weeks(~D[2024-03-11], "T01")
+
+      assert Date.convert!(~D[2024-01-28], Calendrical.ISOWeek).month == 1
+      assert Date.convert!(~D[2024-01-29], Calendrical.ISOWeek).month == 2
+      assert roll.(~D[2024-01-28]) == in_weeks(~D[2024-01-26], "T01")
     end
   end
 end

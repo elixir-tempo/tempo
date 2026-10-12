@@ -352,7 +352,7 @@ defmodule Tempo.UnitValues do
     if is_nil(year) do
       {:error, :unanchored}
     else
-      counted(calendar.months_in_year(year))
+      counted(last_month(year, calendar))
     end
   end
 
@@ -417,16 +417,10 @@ defmodule Tempo.UnitValues do
   # Whether a year has the month, which a calendar is asked before it is
   # asked for the month's days: for a month its year does not have one
   # calendar answers as if the months went round, one with no days, and one
-  # not at all. A date of a calendar of weeks holds its week where a month is
-  # held, and has the weeks its year has. A month every year has needs no
-  # count of the year's months, which an astronomical calendar works out from
-  # its new moons.
+  # not at all. A month every year has needs no count of the year's months,
+  # which an astronomical calendar works out from its new moons.
   defp month_of_year?(month, year, calendar) when month >= 1 do
-    if Tempo.week_based_calendar?(calendar) do
-      month <= calendar_weeks_in_year(year, calendar)
-    else
-      month <= fewest_months(calendar) or month <= last_month(year, calendar)
-    end
+    month <= fewest_months(calendar) or month <= last_month(year, calendar)
   end
 
   defp month_of_year?(_month, _year, _calendar) do
@@ -440,10 +434,15 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  defp last_month(year, calendar) do
-    case calendar.months_in_year(year) do
-      months when is_integer(months) -> months
-      _cannot_say -> 0
+  @doc false
+  # The last month a year has, as its calendar numbers its months
+  # (`month_numbers/1`): the number a date of the year holds in its month
+  # field at most. A year the calendar does not have has none.
+  @spec last_month(integer(), module()) :: non_neg_integer()
+  def last_month(year, calendar) do
+    case calendar.month_numbers(year) do
+      [_ | _] = months -> last_of(months)
+      _no_such_year -> 0
     end
   end
 
@@ -1704,17 +1703,18 @@ defmodule Tempo.UnitValues do
 
   ## The days of a week
   #
-  # `K` counts the days of the week of the value that holds it: the
-  # calendar's own week in a calendar of weeks, whose dates hold that day,
-  # and ISO 8601's week, which starts on Monday, in a calendar of months
-  # (decided 2026-10-05). So a day of the week is a number of its value's
-  # calendar, and the weekday it names is asked of that calendar, here,
-  # wherever it meets a date of another calendar or a weekday's name.
+  # `K` counts the days of the week of the value that holds it, as its
+  # calendar counts the days of a week date (`date_from_week_date/3`, decided
+  # 2026-10-05): ISO 8601's week, which starts on Monday, in a calendar that
+  # counts its week dates by ISO 8601's rule, and its own week in one whose
+  # week dates are its own dates. So a day of the week is a number of its
+  # value's calendar, and the weekday it names is asked of that calendar,
+  # here, wherever it meets a date of another calendar or a weekday's name.
 
   @doc """
   Returns the weekday a day of the week names in a calendar, as ISO 8601 numbers the weekdays.
 
-  In a calendar of months a day of the week is ISO 8601's, so it is its own weekday. In a calendar of weeks it is a day of the calendar's own week, and the weekday depends on the day those weeks start on: the third day is Wednesday in `Calendrical.ISOWeek`, whose weeks start on Monday, and Tuesday in `Calendrical.NRF`, whose weeks start on Sunday.
+  A day of the week is a day of a week date as its calendar counts one, and the weekday depends on the day those weeks start on: the third day is Wednesday in `Calendrical.Gregorian` and in `Calendrical.ISOWeek`, whose week dates start on Monday, and Tuesday in `Calendrical.NRF`, whose own weeks start on Sunday.
 
   ### Arguments
 
@@ -1740,7 +1740,7 @@ defmodule Tempo.UnitValues do
   """
   @spec iso_weekday_from_day_of_week(integer(), module()) :: integer()
   def iso_weekday_from_day_of_week(day_of_week, calendar) when is_integer(day_of_week) do
-    if day_of_week in days_of_a_week(calendar) and Tempo.week_based_calendar?(calendar) do
+    if day_of_week in days_of_a_week(calendar) do
       weekday_of_week_day(calendar, day_of_week)
     else
       day_of_week
@@ -1754,7 +1754,7 @@ defmodule Tempo.UnitValues do
   @doc """
   Returns the day of the week a calendar gives a weekday, the weekday numbered as ISO 8601 numbers it.
 
-  The inverse of `iso_weekday_from_day_of_week/2`: Wednesday is the third day of the week in a calendar of months and in `Calendrical.ISOWeek`, and the fourth in `Calendrical.NRF`, whose weeks start on Sunday.
+  The inverse of `iso_weekday_from_day_of_week/2`: Wednesday is the third day of the week in `Calendrical.Gregorian` and in `Calendrical.ISOWeek`, and the fourth in `Calendrical.NRF`, whose weeks start on Sunday.
 
   ### Arguments
 
@@ -1777,13 +1777,9 @@ defmodule Tempo.UnitValues do
   """
   @spec day_of_week_from_iso_weekday(integer(), module()) :: integer()
   def day_of_week_from_iso_weekday(iso_weekday, calendar) when is_integer(iso_weekday) do
-    if Tempo.week_based_calendar?(calendar) do
-      calendar
-      |> days_of_a_week()
-      |> Enum.find(iso_weekday, &(weekday_of_week_day(calendar, &1) == iso_weekday))
-    else
-      iso_weekday
-    end
+    calendar
+    |> days_of_a_week()
+    |> Enum.find(iso_weekday, &(weekday_of_week_day(calendar, &1) == iso_weekday))
   end
 
   def day_of_week_from_iso_weekday(no_weekday, _calendar) do
@@ -1791,15 +1787,19 @@ defmodule Tempo.UnitValues do
   end
 
   @doc false
-  # The day a calendar is asked to count a week's days from, for the number
-  # `K` gives one of its dates: its own first day in a calendar of weeks,
-  # and Monday in a calendar of months.
-  @spec week_counted_from(module()) :: :default | :monday
-  def week_counted_from(calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      :default
-    else
-      :monday
+  # The day of the week a date is, as its calendar counts the days of a week
+  # date (`week_date_from_date/3`): the number `K` gives it.
+  @spec day_of_week_of(Date.t()) :: integer() | nil
+  def day_of_week_of(%Date{year: year, month: month, day: day, calendar: calendar}) do
+    day_of_week_of(year, month, day, calendar)
+  end
+
+  @doc false
+  @spec day_of_week_of(integer(), integer(), integer(), module()) :: integer() | nil
+  def day_of_week_of(year, month, day, calendar) do
+    case calendar.week_date_from_date(year, month, day) do
+      {_week_year, _week, day_of_week} -> day_of_week
+      {:error, _reason} -> nil
     end
   end
 
@@ -1809,14 +1809,37 @@ defmodule Tempo.UnitValues do
     1..calendar.days_in_week()//1
   end
 
-  # Every week of a calendar of weeks starts on the same weekday, so the
-  # first week of any year answers for them all: of this one, where any
-  # would do.
-  @any_year 2000
+  # Every week of a calendar's week dates starts on the same weekday, so the
+  # first week of any year answers for them all. The year asked is the
+  # calendar's own of a day every calendar has, where one number for every
+  # calendar would not do: the year 2000 of a calendar by sighting is five
+  # centuries on, past what its ephemeris covers. The calendar gives the date
+  # of the day (`date_from_week_date/3`) and its weekday (`day_of_week/4`).
+  # The answer is the same for as long as the calendar is, and is asked once.
+  @any_day ~D[2000-01-01]
 
   defp weekday_of_week_day(calendar, day_of_week) do
-    {iso_weekday, _first, _last} = calendar.day_of_week(@any_year, 1, day_of_week, :monday)
-    iso_weekday
+    key = {__MODULE__, :weekday_of_week_day, calendar, day_of_week}
+    weekday = :persistent_term.get(key, nil)
+
+    if is_nil(weekday) do
+      asked = weekday_asked_of(calendar, day_of_week)
+      :persistent_term.put(key, asked)
+      asked
+    else
+      weekday
+    end
+  end
+
+  defp weekday_asked_of(calendar, day_of_week) do
+    with {:ok, %Date{year: any_year}} <- Date.convert(@any_day, calendar),
+         %Date{year: year, month: month, day: day} <-
+           calendar.date_from_week_date(any_year, 1, day_of_week),
+         {iso_weekday, _first, _last} <- calendar.day_of_week(year, month, day, :monday) do
+      iso_weekday
+    else
+      _no_such_day -> day_of_week
+    end
   end
 
   ## The weeks of a year
@@ -1831,7 +1854,7 @@ defmodule Tempo.UnitValues do
   # every calendar answers (`date_from_week_date/3`): ISO 8601's rule over
   # the calendar's own year, as RFC 7529 applies it to any calendar, each
   # week starting on a Monday and week 1 the one holding the year's fourth
-  # day. A calendar of weeks answers with its own date.
+  # day. A calendar of weeks answers with the date of its own week.
   def date_from_iso_week(year, week, day, calendar) do
     case calendar.date_from_week_date(year, week, day) do
       %Date{} = date -> {:ok, date}
@@ -1841,16 +1864,11 @@ defmodule Tempo.UnitValues do
 
   @doc false
   # The date of day `day` of week `week` of `year` in the calendar's own
-  # weeks (`w`): a week-based calendar's native date or, in a month-based
-  # one, the day of the week with ISO 8601's number `day` (`1`, Monday, to
-  # `7`, Sunday) among the days the calendar's `week/2` gives the week,
-  # so a week cut short at the start or end of its year has fewer.
+  # weeks (`w`): the day of the week with the number `day` among the days
+  # the calendar's `week/2` gives the week, so a week cut short at the start
+  # or end of its year has fewer.
   def date_from_calendar_week(year, week, day, calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      Date.new(year, week, day, calendar)
-    else
-      weekday_in_week(calendar_week_range(year, week, calendar), day)
-    end
+    weekday_in_week(calendar_week_range(year, week, calendar), day)
   end
 
   @doc false
@@ -1981,8 +1999,8 @@ defmodule Tempo.UnitValues do
 
   # The day of `week_days` with ISO 8601's weekday number `weekday`, from
   # the calendar's own day of the week.
-  defp weekday_in_week(%Date.Range{} = week_days, weekday) when is_integer(weekday) do
-    case Enum.find(week_days, &(Date.day_of_week(&1, :monday) == weekday)) do
+  defp weekday_in_week(%Date.Range{} = week_days, day_of_week) when is_integer(day_of_week) do
+    case Enum.find(week_days, &(day_of_week_of(&1) == day_of_week)) do
       %Date{} = date -> {:ok, date}
       nil -> {:error, :invalid_date}
     end

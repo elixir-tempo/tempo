@@ -134,7 +134,8 @@ defmodule Tempo.Matrix.CalendarCensus do
   """
   @spec forms(module()) :: [%{form: String.t(), text: String.t(), expect: tuple()}]
   def forms(calendar) do
-    for date <- anchors(calendar), {form, text, expect} <- forms_on(date, week?(calendar)) do
+    for date <- anchors(calendar),
+        {form, text, expect} <- forms_on(date) ++ week_forms_on(date, calendar) do
       %{form: form, text: text, expect: expect}
     end
   end
@@ -149,15 +150,16 @@ defmodule Tempo.Matrix.CalendarCensus do
     Enum.map(@anchors, &Date.convert!(&1, calendar))
   end
 
-  defp week?(calendar) do
-    calendar.calendar_base() == :week
-  end
+  # The calendars of weeks, which are asked a week, a day of one and a
+  # selection in one beside what every calendar is asked. Their dates are a
+  # year, a month and a day, as every calendar's are, and the week a date is
+  # in is the calendar's to say (`week_date_from_date/3`).
+  @of_weeks [Calendrical.ISOWeek, Calendrical.NRF]
 
-  # In a calendar of weeks a date's month is its week and its day the day of
-  # that week.
-  defp forms_on(%Date{year: y, month: w, day: k}, true) do
+  defp week_forms_on(%Date{} = date, calendar) when calendar in @of_weeks do
+    {y, w, k} = week_date(date, calendar)
+
     [
-      {"Y", "#{y}Y", {:week_year, y}},
       {"Y-W", "#{y}Y#{w}W", {:week, y, w}},
       {"Y-W-K", "#{y}Y#{w}W#{k}K", {:week_day, y, w, k, []}},
       {"Y-W-K T H", "#{y}Y#{w}W#{k}KT10H", {:week_day, y, w, k, [hour: 10]}},
@@ -166,7 +168,15 @@ defmodule Tempo.Matrix.CalendarCensus do
     ]
   end
 
-  defp forms_on(%Date{year: y, month: m, day: d} = date, false) do
+  defp week_forms_on(_date, _calendar) do
+    []
+  end
+
+  defp week_date(%Date{year: year, month: month, day: day}, calendar) do
+    {_week_year, _week, _day_of_week} = calendar.week_date_from_date(year, month, day)
+  end
+
+  defp forms_on(%Date{year: y, month: m, day: d} = date) do
     [
       {"Y", "#{y}Y", {:year, y}},
       {"Y-M", "#{y}Y#{m}M", {:month, y, m}},
@@ -214,11 +224,6 @@ defmodule Tempo.Matrix.CalendarCensus do
 
   def expected({:first_day, y, m, time}, calendar) do
     clock(hd(month_dates(y, m || 1, calendar)), time)
-  end
-
-  def expected({:week_year, y}, calendar) do
-    weeks = for w <- 1..weeks_in_year(y, calendar), do: week_span(y, w, calendar)
-    {{elem(hd(weeks), 0), elem(List.last(weeks), 1)}, weeks}
   end
 
   def expected({:week, y, w}, calendar) do
@@ -350,9 +355,9 @@ defmodule Tempo.Matrix.CalendarCensus do
   every day of each, in a calendar of months, and every day of the week.
 
   A reform calendar counts nothing with no year, so each of a few months
-  and days of it needs a year. A calendar of weeks has no month, and a year
-  that starts within its months is left out: with no year a month there is
-  the one a date names, and with a year the nth the calendar counts.
+  and days of it needs a year. A year that starts within its months is left
+  out: with no year a month there is the one a date names, and with a year
+  the nth the calendar counts.
 
   ### Arguments
 
@@ -365,10 +370,10 @@ defmodule Tempo.Matrix.CalendarCensus do
   """
   @spec no_year(module()) :: [%{text: String.t(), covers: covers(), walk: walk()}]
   def no_year(calendar) do
-    cond do
-      week?(calendar) -> weekdays_no_year()
-      starts_within_its_months?(hd(anchors(calendar)).year, calendar) -> []
-      true -> months_no_year(calendar, calendar.months_in_year()) ++ weekdays_no_year()
+    if starts_within_its_months?(hd(anchors(calendar)).year, calendar) do
+      []
+    else
+      months_no_year(calendar, calendar.months_in_year()) ++ weekdays_no_year()
     end
   end
 
@@ -484,6 +489,11 @@ defmodule Tempo.Matrix.CalendarCensus do
     {min(first, last), max(first, last)}
   end
 
+  # A month of a calendar of weeks has one of two counts, which are not a run.
+  defp fewest_and_most({:ambiguous, [_ | _] = counts}) do
+    {Enum.min(counts), Enum.max(counts)}
+  end
+
   ## Shapes, intervals and recurrences
 
   @doc """
@@ -509,10 +519,10 @@ defmodule Tempo.Matrix.CalendarCensus do
   def shapes(calendar) do
     date = hd(anchors(calendar))
 
-    cond do
-      week?(calendar) -> week_shapes(date, calendar)
-      starts_within_its_months?(date.year, calendar) -> []
-      true -> month_shapes(date, calendar)
+    if starts_within_its_months?(date.year, calendar) do
+      []
+    else
+      month_shapes(date, calendar) ++ week_shapes(date, calendar)
     end
   end
 
@@ -621,7 +631,8 @@ defmodule Tempo.Matrix.CalendarCensus do
     Enum.map(0..(count - 1), &elem(counted_month_span(y, m, &1, calendar), 0))
   end
 
-  defp week_shapes(%Date{year: y, month: w}, calendar) do
+  defp week_shapes(%Date{} = date, calendar) when calendar in @of_weeks do
+    {y, w, _day_of_week} = week_date(date, calendar)
     weeks = weeks_in_year(y, calendar)
     dates = week_dates(y, w, calendar)
     week = week_span(y, w, calendar)
@@ -657,13 +668,12 @@ defmodule Tempo.Matrix.CalendarCensus do
         "a recurrence by weeks",
         "R3/#{y}Y#{w}W/P1W",
         for(n <- 0..2, do: week_span(y, w + n, calendar))
-      ),
-      shape(
-        "a recurrence by years",
-        "R3/#{y}Y/P1Y",
-        for(n <- 0..2, do: elem(expected({:week_year, y + n}, calendar), 0))
       )
     ]
+  end
+
+  defp week_shapes(_date, _calendar) do
+    []
   end
 
   # A value of several members, each its own span, whose walk is not asked.
@@ -711,9 +721,9 @@ defmodule Tempo.Matrix.CalendarCensus do
   @doc """
   A selection of each kind, each written five ways, with what it selects.
 
-  In a calendar of months they are a month, a month and a day, a day of the
-  year, a day, a weekday and a position; in a calendar of weeks a week, a
-  week and a weekday, a year's weekdays and a week's. Each is written as a
+  They are a month, a month and a day, a day of the year, a day, a weekday
+  and a position, and in a calendar of weeks a week, a week and a weekday,
+  a year's weekdays and a week's besides. Each is written as a
   number, a count from the end, a range that reaches the end, the first
   and the last, and a value the period lacks.
 
@@ -737,10 +747,10 @@ defmodule Tempo.Matrix.CalendarCensus do
   def selections(calendar) do
     date = hd(anchors(calendar))
 
-    cond do
-      week?(calendar) -> week_selections(date, calendar)
-      starts_within_its_months?(date.year, calendar) -> []
-      true -> month_selections(date, calendar)
+    if starts_within_its_months?(date.year, calendar) do
+      []
+    else
+      month_selections(date, calendar) ++ week_selections(date, calendar)
     end
   end
 
@@ -839,7 +849,8 @@ defmodule Tempo.Matrix.CalendarCensus do
   # The selections of a calendar of weeks, whose answers are worked out from
   # the calendar's own weeks: the matrix's selections count a week as ISO
   # 8601 does.
-  defp week_selections(%Date{year: y, month: w}, calendar) do
+  defp week_selections(%Date{} = date, calendar) when calendar in @of_weeks do
+    {y, w, _day_of_week} = week_date(date, calendar)
     weeks = 1..weeks_in_year(y, calendar)//1
 
     for {way, x} <- ways(w, 60),
@@ -859,6 +870,10 @@ defmodule Tempo.Matrix.CalendarCensus do
         selected
       )
     end
+  end
+
+  defp week_selections(_date, _calendar) do
+    []
   end
 
   defp days_of_weeks(weeks, written, y, calendar) do

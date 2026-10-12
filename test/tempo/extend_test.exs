@@ -39,9 +39,10 @@ defmodule Tempo.Extend.Test do
       assert Tempo.extend(~o"{6,7}M") == {:ok, ~o"{6,7}M{1..-1}D"}
     end
 
+    # A year of a calendar of weeks is its months, as a year of any is.
     test "in a calendar of weeks, and in one of other months" do
       assert Tempo.extend(Tempo.from_iso8601!("{2026,2027}Y", Calendrical.ISOWeek)) ==
-               Tempo.from_iso8601("{2026,2027}Y{1..-1}W", Calendrical.ISOWeek)
+               Tempo.from_iso8601("{2026,2027}Y{1..-1}M", Calendrical.ISOWeek)
 
       assert Tempo.extend(Tempo.from_iso8601!("5786Y{6,7}M", Hebrew)) ==
                Tempo.from_iso8601("5786Y{6,7}M{1..-1}D", Hebrew)

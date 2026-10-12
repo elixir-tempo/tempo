@@ -2,6 +2,7 @@ defmodule Tempo.NewTest do
   use ExUnit.Case, async: true
   import Tempo.Sigils
 
+  alias Calendrical.ISOWeek
   alias Tempo.Duration
   alias Tempo.Interval
   alias Tempo.IntervalSet
@@ -113,13 +114,20 @@ defmodule Tempo.NewTest do
       assert {:ok, second_quarter} == Tempo.from_iso8601("5787-34", Calendrical.Hebrew)
     end
 
-    test "a week-based calendar's quarter is a group of its weeks" do
+    # A calendar of weeks has twelve months of its weeks, and its quarter is
+    # three of them, as a quarter of any calendar of twelve months is: the
+    # fourth runs from week 40 to the end of the year, 53 weeks in 2026.
+    test "a week-based calendar's quarter is a group of its months" do
       {:ok, fourth_quarter} = Tempo.new(year: 2026, quarter: 4, calendar: Calendrical.ISOWeek)
 
-      assert fourth_quarter.time == [year: 2026, week: {:group, 40..53}]
+      assert fourth_quarter.time == [year: 2026, month: {:group, 10..12}]
+      assert {:ok, %Interval{from: from, to: to}} = Tempo.to_interval(fourth_quarter)
 
-      assert {:ok, %Tempo.Interval{to: %Tempo{time: [year: 2027, week: 1]}}} =
-               Tempo.to_interval(fourth_quarter)
+      assert {:ok, ISOWeek.date_from_week_date(2026, 40, 1)} ==
+               Tempo.to_date(Tempo.extend_resolution(from, :day))
+
+      assert Tempo.extend_resolution(to, :day) ==
+               Tempo.from_iso8601!("2027-W01-1", Calendrical.ISOWeek)
     end
   end
 

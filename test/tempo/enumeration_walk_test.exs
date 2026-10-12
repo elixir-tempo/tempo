@@ -34,8 +34,11 @@ defmodule Tempo.EnumerationWalk.Test do
       assert units(~o"2026Y25WX*K", :day) == Enum.to_list(15..21)
       assert Enum.to_list(~o"X*K") == [~o"1K", ~o"2K", ~o"3K", ~o"4K", ~o"5K", ~o"6K", ~o"7K"]
 
+      # In a calendar of weeks too: its week 25 is the fifteenth to the
+      # twenty-first day of its sixth month.
       week = Tempo.from_iso8601!("2026Y25WX*K", Calendrical.ISOWeek)
-      assert units(week, :day_of_week) == Enum.to_list(1..7)
+      assert units(week, :day) == Enum.to_list(15..21)
+      assert units(week, :month) == List.duplicate(6, 7)
     end
 
     test "a masked and an unspecified day of the year" do

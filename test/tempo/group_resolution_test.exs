@@ -224,12 +224,21 @@ defmodule Tempo.GroupResolution.Test do
                Tempo.from_iso8601("2026-38")
     end
 
-    test "are groups of weeks in a week-based calendar" do
-      assert {:ok, %Tempo{time: [year: 2026, week: {:group, 40..53}]}} =
+    # A calendar of weeks has twelve months of its weeks, and a division of
+    # its year is a group of them, as in any calendar of twelve months.
+    test "are groups of months in a week-based calendar too" do
+      assert {:ok, %Tempo{time: [year: 2026, month: {:group, 10..12}]}} =
                Tempo.from_iso8601("2026-36", Calendrical.ISOWeek)
 
-      assert {:ok, %Tempo{time: [year: 2026, week: {:group, 27..53}]}} =
+      assert {:ok, %Tempo{time: [year: 2026, month: {:group, 7..12}]}} =
                Tempo.from_iso8601("2026-41", Calendrical.ISOWeek)
+
+      # Its fourth quarter begins with its week 40.
+      {:ok, quarter} = Tempo.from_iso8601("2026-36", Calendrical.ISOWeek)
+      {:ok, %Tempo.Interval{from: from}} = Tempo.to_interval(quarter)
+
+      assert Tempo.extend_resolution(from, :day) ==
+               Tempo.from_iso8601!("2026-W40-1", Calendrical.ISOWeek)
     end
   end
 

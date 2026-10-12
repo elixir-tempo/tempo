@@ -603,12 +603,25 @@ defmodule Tempo.Matrix.Selections do
     day_of_month in values(written, 1..Reference.days_in_month(year, month, calendar)//1)
   end
 
-  defp day_named?(:day_of_week, written, day, _calendar) do
-    Date.day_of_week(day) in values(written, 1..7//1)
+  defp day_named?(:day_of_week, written, day, calendar) do
+    day_of_week(day, calendar) in values(written, 1..7//1)
   end
 
   defp day_named?(_clock_or_position, _written, _day, _calendar) do
     true
+  end
+
+  # The number a day has in its week, as its calendar counts the days of a
+  # week date: ISO 8601's weekday where its weeks begin on Monday, and its
+  # own where they begin on another day.
+  defp day_of_week(%Date{} = day, Gregorian) do
+    Date.day_of_week(day)
+  end
+
+  defp day_of_week(%Date{} = day, calendar) do
+    %Date{year: year, month: month, day: day_of_month} = Date.convert!(day, calendar)
+    {_week_year, _week, day_of_week} = calendar.week_date_from_date(year, month, day_of_month)
+    day_of_week
   end
 
   defp in_calendar(%Date{} = day, Gregorian) do

@@ -24,6 +24,9 @@ defmodule Tempo.RRule.Encoder do
     year: "YEARLY"
   }
 
+  # ISO 8601's weeks, and RFC 5545's by default, start on a Monday, weekday 1.
+  @monday 1
+
   # The selection tokens with an RRULE BY-part (and WKST).
   @rrule_tokens [
     :month,
@@ -567,31 +570,24 @@ defmodule Tempo.RRule.Encoder do
   end
 
   # WKST says the day a rule's weeks begin, which is Monday where none is
-  # written, and is always the last part written. A recurrence in a calendar
-  # of weeks counts its weeks as the calendar does, whatever week start its
-  # rule holds, so the one written for it is the calendar's: the day its weeks
-  # begin where the rule steps by weeks and that day is not Monday, and
-  # otherwise none.
+  # written, and is always the last part written. A recurrence counts its
+  # weeks as its calendar does. A calendar whose weeks begin on Monday, as
+  # ISO 8601's do, counts them from the day the rule holds; one whose weeks
+  # begin on another day counts them from that day, whatever week start the
+  # rule holds, so the one written for it is the calendar's, where the rule
+  # steps by weeks, and otherwise none.
   defp week_start(selection, interval) do
     {held, selection} = Enum.split_with(selection, &match?({:wkst, _day}, &1))
     {week_start_in(counted_in(interval), held, interval), selection}
   end
 
   defp week_start_in(calendar, held, %Tempo.Interval{duration: %Tempo.Duration{time: time}}) do
+    calendars_own = UnitValues.iso_weekday_from_day_of_week(1, calendar)
+
     cond do
-      not Tempo.week_based_calendar?(calendar) -> held
-      Keyword.has_key?(time, :week) -> calendar_week_start(calendar)
+      calendars_own == @monday -> held
+      Keyword.has_key?(time, :week) -> [wkst: calendars_own]
       true -> []
-    end
-  end
-
-  defp calendar_week_start(calendar) do
-    weekday = UnitValues.iso_weekday_from_day_of_week(1, calendar)
-
-    if weekday == 1 do
-      []
-    else
-      [wkst: weekday]
     end
   end
 
@@ -608,8 +604,8 @@ defmodule Tempo.RRule.Encoder do
   # BYDAY names weekdays, and a selection holds days of the week of its
   # rule's calendar, the last of them written `-1K`. Each is written as the
   # weekday it is there (`Tempo.UnitValues.iso_weekday_from_day_of_week/2`):
-  # the third day is Wednesday in a calendar of months and Tuesday in a
-  # calendar of weeks that start on Sunday. A day no week has is no weekday
+  # the third day is Wednesday in a calendar whose weeks start on Monday and
+  # Tuesday in one whose weeks start on Sunday. A day no week has is no weekday
   # for a BYDAY to name.
   defp weekdays_named(selection, calendar, interval) do
     Enum.reduce_while(selection, {:ok, []}, fn entry, {:ok, named} ->

@@ -281,9 +281,27 @@ defmodule Tempo.DayWithNoMonthTest do
       end
     end
 
-    test "a calendar of weeks has no months, and refuses a day of one as it did" do
-      assert {:error, %ConversionError{}} = Tempo.to_interval(read("2026YL45DN", ISOWeek))
-      assert {:error, %ConversionError{}} = Tempo.to_interval(read("R2/2026/P1Y/FL45DN", ISOWeek))
+    # A calendar of weeks has months of its own, so a day with no month is a
+    # day of its year there as in every calendar: its years have 364 days or
+    # 371, and day 45 of 2026 is the seventeenth of its second month. It was
+    # refused, a calendar of weeks having had no months.
+    test "a year of weeks is counted by its own days" do
+      for year <- 2025..2027,
+          {text, written} <- [{"45", [45]}, {"-1", [-1]}, {"{1,364}", [1, 364]}] do
+        expected = days_named(written, year, ISOWeek)
+
+        value = Tempo.to_interval(read("#{year}YL#{text}DN", ISOWeek))
+        plain = Tempo.select(read("#{year}Y", ISOWeek), read("#{text}D", ISOWeek))
+
+        assert {year, text, days(value)} == {year, text, expected}
+        assert {year, text, days(plain)} == {year, text, expected}
+      end
+
+      assert days(Tempo.to_interval(read("2026YL45DN", ISOWeek))) ==
+               [Date.new!(2026, 2, 17, ISOWeek)]
+
+      assert days(Tempo.to_interval(read("R2/2026/P1Y/FL45DN", ISOWeek))) ==
+               [Date.new!(2026, 2, 17, ISOWeek), Date.new!(2027, 2, 17, ISOWeek)]
     end
   end
 

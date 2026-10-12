@@ -142,7 +142,7 @@ defmodule Tempo.RRule.OtherCalendarTest do
                {:ok, "FREQ=DAILY;BYDAY=SU,MO,TU,WE,TH"}
     end
 
-    test "replaces the one a rule was read with, which a calendar of weeks does not count by" do
+    test "replaces the one a rule was read with, where the calendar's weeks begin on another day" do
       for week_start <- @read do
         {:ok, recurrence} =
           RRule.parse("FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO" <> week_start,
@@ -159,10 +159,14 @@ defmodule Tempo.RRule.OtherCalendarTest do
                  {week_start, {:ok, "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO;WKST=SU"}}
       end
 
+      # A calendar whose weeks begin on Monday, as the ISO week calendar's
+      # do and the Gregorian calendar's, counts a rule's weeks from the day
+      # the rule holds, so that day is kept. It was dropped for every
+      # calendar of weeks, the calendar being asked which kind it was.
       {:ok, recurrence} =
         RRule.parse("FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO;WKST=SU", from: read("2026Y25W", ISOWeek))
 
-      assert RRule.to_string(recurrence) == {:ok, "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,SU"}
+      assert RRule.to_string(recurrence) == {:ok, "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,SU;WKST=SU"}
     end
   end
 

@@ -3,9 +3,11 @@ defmodule Tempo.WeekCalendarTest do
 
   # A week-based calendar (the ISO week calendar, the NRF retail calendar, a
   # retail calendar built with `Calendrical.new/3`) numbers its weeks within
-  # its year. Its dates take ISO 8601's week date shape, `[year, week,
-  # day_of_week]`, however they are made, and are written as ISO 8601-2
-  # §7.2.4's explicit week date, `2026Y25W2K`.
+  # its year. Its dates are a year, a month of its pattern of weeks and a day
+  # of that month, as every calendar's are (decided 2026-10-13), so a value in
+  # one is read, held, stepped and written as a value of any calendar is. A
+  # week date written for it (`2026-W25-2`) is the date it names: the second
+  # day of the calendar's own week 25.
 
   import Tempo.Sigils
 
@@ -34,95 +36,121 @@ defmodule Tempo.WeekCalendarTest do
           "Etc/UTC"
         )
 
-      assert tuesday.time == [year: 2026, week: 25, day_of_week: 2]
-      assert Tempo.from_elixir(Date.new!(2026, 25, 2, ISOWeek)) == tuesday
+      assert tuesday.time == [year: 2026, month: 6, day: 16]
+      assert Tempo.from_elixir(ISOWeek.date_from_week_date(2026, 25, 2)) == tuesday
+      assert Tempo.from_elixir(Date.new!(2026, 6, 16, ISOWeek)) == tuesday
       assert Tempo.to_calendar!(~o"2026-06-16", ISOWeek) == tuesday
 
-      assert Keyword.take(zoned.time, [:week, :day_of_week, :hour]) == [
-               week: 25,
-               day_of_week: 2,
-               hour: 8
-             ]
+      assert Keyword.take(zoned.time, [:month, :day, :hour]) == [month: 6, day: 16, hour: 8]
 
-      naive = Tempo.from_elixir(NaiveDateTime.new!(2026, 25, 2, 10, 30, 0, {0, 0}, ISOWeek))
-      assert naive.time == [year: 2026, week: 25, day_of_week: 2, hour: 10, minute: 30, second: 0]
+      naive = Tempo.from_elixir(NaiveDateTime.new!(2026, 6, 16, 10, 30, 0, {0, 0}, ISOWeek))
+      assert naive.time == [year: 2026, month: 6, day: 16, hour: 10, minute: 30, second: 0]
     end
 
+    # The NRF year 2026 begins on Sunday 1 February, and its week 20 on
+    # Sunday 14 June: the third day of it is Tuesday 16 June, the seventeenth
+    # day of the calendar's fifth month.
     test "the NRF retail calendar's weeks" do
       parsed = Tempo.from_iso8601!("2026-W20-3[u-ca=nrf]")
 
-      assert parsed.time == [year: 2026, week: 20, day_of_week: 3]
-      built = Tempo.from_elixir(Date.new!(2026, 20, 3, NRF))
+      assert parsed.time == [year: 2026, month: 5, day: 17]
+      assert Tempo.to_calendar(parsed, Calendar.ISO) == {:ok, ~o"2026-06-16"}
+
+      built = Tempo.from_elixir(NRF.date_from_week_date(2026, 20, 3))
       assert {built.calendar, built.time} == {NRF, parsed.time}
     end
   end
 
-  # A calendar of weeks has no month, no day of a month and no day of the
-  # year (decided 2026-10-12): one written or given for it is an error, where
-  # it was read as the Gregorian day and converted.
+  # A calendar of weeks has months of its own, the months of its pattern of
+  # weeks, each 28 days or 35 (decided 2026-10-13, where a month written for
+  # one was an error for a day and, before that, the Gregorian day
+  # converted). A date written with a month, a day of the year or a season is
+  # read in it as in every calendar.
   describe "a date written with a month, for a calendar of weeks" do
-    test "is an error that names the week form" do
-      for text <- ["2026-06-15", "2026-166", "2026Y166O", "2026-06-15T10:30"],
-          calendar <- [ISOWeek, NRF] do
-        assert {:error, %InvalidDateError{calendar: ^calendar} = error} =
-                 Tempo.from_iso8601(text, calendar),
-               text
+    test "is the calendar's own month and day" do
+      for calendar <- [ISOWeek, NRF] do
+        assert {:ok, %Tempo{calendar: ^calendar, time: [year: 2026, month: 6, day: 15]}} =
+                 Tempo.from_iso8601("2026-06-15", calendar)
 
-        assert Exception.message(error) =~ "2026Y25W2K", text
-        assert Exception.message(error) =~ "Tempo.to_calendar/2", text
+        assert {:ok, %Tempo{time: [year: 2026, month: 6, day: 15, hour: 10, minute: 30]}} =
+                 Tempo.from_iso8601("2026-06-15T10:30", calendar)
+
+        assert {:ok, %Tempo{calendar: ^calendar, time: [year: 2026, month: 6]}} =
+                 Tempo.from_iso8601("2026-06", calendar)
+
+        # The fifteenth day of the sixth month is the first day of week 25.
+        assert Tempo.from_iso8601("2026-06-15", calendar) ==
+                 Tempo.from_iso8601("2026-W25-1", calendar)
       end
 
-      assert {:error, %InvalidDateError{calendar: ISOWeek}} =
-               Tempo.from_iso8601("2026-06-15[u-ca=iso-week]")
+      assert Tempo.from_iso8601("2026-06-15[u-ca=iso-week]") == {:ok, ~o"2026Y6M15D"W}
+
+      # The same text is another day in each: the ISO week calendar's sixth
+      # month begins on Monday 1 June 2026 and NRF's on Sunday 5 July.
+      assert Tempo.to_calendar(~o"2026Y6M15D"W, Calendar.ISO) == {:ok, ~o"2026-06-15"}
+
+      assert Tempo.to_calendar(Tempo.from_iso8601!("2026-06-15", NRF), Calendar.ISO) ==
+               {:ok, ~o"2026-07-19"}
     end
 
-    test "names the unit that has no place in the calendar" do
-      assert {:error, %InvalidDateError{unit: :month, value: 6}} =
-               Tempo.from_iso8601("2026-06-15", ISOWeek)
+    # The ISO week calendar's 2026 begins on Monday 29 December 2025, and its
+    # day 166 is Friday 12 June 2026, the twelfth day of its sixth month.
+    test "a day of the year is counted in the calendar's own year" do
+      for text <- ["2026-166", "2026Y166O"] do
+        assert Tempo.from_iso8601(text, ISOWeek) == {:ok, ~o"2026Y6M12D"W}, text
+      end
 
-      assert {:error, %InvalidDateError{unit: :day_of_year, value: 166}} =
-               Tempo.from_iso8601("2026-166", ISOWeek)
-
-      assert {:error, %InvalidDateError{unit: :day, value: 15}} =
-               Tempo.from_iso8601("15D", ISOWeek)
+      assert Tempo.to_calendar(~o"2026Y6M12D"W, Calendar.ISO) == {:ok, ~o"2026-06-12"}
     end
 
-    test "is an error in part as it is whole, and whether or not the date exists" do
+    test "is read in part as it is whole" do
       for text <- [
-            "2026-06",
             "6M15D",
             "15D",
             "2026-{06,07}",
             "2026-06-{01,15}",
             "2026-0X",
             "2022Y3G4DU",
-            "2026Y1G2MU",
-            "2026-02-30",
-            "2026-13-01"
+            "2026Y1G2MU"
           ],
           calendar <- [ISOWeek, NRF] do
-        assert {:error, %InvalidDateError{calendar: ^calendar}} =
-                 Tempo.from_iso8601(text, calendar),
-               text
+        assert {:ok, %Tempo{calendar: ^calendar}} = Tempo.from_iso8601(text, calendar), text
       end
     end
 
-    test "is an error at an end of an interval and at a recurrence's start" do
+    # Both calendars lay their weeks out 4-5-4 in a quarter, so the first
+    # month has 28 days and the second 35.
+    test "is checked against the calendar's own months" do
+      for calendar <- [ISOWeek, NRF] do
+        assert {:ok, %Tempo{time: [year: 2026, month: 2, day: 30]}} =
+                 Tempo.from_iso8601("2026-02-30", calendar)
+
+        assert {:error, %InvalidDateError{unit: :day, value: 29, calendar: ^calendar}} =
+                 Tempo.from_iso8601("2026-01-29", calendar)
+
+        assert {:error, %InvalidDateError{unit: :month, value: 13, calendar: ^calendar}} =
+                 Tempo.from_iso8601("2026-13-01", calendar)
+      end
+    end
+
+    test "is read at an end of an interval and at a recurrence's start" do
       for text <- ["2026-06-15/2026-06-20", "2026-06/2026-08", "R3/2026-06-15/P1W"] do
-        assert {:error, %InvalidDateError{unit: :month}} = Tempo.from_iso8601(text, ISOWeek),
+        assert {:ok, %Interval{from: %Tempo{calendar: ISOWeek, time: time}}} =
+                 Tempo.from_iso8601(text, ISOWeek),
                text
+
+        assert Keyword.take(time, [:year, :month]) == [year: 2026, month: 6], text
       end
     end
 
-    test "is an error when a value is built, as when it is parsed" do
-      assert {:error, %InvalidDateError{unit: :month}} =
-               Tempo.new(year: 2026, month: 6, day: 15, calendar: ISOWeek)
+    test "is built as it is parsed" do
+      assert Tempo.new(year: 2026, month: 6, day: 15, calendar: ISOWeek) ==
+               {:ok, ~o"2026Y6M15D"W}
 
-      assert {:error, %InvalidDateError{unit: :day_of_year}} =
-               Tempo.new(year: 2026, day_of_year: 166, calendar: ISOWeek)
+      assert Tempo.new(year: 2026, day_of_year: 166, calendar: ISOWeek) ==
+               {:ok, ~o"2026Y6M12D"W}
 
-      assert {:error, %InvalidDateError{unit: :month}} =
-               Tempo.new(year: 2026, month: 6, calendar: ISOWeek)
+      assert Tempo.new(year: 2026, month: 6, calendar: ISOWeek) == {:ok, ~o"2026Y6M"W}
     end
 
     test "a date of another calendar is brought to it by converting it" do
@@ -131,40 +159,51 @@ defmodule Tempo.WeekCalendarTest do
       assert Tempo.to_calendar(~o"2026-06-15T10:30", ISOWeek) == {:ok, ~o"2026-W25-1T10:30"W}
 
       {:ok, retail} = Tempo.to_calendar(~o"2026-06-15", NRF)
-      assert {retail.calendar, retail.time} == {NRF, [year: 2026, week: 20, day_of_week: 2]}
+      assert {retail.calendar, retail.time} == {NRF, [year: 2026, month: 5, day: 16]}
+      assert NRF.week_date_from_date(2026, 5, 16) == {2026, 20, 2}
 
       {:ok, uncertain} = Tempo.to_calendar(~o"2026-?06-15", ISOWeek)
-      assert inspect(uncertain) == ~s(~o"2026Y25W1K?"W)
+      assert inspect(uncertain) == ~s(~o"2026Y6M15D?"W)
     end
 
-    test "a season and a division of the year are no month, and a day after one is a day" do
+    # A season is the astronomical one, wherever the calendar's months fall,
+    # and a division of the year is the calendar's own: spring of 2026 begins
+    # on 20 March, so its second day is 21 March in each calendar, and the
+    # fifth day of the first quarter is the fifth day of the calendar's year.
+    test "a season and a division of the year are read, and a day after one is a day of it" do
       for calendar <- [ISOWeek, NRF] do
         assert {:ok, _quarter} = Tempo.from_iso8601("2026Y33M", calendar)
         assert {:ok, _spring} = Tempo.from_iso8601("2026Y25M", calendar)
 
-        assert {:error, %InvalidDateError{unit: :day, value: 2}} =
-                 Tempo.from_iso8601("2026Y25M2D", calendar)
+        {:ok, second_day_of_spring} = Tempo.from_iso8601("2026Y25M2D", calendar)
+        assert Tempo.to_calendar(second_day_of_spring, Calendar.ISO) == {:ok, ~o"2026-03-21"}
 
-        assert {:error, %InvalidDateError{unit: :day, value: 5}} =
+        assert {:ok, %Tempo{time: [year: 2026, month: 1, day: 5]}} =
                  Tempo.from_iso8601("2026Y33M5D", calendar)
       end
+
+      assert Tempo.from_iso8601("2026Y25M2D") == {:ok, ~o"2026-03-21"}
     end
   end
 
-  # The year of a week calendar's value is the calendar's own, not the
-  # Gregorian year a month and a day belong to: the NRF year 2026 holds
-  # January 2027.
-  describe "a month or a day of one, and a week calendar's value" do
+  # A month, a week and a day are numbered by their calendar, so a value of
+  # one calendar is not placed on, nor selected from, a value of another: the
+  # NRF year 2026 holds January 2027.
+  describe "a month or a day of one calendar, and a week calendar's value" do
     test "is not placed on it" do
       for {value, other} <- [
             {~o"2026"W, ~o"6M15D"},
             {~o"6M15D", ~o"2026"W},
             {~o"2026"W, ~o"6M"},
             {~o"2026"W, ~o"166O"},
+            {~o"2026"W, ~o"25W2K"},
             {~o"2026-W25-1"W, ~o"7M1D"}
           ] do
-        assert {:error, %ConversionError{target: ISOWeek}} = Tempo.at(value, other),
+        assert {:error, %ConversionError{target: target} = error} = Tempo.at(value, other),
                inspect({value, other})
+
+        assert target == other.calendar
+        assert Exception.message(error) =~ "read both in one calendar"
       end
     end
 
@@ -174,22 +213,26 @@ defmodule Tempo.WeekCalendarTest do
                inspect(selector)
       end
     end
+
+    test "is placed and selected where both are read in the calendar of weeks" do
+      month_and_day = Tempo.from_iso8601!("6M15D", ISOWeek)
+
+      assert Tempo.at(~o"2026"W, month_and_day) == {:ok, ~o"2026Y6M15D"W}
+
+      {:ok, selected} = Tempo.select(~o"2026"W, month_and_day)
+      assert [%{from: from}] = IntervalSet.members(selected)
+      assert from == ~o"2026Y6M15D"W
+    end
   end
 
   describe "a value placed or extended in its own calendar" do
-    test "a week date keeps its shape when a time or a week is placed in it" do
+    test "a week date is the date it names when a time or a week is placed in it" do
       assert Tempo.at(~o"2026-W25-2"W, ~o"T10") == {:ok, ~o"2026-W25-2T10"W}
       assert Tempo.at(~o"2026"W, ~o"25W2K"W) == {:ok, ~o"2026-W25-2"W}
 
-      # A week and a day read in the Gregorian calendar are not those of a
-      # calendar of weeks, and are placed on no year of one (decided
-      # 2026-10-04).
-      assert {:error, %ConversionError{target: Calendar.ISO}} =
-               Tempo.at(~o"2026"W, ~o"25W2K")
-
       {:ok, tuesdays} = Tempo.select(~o"2026-W25"W, ~o"2K")
       assert [%{from: from}] = IntervalSet.members(tuesdays)
-      assert from.time == [year: 2026, week: 25, day_of_week: 2]
+      assert from.time == [year: 2026, month: 6, day: 16]
     end
 
     test "a month is checked against the value's calendar, not the Gregorian one" do
@@ -208,10 +251,21 @@ defmodule Tempo.WeekCalendarTest do
     end
   end
 
-  describe "a recurrence its calendar cannot walk" do
-    test "is an error, not a raise, when its start has no month to step by" do
+  describe "a recurrence in a calendar of weeks" do
+    # A day steps by the calendar's own months, as a day of any calendar
+    # does; a week alone has no month to step by, in any calendar.
+    test "steps by months from a day, and is an error from a week alone" do
+      {:ok, monthly} = Tempo.to_interval(Tempo.from_iso8601!("R3/2026-W25-1/P1M", ISOWeek))
+
+      assert monthly
+             |> IntervalSet.members()
+             |> Enum.map(&Interval.from/1) == [
+               ~o"2026Y6M15D"W,
+               ~o"2026Y7M15D"W,
+               ~o"2026Y8M15D"W
+             ]
+
       for rule <- [
-            Tempo.from_iso8601!("R3/2026-W25-1/P1M", ISOWeek),
             Tempo.from_iso8601!("R3/2026-W25/P1M", ISOWeek),
             Tempo.from_iso8601!("R3/2026-W25/P1M")
           ] do
@@ -219,22 +273,39 @@ defmodule Tempo.WeekCalendarTest do
       end
     end
 
-    test "is an error when it selects by a month or a day of the year in a calendar of weeks" do
-      for text <- ["R3/2026-W25-1/P1Y/FL6M15DN", "R3/2026-W25-1/P1Y/FL166ON", "2026YL6M15DN"] do
-        rule = Tempo.from_iso8601!(text, ISOWeek)
+    # The fifteenth of the sixth month in each of three years, and day 166
+    # of the year, which falls before the start in 2026.
+    test "selects by a month or a day of the year of the calendar's own" do
+      starts = fn text ->
+        {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!(text, ISOWeek))
 
-        assert {:error, %ConversionError{} = error} = Tempo.to_interval(rule), text
-        assert Exception.message(error) =~ "calendar of weeks"
+        set
+        |> IntervalSet.members()
+        |> Enum.map(&Interval.from/1)
       end
+
+      assert starts.("R3/2026-W25-1/P1Y/FL6M15DN") == [
+               ~o"2026Y6M15D"W,
+               ~o"2027Y6M15D"W,
+               ~o"2028Y6M15D"W
+             ]
+
+      assert starts.("R3/2026-W25-1/P1Y/FL166ON") == [
+               ~o"2027Y6M12D"W,
+               ~o"2028Y6M12D"W,
+               ~o"2029Y6M12D"W
+             ]
+
+      assert starts.("2026YL6M15DN") == [~o"2026Y6M15D"W]
     end
   end
 
   describe "the ISO 8601 form reads back as the value" do
-    test "a week date is written with ISO 8601-2's day of the week" do
-      assert Tempo.to_iso8601!(~o"2026-W25-2"W) == "2026Y25W2K[u-ca=iso-week]"
-      assert inspect(~o"2026-W25-2"W) == ~s|~o"2026Y25W2K"W|
+    test "a week date is written as the date it names" do
+      assert Tempo.to_iso8601!(~o"2026-W25-2"W) == "2026Y6M16D[u-ca=iso-week]"
+      assert inspect(~o"2026-W25-2"W) == ~s|~o"2026Y6M16D"W|
       back = read_back(~o"2026-W25-2"W)
-      assert {back.calendar, back.time} == {ISOWeek, [year: 2026, week: 25, day_of_week: 2]}
+      assert {back.calendar, back.time} == {ISOWeek, [year: 2026, month: 6, day: 16]}
     end
 
     test "a week, a date and time, a zoned value and an NRF quarter" do
@@ -243,12 +314,15 @@ defmodule Tempo.WeekCalendarTest do
       zoned = Tempo.from_iso8601!("2026-W25-2T10:30:00[Europe/Paris][u-ca=iso-week]")
       {:ok, quarter} = Tempo.from_elixir(NRF.quarter(2026, 1))
 
+      assert week.time == [year: 2026, week: 25]
+      assert Tempo.to_iso8601!(week) == "2026Y25W[u-ca=iso-week]"
+
       for value <- [week, datetime, zoned] do
         back = read_back(value)
         assert {back.calendar, back.time} == {ISOWeek, value.time}
       end
 
-      assert Tempo.to_iso8601!(quarter) == "2026Y1W1K/14W1K[u-ca=nrf]"
+      assert Tempo.to_iso8601!(quarter) == "2026Y1M1D/4M1D[u-ca=nrf]"
       assert Tempo.equal?(read_back(quarter), quarter)
     end
 
@@ -272,28 +346,40 @@ defmodule Tempo.WeekCalendarTest do
 
       assert Tempo.equal?(
                Tempo.from_iso8601!("2026-W20-3[u-ca=nrf]"),
-               Tempo.from_elixir(Date.new!(2026, 20, 3, NRF))
+               Tempo.from_elixir(NRF.date_from_week_date(2026, 20, 3))
              )
 
       assert {:ok, overlap} = Tempo.intersection(~o"2026-W25"W, ~o"2026-06-16/2026-06-18")
       assert IntervalSet.count(overlap) == 1
     end
 
-    test "days and weeks step on the week axis, and a month is an error" do
+    # A day on from the last day of a week is the first of the next, and a
+    # month on from the sixteenth of the sixth month is the sixteenth of the
+    # seventh, where a month was an error for a calendar of weeks.
+    test "days, weeks and months step it as they step a date of any calendar" do
       assert Tempo.shift(~o"2026-W25-7"W, ~o"P1D") == ~o"2026-W26-1"W
       assert Tempo.shift(~o"2026-W25-2"W, ~o"P1W") == ~o"2026-W26-2"W
-
-      assert {:error, %Tempo.ResolutionError{target: :month}} =
-               Tempo.shift(~o"2026-W25-2"W, ~o"P1M")
+      assert Tempo.shift(~o"2026-W25-2"W, ~o"P1M") == ~o"2026Y7M16D"W
     end
 
+    # A day is rounded to the first day of its week or of the next, as a
+    # Gregorian day is, and NRF's weeks begin on Sunday: its Monday rounds
+    # back to the Sunday and its Thursday on to the next.
     test "its day of the week and year, its rounding, and its date and time" do
       tuesday = ~o"2026-W25-2"W
       datetime = Tempo.from_iso8601!("2026-W25-2T10:30:00[u-ca=iso-week]")
 
       assert {Tempo.day_of_week(tuesday), Tempo.day_of_year(tuesday)} == {2, 170}
-      assert Tempo.round(tuesday, :week) == ~o"2026-W25"W
-      assert Tempo.round(~o"2026-W25-5"W, :week) == ~o"2026-W26"W
+      assert Tempo.round(tuesday, :week) == ~o"2026-W25-1"W
+      assert Tempo.round(~o"2026-W25-5"W, :week) == ~o"2026-W26-1"W
+      assert Tempo.round(~o"2026-06-16", :week) == ~o"2026-06-15"
+
+      assert Tempo.round(Tempo.from_iso8601!("2026-W25-2", NRF), :week) ==
+               Tempo.from_iso8601!("2026-W25-1", NRF)
+
+      assert Tempo.round(Tempo.from_iso8601!("2026-W25-5", NRF), :week) ==
+               Tempo.from_iso8601!("2026-W26-1", NRF)
+
       # Each part keeps what the value carries, its calendar annotation too.
       assert Tempo.split(datetime) ==
                {Tempo.from_iso8601!("2026-W25-2[u-ca=iso-week]"),
@@ -302,7 +388,7 @@ defmodule Tempo.WeekCalendarTest do
       assert Tempo.split(~o"2026-W25-2T10:30:00"W) == {tuesday, ~o"T10:30:00"W}
 
       assert Tempo.to_naive_datetime(datetime) ==
-               NaiveDateTime.new(2026, 25, 2, 10, 30, 0, {0, 0}, ISOWeek)
+               NaiveDateTime.new(2026, 6, 16, 10, 30, 0, {0, 0}, ISOWeek)
     end
   end
 
@@ -329,25 +415,30 @@ defmodule Tempo.WeekCalendarTest do
     end
 
     test "a week-based calendar's date is handed to Localize in its own calendar" do
-      {:ok, localized} = Localize.Date.to_string(Date.new!(2026, 25, 2, ISOWeek))
+      {:ok, localized} = Localize.Date.to_string(Date.new!(2026, 6, 16, ISOWeek))
 
       assert Tempo.to_string(~o"2026-W25-2"W) == {:ok, localized}
     end
 
-    test "a week-based calendar's day is written as its calendar writes it" do
-      assert Tempo.to_string(~o"2026-W25-2"W) == {:ok, "2026-W25-2"}
-      assert Tempo.to_string(~o"2026-W25-2"W, format: :full, locale: :de) == {:ok, "2026-W25-2"}
+    # Its months are named as CLDR's generic calendar names them, and its
+    # week is its days, as a week of any calendar is.
+    test "a week-based calendar's day is written in the locale's formats of its calendar" do
+      assert Tempo.to_string(~o"2026-W25-2"W) == {:ok, "M06 16, 2026 AD"}
+
+      assert Tempo.to_string(~o"2026-W25-2"W, format: :full, locale: :de) ==
+               {:ok, "Dienstag, 16. M06 2026 n. Chr."}
+
+      assert Tempo.to_string(~o"2026-W25"W) == {:ok, "M06 15 – 21, 2026 AD"}
     end
 
+    # A year is written as its months, from the first to the last, as the
+    # Gregorian year is "Jan – Dec 2026".
     test "a week-based calendar's year is written, alone and across a range" do
-      {:ok, localized} = Localize.Date.to_string(%{year: 2026, calendar: ISOWeek}, format: :y)
+      assert Tempo.to_string(~o"2026") == {:ok, "Jan – Dec 2026"}
+      assert Tempo.to_string(~o"2026"W) == {:ok, "M01 – M12 2026 AD"}
 
-      assert localized =~ "2026"
-      assert Tempo.to_string(~o"2026"W) == {:ok, localized}
-
-      assert {:ok, years} = Tempo.to_string(Tempo.from_iso8601!("2026/2028", ISOWeek))
-      assert years =~ "2026"
-      assert years =~ "2027"
+      assert Tempo.to_string(Tempo.from_iso8601!("2026/2028", ISOWeek)) ==
+               {:ok, "2026 AD – 2027 AD"}
     end
   end
 

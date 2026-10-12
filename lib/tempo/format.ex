@@ -217,27 +217,14 @@ defmodule Tempo.Format do
   defp render_value(%Tempo{} = tempo, options) do
     {unit, _} = Tempo.resolution(tempo)
 
-    cond do
-      week_of_a_calendar_of_weeks?(tempo, options) ->
-        render_weeks(tempo, tempo, options)
-
-      expand_as_closed_interval?(unit, tempo, options) ->
-        render_tempo_as_closed_interval(tempo, unit, options)
-
-      true ->
-        render_single_value(tempo, options)
-    end
-  end
-
-  defp render_interval(%Tempo.Interval{from: from, to: to} = interval, options) do
-    if weeks_of_a_calendar_of_weeks?(from, to, options) do
-      render_weeks(from, last_week(to), options)
+    if expand_as_closed_interval?(unit, tempo, options) do
+      render_tempo_as_closed_interval(tempo, unit, options)
     else
-      render_dates(interval, options)
+      render_single_value(tempo, options)
     end
   end
 
-  defp render_dates(%Tempo.Interval{} = interval, options) do
+  defp render_interval(%Tempo.Interval{} = interval, options) do
     case the_one_value(interval) do
       %Tempo{} = value -> render_value(value, options)
       nil -> render_span(interval, options)
@@ -274,55 +261,6 @@ defmodule Tempo.Format do
 
   defp the_one_value(_interval) do
     nil
-  end
-
-  # A week of a calendar of weeks is a unit of that calendar as a month is
-  # of the Gregorian, and is shown as the locale words one: "week 25 of
-  # 2026", "Woche 25 des Jahres 2026" (CLDR's `yw`), and a span of weeks
-  # from its first to its last. It was shown by its first and last days,
-  # "2026-W25-1 – 2026-W25-7", which is the notation and not the words.
-  # A week of a calendar of months is the dates it holds, as it was.
-  defp week_of_a_calendar_of_weeks?(
-         %Tempo{time: [{:year, year}, {:week, week}], calendar: calendar},
-         options
-       )
-       when is_integer(year) and is_integer(week) do
-    Tempo.week_based_calendar?(calendar) and expandable_format?(Keyword.get(options, :format))
-  end
-
-  defp week_of_a_calendar_of_weeks?(_value, _options) do
-    false
-  end
-
-  defp weeks_of_a_calendar_of_weeks?(%Tempo{} = from, %Tempo{} = to, options) do
-    week_of_a_calendar_of_weeks?(from, options) and week_of_a_calendar_of_weeks?(to, options)
-  end
-
-  defp weeks_of_a_calendar_of_weeks?(_from, _to, _options) do
-    false
-  end
-
-  # The last week a span of weeks holds is the one before its end.
-  defp last_week(%Tempo{} = to) do
-    Math.subtract(to, Tempo.Duration.build(week: 1))
-  end
-
-  defp render_weeks(%Tempo{time: time} = first, %Tempo{time: time}, options) do
-    Localize.Date.to_string(to_locale_map(first), in_weeks(options))
-  end
-
-  defp render_weeks(%Tempo{} = first, %Tempo{} = last, options) do
-    Localize.Interval.to_string(to_locale_map(first), to_locale_map(last), in_weeks(options))
-  end
-
-  defp render_weeks(_first, {:error, _reason} = error, _options) do
-    error
-  end
-
-  defp in_weeks(options) do
-    options
-    |> Keyword.drop([:fields])
-    |> Keyword.put(:format, :yw)
   end
 
   # A span whose first and last values are one value is that value, so it
@@ -792,9 +730,7 @@ defmodule Tempo.Format do
         shown_unit = duration_unit(iter_unit)
         one_less = Tempo.Duration.build([{shown_unit, 1}])
 
-        # The day before a week's end is a date in a calendar of months and
-        # a day of the week in a calendar of weeks, and `:day` is the day of
-        # either.
+        # The day before a week's end is a date, and `:day` is its day.
         with %Tempo{} = last <- Math.subtract(to, one_less),
              %Tempo{} = first <- Tempo.trunc(from, shown_unit),
              %Tempo{} = closed_last <- Tempo.trunc(last, shown_unit) do

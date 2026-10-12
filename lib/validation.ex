@@ -53,7 +53,7 @@ defmodule Tempo.Validation do
          :ok <- taken_as_written_alone(tempo, units, calendar) do
       units = sets_of_one_as_their_member(units)
 
-      case resolve_in_its_calendar(units, calendar) do
+      case resolve_units(units, calendar) do
         {:error, reason} ->
           {:error, reason}
 
@@ -221,77 +221,6 @@ defmodule Tempo.Validation do
     error
   end
 
-  @doc false
-  # A calendar of weeks has no month, no day of a month and no day of the
-  # year: its dates are a year, a week and a day of the week, written
-  # `2026Y25W2K` (decided 2026-10-12). Whether units hold one of the three
-  # for such a calendar, which is an error wherever they are read or given:
-  # a date of another calendar is brought to it with `Tempo.to_calendar/2`,
-  # and is not read as one and converted. A month from 21 to 41 is ISO
-  # 8601-2's code for a season or a division of the year, which every
-  # calendar has, and is no month.
-  @spec months_in_a_calendar_of_weeks?(keyword() | term(), module()) :: boolean()
-  def months_in_a_calendar_of_weeks?(units, calendar) when is_list(units) do
-    Tempo.week_based_calendar?(calendar) and Enum.any?(units, &month_or_day?/1)
-  end
-
-  def months_in_a_calendar_of_weeks?(_units, _calendar) do
-    false
-  end
-
-  @doc false
-  # The error for a month, a day of a month or a day of the year written or
-  # given for a calendar of weeks, which names the form such a calendar's
-  # dates take.
-  @spec no_months_error(keyword(), module()) :: Exception.t()
-  def no_months_error(units, calendar) do
-    {unit, value} = Enum.find(units, &month_or_day?/1)
-
-    InvalidDateError.exception(
-      unit: unit,
-      value: value,
-      calendar: calendar,
-      reason:
-        "#{Calendars.name(calendar)} is a calendar of weeks, with no month, no day of a month " <>
-          "and no day of the year, so #{unit_text(unit)} #{Calendars.inspect(value)} is not valid " <>
-          "in it. Its dates are a year, a week and a day of the week, written as 2026Y25W2K " <>
-          "is; a date of another calendar is brought to it with Tempo.to_calendar/2."
-    )
-  end
-
-  defp unit_text(:day_of_year) do
-    "day of the year"
-  end
-
-  defp unit_text(:traditional_month) do
-    "month"
-  end
-
-  defp unit_text(unit) do
-    Atom.to_string(unit)
-  end
-
-  defp month_or_day?({:month, month}) when is_integer(month) do
-    not Group.season_or_division?(month)
-  end
-
-  defp month_or_day?({unit, _value})
-       when unit in [:month, :traditional_month, :day, :day_of_year] do
-    true
-  end
-
-  defp month_or_day?(_other_unit) do
-    false
-  end
-
-  defp resolve_in_its_calendar(units, calendar) do
-    if months_in_a_calendar_of_weeks?(units, calendar) do
-      {:error, no_months_error(units, calendar)}
-    else
-      resolve_units(units, calendar)
-    end
-  end
-
   # The units before a selection name the period it selects in, and are read
   # as they are with no selection after them: a month or a week its year
   # does not have is refused there too (`2027Y53WL1KN`), and a count from the
@@ -395,15 +324,11 @@ defmodule Tempo.Validation do
   end
 
   # A year's first day is the first of its first month, as the calendar
-  # gives them, or of its first week in a calendar of weeks.
+  # gives them.
   defp first_day_of({:year, year}, calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      [year: group_start(year), week: 1, day_of_week: 1]
-    else
-      [year: group_start(year)]
-      |> UnitValues.with_first_month(calendar)
-      |> UnitValues.with_first_day(calendar)
-    end
+    [year: group_start(year)]
+    |> UnitValues.with_first_month(calendar)
+    |> UnitValues.with_first_day(calendar)
   end
 
   defp first_day_of({:month, month}, _calendar) do
@@ -758,27 +683,18 @@ defmodule Tempo.Validation do
     end
   end
 
-  # A week date (`W`) is an ISO 8601 week: in a month-based calendar ISO
-  # 8601's rule applied to the calendar's own year (weeks from Monday,
-  # week 1 the one holding the year's fourth day), and in a week-based
-  # calendar its own week. The calendar's own weeks are written `w`, and
-  # `Tempo.Iso8601.Group` resolves them to dates.
-  #
-  # Resolution of (year, week, day) to a concrete calendar date
-  # depends on the calendar's base:
-  #
-  #   * `:month`-based (Gregorian and the other civil calendars) — the
-  #     day of the ISO 8601 week, as a `[year, month, day]` value.
-  #
-  #   * `:week`-based (`Calendrical.ISOWeek` and the week-based fiscal
-  #     calendars) — keep the `[year, week, day_of_week]` shape, the
-  #     calendar's own week and day.
+  # A week date (`W`) is an ISO 8601 week: ISO 8601's rule applied to the
+  # calendar's own year (weeks from Monday, week 1 the one holding the
+  # year's fourth day), which every calendar answers alike
+  # (`date_from_week_date/3`), and a whole one is the date it names, as a
+  # `[year, month, day]` value. The calendar's own weeks are written `w`,
+  # and `Tempo.Iso8601.Group` resolves them to dates.
   def resolve([{:year, year}, {:week, week}, {:day_of_week, day} | rest], calendar)
       when is_integer(year) and is_integer(week) and is_integer(day) do
     with {:ok, weeks} <- values_in(:week, [year: year], calendar),
          {:ok, week} <- conform(week, weeks, unit: :week, year: year, calendar: calendar),
          [day_of_week: day] <- resolve([day_of_week: day], calendar) do
-      year_week_day(year, week, day, rest, week_dates(calendar), calendar)
+      year_week_day(year, week, day, rest, calendar)
     end
   end
 
@@ -2130,17 +2046,7 @@ defmodule Tempo.Validation do
     true
   end
 
-  # Whether a week date is kept as the calendar's own week and day, or is
-  # the date of a calendar of months.
-  defp week_dates(calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      :week
-    else
-      :month
-    end
-  end
-
-  defp year_week_day(year, week, day, rest, :month, calendar) do
+  defp year_week_day(year, week, day, rest, calendar) do
     case UnitValues.date_from_iso_week(year, week, day, calendar) do
       {:ok, date} ->
         prepend_year(
@@ -2158,17 +2064,13 @@ defmodule Tempo.Validation do
     end
   end
 
-  defp year_week_day(year, week, day, rest, :week, calendar) do
-    prepend_year(year, resolve([{:week, week}, {:day_of_week, day} | rest], calendar))
-  end
-
   @doc false
-  # A value that names a week of a year and a day of it, as the date it names
-  # in a calendar of months: what reading it gives (`resolve/2`), for a value
-  # an operation counted in the week's own units, as the walk of a week and a
-  # step of days from one do. A calendar of weeks keeps its week and its day,
-  # and so does a value with no year, one whose year, week or day is not one
-  # whole number, and one that names a day its year's weeks do not hold.
+  # A value that names a week of a year and a day of it, as the date it
+  # names: what reading it gives (`resolve/2`), for a value an operation
+  # counted in the week's own units, as the walk of a week and a step of days
+  # from one do. A value with no year keeps its week and its day, and so does
+  # one whose year, week or day is not one whole number, and one that names a
+  # day its year's weeks do not hold.
   @spec calendar_date_from_week_date(value) :: value when value: term()
   def calendar_date_from_week_date(
         %Tempo{
@@ -2177,12 +2079,13 @@ defmodule Tempo.Validation do
         } = tempo
       )
       when is_integer(year) and is_integer(week) and is_integer(day) do
-    with false <- Tempo.week_based_calendar?(calendar),
-         {:ok, %Date{} = date} <- UnitValues.date_from_iso_week(year, week, day, calendar) do
-      dated = [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
-      %{Qualification.rewritten(tempo, dated) | time: dated}
-    else
-      _a_calendar_of_weeks_or_no_such_day -> tempo
+    case UnitValues.date_from_iso_week(year, week, day, calendar) do
+      {:ok, %Date{} = date} ->
+        dated = [{:year, date.year}, {:month, date.month}, {:day, date.day} | rest]
+        %{Qualification.rewritten(tempo, dated) | time: dated}
+
+      {:error, _no_such_day} ->
+        tempo
     end
   end
 

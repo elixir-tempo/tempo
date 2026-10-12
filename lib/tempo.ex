@@ -355,8 +355,7 @@ defmodule Tempo do
   * `:year` is the calendar year.
 
   * `:quarter` is the quarter of the year, spanning the months the
-    calendar's `quarter/2` gives it (the weeks, in a week-based calendar
-    such as `Calendrical.ISOWeek`) — the value `2026-34` parses to. It
+    calendar's `quarter/2` gives it — the value `2026-34` parses to. It
     requires `:year`.
 
   * `:month` is the calendar month (Gregorian axis).
@@ -392,10 +391,10 @@ defmodule Tempo do
 
   * `:calendar` is the `Calendrical` calendar module used to
     interpret and validate the components. Defaults to
-    `Calendrical.Gregorian`. A calendar of weeks, such as
-    `Calendrical.ISOWeek`, has no months: its dates are a `:year`, a
-    `:week` and a `:day_of_week`, and a `:month`, a `:day` or a
-    `:day_of_year` given for one is an error. A calendar is a module
+    `Calendar.ISO`. A calendar of weeks, such as
+    `Calendrical.ISOWeek`, takes a `:month` and a `:day` of its own, a
+    month being four or five of its weeks, and a `:week` and a
+    `:day_of_week` are the date they name in it. A calendar is a module
     and never the name of one: `:hebrew` is an error.
 
   * `:zone` is an IANA time-zone name as a binary (e.g.
@@ -802,8 +801,7 @@ defmodule Tempo do
   end
 
   # A quarter is the span the calendar's `quarter/2` returns, held as the
-  # group of months it covers (of weeks, in a week-based calendar), as the
-  # ISO 8601-2 quarter `2026-34` is.
+  # group of months it covers, as the ISO 8601-2 quarter `2026-34` is.
   defp quarter_to_group(components, options) do
     case Keyword.pop(components, :quarter) do
       {nil, components} ->
@@ -830,9 +828,7 @@ defmodule Tempo do
   end
 
   # An ordinal day is the calendar date it names, as the ISO 8601 ordinal
-  # date `2026-166` parses to, from Calendrical. One given for a calendar of
-  # weeks, which has no day of the year, is left for the validation that
-  # refuses it.
+  # date `2026-166` parses to, from Calendrical.
   defp day_of_year_to_date(components, options) do
     calendar = Keyword.get(options, :calendar)
 
@@ -841,11 +837,7 @@ defmodule Tempo do
         {:ok, components}
 
       {day_of_year, without_day_of_year} ->
-        if Validation.months_in_a_calendar_of_weeks?(components, calendar) do
-          {:ok, components}
-        else
-          ordinal_date(without_day_of_year, day_of_year, calendar)
-        end
+        ordinal_date(without_day_of_year, day_of_year, calendar)
     end
   end
 
@@ -920,8 +912,7 @@ defmodule Tempo do
   # Feb 29, etc.). Validation may return an `InvalidDateError` with
   # rich context. The value is the one the same components parse to, so a
   # value built and a value read are one value: a week and a day of it are
-  # the calendar date they name (`2026-W25-3` is 17 June), and a month or a
-  # day of one given for a calendar of weeks is refused.
+  # the calendar date they name (`2026-W25-3` is 17 June), in every calendar.
   # A shift and a zone given together say twice how far the value's clock is
   # from UTC, and where they disagree no one value is meant: it is refused
   # (decided 2026-10-08), where it was held at an offset its zone is not at.
@@ -985,10 +976,11 @@ defmodule Tempo do
     `[u-ca=NAME]` tag in the IXDTF suffix. When omitted, the
     `[u-ca=NAME]` tag names the calendar, and with no tag
     `Calendar.ISO` is used. A calendar of weeks, such as
-    `Calendrical.ISOWeek`, has no months: its dates are written with
-    a week and a day of the week (`2026-W25-1`), and a month, a day
-    of a month or a day of the year written for one is an error. A
-    date of another calendar is brought to it with `to_calendar/2`.
+    `Calendrical.ISOWeek`, has months of its own, each four or five
+    of its weeks: a date written with a month (`2026-06-15`) is that
+    calendar's own, and a week date (`2026-W25-1`) is the same day,
+    the date it names in the calendar's weeks. A date of another
+    calendar is brought to it with `to_calendar/2`.
     Every part of an expression is in the calendar: both ends of an
     interval, every member of a set, and the start, the domain and
     the rule of a recurrence.
@@ -1049,10 +1041,10 @@ defmodule Tempo do
       ...>   Tempo.from_iso8601("2022-11-20T10:30:00Z[!Continent/Imaginary]")
 
       iex> Tempo.from_iso8601("2026-W25-1", Calendrical.ISOWeek)
-      {:ok, ~o"2026Y25W1K"W}
+      {:ok, ~o"2026Y6M15D"W}
 
-      iex> {:error, %Tempo.InvalidDateError{unit: :month}} =
-      ...>   Tempo.from_iso8601("2026-06-15", Calendrical.ISOWeek)
+      iex> Tempo.from_iso8601("2026-06-15", Calendrical.ISOWeek)
+      {:ok, ~o"2026Y6M15D"W}
 
       iex> Tempo.from_iso8601("2026-21", territory: :AU)
       {:ok, ~o"2026Y9M/12M"}
@@ -2632,39 +2624,7 @@ defmodule Tempo do
   end
 
   def from_date(%{year: year, month: month, day: day, calendar: calendar}) do
-    AST.build(date_units(year, month, day, calendar), calendar)
-  end
-
-  @doc false
-  # A date's fields as a value's units: the month and day of a month-based
-  # calendar, or the week and the day of the week a week-based calendar keeps
-  # in them, so its values take ISO 8601's week date shape as a parsed one does.
-  @spec date_units(integer(), integer(), integer(), module()) :: keyword()
-  def date_units(year, month, day, calendar) do
-    if week_based_calendar?(calendar) do
-      [year: year, week: month, day_of_week: day]
-    else
-      [year: year, month: month, day: day]
-    end
-  end
-
-  @doc false
-  # A calendar that numbers weeks within its year rather than months, whose
-  # dates are a year, a week and a day of the week. It is the calendar's to
-  # say (`calendar_base/0`), and this is the one function that asks it.
-  @spec week_based_calendar?(module()) :: boolean()
-  def week_based_calendar?(calendar) do
-    calendar.calendar_base() == :week
-  end
-
-  # The unit of a day in a calendar's dates: the day of the week in a
-  # week-based calendar.
-  defp day_unit(calendar) do
-    if week_based_calendar?(calendar) do
-      :day_of_week
-    else
-      :day
-    end
+    AST.build([year: year, month: month, day: day], calendar)
   end
 
   @doc """
@@ -2695,8 +2655,7 @@ defmodule Tempo do
   ### Options
 
   * `:resolution` is a time unit atom applied to both endpoints via
-    `at_resolution/2`. The default is the day: `:day`, or
-    `:day_of_week` in a week-based calendar.
+    `at_resolution/2`. The default is `:day`.
 
   ### Returns
 
@@ -2738,7 +2697,7 @@ defmodule Tempo do
              "(Tempo intervals have positive extent)."
        )}
     else
-      resolution = Keyword.get_lazy(options, :resolution, fn -> day_unit(first.calendar) end)
+      resolution = Keyword.get(options, :resolution, :day)
 
       with %Tempo{} = from <- at_resolution(from_date(first), resolution),
            %Tempo{} = to <- at_resolution(from_date(UnitValues.day_after(last)), resolution) do
@@ -2859,8 +2818,8 @@ defmodule Tempo do
         } = naive
       ) do
     AST.build(
-      date_units(year, month, day, calendar) ++
-        [hour: hour, minute: minute, second: second] ++ microsecond_component(naive),
+      [year: year, month: month, day: day, hour: hour, minute: minute, second: second] ++
+        microsecond_component(naive),
       calendar
     )
   end
@@ -2929,8 +2888,8 @@ defmodule Tempo do
     tempo_calendar = calendar
 
     time =
-      date_units(year, month, day, tempo_calendar) ++
-        [hour: hour, minute: minute, second: second] ++ microsecond_component(dt)
+      [year: year, month: month, day: day, hour: hour, minute: minute, second: second] ++
+        microsecond_component(dt)
 
     total_offset = utc_offset + std_offset
 
@@ -3515,10 +3474,9 @@ defmodule Tempo do
   `:day_of_week`, `:day_of_year` against a Gregorian value — return a
   `t:Tempo.ResolutionError.t/0` rather than an unrelated coarser unit.
 
-  A week numbers each of its days, so the day of a week date in a
-  calendar of weeks is its day of the week: `:day` truncates such a
-  value to it, as it extends and rounds one to it. A week of a calendar
-  of months is extended to the date of its first day.
+  A week date is the date it names, in every calendar, so `:day`
+  truncates, extends and rounds a value to a date. A week is extended
+  to the date of its first day.
 
   ## Truncating an interval
 
@@ -4014,25 +3972,10 @@ defmodule Tempo do
   # calendar — the engine of `at/2` and `on/2`, which are the public way to
   # combine two values. Passes through any non-`{:ok, _}` from
   # `Validation.validate/2`, which dialyzer widens beyond the spec.
-  #
-  # A month, a day of one or a day of the year is not placed on a value of a
-  # calendar of weeks: its year is the calendar's own, not the Gregorian year
-  # they belong to (the NRF year 2026 holds January 2027), so the day they
-  # would name there is not one of that year's.
   @doc false
   @dialyzer {:nowarn_function, merge: 2}
   @spec merge(t(), t()) :: t() | {:error, error_reason()}
-  def merge(%__MODULE__{} = base, %Tempo{} = from) do
-    calendar = base.calendar
-
-    if Validation.months_in_a_calendar_of_weeks?(from.time, calendar) do
-      {:error, placed_by_month_error(base, from, calendar)}
-    else
-      merge_in(base, from, calendar)
-    end
-  end
-
-  defp merge_in(base, from, calendar) do
+  def merge(%__MODULE__{calendar: calendar} = base, %Tempo{} = from) do
     units = Enumeration.merge(base.time, from.time)
     qualifications = Qualification.merge(base.qualifications, from.qualifications)
 
@@ -4116,18 +4059,6 @@ defmodule Tempo do
     ZonedTempoError.exception(
       operation: "place a value in one zone on a value in another",
       value: from
-    )
-  end
-
-  defp placed_by_month_error(base, from, calendar) do
-    ConversionError.exception(
-      value: from,
-      target: calendar,
-      reason:
-        "#{Calendars.name(calendar)} is a calendar of weeks, with no months, so #{Calendars.inspect(from)} " <>
-          "cannot be placed on #{Calendars.inspect(base)}; place a week (W) and a day of the week (K) " <>
-          "read in that calendar, or bring a date of another calendar to it with " <>
-          "Tempo.to_calendar/2."
     )
   end
 
@@ -4288,31 +4219,16 @@ defmodule Tempo do
     false
   end
 
-  # A month or a day placed on a value of a calendar of weeks keeps the error
-  # that says what such a calendar takes.
   defp two_calendars_error(value, other) do
-    cond do
-      by_month_on_weeks?(value, other) ->
-        placed_by_month_error(other, value, other.calendar)
-
-      by_month_on_weeks?(other, value) ->
-        placed_by_month_error(value, other, value.calendar)
-
-      true ->
-        ConversionError.exception(
-          value: value,
-          target: other.calendar,
-          reason:
-            "#{Calendars.inspect(value)} is a value of #{Calendars.name(value.calendar)} and " <>
-              "#{Calendars.inspect(other)} one of #{Calendars.name(other.calendar)}, and a month, a " <>
-              "week and a day are numbered by their calendar: read both in one calendar to " <>
-              "place one on the other."
-        )
-    end
-  end
-
-  defp by_month_on_weeks?(%__MODULE__{time: time}, %__MODULE__{} = base) do
-    Validation.months_in_a_calendar_of_weeks?(time, base.calendar)
+    ConversionError.exception(
+      value: value,
+      target: other.calendar,
+      reason:
+        "#{Calendars.inspect(value)} is a value of #{Calendars.name(value.calendar)} and " <>
+          "#{Calendars.inspect(other)} one of #{Calendars.name(other.calendar)}, and a month, a " <>
+          "week and a day are numbered by their calendar: read both in one calendar to " <>
+          "place one on the other."
+    )
   end
 
   # An interval is placed endpoint by endpoint; an open end, or one its
@@ -5008,7 +4924,7 @@ defmodule Tempo do
   end
 
   def from_elixir(%Date{} = date, options) do
-    resolution = Keyword.get_lazy(options, :resolution, fn -> day_unit(date.calendar) end)
+    resolution = Keyword.get(options, :resolution, :day)
 
     date
     |> from_date()
@@ -5140,8 +5056,7 @@ defmodule Tempo do
       iex> Tempo.extend_resolution(~o"2020Y6M", :hour)
       ~o"2020Y6M1DT0H"
 
-  A week of a calendar of months is extended to the date of its first
-  day, and a week of a calendar of weeks to its first day of the week:
+  A week is extended to the date of its first day:
 
       iex> Tempo.extend_resolution(~o"2026-W25", :day)
       ~o"2026Y6M15D"
@@ -5359,16 +5274,15 @@ defmodule Tempo do
   end
 
   # A week numbers each day within it, so the day of a value on the week
-  # axis is its day of the week (`K`), in a calendar of weeks and for a
-  # Gregorian week alike: a week date at day resolution is
+  # axis is its day of the week (`K`): a week date at day resolution is
   # `[year, week, day_of_week]`. A value that holds several days of the
   # year has its day there (`O`); one alone is read as its date.
   # Truncating, extending and rounding to `:day` all read the unit here. A
-  # Gregorian week extended to it is then written as the date it names
+  # week extended to it is then written as the date it names
   # (`extend_resolution/2`).
-  defp day_unit(:day, %__MODULE__{time: time, calendar: calendar}) do
+  defp day_unit(:day, %__MODULE__{time: time}) do
     cond do
-      List.keymember?(time, :week, 0) or week_based_calendar?(calendar) -> :day_of_week
+      List.keymember?(time, :week, 0) -> :day_of_week
       List.keymember?(time, :day_of_year, 0) -> :day_of_year
       true -> :day
     end
@@ -5623,8 +5537,8 @@ defmodule Tempo do
     {:error, ConversionError.exception(value: value, target: NaiveDateTime)}
   end
 
-  # A week date's day as its calendar numbers it — the calendar's own week
-  # in a week-based calendar, ISO 8601's in any other — at its time of day.
+  # A week date's day as its calendar places it (`date_from_week_date/3`), at
+  # its time of day.
   defp week_naive_datetime(tempo, {year, week, day}, {hour, minute, second, microsecond}) do
     with {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, tempo.calendar) do
       NaiveDateTime.new(
@@ -5939,8 +5853,8 @@ defmodule Tempo do
     convert_date(value, Date.new(year, month, day, source), calendar)
   end
 
-  # A week date is the day of its week: the calendar's own week in a
-  # week-based calendar, and ISO 8601's in any other.
+  # A week date is the day of its week, as its calendar places it
+  # (`date_from_week_date/3`).
   defp in_calendar(
          %Tempo{
            time: [year: year, week: week, day_of_week: day],
@@ -6032,7 +5946,7 @@ defmodule Tempo do
   # metadata, and its zone and tags (its calendar is now the one converted
   # to). Each unit of the converted date is worked out from all of the units
   # it was written with, so a qualified year, month or day qualifies every
-  # unit of it, as a date written for a calendar of weeks converts.
+  # unit of it.
   defp carried_across(%__MODULE__{time: time} = converted, %__MODULE__{} = value) do
     %{
       converted
@@ -6988,7 +6902,7 @@ defmodule Tempo do
     {year, month, day} = calendar.date_from_iso_days(Integer.floor_div(seconds, 86_400))
 
     {:ok,
-     date_units(year, month, day, calendar) ++
+     [year: year, month: month, day: day] ++
        [
          hour: div(time_of_day, 3_600),
          minute:
@@ -7493,9 +7407,7 @@ defmodule Tempo do
     end
   end
 
-  # A week date's day as its calendar numbers it: the calendar's own week and
-  # day in a week-based calendar, and the date of the ISO 8601 week's day in
-  # any other.
+  # A week date's day as its calendar places it (`date_from_week_date/3`).
   defp week_date_ymd!(tempo, function, {year, week, day}) do
     case UnitValues.date_from_iso_week(year, week, day, tempo.calendar) do
       {:ok, date} ->
@@ -7986,7 +7898,7 @@ defmodule Tempo do
   @doc """
   Format a Tempo value as a locale-aware string.
 
-  Routes through Localize so format patterns, month and weekday names, day periods, and punctuation all follow CLDR data for the chosen locale. The default format is keyed off the Tempo's resolution — a year renders as its first and last months, a month or a week as its first and last days, a day as that day, and so on. A week date is the day it names. A week of a calendar of weeks is a unit of that calendar, and renders as the locale's words for it ("week 25 of 2026").
+  Routes through Localize so format patterns, month and weekday names, day periods, and punctuation all follow CLDR data for the chosen locale. The default format is keyed off the Tempo's resolution — a year renders as its first and last months, a month or a week as its first and last days, a day as that day, and so on. A week date is the day it names.
 
   A value that names something other than its own one span renders as the span or spans `Tempo.to_interval/2` gives it: a mask its span (`~o"202X"` is 2020 to 2029), and a recurrence, a selection or a set its spans as a list in the locale. A one-of set renders as its alternatives ("2026 or 2027").
 
@@ -8066,13 +7978,14 @@ defmodule Tempo do
       iex> Tempo.to_string(Tempo.from_iso8601!("-0044-03-15", Calendrical.Julian))
       {:ok, "Mar 15, 44 BC"}
 
-  A week of a calendar of weeks is worded as the locale words one:
+  A week is its days, from the first to the last, in the formats of its calendar. A calendar of weeks' months are named as CLDR's generic calendar names them:
+
+      iex> Tempo.to_string(~o"2026-W25")
+      {:ok, "Jun 15\u2009\u2013\u200921, 2026"}
 
       iex> week = Tempo.from_iso8601!("2026-W25", Calendrical.ISOWeek)
       iex> Tempo.to_string(week)
-      {:ok, "week 25 of 2026"}
-      iex> Tempo.to_string(week, locale: "de")
-      {:ok, "Woche 25 des Jahres 2026"}
+      {:ok, "M06 15\u2009\u2013\u200921, 2026 AD"}
 
   A recurrence is its occurrences, as a list, and a one-of set its alternatives:
 
@@ -8739,7 +8652,7 @@ defmodule Tempo do
   end
 
   # A day of the week starts on the first such day on or after the window's
-  # start, in its week when the window is a calendar of weeks.
+  # start.
   defp placed_start(
          window_from,
          :day_of_week,
@@ -8964,8 +8877,7 @@ defmodule Tempo do
 
   # A recurrence is walked by stepping its start by its cadence and applying
   # its selection to each step. A cadence its start cannot be stepped by (a
-  # month, from a week date) and a selection by a unit its calendar has none of
-  # (a month, in a calendar of weeks) give nothing to walk, and are errors.
+  # month, from a week) gives nothing to walk, and is an error.
   defp walkable(
          %Tempo.Interval{
            recurrence: recurrence,
@@ -9056,46 +8968,12 @@ defmodule Tempo do
     {:error, step_error(value, :grouped_component)}
   end
 
-  defp selectable(%Tempo{time: time} = rule, interval) do
-    if selects_by_month?(time) and week_based_calendar?(rule.calendar) do
-      {:error,
-       ConversionError.exception(
-         value: interval,
-         reason:
-           "#{Calendars.name(rule.calendar)} is a calendar of weeks, with no months, so " <>
-             "#{Calendars.inspect(interval)} cannot select by a month, a day of one or a day of the year."
-       )}
-    else
-      Selection.calendar_week_in_its_year(time, interval)
-    end
+  defp selectable(%Tempo{time: time}, interval) do
+    Selection.calendar_week_in_its_year(time, interval)
   end
 
   defp selectable(_no_rule, _interval) do
     :ok
-  end
-
-  # Whether a selection, or a window within it, selects by a month, by a day
-  # of one or by a day of the year: the units a date written for a calendar of
-  # weeks is read in the Gregorian calendar by.
-  defp selects_by_month?(units) when is_list(units) do
-    Enum.any?(units, &selects_by_month?/1)
-  end
-
-  defp selects_by_month?({unit, _value})
-       when unit in [:month, :traditional_month, :day, :day_of_year] do
-    true
-  end
-
-  defp selects_by_month?({:selection, selection}) do
-    selects_by_month?(selection)
-  end
-
-  defp selects_by_month?({:interval, %Tempo.Interval{from: %Tempo{time: time}}}) do
-    selects_by_month?(time)
-  end
-
-  defp selects_by_month?(_other_unit) do
-    false
   end
 
   @doc false
@@ -10987,9 +10865,9 @@ defmodule Tempo do
   # walk starts from and those the rule's part names, each counted from the
   # unit's first. A rule with no such part names them all. They are the
   # values the part is asked by when it limits (`Tempo.RRule.Selection`): a
-  # day of the week is a number of the rule's calendar, the first day of its
-  # own week in a calendar of weeks, and is the weekday ISO 8601 numbers
-  # here, as the start's is.
+  # day of the week is a number of the rule's calendar, counted from the day
+  # its weeks begin on, and is the weekday ISO 8601 numbers here, as the
+  # start's is.
   defp place_named(part, selection, %Tempo{} = from, calendar) do
     with {:ok, %Range{first: first} = values} <- UnitValues.in_period(part, [], calendar),
          {:ok, start} <- value_stepped_from(from, part) do
@@ -11189,7 +11067,7 @@ defmodule Tempo do
   end
 
   defp day_of_calendar(%Date{year: year, month: month, day: day}, calendar) do
-    %Tempo{time: date_units(year, month, day, calendar), calendar: calendar}
+    %Tempo{time: [year: year, month: month, day: day], calendar: calendar}
   end
 
   # The occurrences a walk gave. A step its cadence could not take ends the
@@ -12503,8 +12381,7 @@ defmodule Tempo do
 
   defp week_year_floor(%Tempo{time: [year: year], calendar: calendar} = from, start)
        when is_integer(year) do
-    with false <- week_based_calendar?(calendar),
-         {:ok, %Date{} = monday} <- UnitValues.date_from_iso_week(year, 1, 1, calendar),
+    with {:ok, %Date{} = monday} <- UnitValues.date_from_iso_week(year, 1, 1, calendar),
          {:ok, %Date{} = monday} <- Date.convert(monday, calendar) do
       %{from | time: [year: monday.year, month: monday.month, day: monday.day]}
     else
@@ -12598,7 +12475,7 @@ defmodule Tempo do
   # no selection, the day floor keeps a plain cadence (`R/../P1D`) walking
   # days.
   defp start_unit(
-         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]} = rule} =
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}} =
            interval
        )
        when selection != [] do
@@ -12617,7 +12494,6 @@ defmodule Tempo do
       {finest_unit, _value} ->
         finest_unit
         |> calendar_start_unit(stepped_by(interval))
-        |> week_in_a_calendar_of_weeks(finest_unit, rule)
         |> in_a_window(selection)
 
       nil ->
@@ -12636,24 +12512,6 @@ defmodule Tempo do
 
   defp stepped_by(_no_cadence) do
     nil
-  end
-
-  # A calendar of weeks holds a week where a calendar of months holds a
-  # month, and the resolver reads its weeks as its months, so a week
-  # selected in one starts from a week, as a month selected starts from a
-  # month. Started from the year, as a week of a calendar of months is, the
-  # week had no unit to be put in and the year was selected whole.
-  defp week_in_a_calendar_of_weeks(start_unit, finest_unit, %Tempo{} = rule)
-       when finest_unit in [:week, :calendar_week] do
-    if week_based_calendar?(rule.calendar) do
-      :week
-    else
-      start_unit
-    end
-  end
-
-  defp week_in_a_calendar_of_weeks(start_unit, _finest_unit, _rule) do
-    start_unit
   end
 
   # The week start (`q`) and a rule's skip are context, and name no unit.
@@ -12789,7 +12647,7 @@ defmodule Tempo do
   end
 
   defp narrowed_mask(entry, unit, mask, prefix, rest, calendar) do
-    if tail_narrows?(rest, prefix ++ [entry]) or every_week_follows?(rest, calendar) do
+    if tail_narrows?(rest, prefix ++ [entry]) or every_week_follows?(rest) do
       mask_before_narrower(unit, mask, prefix, rest, calendar)
     else
       mask_alone(unit, mask, prefix, calendar)
@@ -12799,12 +12657,11 @@ defmodule Tempo do
   # Every week of a year is not the year (`spans_its_values?/4`), so a mask
   # of all the weeks after a masked year (`202XYXXW`) narrows it: the weeks
   # of each year, where any other unit masked whole widens to the years.
-  defp every_week_follows?([{:week, week} | _rest], calendar)
-       when week == :any or is_tuple(week) do
-    not week_based_calendar?(calendar)
+  defp every_week_follows?([{:week, week} | _rest]) when week == :any or is_tuple(week) do
+    true
   end
 
-  defp every_week_follows?(_rest, _calendar) do
+  defp every_week_follows?(_rest) do
     false
   end
 
@@ -12836,10 +12693,9 @@ defmodule Tempo do
   # Every week of a year is not the year: ISO 8601's weeks of 2026 run from
   # 29 December 2025 to 3 January 2027. So a mask of all of them is the span
   # from the first week to the last, where any other unit's is the span of the
-  # units before it. In a calendar of weeks the two are one.
-  defp spans_its_values?(:week, mask, prefix, calendar) do
-    narrowing_mask?(:week, mask, prefix) or
-      (prefix != [] and not week_based_calendar?(calendar))
+  # units before it.
+  defp spans_its_values?(:week, mask, prefix, _calendar) do
+    narrowing_mask?(:week, mask, prefix) or prefix != []
   end
 
   defp spans_its_values?(unit, mask, prefix, _calendar) do
@@ -17360,7 +17216,7 @@ defmodule Tempo do
 
   * `tempo` when it is a workday, otherwise the workday it rolls to.
 
-  * `{:error, reason}` as for `add_workdays/3`, for an option this does not take, and for a modified roll of a day in a calendar of weeks, which has no month to stay in (a `Tempo.ResolutionError`).
+  * `{:error, reason}` as for `add_workdays/3`, and for an option this does not take.
 
   ### Examples
 
@@ -17491,7 +17347,7 @@ defmodule Tempo do
   end
 
   # The month a day is of: the one its calendar counts it in, as `trunc/2`
-  # gives it. A calendar of weeks has no months.
+  # gives it.
   defp month_of(day) do
     case trunc(day, :month) do
       %Tempo{time: month} ->
@@ -17829,8 +17685,7 @@ defmodule Tempo do
       {year, month, day} when is_integer(year) and is_integer(month) and is_integer(day) ->
         Date.new(year, month, day, tempo.calendar)
 
-      # A day of the year or of a week, with or without a time of day: a
-      # calendar of weeks keeps its week and day beside a time.
+      # A day of the year or of a week, with or without a time of day.
       _ordinal_or_week_date ->
         tempo
         |> trunc(:day)
