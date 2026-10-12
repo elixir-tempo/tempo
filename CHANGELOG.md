@@ -877,9 +877,9 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 * `Tempo.union/2`, `intersection/2` and `difference/2` take a set whose member is a range (`{2026-06-15..2026-06-20}`), where they raised.
 
-* A whole date written with a month and a day, or as a day of the year, for a calendar of weeks is the Gregorian day converted into it, as Localize reads it: `~o"2026-06-15"W` and `Tempo.new(year: 2026, month: 6, day: 15, calendar: Calendrical.ISOWeek)` are `~o"2026-W25-1"W`, where each held a month and a day its calendar has none of. Anything less than a whole date there, and a month or a day of one placed on (`at/2`, `on/2`) or selected in (`select/2`) a week calendar's value, is a `Tempo.ConversionError`.
+* A month, a day of a month or a day of the year written or given for a calendar of weeks is a `Tempo.InvalidDateError` that names the week form (`2026Y25W2K`): `~o"2026-06-15"W` and `Tempo.new(year: 2026, month: 6, day: 15, calendar: Calendrical.ISOWeek)` are errors, where each held a month and a day its calendar has none of. A date of another calendar is brought to one with `Tempo.to_calendar/2`, and a month or a day of one placed on (`at/2`, `on/2`) or selected in (`select/2`) a week calendar's value is a `Tempo.ConversionError`.
 
-* A date converted into a calendar of weeks is qualified in every unit when its year, month or day was: `2026-?06-15[u-ca=iso-week]` is `2026-W25-1?`.
+* `Tempo.InvalidDateError`'s message is its written reason whenever it has one, where an error that also named a unit said only the unit and the value (`Invalid week: 6`).
 
 * `Tempo.at/2`, `on/2` and `extend/1` check a value in its own calendar, so a Hebrew leap year takes its thirteenth month and a week date keeps its shape when a time is placed in it, where each was checked as a Gregorian date.
 

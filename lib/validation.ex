@@ -4,7 +4,6 @@ defmodule Tempo.Validation do
   alias Localize.Utils.Math
   alias Tempo.Calendars
   alias Tempo.Compare
-  alias Tempo.ConversionError
   alias Tempo.Enumeration.SkippedReadings
   alias Tempo.Enumeration.Zone
   alias Tempo.IntervalEndpointsError
@@ -53,15 +52,14 @@ defmodule Tempo.Validation do
          {:ok, units} <- in_years_of_the_calendar(units, calendar),
          :ok <- taken_as_written_alone(tempo, units, calendar) do
       units = sets_of_one_as_their_member(units)
-      written = written_calendar(units, calendar)
 
-      case resolve_as_written(units, written, calendar) do
+      case resolve_in_its_calendar(units, calendar) do
         {:error, reason} ->
           {:error, reason}
 
         resolved ->
           tempo
-          |> qualify_converted(resolved, written, calendar)
+          |> qualify_resolved(resolved)
           |> validated_groups(collapse_single_member_sets(resolved), calendar)
       end
     end
@@ -224,28 +222,74 @@ defmodule Tempo.Validation do
   end
 
   @doc false
-  # Whether a value's units are written in a calendar other than its own, as a
-  # month and a day are in a calendar of weeks, and so are converted when it is
-  # validated.
-  @spec written_in_another_calendar?(keyword(), module()) :: boolean()
-  def written_in_another_calendar?(units, calendar) do
-    written_calendar(units, calendar) != calendar
+  # A calendar of weeks has no month, no day of a month and no day of the
+  # year: its dates are a year, a week and a day of the week, written
+  # `2026Y25W2K` (decided 2026-10-12). Whether units hold one of the three
+  # for such a calendar, which is an error wherever they are read or given:
+  # a date of another calendar is brought to it with `Tempo.to_calendar/2`,
+  # and is not read as one and converted. A month from 21 to 41 is ISO
+  # 8601-2's code for a season or a division of the year, which every
+  # calendar has, and is no month.
+  @spec months_in_a_calendar_of_weeks?(keyword() | term(), module()) :: boolean()
+  def months_in_a_calendar_of_weeks?(units, calendar) when is_list(units) do
+    Tempo.week_based_calendar?(calendar) and Enum.any?(units, &month_or_day?/1)
   end
 
-  # A calendar of weeks has no month or day of a month, so a date written for
-  # one with them, or as a day of the year, is read in the calendar its
-  # `parsing_calendar/0` names, the Gregorian calendar, and converted into it,
-  # as Localize reads such a date: 15 June 2026 is day 1 of week 25. Only a
-  # whole date converts. A month alone, or a set of days, names no week and no
-  # day of one, and is an error.
-  defp resolve_as_written(units, calendar, calendar) do
-    resolve_units(units, calendar)
+  def months_in_a_calendar_of_weeks?(_units, _calendar) do
+    false
   end
 
-  defp resolve_as_written(units, written, calendar) do
-    units
-    |> resolve_units(written)
-    |> convert_date(written, calendar)
+  @doc false
+  # The error for a month, a day of a month or a day of the year written or
+  # given for a calendar of weeks, which names the form such a calendar's
+  # dates take.
+  @spec no_months_error(keyword(), module()) :: Exception.t()
+  def no_months_error(units, calendar) do
+    {unit, value} = Enum.find(units, &month_or_day?/1)
+
+    InvalidDateError.exception(
+      unit: unit,
+      value: value,
+      calendar: calendar,
+      reason:
+        "#{Calendars.name(calendar)} is a calendar of weeks, with no month, no day of a month " <>
+          "and no day of the year, so #{unit_text(unit)} #{Calendars.inspect(value)} is not valid " <>
+          "in it. Its dates are a year, a week and a day of the week, written as 2026Y25W2K " <>
+          "is; a date of another calendar is brought to it with Tempo.to_calendar/2."
+    )
+  end
+
+  defp unit_text(:day_of_year) do
+    "day of the year"
+  end
+
+  defp unit_text(:traditional_month) do
+    "month"
+  end
+
+  defp unit_text(unit) do
+    Atom.to_string(unit)
+  end
+
+  defp month_or_day?({:month, month}) when is_integer(month) do
+    not Group.season_or_division?(month)
+  end
+
+  defp month_or_day?({unit, _value})
+       when unit in [:month, :traditional_month, :day, :day_of_year] do
+    true
+  end
+
+  defp month_or_day?(_other_unit) do
+    false
+  end
+
+  defp resolve_in_its_calendar(units, calendar) do
+    if months_in_a_calendar_of_weeks?(units, calendar) do
+      {:error, no_months_error(units, calendar)}
+    else
+      resolve_units(units, calendar)
+    end
   end
 
   # The units before a selection name the period it selects in, and are read
@@ -418,102 +462,34 @@ defmodule Tempo.Validation do
 
   # Each date unit of a date written again in other units is worked out from
   # all of the units it was written with, so a qualification of any of them
-  # qualifies every one: `2026-?06-15` in a calendar of weeks is
-  # `2026-W25-1?`, and a week date a value holds as a calendar date
+  # qualifies every one: a week date a value holds as a calendar date
   # (`2026-W25-1?`) is `2026-06-15?`. A qualified time of day is its own.
   #
   # A value qualified as a whole (`T10H30S~`, ISO 8601-2 §8.2.1) is qualified
   # in each unit it is read with, the ones its text leaves out among them:
   # the minute of `T10H30S~`, the month and the day of `2026YT17H?`.
-  defp qualify_converted(%Tempo{qualifications: %{}} = tempo, resolved, written, calendar)
-       when is_list(resolved) do
+  defp qualify_resolved(%Tempo{qualifications: %{}} = tempo, resolved) when is_list(resolved) do
     qualification = Qualification.whole(tempo)
 
-    if is_nil(qualification) do
-      if written != calendar or qualified_unit_gone?(tempo, resolved) do
+    cond do
+      not is_nil(qualification) ->
+        %{tempo | qualifications: Qualification.complete(resolved, qualification)}
+
+      qualified_unit_gone?(tempo, resolved) ->
         Qualification.rewritten(tempo, resolved)
-      else
+
+      true ->
         tempo
-      end
-    else
-      %{tempo | qualifications: Qualification.complete(resolved, qualification)}
     end
   end
 
-  defp qualify_converted(tempo, _resolved, _written, _calendar) do
+  defp qualify_resolved(tempo, _resolved) do
     tempo
   end
 
   defp qualified_unit_gone?(%Tempo{qualifications: qualifications}, resolved) do
     units = for entry <- resolved, is_tuple(entry), do: elem(entry, 0)
     Enum.any?(Map.keys(qualifications), &(&1 not in units))
-  end
-
-  # The calendar a value's units are written in: the one its calendar is read
-  # in when they hold a month or a day, and otherwise its own.
-  defp written_calendar(units, calendar) when is_list(units) do
-    reading = reading_calendar(calendar)
-
-    if reading != calendar and Enum.any?(units, &month_or_day?/1) do
-      reading
-    else
-      calendar
-    end
-  end
-
-  defp written_calendar(_units, calendar) do
-    calendar
-  end
-
-  defp month_or_day?({unit, _value}) when unit in [:month, :day, :day_of_year] do
-    true
-  end
-
-  defp month_or_day?(_other_unit) do
-    false
-  end
-
-  # The calendar a calendar's dates are read in, as it answers: itself, or
-  # Elixir's `Calendar.ISO` for one of Calendrical's calendars of weeks. That
-  # is a calendar named to Tempo by another library, as a caller names it,
-  # and it comes in as a caller's does.
-  defp reading_calendar(calendar) do
-    Calendars.inside(calendar.parsing_calendar())
-  end
-
-  # A date that does not exist as it is written (30 February) is an
-  # `InvalidDateError` from resolving it. One that exists and cannot be
-  # converted, being less than a whole date, is a `ConversionError`, as it is
-  # from `Tempo.to_calendar/2`.
-  defp convert_date({:error, _reason} = error, _written, _calendar) do
-    error
-  end
-
-  defp convert_date(
-         [{:year, year}, {:month, month}, {:day, day} | rest] = units,
-         written,
-         calendar
-       )
-       when is_integer(year) and is_integer(month) and is_integer(day) do
-    with {:ok, date} <- Date.new(year, month, day, written),
-         {:ok, %Date{} = converted} <- Date.convert(date, calendar) do
-      Tempo.date_units(converted.year, converted.month, converted.day, calendar) ++ rest
-    else
-      {:error, reason} ->
-        {:error, ConversionError.exception(value: units, target: calendar, reason: reason)}
-    end
-  end
-
-  defp convert_date(month_or_day_alone, written, calendar) do
-    {:error,
-     ConversionError.exception(
-       value: month_or_day_alone,
-       target: calendar,
-       reason:
-         "#{Calendars.name(calendar)} has no month or day of a month of its own. A date written " <>
-           "with them is read in #{Calendars.name(written)} and converted, which takes a whole " <>
-           "date: a year with a month and a day, or with a day of the year."
-     )}
   end
 
   # A set with one member denotes exactly what that member denotes, so

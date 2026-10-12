@@ -30,18 +30,12 @@ defmodule Tempo.InvalidDateError do
     Calendars.outside(struct!(__MODULE__, bindings))
   end
 
-  # A reason written beside the values the unit takes is the whole of what
-  # there is to say: it names the value, what it was read as, and the values
-  # it could have been (`Tempo.Validation.conform/3`).
+  # A reason that is written out is the whole of what there is to say: it
+  # names the value, what it was read as, and the values it could have been
+  # (`Tempo.Validation.conform/3`), or why the unit has no place in the
+  # calendar. The unit and the value are held beside it for a caller to read.
   @impl true
-  def message(%__MODULE__{reason: reason, valid_range: range})
-      when is_binary(reason) and not is_nil(range) do
-    reason
-  end
-
-  # A year a calendar does not have is said as it is: the calendar has no
-  # run of years to list beside it.
-  def message(%__MODULE__{unit: :year, reason: reason}) when is_binary(reason) do
+  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
     reason
   end
 
@@ -54,10 +48,6 @@ defmodule Tempo.InvalidDateError do
 
   def message(%__MODULE__{unit: unit, value: value}) when not is_nil(unit) do
     "Invalid #{unit}: #{Calendars.inspect(value)}"
-  end
-
-  def message(%__MODULE__{reason: reason}) when is_binary(reason) do
-    reason
   end
 
   def message(%__MODULE__{reason: reason}) when is_atom(reason) and not is_nil(reason) do

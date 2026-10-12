@@ -393,10 +393,10 @@ defmodule Tempo do
   * `:calendar` is the `Calendrical` calendar module used to
     interpret and validate the components. Defaults to
     `Calendrical.Gregorian`. A calendar of weeks, such as
-    `Calendrical.ISOWeek`, has no months: a `:year`, `:month` and
-    `:day`, or a `:year` and `:day_of_year`, given for one are the
-    Gregorian day, converted into it. A calendar is a module and
-    never the name of one: `:hebrew` is an error.
+    `Calendrical.ISOWeek`, has no months: its dates are a `:year`, a
+    `:week` and a `:day_of_week`, and a `:month`, a `:day` or a
+    `:day_of_year` given for one is an error. A calendar is a module
+    and never the name of one: `:hebrew` is an error.
 
   * `:zone` is an IANA time-zone name as a binary (e.g.
     `"Australia/Sydney"`). Sets `extended.zone_id`. A date with a
@@ -831,8 +831,8 @@ defmodule Tempo do
 
   # An ordinal day is the calendar date it names, as the ISO 8601 ordinal
   # date `2026-166` parses to, from Calendrical. One given for a calendar of
-  # weeks is the Gregorian day of the year, as one parsed for it is, and is
-  # left for the validation that converts it.
+  # weeks, which has no day of the year, is left for the validation that
+  # refuses it.
   defp day_of_year_to_date(components, options) do
     calendar = Keyword.get(options, :calendar)
 
@@ -841,7 +841,7 @@ defmodule Tempo do
         {:ok, components}
 
       {day_of_year, without_day_of_year} ->
-        if Validation.written_in_another_calendar?(components, calendar) do
+        if Validation.months_in_a_calendar_of_weeks?(components, calendar) do
           {:ok, components}
         else
           ordinal_date(without_day_of_year, day_of_year, calendar)
@@ -920,8 +920,8 @@ defmodule Tempo do
   # Feb 29, etc.). Validation may return an `InvalidDateError` with
   # rich context. The value is the one the same components parse to, so a
   # value built and a value read are one value: a week and a day of it are
-  # the calendar date they name (`2026-W25-3` is 17 June), and a month and a
-  # day given for a calendar of weeks are the Gregorian day, converted.
+  # the calendar date they name (`2026-W25-3` is 17 June), and a month or a
+  # day of one given for a calendar of weeks is refused.
   # A shift and a zone given together say twice how far the value's clock is
   # from UTC, and where they disagree no one value is meant: it is refused
   # (decided 2026-10-08), where it was held at an offset its zone is not at.
@@ -985,9 +985,10 @@ defmodule Tempo do
     `[u-ca=NAME]` tag in the IXDTF suffix. When omitted, the
     `[u-ca=NAME]` tag names the calendar, and with no tag
     `Calendar.ISO` is used. A calendar of weeks, such as
-    `Calendrical.ISOWeek`, has no months, so a whole date written
-    with a month and a day, or as a day of the year, is read as the
-    Gregorian day and converted into it; a month alone is an error.
+    `Calendrical.ISOWeek`, has no months: its dates are written with
+    a week and a day of the week (`2026-W25-1`), and a month, a day
+    of a month or a day of the year written for one is an error. A
+    date of another calendar is brought to it with `to_calendar/2`.
     Every part of an expression is in the calendar: both ends of an
     interval, every member of a set, and the start, the domain and
     the rule of a recurrence.
@@ -1047,8 +1048,11 @@ defmodule Tempo do
       iex> {:error, %Tempo.UnknownZoneError{zone_id: "Continent/Imaginary"}} =
       ...>   Tempo.from_iso8601("2022-11-20T10:30:00Z[!Continent/Imaginary]")
 
-      iex> Tempo.from_iso8601("2026-06-15", Calendrical.ISOWeek)
+      iex> Tempo.from_iso8601("2026-W25-1", Calendrical.ISOWeek)
       {:ok, ~o"2026Y25W1K"W}
+
+      iex> {:error, %Tempo.InvalidDateError{unit: :month}} =
+      ...>   Tempo.from_iso8601("2026-06-15", Calendrical.ISOWeek)
 
       iex> Tempo.from_iso8601("2026-21", territory: :AU)
       {:ok, ~o"2026Y9M/12M"}
@@ -4021,7 +4025,7 @@ defmodule Tempo do
   def merge(%__MODULE__{} = base, %Tempo{} = from) do
     calendar = base.calendar
 
-    if Validation.written_in_another_calendar?(from.time, calendar) do
+    if Validation.months_in_a_calendar_of_weeks?(from.time, calendar) do
       {:error, placed_by_month_error(base, from, calendar)}
     else
       merge_in(base, from, calendar)
@@ -4122,8 +4126,8 @@ defmodule Tempo do
       reason:
         "#{Calendars.name(calendar)} is a calendar of weeks, with no months, so #{Calendars.inspect(from)} " <>
           "cannot be placed on #{Calendars.inspect(base)}; place a week (W) and a day of the week (K) " <>
-          "read in that calendar, or write the whole date, which is read as the Gregorian " <>
-          "day and converted."
+          "read in that calendar, or bring a date of another calendar to it with " <>
+          "Tempo.to_calendar/2."
     )
   end
 
@@ -4308,7 +4312,7 @@ defmodule Tempo do
   end
 
   defp by_month_on_weeks?(%__MODULE__{time: time}, %__MODULE__{} = base) do
-    Validation.written_in_another_calendar?(time, base.calendar)
+    Validation.months_in_a_calendar_of_weeks?(time, base.calendar)
   end
 
   # An interval is placed endpoint by endpoint; an open end, or one its

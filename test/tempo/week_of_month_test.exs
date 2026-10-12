@@ -891,8 +891,9 @@ defmodule Tempo.WeekOfMonthTest do
       assert Enum.map(weeks, &{&1.first, &1.last}) == expected
     end
 
-    test "are not a value's to name in a calendar that reads its months in another" do
-      assert {:error, %Tempo.InvalidDateError{unit: :week, value: 2, year: 2026, month: 6}} =
+    test "are not a value's to name in a calendar of weeks, which has no month" do
+      assert {:error,
+              %Tempo.InvalidDateError{unit: :month, value: 6, calendar: Calendrical.ISOWeek}} =
                Tempo.from_iso8601("2026Y6M2W", Calendrical.ISOWeek)
     end
   end

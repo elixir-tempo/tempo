@@ -35,9 +35,10 @@ defmodule Tempo.Sigils do
 
   * `W` — ISO Week calendar (`Calendrical.ISOWeek`). Use when the
     input is in a week-based form you want parsed under ISO week
-    semantics explicitly. A whole date written with a month and a
-    day is read as the Gregorian day and converted, so
-    `~o"2026-06-15"W` is `~o"2026-W25-1"W`.
+    semantics explicitly. A calendar of weeks has no months, so a
+    date is written with its week and its day of the week
+    (`~o"2026-W25-1"W`), and one written with a month and a day is
+    an error.
 
   ## Match context
 

@@ -107,6 +107,8 @@ These keep their names and change their meaning:
 
 * **`Tempo.new/1` of a week and a day of it** — the calendar date they name, as the parser reads them, where 1.x kept the week date.
 
+* **A month, a day of a month or a day of the year for a calendar of weeks** — a `Tempo.InvalidDateError` that names the week form (`~o"2026-W25-1"W`), written or given to `Tempo.new/1`, where 1.x held a month and a day such a calendar has none of; a date of another calendar is brought to one with `Tempo.to_calendar/2`.
+
 * **`shift/3` by months and days** — the months, then the days from the day they land on, as `Date.shift/2` counts; and an unknown unit is an error, where 1.x passed it over.
 
 * **A recurrence across the end of a month** — its occurrences are consecutive, each ending where the next starts.

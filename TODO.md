@@ -68,6 +68,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **A month written for a calendar of weeks is an error** — the user, 2026-10-12: "Week calendars are 2026Y25W2D format", and a month, a day of a month or a day of the year written or given for one is invalid, where it was read as the Gregorian day and converted. It is a `Tempo.InvalidDateError` that names the week form (`2026Y25W2K`, ISO 8601-2's day of the week) at the reader and in `Tempo.new/1`; a season and a division of the year stay; no calendar is asked its `parsing_calendar/0`. 2026-10-12.
+
 * [x] **CI's lint row: four dialyzer findings in the set operations** — a window with no year beside a dated operand was asked its class a second time, in a clause only such a window reaches, and the branch that could not be taken answered `:ok`: the clause returns the error itself. Found by bisecting (`61fbe28` was the first commit with the four) and by a run with a spec on each private function of the path. 2026-10-12.
 
 * [x] **No calendar known by its name, and two shorter ways for the notation's calendar gone** — the week arithmetic's three clauses for `Calendrical.Gregorian` and `Calendrical.ISOWeek` are removed, so no line of code outside `Tempo.Calendars` names a calendar module; a value is brought to the zone's calendar, and a rule's end to the rule's, with no clause for one already there. The census counts 219 places, and [plans/calendar-surface.md](plans/calendar-surface.md) says what each kind of them needs. 2026-10-12.

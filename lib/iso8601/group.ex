@@ -27,12 +27,16 @@ defmodule Tempo.Iso8601.Group do
   def expand_groups(tempo, calendar \\ Calendars.default())
 
   # A value is grouped in its own calendar, so a Hebrew quarter holds the
-  # Hebrew months Calendrical puts in it.
+  # Hebrew months Calendrical puts in it. A month, a day of a month or a day
+  # of the year written for a calendar of weeks is refused before anything
+  # is expanded, so a day after a season is too (`2026Y25M2D`).
   def expand_groups(%Tempo{time: time} = tempo, calendar) do
-    case expand_groups(time, tempo.calendar || calendar) do
-      {:error, reason} -> {:error, reason}
-      %Tempo.Interval{} = interval -> {:ok, as_the_value_is(interval, tempo)}
-      time -> {:ok, %{tempo | time: time}}
+    calendar = tempo.calendar || calendar
+
+    if Validation.months_in_a_calendar_of_weeks?(time, calendar) do
+      {:error, Validation.no_months_error(time, calendar)}
+    else
+      expanded_in(tempo, calendar)
     end
   end
 
@@ -482,6 +486,14 @@ defmodule Tempo.Iso8601.Group do
   # and are not asked: they have no dates until they are given a hemisphere.
   @divisions [21..24, 25..28, 29..32, 33..36, 37..39, 40..41]
 
+  @doc false
+  # Whether a number written as a month is ISO 8601-2's code for a season or
+  # a division of the year (§4.8), and so no month.
+  @spec season_or_division?(integer()) :: boolean()
+  def season_or_division?(number) when is_integer(number) do
+    Enum.any?(@divisions, &(number in &1))
+  end
+
   # The most divisions a range names: a range of seasons across every year
   # of the calendar is not expanded.
   @most_divisions 1_000
@@ -659,6 +671,14 @@ defmodule Tempo.Iso8601.Group do
 
   defp reversed({:error, _reason} = error) do
     error
+  end
+
+  defp expanded_in(%Tempo{time: time} = tempo, calendar) do
+    case expand_groups(time, calendar) do
+      {:error, reason} -> {:error, reason}
+      %Tempo.Interval{} = interval -> {:ok, as_the_value_is(interval, tempo)}
+      time -> {:ok, %{tempo | time: time}}
+    end
   end
 
   ## Sub-year divisions
@@ -1338,11 +1358,9 @@ defmodule Tempo.Iso8601.Group do
   ## Weeks of a month
 
   # A negative week counts back from the month's last, as `-1W` does in a
-  # year. A month the calendar reads in another calendar than its own (a
-  # calendar of weeks answers so, by `parsing_calendar/0`) is no month of
-  # its own to number a week in.
+  # year. A calendar of weeks has no month to number a week in.
   defp week_of_month(year, month, week, rest, calendar) do
-    with false <- Validation.written_in_another_calendar?([month: month], calendar),
+    with false <- Validation.months_in_a_calendar_of_weeks?([month: month], calendar),
          {:ok, %Date.Range{} = dates} <- UnitValues.week_of_month(year, month, week, calendar) do
       week_of_month_days(dates, rest, calendar, {year, month, week})
     else

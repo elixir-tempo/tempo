@@ -1460,7 +1460,7 @@ defmodule Tempo.Select do
   # (`merged_constraint_tempo/2`): a calendar of weeks has no month to
   # filter by.
   defp filters_in(selection, calendar) do
-    if Validation.written_in_another_calendar?(selection, calendar) do
+    if Validation.months_in_a_calendar_of_weeks?(selection, calendar) do
       {:error, selects_by_month_error(calendar, selection)}
     else
       :ok
@@ -2408,7 +2408,7 @@ defmodule Tempo.Select do
          %Interval{from: %Tempo{calendar: calendar} = from} = base,
          c_time
        ) do
-    if Validation.written_in_another_calendar?(c_time, calendar) do
+    if Validation.months_in_a_calendar_of_weeks?(c_time, calendar) do
       {:error, selects_by_month_error(calendar, c_time)}
     else
       merged_onto(base, from, c_time)

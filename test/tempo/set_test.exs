@@ -8,7 +8,6 @@ defmodule Tempo.SetTest do
   alias Calendrical.Hebrew
   alias Calendrical.ISOWeek
   alias Calendrical.NRF
-  alias Tempo.ConversionError
   alias Tempo.Interval
   alias Tempo.IntervalEndpointsError
   alias Tempo.IntervalSet
@@ -131,14 +130,17 @@ defmodule Tempo.SetTest do
       assert {:ok, %Tempo.Set{}} = Tempo.from_iso8601("{5787-13-01}", Hebrew)
     end
 
-    test "converts a whole date written with a month for a calendar of weeks" do
-      set = Tempo.from_iso8601!("{2026-06-15,2026-06-16..2026-06-18}", ISOWeek)
+    test "takes week dates for a calendar of weeks, and no date written with a month" do
+      set = Tempo.from_iso8601!("{2026-W25-1,2026-W25-2..2026-W25-4}", ISOWeek)
 
       assert Enum.uniq(calendars(set)) == [ISOWeek]
       assert [%Tempo{time: [year: 2026, week: 25, day_of_week: 1]}, %Tempo.Range{}] = set.set
 
-      assert {:error, %ConversionError{target: ISOWeek}} =
-               Tempo.from_iso8601("{2026-06}", ISOWeek)
+      for text <- ["{2026-06-15,2026-06-16..2026-06-18}", "{2026-06}"] do
+        assert {:error, %InvalidDateError{unit: :month, calendar: ISOWeek}} =
+                 Tempo.from_iso8601(text, ISOWeek),
+               text
+      end
     end
   end
 
