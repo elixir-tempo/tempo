@@ -361,20 +361,44 @@ defmodule Tempo.RRule.StepPastPartsTest do
       end
     end
 
-    test "counts a rule's days of the week in the calendar the rule is written in" do
+    test "is refused beside a start of another calendar, and counted where both are of one" do
       # The second day of a week of NRF's, whose weeks begin on Sunday, is a
-      # Monday: the first day of a rule written in the Gregorian calendar.
+      # Monday. A recurrence is in one calendar, so a rule written in the
+      # Gregorian calendar is refused beside it, where its Monday was counted
+      # as the Gregorian's first day.
       monday = Tempo.new!(year: 2026, week: 25, day_of_week: 2, calendar: NRF)
       first = gregorian(monday)
       assert Date.day_of_week(first) == 1
 
       every_seventh =
-        &Interval.new!(from: monday, duration: ~o"P7D", recurrence: 3, repeat_rule: &1)
+        &Interval.new(from: monday, duration: ~o"P7D", recurrence: 3, repeat_rule: &1)
 
-      assert starts_of(every_seventh.(~o"L2KN")) == []
+      assert {:error, %Tempo.IntervalEndpointsError{} = error} = every_seventh.(~o"L1KN")
 
-      assert Enum.map(starts_of(every_seventh.(~o"L1KN")), &gregorian/1) ==
+      assert Exception.message(error) =~
+               "The start is in Calendrical.NRF and the rule in Calendar.ISO. " <>
+                 "A recurrence is in one calendar"
+
+      # In its start's calendar, Monday is the second day of the rule's week.
+      in_nrf = &Tempo.from_iso8601!(&1, NRF)
+      {:ok, mondays} = every_seventh.(in_nrf.("L2KN"))
+
+      assert Enum.map(starts_of(mondays), &gregorian/1) ==
                [first, Date.add(first, 7), Date.add(first, 14)]
+
+      {:ok, sundays} = every_seventh.(in_nrf.("L1KN"))
+      assert starts_of(sundays) == []
+
+      # A rule read from RFC 5545 names its days, and is held as its start's
+      # calendar counts them.
+      {:ok, read} = RRule.parse("FREQ=DAILY;INTERVAL=7;COUNT=3;BYDAY=MO", from: monday)
+      assert read.repeat_rule == in_nrf.("L2KN")
+
+      assert Enum.map(starts_of(read), &gregorian/1) == [
+               first,
+               Date.add(first, 7),
+               Date.add(first, 14)
+             ]
     end
   end
 

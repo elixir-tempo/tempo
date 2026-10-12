@@ -741,9 +741,19 @@ defmodule Tempo.WeekOfMonthTest do
       # A rule is read with its parts from the coarsest, and one built with
       # the week last starts from a month, with no day to move.
       rule = %Tempo{time: [selection: [day_of_week: 3, week: 2]], calendar: Gregorian}
+      june = Tempo.from_iso8601!("2026-06", Gregorian)
 
       recurrence =
-        Interval.new!(from: ~o"2026-06", duration: ~o"P1M", recurrence: 2, repeat_rule: rule)
+        Interval.new!(from: june, duration: ~o"P1M", recurrence: 2, repeat_rule: rule)
+
+      # A rule of another calendar than its start is refused.
+      assert {:error, %Tempo.IntervalEndpointsError{}} =
+               Interval.new(
+                 from: ~o"2026-06",
+                 duration: ~o"P1M",
+                 recurrence: 2,
+                 repeat_rule: rule
+               )
 
       assert days(Tempo.to_interval(recurrence)) ==
                for(month <- 6..7, do: seconds({Date.add(elem(week(2026, month, 2), 0), 2), 1}))

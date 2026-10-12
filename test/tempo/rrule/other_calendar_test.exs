@@ -149,8 +149,14 @@ defmodule Tempo.RRule.OtherCalendarTest do
             from: read("2026Y25W", NRF)
           )
 
+        # The rule is held in its start's calendar, whose weeks begin on
+        # Sunday: Sunday and Monday are its first and second days, and are
+        # written in that order.
+        assert %Tempo{calendar: NRF, time: [selection: selection]} = recurrence.repeat_rule
+        assert Keyword.fetch!(selection, :day_of_week) == [1..2]
+
         assert {week_start, RRule.to_string(recurrence)} ==
-                 {week_start, {:ok, "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,SU;WKST=SU"}}
+                 {week_start, {:ok, "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO;WKST=SU"}}
       end
 
       {:ok, recurrence} =

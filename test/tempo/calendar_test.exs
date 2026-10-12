@@ -629,6 +629,25 @@ defmodule Tempo.CalendarTest do
     end
   end
 
+  describe "a recurrence with a rule, converted to another calendar" do
+    test "is an error, since its rule counts the months and days of its own" do
+      yearly = Tempo.from_iso8601!("R3/2026-01-01/P1Y/FL7M4DN")
+
+      assert {:error, %Tempo.ConversionError{} = error} =
+               Tempo.to_calendar(yearly, Calendrical.Hebrew)
+
+      assert Exception.message(error) =~ "has no form in Calendrical.Hebrew"
+
+      # Its occurrences convert, each a span of days.
+      {:ok, occurrences} = Tempo.to_interval(yearly)
+      {:ok, in_hebrew} = Tempo.to_calendar(occurrences, Calendrical.Hebrew)
+      assert IntervalSet.count(in_hebrew) == 3
+
+      # The calendar it is in already is no conversion.
+      assert Tempo.to_calendar(yearly, Calendar.ISO) == {:ok, yearly}
+    end
+  end
+
   describe "cross-calendar comparisons via IXDTF" do
     test "overlaps?/2 works between an IXDTF-Hebrew date and a Gregorian one" do
       {:ok, hebrew_date} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")

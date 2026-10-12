@@ -12,6 +12,10 @@
 
 * An interval is in one calendar and one zone. `Tempo.Interval.new/1` returns a `Tempo.IntervalEndpointsError` for two ends of different calendars or of different zones, where it answered an interval of both; convert one end with `Tempo.to_calendar/2` or `Tempo.shift_zone/2`.
 
+* A recurrence is in one calendar, its rule with it: `Tempo.Interval.new/1` returns a `Tempo.IntervalEndpointsError` for a `:repeat_rule` of another calendar than its ends, where a Hebrew rule beside a Gregorian start was counted as a Gregorian one. A rule `Tempo.RRule.parse/2` reads with no `RSCALE` is held in the calendar of its `:from`, and its `UNTIL` is a date of the recurrence's calendar.
+
+* `Tempo.to_calendar/2` returns a `Tempo.ConversionError` for a recurrence whose rule is of another calendar than the one asked for, where it converted the start and left the rule, which was then counted in the start's calendar. Convert its occurrences instead (`Tempo.to_interval/2`).
+
 * A recurrence's domain is in the calendar written after the recurrence: `R/{5787Y..5788Y}/P1Y/FL1M1DN[u-ca=hebrew]` is the first day of two Hebrew years, where a domain's years were Gregorian whatever the rule's calendar. The Gregorian years such a rule falls in are given as a `:within` window.
 
 * `Tempo.to_iso8601/1` returns a `Tempo.Iso8601EncodeError` for an interval or a set given parts in two zones or two calendars by hand, and `inspect/1` shows it as not expressible, where each part was written with a suffix of its own.

@@ -230,6 +230,7 @@ defmodule Tempo.Interval do
          :ok <- validate_endpoint_types(from, to),
          :ok <- validate_one_calendar(from, to),
          :ok <- validate_one_zone(from, to),
+         :ok <- validate_rule_calendar(from, to, Keyword.get(options, :repeat_rule)),
          {from, to} = propagate_zone({from, to}),
          :ok <- validate_from_to_order(from, to),
          {:ok, unit} <- validate_unit(Keyword.get(options, :unit), from),
@@ -461,6 +462,38 @@ defmodule Tempo.Interval do
 
   defp validate_one_calendar(_from, _to) do
     :ok
+  end
+
+  # A recurrence is one expression, so its rule is in the calendar of its
+  # ends. A rule of another calendar is not counted in the ends': its months
+  # and its days would be read as theirs.
+  defp validate_rule_calendar(from, to, %Tempo{calendar: rule_calendar}) do
+    ends =
+      for {name, %Tempo{calendar: calendar}} <- [{"start", from}, {"end", to}],
+          calendar != rule_calendar do
+        {name, calendar}
+      end
+
+    rule_beside(ends, rule_calendar)
+  end
+
+  defp validate_rule_calendar(_from, _to, _no_rule) do
+    :ok
+  end
+
+  defp rule_beside([], _rule_calendar) do
+    :ok
+  end
+
+  defp rule_beside([{name, calendar} | _rest], rule_calendar) do
+    {:error,
+     IntervalEndpointsError.exception(
+       operation: :new,
+       reason:
+         "The #{name} is in #{Calendars.name(calendar)} and the rule in " <>
+           "#{Calendars.name(rule_calendar)}. A recurrence is in one calendar: convert " <>
+           "the #{name} with `Tempo.to_calendar/2`, or read the rule in the #{name}'s calendar."
+     )}
   end
 
   # An interval is in one zone, as it is in one calendar: a zone is written

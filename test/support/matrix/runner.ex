@@ -247,14 +247,18 @@ defmodule Tempo.Matrix.Runner do
   end
 
   # Whether an answer holds an expression of two calendars anywhere in it:
-  # an interval whose ends differ, or a set whose members do. A lazy set's
-  # members are still to be given, and are not read.
-  defp mixes_calendars?(%Interval{
-         from: %Tempo{calendar: from_calendar},
-         to: %Tempo{calendar: to_calendar}
-       })
-       when from_calendar != to_calendar do
-    true
+  # an interval whose ends, domain and rule are not of one, or a set whose
+  # members are not. A lazy set's members are still to be given, and are
+  # not read.
+  defp mixes_calendars?(%Interval{from: from, to: to, repeat_rule: rule} = interval) do
+    calendars = Enum.uniq(calendars_of(from) ++ calendars_of(to) ++ calendars_of(rule))
+
+    if match?([_one, _another | _rest], calendars) do
+      true
+    else
+      fields = Map.from_struct(interval)
+      mixes_calendars?(Map.values(fields))
+    end
   end
 
   defp mixes_calendars?(%IntervalSet{} = set) do
@@ -286,6 +290,27 @@ defmodule Tempo.Matrix.Runner do
 
   defp mixes_calendars?(_term) do
     false
+  end
+
+  # The calendars the parts of an expression are in.
+  defp calendars_of(%Tempo{calendar: calendar}) do
+    [calendar]
+  end
+
+  defp calendars_of(%Tempo.Set{set: members, except: except}) do
+    Enum.flat_map(members ++ except, &calendars_of/1)
+  end
+
+  defp calendars_of(%Tempo.Range{first: first, last: last}) do
+    calendars_of(first) ++ calendars_of(last)
+  end
+
+  defp calendars_of(%Interval{from: from, to: to}) do
+    calendars_of(from) ++ calendars_of(to)
+  end
+
+  defp calendars_of(_open_or_absent) do
+    []
   end
 
   defp mixed_members?(members) do

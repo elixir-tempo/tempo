@@ -5887,6 +5887,22 @@ defmodule Tempo do
     )
   end
 
+  # A recurrence's rule counts the months and the days of its own calendar,
+  # and has no form in another. Its ends converted beside it were a
+  # recurrence of two calendars, whose rule was then counted in the ends'.
+  defp in_calendar(%Interval{repeat_rule: %Tempo{calendar: rule_calendar}} = interval, calendar)
+       when rule_calendar != calendar do
+    {:error,
+     ConversionError.exception(
+       value: interval,
+       target: calendar,
+       reason:
+         "A recurrence's rule counts the months and the days of its own calendar, " <>
+           "#{Calendars.name(rule_calendar)}, and has no form in #{Calendars.name(calendar)}. " <>
+           "Convert its occurrences: `Tempo.to_interval/2`, then `Tempo.to_calendar/2`."
+     )}
+  end
+
   defp in_calendar(%Interval{} = interval, calendar) do
     with {:ok, from} <- convert_endpoint(interval.from, calendar),
          {:ok, to} <- convert_endpoint(interval.to, calendar) do

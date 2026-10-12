@@ -521,6 +521,7 @@ defmodule Tempo.RRule do
 
         with :ok <- Rule.leap_months_built(rule),
              {:ok, options} <- in_rscale(rule, options),
+             {:ok, parts} <- until_in_calendar(rule, parts, Keyword.get(options, :from)),
              recurrence = do_build(freq_unit, parts, options),
              :ok <- Selection.week_number_of_a_year(recurrence),
              do: {:ok, recurrence}
@@ -530,11 +531,20 @@ defmodule Tempo.RRule do
     end
   end
 
+  # RFC 5545 writes a rule's end as a Gregorian date. It is a part of the
+  # recurrence, which is in one calendar, so it is held in the recurrence's.
+  defp until_in_calendar(%Rule{} = rule, parts, from) do
+    with {:ok, until} <- Rule.in_recurrence_calendar(rule, from, Keyword.get(parts, :until)) do
+      {:ok, Keyword.replace(parts, :until, until)}
+    end
+  end
+
   # RFC 7529: a rule that names a calendar is counted in it from its start's
-  # date there, and the end of its first occurrence is a date of it too.
+  # date there. A recurrence is in one calendar, the rule's or else its
+  # start's, and the end of its first occurrence is a date of it too.
   defp in_rscale(%Rule{} = rule, options) do
     with {:ok, from} <- Rule.start_in_rscale(rule, Keyword.get(options, :from)),
-         {:ok, base_to} <- end_in_rscale(rule, Keyword.get(options, :base_to)),
+         {:ok, base_to} <- end_in_calendar(rule, from, Keyword.get(options, :base_to)),
          :ok <- carries_its_calendar(rule, from) do
       {:ok,
        options
@@ -543,11 +553,11 @@ defmodule Tempo.RRule do
     end
   end
 
-  defp end_in_rscale(rule, %Tempo{} = base_to) do
-    Rule.start_in_rscale(rule, base_to)
+  defp end_in_calendar(rule, from, %Tempo{} = base_to) do
+    Rule.in_recurrence_calendar(rule, from, base_to)
   end
 
-  defp end_in_rscale(_rule, other) do
+  defp end_in_calendar(_rule, _from, other) do
     {:ok, other}
   end
 

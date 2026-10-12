@@ -97,6 +97,7 @@ defmodule Tempo.RRule.Rule do
   alias Tempo.Calendars
   alias Tempo.Iso8601.Parser
   alias Tempo.Iso8601.Unit
+  alias Tempo.RRule.Selection
   alias Tempo.UnitValues
   alias Tempo.Validation
 
@@ -534,7 +535,7 @@ defmodule Tempo.RRule.Rule do
         |> push_byday(rule.byday, position_of_numbered_weekday(rule))
         |> push_times(rule, not times_after_selection?(rule))
         |> push_by(rule.bysetpos, :instance)
-        |> push_skip(rule, rule.rscale || calendar_of_start(dtstart))
+        |> push_skip(rule, recurrence_calendar(rule, dtstart))
         |> push_wkst(rule.wkst)
         |> Enum.reverse()
         |> Parser.consolidate_selection()
@@ -545,12 +546,67 @@ defmodule Tempo.RRule.Rule do
         |> Enum.reverse()
         |> Parser.consolidate_selection()
 
-      # A rule that names no calendar is counted in the one a rule counts in.
-      %Tempo{
-        time: [{:selection, selection} | units],
-        calendar: rule.rscale || Calendars.rule()
-      }
+      # A recurrence is in one calendar, its rule with it: the calendar the
+      # rule names, or else the one its start is in. RFC 5545 names its days
+      # of the week, which a calendar of weeks counts from the day its own
+      # weeks begin on, so they are written as that calendar counts them.
+      calendar = recurrence_calendar(rule, dtstart)
+
+      %Tempo{time: [{:selection, counted_in(selection, calendar)} | units], calendar: calendar}
     end
+  end
+
+  # A selection's days of the week as a calendar counts them. One that
+  # counts them as RFC 5545 names them, as every calendar of months does,
+  # leaves the selection as it was.
+  defp counted_in(selection, calendar) do
+    counted = Selection.days_of_week_in_calendar(selection, Calendars.rule(), calendar)
+
+    selection
+    |> Enum.zip(counted)
+    |> Enum.map(&as_counted/1)
+    |> Parser.consolidate_selection()
+  end
+
+  defp as_counted({entry, entry}) do
+    entry
+  end
+
+  # One day is one day still, and several are in the order the calendar
+  # counts them.
+  defp as_counted({{:day_of_week, day}, {:day_of_week, [counted]}}) when is_integer(day) do
+    {:day_of_week, counted}
+  end
+
+  defp as_counted({_named, {:day_of_week, days}}) when is_list(days) do
+    {:day_of_week, Enum.sort(days)}
+  end
+
+  defp as_counted({_named, counted}) do
+    counted
+  end
+
+  @doc false
+  # The calendar a recurrence read from a rule is in: the one the rule names
+  # (RFC 7529's `RSCALE`), or else the one its start is in, and the calendar
+  # a rule counts in where it has neither.
+  @spec recurrence_calendar(t(), Tempo.t() | nil) :: module()
+  def recurrence_calendar(%__MODULE__{rscale: nil}, start) do
+    calendar_of_start(start)
+  end
+
+  def recurrence_calendar(%__MODULE__{rscale: calendar}, _start) do
+    calendar
+  end
+
+  @doc false
+  # A rule's end (`UNTIL`), or the end of its first occurrence, as a date of
+  # the calendar its recurrence is in. RFC 5545 writes both as Gregorian
+  # dates, and a recurrence is in one calendar.
+  @spec in_recurrence_calendar(t(), Tempo.t() | nil, Tempo.t() | nil) ::
+          {:ok, Tempo.t() | nil} | {:error, {:from_is_no_date, Tempo.t()}}
+  def in_recurrence_calendar(%__MODULE__{} = rule, start, value) do
+    start_in_rscale(%{rule | rscale: recurrence_calendar(rule, start)}, value)
   end
 
   # RFC 7529 numbers a month as its calendar names it, a leap month taking

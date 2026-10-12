@@ -170,21 +170,24 @@ defmodule Tempo.RRule.Expander do
          {:ok, recurrence} <- counted(rule.count),
          :ok <- Rule.leap_months_built(rule),
          {:ok, dtstart} <- Rule.start_in_rscale(rule, dtstart),
-         {:ok, options} <- base_to_in_rscale(rule, options),
-         ast = recurring(rule, dtstart, interval, recurrence, options),
+         {:ok, until} <- Rule.in_recurrence_calendar(rule, dtstart, rule.until),
+         {:ok, options} <- base_to_in_calendar(rule, dtstart, options),
+         ast = recurring(%{rule | until: until}, dtstart, interval, recurrence, options),
          :ok <- Selection.week_number_of_a_year(ast) do
       {:ok, ast}
     end
   end
 
   # RFC 7529, RFC 8984 §4.3.3: a rule that names a calendar is counted in it
-  # from its start's date there, and the end of its first occurrence is a
-  # date of it too.
-  defp base_to_in_rscale(rule, options) do
+  # from its start's date there. A recurrence is in one calendar, the rule's
+  # or else its start's, and the rule's end and the end of its first
+  # occurrence are dates of it too.
+  defp base_to_in_calendar(rule, dtstart, options) do
     case Keyword.get(options, :base_to) do
       %Tempo{} = base_to ->
-        with {:ok, base_to} <- Rule.start_in_rscale(rule, base_to),
-             do: {:ok, Keyword.put(options, :base_to, base_to)}
+        with {:ok, base_to} <- Rule.in_recurrence_calendar(rule, dtstart, base_to) do
+          {:ok, Keyword.put(options, :base_to, base_to)}
+        end
 
       _none ->
         {:ok, options}

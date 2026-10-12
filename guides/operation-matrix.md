@@ -94,7 +94,7 @@ The three tables are three levels of guarantee.
 | Set of durations `{P1D,P2D}` | none | all | none | none | none | none | none | 3 of 5 | none | `ArgumentError`, `Tempo.ConversionError` |
 | Recurrence, counted `R3/2026-06-01/P1D` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 3 of 11 | 2 of 9 | all | 3 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Recurrence, unending `R/2026-01-01/P1Y` | 2 of 11 | none | 3 of 9 | 1 of 21 | none | 3 of 11 | none | 4 of 5 | 3 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.UnboundedRecurrenceError` |
-| Recurrence, selecting `R3/2026-01-01/P1Y/FL7M4DN` | 4 of 11 | all | 2 of 9 | 6 of 21 | all | 3 of 11 | 2 of 9 | all | 3 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
+| Recurrence, selecting `R3/2026-01-01/P1Y/FL7M4DN` | 3 of 11 | all | 2 of 9 | 6 of 21 | all | 3 of 11 | 2 of 9 | all | 3 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |
 | Set in a unit `2026Y{6,7}M` | 4 of 11 | all | 8 of 9 | 6 of 21 | all | 9 of 11 | 2 of 9 | 4 of 5 | 15 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Range in a unit `2026Y{1..3}M` | 4 of 11 | all | 8 of 9 | 6 of 21 | all | 9 of 11 | 2 of 9 | 4 of 5 | 15 of 19 | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError`, `Tempo.IntervalEndpointsError`, `Tempo.ResolutionError`, `Tempo.RoundingError` |
 | Set of values `{2026-06-15,2026-07-01}` | 3 of 11 | all | 8 of 9 | 5 of 21 | all | none | 2 of 9 | 4 of 5 | none | `ArgumentError`, `Tempo.ConversionError`, `Tempo.FloatingTempoError` |

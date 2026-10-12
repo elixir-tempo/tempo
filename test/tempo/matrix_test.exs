@@ -53,6 +53,19 @@ defmodule Tempo.Matrix.Test do
 
     assert Runner.outcome(fn -> IntervalSet.new([hebrew_span, span]) end) == :ok
 
+    # A recurrence's rule and its domain are parts of the expression too.
+    yearly = Tempo.from_iso8601!("R3/2026-07-01/P1Y/FL7M1DN")
+    hebrew_rule = Tempo.from_iso8601!("R/../P1Y/FL7M1DN[u-ca=hebrew]").repeat_rule
+    hebrew_domain = Tempo.from_iso8601!("R/{5786Y..5787Y}/P1Y/FL7M1DN[u-ca=hebrew]").from
+
+    assert Runner.outcome(fn -> {:ok, yearly} end) == :ok
+
+    assert Runner.outcome(fn -> {:ok, %{yearly | repeat_rule: hebrew_rule}} end) ==
+             :mixed_calendars
+
+    assert Runner.outcome(fn -> {:ok, %{yearly | from: hebrew_domain}} end) ==
+             :mixed_calendars
+
     refute Runner.passes?(:inside_calendar, :deliberate)
     refute Runner.passes?(:mixed_calendars, :deliberate)
   end
