@@ -6,7 +6,7 @@ Every place Tempo's implementation touches a calendar, in the tree this file is 
 
 ## What was read, and how
 
-* **110 files of `lib/`** — 83,150 lines: 46,202 of code, 14,901 of documentation (`@doc`, `@moduledoc` and `@typedoc`, doctests among them), 11,883 of comment and 10,164 blank. Only code is counted below: a calendar named in a doctest or a comment is no code path.
+* **110 files of `lib/`** — 83,643 lines: 46,523 of code, 14,903 of documentation (`@doc`, `@moduledoc` and `@typedoc`, doctests among them), 11,907 of comment and 10,310 blank. Only code is counted below: a calendar named in a doctest or a comment is no code path.
 
 * **A call on a calendar** — every `receiver.function(` whose receiver is a variable, every `&receiver.function/arity` and every call on the result of a call. The receiver of every one is `calendar`, a call of `Tempo.Calendars` or of a function named for a calendar, `backend`, `resolver`, `clock()` or `database()`; the first three are a calendar, and the others are not.
 
@@ -22,15 +22,15 @@ Every place Tempo's implementation touches a calendar, in the tree this file is 
 
 | What | Count |
 |---|---|
-| Calls on a calendar | 147 calls of 39 functions |
+| Calls on a calendar | 145 calls of 39 functions |
 | Of those functions, declared by neither behaviour | 0:  |
 | Of those functions, optional in `Calendrical` | 0:  |
 | Probes of what a calendar exports | 0 probes of 0 functions |
-| Lines of code that name a calendar | 6 lines, 6 names |
-| Calendars named | Gregorian 4, ISOWeek 2 |
-| Deciders by a calendar's kind | 43 functions defined, called at 224 places |
+| Lines of code that name a calendar | 0 lines, 0 names |
+| Calendars named |  |
+| Deciders by a calendar's kind | 43 functions defined, called at 222 places |
 | Calls into Calendrical's own modules | 17 |
-| Calls into Elixir's `Date`, `NaiveDateTime`, `DateTime` and `Time` | 101 |
+| Calls into Elixir's `Date`, `NaiveDateTime`, `DateTime` and `Time` | 99 |
 | Calls into Erlang's `:calendar` | 20 |
 | Lines that hold a number a calendar would be asked for | 81 |
 | Lines that hold only a number of the clock (24, 60, 3,600, 86,400) | 157 |
@@ -38,7 +38,7 @@ Every place Tempo's implementation touches a calendar, in the tree this file is 
 
 ## 1. Calendars named in code
 
-6 lines name a calendar module, and 6 names are on them, a line that names two calendars counting two. Each line has one class:
+0 lines name a calendar module, and 0 names are on them, a line that names two calendars counting two. Each line has one class:
 
 * **D** (0) — Default: no calendar given is the Gregorian.
 
@@ -50,7 +50,7 @@ Every place Tempo's implementation touches a calendar, in the tree this file is 
 
 * **G** (0) — A computation done in the Gregorian by naming it, where any calendar could be asked.
 
-* **W** (6) — `Calendrical.ISOWeek` paired with the Gregorian for ISO 8601 week dates.
+* **W** (0) — `Calendrical.ISOWeek` paired with the Gregorian for ISO 8601 week dates.
 
 * **X** (0) — The Gregorian as the calendar of something outside Tempo: the zone database, Astro, RFC 5545, cron.
 
@@ -58,12 +58,6 @@ Every place Tempo's implementation touches a calendar, in the tree this file is 
 
 | Line | In | Names | Class |
 |---|---|---|---|
-| `math.ex:3310` | `weeks_by_the_calendar` | Gregorian | W |
-| `tempo/unit_values.ex:1818` | `date_from_iso_week` | Gregorian | W |
-| `tempo/unit_values.ex:1820` | `date_from_iso_week` | ISOWeek | W |
-| `tempo/unit_values.ex:1821` | `date_from_iso_week` | Gregorian | W |
-| `tempo/unit_values.ex:1863` | `iso_weeks_in_year` | Gregorian | W |
-| `tempo/unit_values.ex:1864` | `iso_weeks_in_year` | ISOWeek | W |
 
 `tempo/calendars.ex` is the one module that may name a calendar, and is not counted above. It does so on 5 lines: `tempo/calendars.ex:37`, `tempo/calendars.ex:40`, `tempo/calendars.ex:48`, `tempo/calendars.ex:54`, `tempo/calendars.ex:369`.
 
@@ -78,127 +72,127 @@ One more probe is of no calendar: `tempo/interval_set.ex:277`, of a set-operatio
 
 ## 3. Calls on a calendar
 
-147 calls, of 39 functions at the arities shown. "Declared" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `d461f5a`, less `counted_from_one?/0`, which is removed (48 callbacks, 4 of them optional).
+145 calls, of 39 functions at the arities shown. "Declared" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `d461f5a`, less `counted_from_one?/0`, which is removed (48 callbacks, 4 of them optional).
 
 | Function | Declared | Calls | Lines |
 |---|---|---|---|
-| `plus/6` | `Calendrical`, required | 20 | `iso8601/group.ex:1062`, `math.ex:210`, `math.ex:2957`, `math.ex:3142`, `math.ex:3159`, `math.ex:3196`, `math.ex:3249`, `math.ex:3324`, `math.ex:3333`, `math.ex:3352`, `tempo/interval/steps.ex:361`, `tempo/interval/steps.ex:374`, `tempo/rrule/selection.ex:2852`, `tempo/rrule/selection.ex:3170`, `tempo/unit_values.ex:278`, `tempo/unit_values.ex:1894`, `tempo/unit_values.ex:1994`, `tempo/unit_values.ex:2010`, `validation.ex:2265`, `validation.ex:2290` |
-| `date_from_day_of_year/2` | `Calendrical`, required | 11 | `compare.ex:1452`, `compare.ex:1459`, `tempo.ex:853`, `tempo.ex:5420`, `tempo.ex:7423`, `tempo/interval.ex:1119`, `tempo/rrule/selection.ex:3779`, `tempo/unit_values.ex:1999`, `validation.ex:814`, `validation.ex:854`, `validation.ex:891` |
-| `days_in_week/0` | `Calendrical`, required | 11 | `explain.ex:2840`, `iso8601/group.ex:970`, `iso8601/parser.ex:319`, `math.ex:2044`, `math.ex:2813`, `rounding.ex:210`, `tempo/duration.ex:178`, `tempo/format.ex:428`, `tempo/interval.ex:3260`, `tempo/network/normalize.ex:841`, `tempo/rrule/selection.ex:3094` |
-| `valid_date?/3` | `Calendar`, required | 11 | `compare.ex:1495`, `inspect.ex:189`, `math.ex:209`, `math.ex:3141`, `math.ex:3158`, `math.ex:3195`, `math.ex:3323`, `math.ex:3351`, `tempo/unit_values.ex:237`, `tempo/unit_values.ex:277`, `tempo/unit_values.ex:1436` |
-| `date_to_iso_days/3` | `Calendrical`, required | 9 | `compare.ex:1490`, `compare.ex:1496`, `compare.ex:1498`, `compare.ex:1503`, `compare.ex:1507`, `compare.ex:1602`, `enumeration/zone.ex:751`, `tempo/interval/steps.ex:746`, `tempo/network/normalize.ex:805` |
-| `months_in_year/1` | `Calendar`, required | 8 | `iso8601/group.ex:950`, `math.ex:2946`, `tempo.ex:11109`, `tempo/interval/steps.ex:718`, `tempo/unit_values.ex:353`, `tempo/unit_values.ex:433`, `validation.ex:755`, `validation.ex:771` |
-| `year/1` | `Calendrical`, required | 8 | `iso8601/group.ex:1241`, `tempo.ex:11107`, `tempo.ex:11121`, `tempo/network/normalize.ex:1020`, `tempo/network/normalize.ex:1021`, `tempo/rrule/selection.ex:3604`, `tempo/unit_values.ex:659`, `tempo/unit_values.ex:1478` |
-| `day_of_week/4` | `Calendar`, required | 7 | `enumeration/zone.ex:199`, `math.ex:2539`, `tempo.ex:11110`, `tempo/rrule/selection.ex:2890`, `tempo/rrule/selection.ex:3513`, `tempo/select.ex:1665`, `tempo/unit_values.ex:1793` |
-| `days_in_year/1` | `Calendrical`, required | 7 | `iso8601/group.ex:958`, `iso8601/group.ex:962`, `tempo.ex:11109`, `tempo/unit_values.ex:374`, `validation.ex:843`, `validation.ex:879`, `validation.ex:1126` |
-| `months_in_year/0` | `Calendrical`, required | 7 | `math.ex:3186`, `tempo.ex:11044`, `tempo/network/normalize.ex:398`, `tempo/network/normalize.ex:672`, `tempo/network/normalize.ex:793`, `tempo/network/normalize.ex:1010`, `tempo/unit_values.ex:501` |
-| `cldr_calendar_type/0` | `Calendrical`, required | 4 | `inspect.ex:346`, `inspect.ex:743`, `tempo/format.ex:1127`, `tempo/rrule/rule.ex:377` |
-| `days_in_month/2` | `Calendar`, required | 4 | `iso8601/group.ex:966`, `tempo.ex:7379`, `tempo/unit_values.ex:384`, `validation.ex:1155` |
-| `years_in_cycle/0` | `Calendrical`, required | 4 | `tempo.ex:10743`, `tempo.ex:11036`, `tempo/network/normalize.ex:1009`, `tempo/network/normalize.ex:1019` |
-| `date_from_iso_days/1` | `Calendrical`, required | 3 | `tempo.ex:6953`, `tempo/interval/steps.ex:752`, `tempo/network/normalize.ex:800` |
-| `day_of_year/3` | `Calendar`, required | 3 | `enumeration/skipped_readings.ex:272`, `math.ex:2523`, `tempo/rrule/selection.ex:2810` |
-| `iso_week_of_year/3` | `Calendrical`, required | 3 | `enumeration/zone.ex:198`, `math.ex:2538`, `math.ex:3335` |
-| `leap_year?/1` | `Calendar`, required | 2 | `tempo.ex:13510`, `tempo.ex:13514` |
-| `month/2` | `Calendrical`, required | 2 | `tempo/unit_values.ex:616`, `tempo/unit_values.ex:1674` |
-| `month_numbers/1` | `Calendrical`, required | 2 | `tempo/unit_values.ex:128`, `validation.ex:1468` |
-| `traditional_months/1` | `Calendrical`, required | 2 | `tempo/unit_values.ex:197`, `validation.ex:1918` |
-| `calendar_base/0` | `Calendrical`, required | 1 | `tempo.ex:2649` |
-| `cardinal_day/3` | `Calendrical`, required | 1 | `tempo/unit_values.ex:551` |
-| `cardinal_month/1` | `Calendrical`, required | 1 | `tempo/unit_values.ex:679` |
-| `day_numbers/2` | `Calendrical`, required | 1 | `tempo/unit_values.ex:120` |
-| `days_in_month/1` | `Calendrical`, required | 1 | `tempo/unit_values.ex:508` |
-| `diff/3` | `Calendrical`, required | 1 | `tempo/unit_values.ex:1969` |
-| `month_of_year/3` | `Calendrical`, required | 1 | `tempo/unit_values.ex:678` |
-| `named_month/2` | `Calendrical`, required | 1 | `tempo/unit_values.ex:619` |
-| `ordinal_month_from_traditional/2` | `Calendrical`, required | 1 | `validation.ex:1893` |
+| `plus/6` | `Calendrical`, required | 19 | `iso8601/group.ex:1071`, `math.ex:210`, `math.ex:2976`, `math.ex:3161`, `math.ex:3178`, `math.ex:3215`, `math.ex:3268`, `math.ex:3337`, `math.ex:3354`, `tempo/interval/steps.ex:361`, `tempo/interval/steps.ex:374`, `tempo/rrule/selection.ex:2874`, `tempo/rrule/selection.ex:3195`, `tempo/unit_values.ex:277`, `tempo/unit_values.ex:1903`, `tempo/unit_values.ex:2003`, `tempo/unit_values.ex:2019`, `validation.ex:2274`, `validation.ex:2299` |
+| `date_from_day_of_year/2` | `Calendrical`, required | 11 | `compare.ex:1461`, `compare.ex:1468`, `tempo.ex:854`, `tempo.ex:5430`, `tempo.ex:7454`, `tempo/interval.ex:1158`, `tempo/rrule/selection.ex:3807`, `tempo/unit_values.ex:2008`, `validation.ex:814`, `validation.ex:854`, `validation.ex:891` |
+| `days_in_week/0` | `Calendrical`, required | 11 | `explain.ex:2865`, `iso8601/group.ex:979`, `iso8601/parser.ex:322`, `math.ex:2054`, `math.ex:2829`, `rounding.ex:210`, `tempo/duration.ex:178`, `tempo/format.ex:428`, `tempo/interval.ex:3303`, `tempo/network/normalize.ex:845`, `tempo/rrule/selection.ex:3119` |
+| `valid_date?/3` | `Calendar`, required | 11 | `compare.ex:1504`, `inspect.ex:195`, `math.ex:209`, `math.ex:3160`, `math.ex:3177`, `math.ex:3214`, `math.ex:3336`, `math.ex:3353`, `tempo/unit_values.ex:236`, `tempo/unit_values.ex:276`, `tempo/unit_values.ex:1461` |
+| `date_to_iso_days/3` | `Calendrical`, required | 9 | `compare.ex:1499`, `compare.ex:1505`, `compare.ex:1507`, `compare.ex:1512`, `compare.ex:1516`, `compare.ex:1611`, `enumeration/zone.ex:763`, `tempo/interval/steps.ex:746`, `tempo/network/normalize.ex:809` |
+| `months_in_year/1` | `Calendar`, required | 8 | `iso8601/group.ex:959`, `math.ex:2965`, `tempo.ex:11153`, `tempo/interval/steps.ex:718`, `tempo/unit_values.ex:355`, `tempo/unit_values.ex:444`, `validation.ex:755`, `validation.ex:771` |
+| `year/1` | `Calendrical`, required | 8 | `iso8601/group.ex:1251`, `tempo.ex:11151`, `tempo.ex:11165`, `tempo/network/normalize.ex:1030`, `tempo/network/normalize.ex:1031`, `tempo/rrule/selection.ex:3632`, `tempo/unit_values.ex:670`, `tempo/unit_values.ex:1503` |
+| `day_of_week/4` | `Calendar`, required | 7 | `enumeration/zone.ex:199`, `math.ex:2553`, `tempo.ex:11154`, `tempo/rrule/selection.ex:2912`, `tempo/rrule/selection.ex:3538`, `tempo/select.ex:1666`, `tempo/unit_values.ex:1818` |
+| `days_in_year/1` | `Calendrical`, required | 7 | `iso8601/group.ex:967`, `iso8601/group.ex:971`, `tempo.ex:11153`, `tempo/unit_values.ex:385`, `validation.ex:843`, `validation.ex:879`, `validation.ex:1126` |
+| `months_in_year/0` | `Calendrical`, required | 7 | `math.ex:3205`, `tempo.ex:11088`, `tempo/network/normalize.ex:402`, `tempo/network/normalize.ex:676`, `tempo/network/normalize.ex:797`, `tempo/network/normalize.ex:1020`, `tempo/unit_values.ex:512` |
+| `cldr_calendar_type/0` | `Calendrical`, required | 4 | `inspect.ex:355`, `inspect.ex:753`, `tempo/format.ex:1127`, `tempo/rrule/rule.ex:381` |
+| `days_in_month/2` | `Calendar`, required | 4 | `iso8601/group.ex:975`, `tempo.ex:7410`, `tempo/unit_values.ex:395`, `validation.ex:1155` |
+| `years_in_cycle/0` | `Calendrical`, required | 4 | `tempo.ex:10787`, `tempo.ex:11080`, `tempo/network/normalize.ex:1019`, `tempo/network/normalize.ex:1029` |
+| `date_from_iso_days/1` | `Calendrical`, required | 3 | `tempo.ex:6984`, `tempo/interval/steps.ex:752`, `tempo/network/normalize.ex:804` |
+| `day_of_year/3` | `Calendar`, required | 3 | `enumeration/skipped_readings.ex:272`, `math.ex:2537`, `tempo/rrule/selection.ex:2832` |
+| `iso_week_of_year/3` | `Calendrical`, required | 2 | `enumeration/zone.ex:198`, `math.ex:2552` |
+| `leap_year?/1` | `Calendar`, required | 2 | `tempo.ex:13574`, `tempo.ex:13578` |
+| `month/2` | `Calendrical`, required | 2 | `tempo/unit_values.ex:627`, `tempo/unit_values.ex:1699` |
+| `month_numbers/1` | `Calendrical`, required | 2 | `tempo/unit_values.ex:127`, `validation.ex:1468` |
+| `traditional_months/1` | `Calendrical`, required | 2 | `tempo/unit_values.ex:196`, `validation.ex:1924` |
+| `calendar_base/0` | `Calendrical`, required | 1 | `tempo.ex:2653` |
+| `cardinal_day/3` | `Calendrical`, required | 1 | `tempo/unit_values.ex:562` |
+| `cardinal_month/1` | `Calendrical`, required | 1 | `tempo/unit_values.ex:690` |
+| `day_numbers/2` | `Calendrical`, required | 1 | `tempo/unit_values.ex:119` |
+| `days_in_month/1` | `Calendrical`, required | 1 | `tempo/unit_values.ex:519` |
+| `diff/3` | `Calendrical`, required | 1 | `tempo/unit_values.ex:1978` |
+| `month_of_year/3` | `Calendrical`, required | 1 | `tempo/unit_values.ex:689` |
+| `named_month/2` | `Calendrical`, required | 1 | `tempo/unit_values.ex:630` |
+| `ordinal_month_from_traditional/2` | `Calendrical`, required | 1 | `validation.ex:1899` |
 | `parsing_calendar/0` | `Calendrical`, required | 1 | `validation.ex:481` |
-| `quadrimester/2` | `Calendrical`, required | 1 | `iso8601/group.ex:710` |
-| `quarter/2` | `Calendrical`, required | 1 | `iso8601/group.ex:704` |
-| `semester/2` | `Calendrical`, required | 1 | `iso8601/group.ex:716` |
+| `quadrimester/2` | `Calendrical`, required | 1 | `iso8601/group.ex:713` |
+| `quarter/2` | `Calendrical`, required | 1 | `iso8601/group.ex:707` |
+| `semester/2` | `Calendrical`, required | 1 | `iso8601/group.ex:719` |
 | `solar_term/2` | `Calendrical`, required | 1 | `event.ex:343` |
-| `week/2` | `Calendrical`, required | 1 | `tempo/unit_values.ex:1855` |
-| `week_of_year/3` | `Calendrical`, required | 1 | `tempo/rrule/selection.ex:2864` |
-| `weeks_in_month/2` | `Calendrical`, required | 1 | `tempo/unit_values.ex:1602` |
-| `weeks_in_year/1` | `Calendrical`, required | 1 | `tempo/unit_values.ex:1910` |
+| `week/2` | `Calendrical`, required | 1 | `tempo/unit_values.ex:1870` |
+| `week_of_year/3` | `Calendrical`, required | 1 | `tempo/rrule/selection.ex:2886` |
+| `weeks_in_month/2` | `Calendrical`, required | 1 | `tempo/unit_values.ex:1627` |
+| `weeks_in_year/1` | `Calendrical`, required | 1 | `tempo/unit_values.ex:1919` |
 | `year_of_era/3` | `Calendar`, required | 1 | `tempo/format.ex:1134` |
 
 ## 4. Functions that decide by a calendar's kind
 
-43 functions, defined in 71 clauses and called at 224 places. A call of one is a place where what Tempo does depends on which calendar it holds.
+43 functions, defined in 69 clauses and called at 222 places. A call of one is a place where what Tempo does depends on which calendar it holds.
 
 ### A calendar of weeks, or of months
 
 | Function | Defined | Calls | Called at |
 |---|---|---|---|
-| `week_based_calendar?` | `tempo.ex:2648` | 45 | `compare.ex:746`, `enumeration/zone.ex:190`, `explain.ex:789`, `explain.ex:1045`, `explain.ex:2294`, `explain.ex:2614`, `inspect.ex:325`, `iso8601/group.ex:730`, `iso8601/group.ex:1427`, `iso8601/unit.ex:87`, `iso8601/unit.ex:121`, `math.ex:1798`, `math.ex:2016`, `math.ex:2510`, `math.ex:3139`, `math.ex:3265`, `math.ex:3307`, `math.ex:3350`, `operations.ex:487`, `operations.ex:978`, `tempo.ex:2636`, `tempo.ex:2655`, `tempo.ex:5357`, `tempo.ex:9015`, `tempo.ex:12458`, `tempo.ex:12597`, `tempo.ex:12753`, `tempo.ex:12791`, `tempo/format.ex:290`, `tempo/rrule/encoder.ex:581`, `tempo/rrule/selection.ex:1026`, `tempo/select.ex:1022`, `tempo/select.ex:2092`, `tempo/select.ex:2179`, `tempo/select.ex:2532`, `tempo/unit_values.ex:414`, `tempo/unit_values.ex:1718`, `tempo/unit_values.ex:1755`, `tempo/unit_values.ex:1774`, `tempo/unit_values.ex:1825`, `tempo/unit_values.ex:1841`, `tempo/unit_values.ex:1868`, `validation.ex:356`, `validation.ex:2151`, `validation.ex:2195` |
-| `week_based?` | `compare.ex:745` | 2 | `compare.ex:726`, `compare.ex:730` |
-| `week_based?` | `inspect.ex:324` | 1 | `inspect.ex:171` |
-| `week_calendar?` | `tempo/rrule/selection.ex:1025` | 10 | `tempo/rrule/selection.ex:402`, `tempo/rrule/selection.ex:526`, `tempo/rrule/selection.ex:692`, `tempo/rrule/selection.ex:700`, `tempo/rrule/selection.ex:712`, `tempo/rrule/selection.ex:729`, `tempo/rrule/selection.ex:741`, `tempo/rrule/selection.ex:975`, `tempo/rrule/selection.ex:1796`, `tempo/rrule/selection.ex:3715` |
-| `week_axis?` | `math.ex:2015` | 1 | `math.ex:1994` |
-| `year_of_weeks?` | `operations.ex:977`, `operations.ex:981` | 1 | `operations.ex:974` |
-| `every_week_follows?` | `tempo.ex:12751`, `tempo.ex:12756` | 1 | `tempo.ex:12741` |
-| `same_axis?` | `compare.ex:721`, `compare.ex:725`, `compare.ex:729`, `compare.ex:733`, `compare.ex:737`, `compare.ex:741` | 1 | `compare.ex:711` |
-| `month_of_year?` | `tempo/unit_values.ex:413`, `tempo/unit_values.ex:421` | 1 | `tempo/unit_values.ex:384` |
-| `calendar_of_months` | `explain.ex:2613` | 1 | `explain.ex:2599` |
-| `date_units` | `tempo.ex:2635` | 9 | `operations.ex:915`, `tempo.ex:2627`, `tempo.ex:2854`, `tempo.ex:2924`, `tempo.ex:6956`, `tempo.ex:11144`, `tempo/network/normalize.ex:727`, `tempo/select.ex:1693`, `validation.ex:500` |
-| `calendar_week` | `iso8601/group.ex:1426` | 1 | `iso8601/group.ex:185` |
-| `calendar_weeks_in_year` | `tempo/unit_values.ex:1909` | 4 | `tempo/unit_values.ex:367`, `tempo/unit_values.ex:415`, `tempo/unit_values.ex:1864`, `tempo/unit_values.ex:1869` |
-| `iso_weeks_in_year` | `tempo/unit_values.ex:1863`, `tempo/unit_values.ex:1867` | 2 | `iso8601/group.ex:954`, `tempo/unit_values.ex:360` |
-| `date_from_iso_week` | `tempo/unit_values.ex:1818`, `tempo/unit_values.ex:1824` | 15 | `compare.ex:1447`, `enumeration/zone.ex:101`, `explain.ex:691`, `explain.ex:2318`, `math.ex:2541`, `math.ex:3332`, `tempo.ex:5439`, `tempo.ex:5615`, `tempo.ex:5922`, `tempo.ex:7465`, `tempo.ex:12459`, `tempo/format.ex:1032`, `tempo/select.ex:1657`, `validation.ex:2159`, `validation.ex:2196` |
+| `week_based_calendar?` | `tempo.ex:2652` | 45 | `compare.ex:749`, `enumeration/zone.ex:190`, `explain.ex:792`, `explain.ex:1048`, `explain.ex:2316`, `explain.ex:2636`, `inspect.ex:334`, `iso8601/group.ex:733`, `iso8601/group.ex:1437`, `iso8601/unit.ex:87`, `iso8601/unit.ex:121`, `math.ex:1806`, `math.ex:2024`, `math.ex:2524`, `math.ex:3158`, `math.ex:3284`, `math.ex:3324`, `math.ex:3352`, `operations.ex:495`, `operations.ex:989`, `tempo.ex:2640`, `tempo.ex:2659`, `tempo.ex:5367`, `tempo.ex:9056`, `tempo.ex:12502`, `tempo.ex:12644`, `tempo.ex:12800`, `tempo.ex:12838`, `tempo/format.ex:290`, `tempo/rrule/encoder.ex:582`, `tempo/rrule/selection.ex:1029`, `tempo/select.ex:1022`, `tempo/select.ex:2093`, `tempo/select.ex:2180`, `tempo/select.ex:2533`, `tempo/unit_values.ex:425`, `tempo/unit_values.ex:1743`, `tempo/unit_values.ex:1780`, `tempo/unit_values.ex:1799`, `tempo/unit_values.ex:1840`, `tempo/unit_values.ex:1856`, `tempo/unit_values.ex:1877`, `validation.ex:356`, `validation.ex:2160`, `validation.ex:2204` |
+| `week_based?` | `compare.ex:748` | 2 | `compare.ex:729`, `compare.ex:733` |
+| `week_based?` | `inspect.ex:333` | 1 | `inspect.ex:177` |
+| `week_calendar?` | `tempo/rrule/selection.ex:1028` | 10 | `tempo/rrule/selection.ex:402`, `tempo/rrule/selection.ex:526`, `tempo/rrule/selection.ex:692`, `tempo/rrule/selection.ex:700`, `tempo/rrule/selection.ex:712`, `tempo/rrule/selection.ex:729`, `tempo/rrule/selection.ex:741`, `tempo/rrule/selection.ex:978`, `tempo/rrule/selection.ex:1805`, `tempo/rrule/selection.ex:3743` |
+| `week_axis?` | `math.ex:2023` | 1 | `math.ex:2002` |
+| `year_of_weeks?` | `operations.ex:988`, `operations.ex:992` | 1 | `operations.ex:985` |
+| `every_week_follows?` | `tempo.ex:12798`, `tempo.ex:12803` | 1 | `tempo.ex:12788` |
+| `same_axis?` | `compare.ex:724`, `compare.ex:728`, `compare.ex:732`, `compare.ex:736`, `compare.ex:740`, `compare.ex:744` | 1 | `compare.ex:714` |
+| `month_of_year?` | `tempo/unit_values.ex:424`, `tempo/unit_values.ex:432` | 1 | `tempo/unit_values.ex:395` |
+| `calendar_of_months` | `explain.ex:2635` | 1 | `explain.ex:2621` |
+| `date_units` | `tempo.ex:2639` | 9 | `operations.ex:926`, `tempo.ex:2631`, `tempo.ex:2858`, `tempo.ex:2928`, `tempo.ex:6987`, `tempo.ex:11188`, `tempo/network/normalize.ex:731`, `tempo/select.ex:1694`, `validation.ex:500` |
+| `calendar_week` | `iso8601/group.ex:1436` | 1 | `iso8601/group.ex:185` |
+| `calendar_weeks_in_year` | `tempo/unit_values.ex:1918` | 3 | `tempo/unit_values.ex:375`, `tempo/unit_values.ex:426`, `tempo/unit_values.ex:1878` |
+| `iso_weeks_in_year` | `tempo/unit_values.ex:1876` | 2 | `iso8601/group.ex:963`, `tempo/unit_values.ex:365` |
+| `date_from_iso_week` | `tempo/unit_values.ex:1839` | 14 | `compare.ex:1456`, `enumeration/zone.ex:101`, `explain.ex:694`, `explain.ex:2340`, `math.ex:2555`, `tempo.ex:5449`, `tempo.ex:5625`, `tempo.ex:5950`, `tempo.ex:7496`, `tempo.ex:12503`, `tempo/format.ex:1032`, `tempo/select.ex:1658`, `validation.ex:2168`, `validation.ex:2205` |
 
 ### A year that begins on another day than the first of its first month
 
 | Function | Defined | Calls | Called at |
 |---|---|---|---|
-| `year_begins_with_first_month?` | `tempo/unit_values.ex:1435`, `tempo/unit_values.ex:1439` | 1 | `compare.ex:697` |
-| `fields_in_day_order?` | `compare.ex:679` | 1 | `compare.ex:644` |
-| `first_date` | `tempo/unit_values.ex:1477`, `tempo/unit_values.ex:1484`, `tempo/unit_values.ex:1491` | 1 | `validation.ex:2278` |
-| `start_date` | `tempo/unit_values.ex:1503` | 7 | `compare.ex:685`, `compare.ex:1473`, `explain.ex:2337`, `tempo.ex:7433`, `tempo/format.ex:1133`, `tempo/select.ex:1643`, `validation.ex:2288` |
-| `with_first_month` | `tempo/unit_values.ex:1539`, `tempo/unit_values.ex:1544` | 3 | `tempo.ex:5269`, `tempo/interval/steps.ex:81`, `validation.ex:360` |
-| `with_first_day` | `tempo/unit_values.ex:1554`, `tempo/unit_values.ex:1560` | 4 | `tempo.ex:5273`, `tempo/interval/steps.ex:85`, `validation.ex:341`, `validation.ex:361` |
-| `first_day_of_year` | `validation.ex:2277` | 1 | `validation.ex:2263` |
+| `year_begins_with_first_month?` | `tempo/unit_values.ex:1460`, `tempo/unit_values.ex:1464` | 1 | `compare.ex:700` |
+| `fields_in_day_order?` | `compare.ex:682` | 1 | `compare.ex:647` |
+| `first_date` | `tempo/unit_values.ex:1502`, `tempo/unit_values.ex:1509`, `tempo/unit_values.ex:1516` | 1 | `validation.ex:2287` |
+| `start_date` | `tempo/unit_values.ex:1528` | 7 | `compare.ex:688`, `compare.ex:1482`, `explain.ex:2359`, `tempo.ex:7464`, `tempo/format.ex:1133`, `tempo/select.ex:1644`, `validation.ex:2297` |
+| `with_first_month` | `tempo/unit_values.ex:1564`, `tempo/unit_values.ex:1569` | 3 | `tempo.ex:5279`, `tempo/interval/steps.ex:81`, `validation.ex:360` |
+| `with_first_day` | `tempo/unit_values.ex:1579`, `tempo/unit_values.ex:1585` | 4 | `tempo.ex:5283`, `tempo/interval/steps.ex:85`, `validation.ex:341`, `validation.ex:361` |
+| `first_day_of_year` | `validation.ex:2286` | 1 | `validation.ex:2272` |
 
 ### A month or a day named otherwise than by its field
 
 | Function | Defined | Calls | Called at |
 |---|---|---|---|
-| `month_named_once?` | `tempo/unit_values.ex:615`, `tempo/unit_values.ex:626` | 1 | `explain.ex:592` |
-| `year_named_by_its_months?` | `tempo/unit_values.ex:658`, `tempo/unit_values.ex:669` | 1 | `tempo/format.ex:822` |
-| `named_date` | `tempo/unit_values.ex:583` | 1 | `explain.ex:2340` |
-| `named_day` | `tempo/unit_values.ex:550` | 2 | `explain.ex:569`, `tempo/unit_values.ex:584` |
-| `named_day` | `explain.ex:567`, `explain.ex:572` | 1 | `explain.ex:562` |
-| `named_once?` | `explain.ex:591`, `explain.ex:595` | 1 | `explain.ex:585` |
+| `month_named_once?` | `tempo/unit_values.ex:626`, `tempo/unit_values.ex:637` | 1 | `explain.ex:595` |
+| `year_named_by_its_months?` | `tempo/unit_values.ex:669`, `tempo/unit_values.ex:680` | 1 | `tempo/format.ex:822` |
+| `named_date` | `tempo/unit_values.ex:594` | 1 | `explain.ex:2362` |
+| `named_day` | `tempo/unit_values.ex:561` | 2 | `explain.ex:572`, `tempo/unit_values.ex:595` |
+| `named_day` | `explain.ex:570`, `explain.ex:575` | 1 | `explain.ex:565` |
+| `named_once?` | `explain.ex:594`, `explain.ex:598` | 1 | `explain.ex:588` |
 
 ### A calendar that numbers its months by the year (a year of twelve or of thirteen)
 
 | Function | Defined | Calls | Called at |
 |---|---|---|---|
-| `months_numbered_by_the_year?` | `math.ex:3185` | 1 | `math.ex:3175` |
+| `months_numbered_by_the_year?` | `math.ex:3204` | 1 | `math.ex:3194` |
 
 ### The Gregorian calendar, by its name or its CLDR type
 
 | Function | Defined | Calls | Called at |
 |---|---|---|---|
 | `worded_as_gregorian?` | `tempo/format.ex:1126` | 1 | `tempo/format.ex:1119` |
-| `reads_as_gregorian?` | `inspect.ex:168` | 1 | `inspect.ex:151` |
-| `names?` | `inspect.ex:341` | 1 | `inspect.ex:332` |
-| `kind_of_year` | `tempo.ex:11106` | 1 | `tempo.ex:11101` |
-| `in_gregorian` | `enumeration/zone.ex:94`, `enumeration/zone.ex:109`, `enumeration/zone.ex:113`, `enumeration/zone.ex:128` | 8 | `enumeration/zone.ex:50`, `enumeration/zone.ex:255`, `enumeration/zone.ex:321`, `enumeration/zone.ex:356`, `enumeration/zone.ex:427`, `enumeration/zone.ex:539`, `enumeration/zone.ex:706`, `validation.ex:2891` |
-| `in_calendar_of` | `enumeration/zone.ex:143`, `enumeration/zone.ex:163`, `enumeration/zone.ex:168`, `enumeration/zone.ex:181` | 3 | `enumeration/skipped_readings.ex:265`, `enumeration/zone.ex:429`, `enumeration/zone.ex:541` |
+| `reads_as_gregorian?` | `inspect.ex:174` | 1 | `inspect.ex:157` |
+| `names?` | `inspect.ex:350` | 1 | `inspect.ex:341` |
+| `kind_of_year` | `tempo.ex:11150` | 1 | `tempo.ex:11145` |
+| `in_gregorian` | `enumeration/zone.ex:94`, `enumeration/zone.ex:109`, `enumeration/zone.ex:113`, `enumeration/zone.ex:128` | 8 | `enumeration/zone.ex:50`, `enumeration/zone.ex:255`, `enumeration/zone.ex:322`, `enumeration/zone.ex:360`, `enumeration/zone.ex:434`, `enumeration/zone.ex:548`, `enumeration/zone.ex:716`, `validation.ex:2903` |
+| `in_calendar_of` | `enumeration/zone.ex:143`, `enumeration/zone.ex:163`, `enumeration/zone.ex:168`, `enumeration/zone.ex:181` | 3 | `enumeration/skipped_readings.ex:265`, `enumeration/zone.ex:436`, `enumeration/zone.ex:550` |
 
 ### A calendar with a year 0
 
 | Function | Defined | Calls | Called at |
 |---|---|---|---|
-| `year?` | `tempo/unit_values.ex:236`, `tempo/unit_values.ex:240` | 11 | `enumeration.ex:1099`, `enumeration.ex:1107`, `mask.ex:174`, `mask.ex:184`, `tempo/interval.ex:1463`, `tempo/interval.ex:1470`, `tempo/unit_values.ex:251`, `tempo/unit_values.ex:264`, `validation.ex:158`, `validation.ex:161`, `validation.ex:170` |
+| `year?` | `tempo/unit_values.ex:235`, `tempo/unit_values.ex:239` | 11 | `enumeration.ex:1105`, `enumeration.ex:1113`, `mask.ex:174`, `mask.ex:184`, `tempo/interval.ex:1505`, `tempo/interval.ex:1512`, `tempo/unit_values.ex:250`, `tempo/unit_values.ex:263`, `validation.ex:158`, `validation.ex:161`, `validation.ex:170` |
 
 ### The notation's calendar: what a value is in where it names none, and what asks whether a calendar is it
 
 | Function | Defined | Calls | Called at |
 |---|---|---|---|
-| `default` | `tempo/calendars.ex:305` | 45 | `compare.ex:1498`, `compare.ex:1503`, `compare.ex:1507`, `event.ex:195`, `event.ex:305`, `event.ex:328`, `event.ex:351`, `explain.ex:2615`, `explain.ex:2644`, `explain.ex:2840`, `inspect.ex:38`, `inspect.ex:180`, `inspect.ex:189`, `inspect.ex:316`, `inspect.ex:317`, `inspect.ex:528`, `iso8601/ast.ex:36`, `iso8601/group.ex:27`, `iso8601/group.ex:376`, `iso8601/group.ex:1093`, `iso8601/group.ex:1119`, `iso8601/group.ex:1200`, `iso8601/group.ex:1242`, `iso8601/group.ex:1243`, `iso8601/parser.ex:319`, `sigil.ex:377`, `tempo.ex:167`, `tempo.ex:585`, `tempo.ex:1334`, `tempo.ex:1338`, `tempo.ex:1346`, `tempo.ex:2340`, `tempo.ex:16907`, `tempo/duration.ex:178`, `tempo/format.ex:428`, `tempo/interval.ex:3260`, `tempo/interval_set/backend/lazy.ex:48`, `tempo/network/normalize.ex:418`, `tempo/rrule/rule.ex:947`, `tempo/rrule/selection.ex:3605`, `tempo/rrule/selection.ex:3606`, `tempo/rrule/selection.ex:3659`, `tempo/select.ex:650`, `tempo/set.ex:66`, `validation.ex:38` |
-| `validated` | `tempo/calendars.ex:393`, `tempo/calendars.ex:397` | 3 | `tempo.ex:608`, `tempo.ex:1356`, `tempo.ex:5864` |
-| `is_notation` | `tempo/calendars.ex:377` | 21 | `enumeration/zone.ex:61`, `enumeration/zone.ex:109`, `enumeration/zone.ex:164`, `enumeration/zone.ex:271`, `enumeration/zone.ex:553`, `enumeration/zone.ex:749`, `explain.ex:1389`, `inspect.ex:482`, `inspect.ex:703`, `iso8601/group.ex:144`, `iso8601/group.ex:373`, `iso8601/group.ex:1194`, `tempo.ex:10150`, `tempo/not_built.ex:80`, `tempo/rrule.ex:547`, `tempo/rrule/encoder.ex:190`, `tempo/rrule/encoder.ex:453`, `tempo/rrule/rule.ex:667`, `tempo/select.ex:2499`, `validation.ex:2436`, `validation.ex:2932` |
+| `default` | `tempo/calendars.ex:305` | 45 | `compare.ex:1507`, `compare.ex:1512`, `compare.ex:1516`, `event.ex:195`, `event.ex:305`, `event.ex:328`, `event.ex:351`, `explain.ex:2637`, `explain.ex:2666`, `explain.ex:2865`, `inspect.ex:38`, `inspect.ex:186`, `inspect.ex:195`, `inspect.ex:325`, `inspect.ex:326`, `inspect.ex:540`, `iso8601/ast.ex:36`, `iso8601/group.ex:27`, `iso8601/group.ex:376`, `iso8601/group.ex:1103`, `iso8601/group.ex:1129`, `iso8601/group.ex:1210`, `iso8601/group.ex:1252`, `iso8601/group.ex:1253`, `iso8601/parser.ex:322`, `sigil.ex:380`, `tempo.ex:167`, `tempo.ex:585`, `tempo.ex:1335`, `tempo.ex:1339`, `tempo.ex:1347`, `tempo.ex:2344`, `tempo.ex:16987`, `tempo/duration.ex:178`, `tempo/format.ex:428`, `tempo/interval.ex:3303`, `tempo/interval_set/backend/lazy.ex:48`, `tempo/network/normalize.ex:422`, `tempo/rrule/rule.ex:1009`, `tempo/rrule/selection.ex:3633`, `tempo/rrule/selection.ex:3634`, `tempo/rrule/selection.ex:3687`, `tempo/select.ex:650`, `tempo/set.ex:66`, `validation.ex:38` |
+| `validated` | `tempo/calendars.ex:393`, `tempo/calendars.ex:397` | 3 | `tempo.ex:609`, `tempo.ex:1357`, `tempo.ex:5874` |
+| `is_notation` | `tempo/calendars.ex:377` | 21 | `enumeration/zone.ex:61`, `enumeration/zone.ex:109`, `enumeration/zone.ex:164`, `enumeration/zone.ex:271`, `enumeration/zone.ex:562`, `enumeration/zone.ex:761`, `explain.ex:1402`, `inspect.ex:491`, `inspect.ex:713`, `iso8601/group.ex:144`, `iso8601/group.ex:373`, `iso8601/group.ex:1204`, `tempo.ex:10191`, `tempo/not_built.ex:83`, `tempo/rrule.ex:568`, `tempo/rrule/encoder.ex:190`, `tempo/rrule/encoder.ex:453`, `tempo/rrule/rule.ex:726`, `tempo/select.ex:2500`, `validation.ex:2445`, `validation.ex:2944` |
 | `reading_calendar` | `validation.ex:480` | 1 | `validation.ex:455` |
 | `written_calendar` | `validation.ex:454`, `validation.ex:464` | 2 | `validation.ex:56`, `validation.ex:232` |
 
@@ -207,7 +201,7 @@ One more probe is of no calendar: `tempo/interval_set.ex:277`, of a set-operatio
 | Function | Defined | Calls | Called at |
 |---|---|---|---|
 | `weeks` | `tempo/calendars.ex:370` | 1 | `sigils/options.ex:15` |
-| `is_notation_weeks` | `tempo/calendars.ex:384` | 4 | `inspect.ex:488`, `inspect.ex:703`, `tempo.ex:10150`, `tempo/select.ex:2499` |
+| `is_notation_weeks` | `tempo/calendars.ex:384` | 4 | `inspect.ex:497`, `inspect.ex:713`, `tempo.ex:10191`, `tempo/select.ex:2500` |
 
 ### `calendar_base/0`, asked directly
 
@@ -221,51 +215,51 @@ Calls of a function of a named module, which take the calendar as an argument or
 
 | Function | Calls | Lines |
 |---|---|---|
-| `Calendrical.additional_calendars` | 3 | `inspect.ex:689`, `inspect.ex:735`, `iso8601/tokenizer/extended.ex:599` |
-| `Calendrical.calendar_from_cldr_calendar_type` | 3 | `inspect.ex:342`, `tempo/calendars.ex:337`, `tempo/rrule/rule.ex:361` |
-| `Calendrical.parse` | 1 | `tempo.ex:2344` |
+| `Calendrical.additional_calendars` | 3 | `inspect.ex:699`, `inspect.ex:745`, `iso8601/tokenizer/extended.ex:600` |
+| `Calendrical.calendar_from_cldr_calendar_type` | 3 | `inspect.ex:351`, `tempo/calendars.ex:337`, `tempo/rrule/rule.ex:365` |
+| `Calendrical.parse` | 1 | `tempo.ex:2348` |
 | `Calendrical.validate_calendar` | 1 | `tempo/calendars.ex:398` |
 | `Calendrical.Ecclesiastical.easter_sunday` | 1 | `event.ex:277` |
 | `Calendrical.Ecclesiastical.orthodox_easter_sunday` | 1 | `event.ex:281` |
-| `Calendrical.Kday.kday_on_or_after` | 2 | `tempo.ex:8722`, `tempo/rrule/selection.ex:3006` |
-| `Calendrical.Kday.kday_on_or_before` | 3 | `tempo/rrule/selection.ex:2850`, `tempo/rrule/selection.ex:3080`, `tempo/unit_values.ex:2000` |
-| `Calendrical.Kday.nth_kday` | 1 | `tempo/rrule/selection.ex:4028` |
+| `Calendrical.Kday.kday_on_or_after` | 2 | `tempo.ex:8761`, `tempo/rrule/selection.ex:3031` |
+| `Calendrical.Kday.kday_on_or_before` | 3 | `tempo/rrule/selection.ex:2872`, `tempo/rrule/selection.ex:3105`, `tempo/unit_values.ex:2009` |
+| `Calendrical.Kday.nth_kday` | 1 | `tempo/rrule/selection.ex:4057` |
 | `Calendrical.Lunisolar.solar_term_name` | 1 | `event.ex:55` |
 
 ### Localize
 
 | Function | Calls | Lines |
 |---|---|---|
-| `Localize.ellipsis` | 1 | `inspect.ex:882` |
-| `Localize.get_locale` | 1 | `tempo/territory.ex:147` |
-| `Localize.known_calendars` | 1 | `inspect.ex:676` |
-| `Localize.validate_territory` | 1 | `tempo/territory.ex:107` |
-| `Localize.Calendar.display_name` | 1 | `explain.ex:3430` |
-| `Localize.Calendar.weekdays` | 2 | `tempo.ex:16806`, `tempo.ex:16811` |
-| `Localize.Calendar.weekend` | 3 | `tempo.ex:16812`, `tempo.ex:16900`, `tempo.ex:17695` |
-| `Localize.Date.to_string` | 6 | `explain.ex:2600`, `tempo/format.ex:311`, `tempo/format.ex:903`, `tempo/format.ex:910`, `tempo/format.ex:1309`, `tempo/format.ex:1310` |
+| `Localize.ellipsis` | 1 | `inspect.ex:892` |
+| `Localize.get_locale` | 1 | `tempo/territory.ex:150` |
+| `Localize.known_calendars` | 1 | `inspect.ex:686` |
+| `Localize.validate_territory` | 1 | `tempo/territory.ex:110` |
+| `Localize.Calendar.display_name` | 1 | `explain.ex:3458` |
+| `Localize.Calendar.weekdays` | 2 | `tempo.ex:16886`, `tempo.ex:16891` |
+| `Localize.Calendar.weekend` | 3 | `tempo.ex:16892`, `tempo.ex:16980`, `tempo.ex:17775` |
+| `Localize.Date.to_string` | 6 | `explain.ex:2622`, `tempo/format.ex:311`, `tempo/format.ex:903`, `tempo/format.ex:910`, `tempo/format.ex:1309`, `tempo/format.ex:1310` |
 | `Localize.DateTime.to_string` | 1 | `tempo/format.ex:912` |
 | `Localize.DateTime.Relative.to_parts` | 1 | `tempo/format.ex:557` |
 | `Localize.DateTime.Relative.to_string` | 1 | `tempo/format.ex:547` |
 | `Localize.Duration.to_string` | 1 | `tempo/format.ex:191` |
 | `Localize.Interval.to_string` | 2 | `tempo/format.ex:315`, `tempo/format.ex:1292` |
-| `Localize.LanguageTag.U.parse` | 1 | `iso8601/tokenizer/extended.ex:524` |
+| `Localize.LanguageTag.U.parse` | 1 | `iso8601/tokenizer/extended.ex:525` |
 | `Localize.List.to_string` | 1 | `tempo/format.ex:367` |
-| `Localize.Territory.territory_from_locale` | 4 | `tempo/territory.ex:81`, `tempo/territory.ex:108`, `tempo/territory.ex:137`, `tempo/territory.ex:148` |
-| `Localize.Territory.Hemisphere.hemisphere` | 1 | `tempo.ex:6601` |
+| `Localize.Territory.territory_from_locale` | 4 | `tempo/territory.ex:81`, `tempo/territory.ex:111`, `tempo/territory.ex:140`, `tempo/territory.ex:151` |
+| `Localize.Territory.Hemisphere.hemisphere` | 1 | `tempo.ex:6632` |
 | `Localize.Time.to_string` | 2 | `tempo/format.ex:902`, `tempo/format.ex:911` |
-| `Localize.TimeZoneDatabase.fixed_offset` | 1 | `tempo.ex:2411` |
+| `Localize.TimeZoneDatabase.fixed_offset` | 1 | `tempo.ex:2415` |
 | `Localize.Utils.Math.round` | 6 | `validation.ex:1131`, `validation.ex:1156`, `validation.ex:1177`, `validation.ex:1197`, `validation.ex:1228`, `validation.ex:1240` |
-| `Localize.Validity.U.decode` | 2 | `iso8601/tokenizer/extended.ex:555`, `tempo/territory.ex:156` |
-| `Localize.Validity.U.encode` | 1 | `inspect.ex:684` |
+| `Localize.Validity.U.decode` | 2 | `iso8601/tokenizer/extended.ex:556`, `tempo/territory.ex:159` |
+| `Localize.Validity.U.encode` | 1 | `inspect.ex:694` |
 
 ### Astro
 
 | Function | Calls | Lines |
 |---|---|---|
 | `Astro.date_time_new_moon_at_or_after` | 1 | `event.ex:316` |
-| `Astro.equinox` | 3 | `event.ex:240`, `event.ex:285`, `iso8601/group.ex:1104` |
-| `Astro.solstice` | 3 | `event.ex:244`, `event.ex:289`, `iso8601/group.ex:1110` |
+| `Astro.equinox` | 3 | `event.ex:240`, `event.ex:285`, `iso8601/group.ex:1114` |
+| `Astro.solstice` | 3 | `event.ex:244`, `event.ex:289`, `iso8601/group.ex:1120` |
 
 ## 6. Calls into Elixir's and Erlang's own calendar types
 
@@ -275,38 +269,38 @@ A `Date` is of the calendar it is given, so `Date.new/4`, `Date.convert/2` and `
 |---|---|---|
 | `:calendar.date` | 1 | `tempo/time_zone_database.ex:197` |
 | `:calendar.datetime` | 1 | `enumeration/skipped_readings.ex:55` |
-| `:calendar.datetime_to_gregorian_seconds` | 13 | `compare.ex:1352`, `enumeration/skipped_readings.ex:196`, `enumeration/zone.ex:446`, `enumeration/zone.ex:554`, `enumeration/zone.ex:652`, `tempo/interval.ex:3080`, `tempo/time_zone_database.ex:55`, `tempo/time_zone_database.ex:64`, `tempo/time_zone_database.ex:253`, `tempo/time_zone_database.ex:261`, `tempo/time_zone_database.ex:279`, `tempo/time_zone_database.ex:551`, `validation.ex:2963` |
-| `:calendar.gregorian_seconds_to_datetime` | 5 | `compare.ex:1419`, `enumeration/skipped_readings.ex:246`, `enumeration/zone.ex:660`, `tempo/time_zone_database.ex:166`, `tempo/time_zone_database.ex:265` |
-| `Calendar.calendar` | 6 | `tempo.ex:274`, `tempo.ex:1056`, `tempo.ex:1075`, `tempo.ex:1460`, `tempo/network/normalize.ex:101`, `tempo/network/normalize.ex:136` |
-| `Calendar.day_of_week` | 1 | `tempo.ex:7201` |
+| `:calendar.datetime_to_gregorian_seconds` | 13 | `compare.ex:1361`, `enumeration/skipped_readings.ex:196`, `enumeration/zone.ex:455`, `enumeration/zone.ex:563`, `enumeration/zone.ex:661`, `tempo/interval.ex:3123`, `tempo/time_zone_database.ex:55`, `tempo/time_zone_database.ex:64`, `tempo/time_zone_database.ex:256`, `tempo/time_zone_database.ex:264`, `tempo/time_zone_database.ex:285`, `tempo/time_zone_database.ex:563`, `validation.ex:2975` |
+| `:calendar.gregorian_seconds_to_datetime` | 5 | `compare.ex:1428`, `enumeration/skipped_readings.ex:246`, `enumeration/zone.ex:669`, `tempo/time_zone_database.ex:166`, `tempo/time_zone_database.ex:268` |
+| `Calendar.calendar` | 6 | `tempo.ex:274`, `tempo.ex:1057`, `tempo.ex:1076`, `tempo.ex:1461`, `tempo/network/normalize.ex:101`, `tempo/network/normalize.ex:136` |
+| `Calendar.day_of_week` | 1 | `tempo.ex:7232` |
 | `Calendar.get_time_zone_database` | 1 | `tempo/time_zone_database.ex:77` |
 | `Calendar.naive_datetime` | 2 | `tempo/time_zone_database.ex:158`, `tempo/time_zone_database.ex:158` |
 | `Calendar.time_zone_database` | 1 | `tempo/time_zone_database.ex:75` |
 | `Calendar.TimeZoneDatabase.time_zone_period` | 1 | `tempo/time_zone_database.ex:49` |
-| `Date.beginning_of_week` | 1 | `tempo.ex:3698` |
-| `Date.convert` | 23 | `enumeration/zone.ex:133`, `enumeration/zone.ex:150`, `enumeration/zone.ex:173`, `event.ex:305`, `event.ex:328`, `event.ex:351`, `iso8601/group.ex:1119`, `iso8601/group.ex:1242`, `iso8601/group.ex:1243`, `iso8601/group.ex:1310`, `operations.ex:914`, `tempo.ex:5422`, `tempo.ex:5440`, `tempo.ex:5991`, `tempo.ex:12460`, `tempo/calendars.ex:355`, `tempo/rrule/selection.ex:3605`, `tempo/rrule/selection.ex:3606`, `tempo/rrule/selection.ex:3619`, `tempo/rrule/selection.ex:3659`, `tempo/select.ex:1658`, `tempo/unit_values.ex:1821`, `validation.ex:499` |
-| `Date.day_of_week` | 3 | `explain.ex:692`, `tempo.ex:17729`, `tempo/unit_values.ex:2032` |
-| `Date.diff` | 6 | `compare.ex:242`, `math.ex:2959`, `tempo.ex:7890`, `tempo/interval/steps.ex:165`, `tempo/rrule/selection.ex:2137`, `tempo/rrule/selection.ex:3155` |
-| `Date.new` | 32 | `enumeration/zone.ex:120`, `enumeration/zone.ex:149`, `enumeration/zone.ex:172`, `event.ex:315`, `iso8601/group.ex:1064`, `iso8601/group.ex:1093`, `math.ex:2956`, `math.ex:2958`, `math.ex:3244`, `tempo.ex:5409`, `tempo.ex:5907`, `tempo.ex:5942`, `tempo.ex:17745`, `tempo/interval/steps.ex:728`, `tempo/network/normalize.ex:801`, `tempo/rrule/selection.ex:2779`, `tempo/rrule/selection.ex:3079`, `tempo/rrule/selection.ex:3189`, `tempo/rrule/selection.ex:3210`, `tempo/rrule/selection.ex:3395`, `tempo/rrule/selection.ex:3417`, `tempo/rrule/selection.ex:3658`, `tempo/rrule/selection.ex:3976`, `tempo/rrule/selection.ex:3977`, `tempo/select.ex:1644`, `tempo/select.ex:1686`, `tempo/unit_values.ex:1820`, `tempo/unit_values.ex:1826`, `tempo/unit_values.ex:1842`, `tempo/unit_values.ex:1895`, `tempo/unit_values.ex:2011`, `validation.ex:498` |
+| `Date.beginning_of_week` | 1 | `tempo.ex:3708` |
+| `Date.convert` | 22 | `enumeration/zone.ex:133`, `enumeration/zone.ex:150`, `enumeration/zone.ex:173`, `event.ex:305`, `event.ex:328`, `event.ex:351`, `iso8601/group.ex:1129`, `iso8601/group.ex:1252`, `iso8601/group.ex:1253`, `iso8601/group.ex:1320`, `operations.ex:925`, `tempo.ex:5432`, `tempo.ex:5450`, `tempo.ex:6019`, `tempo.ex:12504`, `tempo/calendars.ex:355`, `tempo/rrule/selection.ex:3633`, `tempo/rrule/selection.ex:3634`, `tempo/rrule/selection.ex:3647`, `tempo/rrule/selection.ex:3687`, `tempo/select.ex:1659`, `validation.ex:499` |
+| `Date.day_of_week` | 3 | `explain.ex:695`, `tempo.ex:17809`, `tempo/unit_values.ex:2041` |
+| `Date.diff` | 6 | `compare.ex:242`, `math.ex:2978`, `tempo.ex:7921`, `tempo/interval/steps.ex:165`, `tempo/rrule/selection.ex:2149`, `tempo/rrule/selection.ex:3180` |
+| `Date.new` | 31 | `enumeration/zone.ex:120`, `enumeration/zone.ex:149`, `enumeration/zone.ex:172`, `event.ex:315`, `iso8601/group.ex:1073`, `iso8601/group.ex:1103`, `math.ex:2975`, `math.ex:2977`, `math.ex:3263`, `tempo.ex:5419`, `tempo.ex:5935`, `tempo.ex:5970`, `tempo.ex:17825`, `tempo/interval/steps.ex:728`, `tempo/network/normalize.ex:805`, `tempo/rrule/selection.ex:2801`, `tempo/rrule/selection.ex:3104`, `tempo/rrule/selection.ex:3214`, `tempo/rrule/selection.ex:3235`, `tempo/rrule/selection.ex:3420`, `tempo/rrule/selection.ex:3442`, `tempo/rrule/selection.ex:3686`, `tempo/rrule/selection.ex:4004`, `tempo/rrule/selection.ex:4005`, `tempo/select.ex:1645`, `tempo/select.ex:1687`, `tempo/unit_values.ex:1841`, `tempo/unit_values.ex:1857`, `tempo/unit_values.ex:1904`, `tempo/unit_values.ex:2020`, `validation.ex:498` |
 | `DateTime.add` | 2 | `event.ex:262`, `tempo/clock/test.ex:96` |
 | `DateTime.convert` | 2 | `tempo/calendars.ex:347`, `tempo/format.ex:716` |
 | `DateTime.from_gregorian_seconds` | 1 | `tempo/format.ex:713` |
-| `DateTime.from_naive` | 4 | `enumeration/zone.ex:65`, `jscalendar.ex:471`, `tempo.ex:5719`, `tempo.ex:5741` |
-| `DateTime.shift_zone` | 3 | `event.ex:269`, `tempo.ex:6303`, `tempo/format.ex:715` |
+| `DateTime.from_naive` | 4 | `enumeration/zone.ex:65`, `jscalendar.ex:473`, `tempo.ex:5729`, `tempo.ex:5751` |
+| `DateTime.shift_zone` | 3 | `event.ex:269`, `tempo.ex:6334`, `tempo/format.ex:715` |
 | `DateTime.shift_zone!` | 1 | `tempo/clock/test.ex:60` |
-| `DateTime.to_date` | 2 | `event.ex:304`, `iso8601/group.ex:1118` |
+| `DateTime.to_date` | 2 | `event.ex:304`, `iso8601/group.ex:1128` |
 | `DateTime.to_naive` | 1 | `enumeration/zone.ex:231` |
-| `DateTime.truncate` | 3 | `tempo.ex:6243`, `tempo.ex:6288`, `tempo/format.ex:534` |
+| `DateTime.truncate` | 3 | `tempo.ex:6274`, `tempo.ex:6319`, `tempo/format.ex:534` |
 | `DateTime.utc_now` | 1 | `tempo/clock/system.ex:15` |
-| `NaiveDateTime.add` | 2 | `enumeration/zone.ex:232`, `tempo.ex:5714` |
+| `NaiveDateTime.add` | 2 | `enumeration/zone.ex:232`, `tempo.ex:5724` |
 | `NaiveDateTime.before?` | 1 | `enumeration/zone.ex:230` |
 | `NaiveDateTime.convert` | 2 | `tempo/calendars.ex:351`, `tempo/format.ex:704` |
 | `NaiveDateTime.from_gregorian_seconds` | 2 | `tempo/format.ex:641`, `tempo/format.ex:703` |
-| `NaiveDateTime.new` | 4 | `enumeration/zone.ex:873`, `tempo.ex:5562`, `tempo.ex:5572`, `tempo.ex:5616` |
+| `NaiveDateTime.new` | 4 | `enumeration/zone.ex:885`, `tempo.ex:5572`, `tempo.ex:5582`, `tempo.ex:5626` |
 | `NaiveDateTime.new!` | 1 | `tempo/time_zone_database.ex:168` |
 | `NaiveDateTime.to_date` | 1 | `tempo/format.ex:708` |
-| `NaiveDateTime.to_string` | 1 | `tempo.ex:5754` |
-| `Time.new` | 2 | `tempo.ex:5478`, `tempo.ex:5497` |
+| `NaiveDateTime.to_string` | 1 | `tempo.ex:5764` |
+| `Time.new` | 2 | `tempo.ex:5488`, `tempo.ex:5507` |
 
 ## 7. Numbers a calendar would be asked for
 
@@ -330,54 +324,54 @@ A `Date` is of the calendar it is given, so `Date.new/4`, `Date.convert/2` and `
 |---|---|---|---|
 | `enumeration/skipped_readings.ex:32` | the module | 400 | zone |
 | `explain.ex:112` | `recurs` | 12 | prose |
-| `explain.ex:3224` | `hours_phrase` | 12 | prose |
-| `explain.ex:3246` | `times_phrase` | 12 | prose |
-| `explain.ex:3416` | `ordinal` | 13 | prose |
+| `explain.ex:3249` | `hours_phrase` | 12 | prose |
+| `explain.ex:3271` | `times_phrase` | 12 | prose |
+| `explain.ex:3444` | `ordinal` | 13 | prose |
 | `iso8601/group.ex:483` | `expand_members` | 28, 29 | standard |
-| `iso8601/group.ex:1005` | `gregorian_season` | 12 | gregorian |
-| `iso8601/group.ex:1008` | `gregorian_season` | 31 | standard |
-| `iso8601/group.ex:1016` | `gregorian_season` | 29 | standard |
-| `iso8601/group.ex:1020` | `gregorian_season` | 28, 30 | standard |
-| `iso8601/group.ex:1168` | `meteorological_months` | 12 | gregorian |
-| `iso8601/tokenizer/helpers.ex:410` | `a_date_and_no_time_of_day` | 13 | reader |
-| `iso8601/tokenizer/helpers.ex:411` | `a_date_and_no_time_of_day` | 31 | reader |
+| `iso8601/group.ex:1014` | `gregorian_season` | 12 | gregorian |
+| `iso8601/group.ex:1017` | `gregorian_season` | 31 | standard |
+| `iso8601/group.ex:1025` | `gregorian_season` | 29 | standard |
+| `iso8601/group.ex:1029` | `gregorian_season` | 28, 30 | standard |
+| `iso8601/group.ex:1178` | `meteorological_months` | 12 | gregorian |
+| `iso8601/tokenizer/helpers.ex:413` | `a_date_and_no_time_of_day` | 13 | reader |
+| `iso8601/tokenizer/helpers.ex:414` | `a_date_and_no_time_of_day` | 31 | reader |
 | `iso8601/tokenizer/plain.ex:51` | `tokens` | 12 | reader |
 | `iso8601/tokenizer/plain.ex:58` | `tokens` | 12 | reader |
 | `iso8601/tokenizer/plain.ex:59` | `tokens` | 31 | reader |
 | `iso8601/unit.ex:13` | the module | 30 | prose |
-| `jscalendar.ex:571` | `skip` | 7 | standard |
-| `tempo.ex:1224` | `month_and_day` | 12, 31 | reader |
-| `tempo.ex:10694` | `walk_too_long_error` | 400 | prose |
-| `tempo.ex:10839` | `moved_by_its_zone` | 30 | zone |
-| `tempo.ex:10840` | `moved_by_its_zone` | 366 | zone |
-| `tempo.ex:13483` | `cadence_index` | 12 | gregorian |
+| `jscalendar.ex:573` | `skip` | 7 | standard |
+| `tempo.ex:1225` | `month_and_day` | 12, 31 | reader |
+| `tempo.ex:10738` | `walk_too_long_error` | 400 | prose |
+| `tempo.ex:10883` | `moved_by_its_zone` | 30 | zone |
+| `tempo.ex:10884` | `moved_by_its_zone` | 366 | zone |
+| `tempo.ex:13547` | `cadence_index` | 12 | gregorian |
 | `tempo/cron.ex:121` | the module | 7 | standard |
 | `tempo/cron.ex:126` | the module | 12 | standard |
-| `tempo/cron.ex:491` | `every_value` | 31 | standard |
-| `tempo/cron.ex:607` | `normalise_month` | 12 | standard |
-| `tempo/cron.ex:631` | `normalise_monthday` | 31 | standard |
-| `tempo/cron.ex:644` | `normalise_monthday` | 31 | standard |
-| `tempo/cron.ex:869` | `parse_dow_part` | 7 | standard |
-| `tempo/cron.ex:904` | `dow_range_days` | 7 | standard |
-| `tempo/cron.ex:912` | `parse_dow_nth` | 53 | standard |
-| `tempo/cron.ex:931` | `dow_step_cron_base` | 7 | standard |
-| `tempo/cron.ex:943` | `dow_step_cron_base` | 7 | standard |
-| `tempo/cron.ex:957` | `dow_to_cron` | 7 | standard |
-| `tempo/cron.ex:980` | `dow_to_rfc` | 7 | standard |
-| `tempo/cron.ex:995` | `cron_to_rfc` | 7 | standard |
-| `tempo/cron.ex:998` | `cron_to_rfc` | 7 | standard |
-| `tempo/cron.ex:999` | `cron_to_rfc` | 7 | standard |
-| `tempo/interval.ex:3032` | `spans_leap_second?` | 12, 31 | standard |
+| `tempo/cron.ex:497` | `every_value` | 31 | standard |
+| `tempo/cron.ex:613` | `normalise_month` | 12 | standard |
+| `tempo/cron.ex:637` | `normalise_monthday` | 31 | standard |
+| `tempo/cron.ex:650` | `normalise_monthday` | 31 | standard |
+| `tempo/cron.ex:879` | `parse_dow_part` | 7 | standard |
+| `tempo/cron.ex:914` | `dow_range_days` | 7 | standard |
+| `tempo/cron.ex:922` | `parse_dow_nth` | 53 | standard |
+| `tempo/cron.ex:941` | `dow_step_cron_base` | 7 | standard |
+| `tempo/cron.ex:953` | `dow_step_cron_base` | 7 | standard |
+| `tempo/cron.ex:967` | `dow_to_cron` | 7 | standard |
+| `tempo/cron.ex:990` | `dow_to_rfc` | 7 | standard |
+| `tempo/cron.ex:1005` | `cron_to_rfc` | 7 | standard |
+| `tempo/cron.ex:1008` | `cron_to_rfc` | 7 | standard |
+| `tempo/cron.ex:1009` | `cron_to_rfc` | 7 | standard |
+| `tempo/interval.ex:3075` | `spans_leap_second?` | 12, 31 | standard |
 | `tempo/rrule.ex:68` | the module | 7 | standard |
 | `tempo/rrule/encoder.ex:50` | the module | 7 | standard |
-| `tempo/rrule/expander.ex:430` | `map_weekday` | 7 | standard |
-| `tempo/rrule/rule.ex:106` | the module | 7 | standard |
-| `tempo/rrule/rule.ex:952` | `push_wkst` | 7 | standard |
-| `tempo/rrule/selection.ex:1852` | `application_order_key` | 7 | prose |
-| `tempo/rrule/selection.ex:3487` | `nearest_weekday` | 7 | standard |
-| `tempo/rrule/selection.ex:3507` | `snap_back_to_weekday` | 7 | standard |
-| `tempo/time_zone_database.ex:263` | `days_of` | 365 | zone |
-| `tempo/time_zone_database.ex:510` | `clear_in_blocks?` | 366 | zone |
+| `tempo/rrule/expander.ex:434` | `map_weekday` | 7 | standard |
+| `tempo/rrule/rule.ex:107` | the module | 7 | standard |
+| `tempo/rrule/rule.ex:1014` | `push_wkst` | 7 | standard |
+| `tempo/rrule/selection.ex:1861` | `application_order_key` | 7 | prose |
+| `tempo/rrule/selection.ex:3512` | `nearest_weekday` | 7 | standard |
+| `tempo/rrule/selection.ex:3532` | `snap_back_to_weekday` | 7 | standard |
+| `tempo/time_zone_database.ex:266` | `days_of` | 365 | zone |
+| `tempo/time_zone_database.ex:519` | `clear_in_blocks?` | 366 | zone |
 | `tempo/workdays.ex:32` | the module | 7 | standard |
 
 The 30 lines of `lib/tempo/leap_seconds.ex` are its table, lines 27 to 159.

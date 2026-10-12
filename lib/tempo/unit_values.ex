@@ -1834,18 +1834,8 @@ defmodule Tempo.UnitValues do
   # week-based calendar's weeks are its own dates. A month-based calendar's
   # follow ISO 8601's rule over the calendar's own year, as RFC 7529
   # applies it to any calendar: each week starts on a Monday, and week 1 is
-  # the one holding the year's fourth day.
-  #
-  # In the Gregorian calendar those weeks are the weeks of
-  # `Calendrical.ISOWeek`, the calendar that is ISO 8601's weeks, so the date
-  # is asked of it in one step: finding where the year's week 1 starts, and
-  # the next year's, took ten times as long.
-  def date_from_iso_week(year, week, day, Calendrical.Gregorian)
-      when is_integer(year) and is_integer(week) and is_integer(day) do
-    with {:ok, week_date} <- Date.new(year, week, day, Calendrical.ISOWeek),
-         do: Date.convert(week_date, Calendrical.Gregorian)
-  end
-
+  # the one holding the year's fourth day. Every calendar of months is asked
+  # the same way: no calendar is known by its name for a shorter one.
   def date_from_iso_week(year, week, day, calendar) do
     if Tempo.week_based_calendar?(calendar) do
       Date.new(year, week, day, calendar)
@@ -1883,12 +1873,6 @@ defmodule Tempo.UnitValues do
   @doc false
   # How many ISO 8601 weeks (`W`) `year` has: a week-based calendar's own
   # count, or the weeks ISO 8601's rule gives a month-based calendar's year.
-  # The Gregorian calendar's are the weeks of `Calendrical.ISOWeek`, as in
-  # `date_from_iso_week/4`.
-  def iso_weeks_in_year(year, Calendrical.Gregorian) when is_integer(year) do
-    calendar_weeks_in_year(year, Calendrical.ISOWeek)
-  end
-
   def iso_weeks_in_year(year, calendar) do
     if Tempo.week_based_calendar?(calendar) do
       calendar_weeks_in_year(year, calendar)

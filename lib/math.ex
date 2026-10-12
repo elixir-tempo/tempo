@@ -3317,20 +3317,14 @@ defmodule Tempo.Math do
   end
 
   # A week of a calendar of weeks so many weeks on is the calendar's own
-  # `plus/6`. A week of a Gregorian year is one of ISO 8601's, counted on
-  # from its first day by the calendar and named again by its week
-  # (`iso_week_of_year/3`). Any other value is counted a week at a time.
+  # `plus/6`. Any other value is counted a week at a time, in whichever
+  # calendar of months it is: none is known by its name for a shorter way.
   defp weeks_by_the_calendar([{:year, year}, {:week, week} | rest], n, calendar)
        when is_integer(year) and is_integer(week) and week > 0 do
-    cond do
-      Tempo.week_based_calendar?(calendar) ->
-        week_of_a_calendar_of_weeks(year, week, rest, n, calendar)
-
-      calendar == Calendrical.Gregorian ->
-        iso_week_on(year, week, rest, n, calendar)
-
-      true ->
-        :by_count
+    if Tempo.week_based_calendar?(calendar) do
+      week_of_a_calendar_of_weeks(year, week, rest, n, calendar)
+    else
+      :by_count
     end
   end
 
@@ -3342,17 +3336,6 @@ defmodule Tempo.Math do
     with true <- calendar.valid_date?(year, week, 1),
          {year, week, _day} <- calendar.plus(year, week, 1, :weeks, n, []) do
       {:ok, [{:year, year}, {:week, week} | rest]}
-    else
-      _by_count -> :by_count
-    end
-  end
-
-  defp iso_week_on(year, week, rest, n, calendar) do
-    with {:ok, %Date{} = first} <- UnitValues.date_from_iso_week(year, week, 1, calendar),
-         {year, month, day} <- calendar.plus(first.year, first.month, first.day, :weeks, n, []),
-         {week_year, week} when is_integer(week_year) and is_integer(week) <-
-           calendar.iso_week_of_year(year, month, day) do
-      {:ok, [{:year, week_year}, {:week, week} | rest]}
     else
       _by_count -> :by_count
     end
