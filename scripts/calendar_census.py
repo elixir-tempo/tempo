@@ -253,7 +253,7 @@ CONSTANTS = {
         ('max_selection_depth', 'limit'), ('max_digits', 'limit'), ('profiles', 'standard'),
     ],
     "lib/iso8601/tokenizer/extended.ex": [
-        ('empty_extended', 'standard'), ('u_ca', 'text'),
+        ('empty_extended', 'standard'), ('u_ca', 'text'), ('dated', 'standard'),
     ],
     "lib/iso8601/tokenizer/grammar.ex": [
         ('endpoint_tags', 'standard'), ('endpoint_units', 'units'), ('bare_numbers', 'standard'),
