@@ -33,10 +33,10 @@ defmodule Tempo.ICal.Test do
   # is 3.0+.
   Application.ensure_loaded(:ical)
 
-  @ical_floating_supported (case Application.spec(:ical, :vsn) do
-                              nil -> false
-                              vsn -> Version.match?(to_string(vsn), ">= 3.0.0")
-                            end)
+  ical_version = Application.spec(:ical, :vsn)
+
+  @ical_floating_supported not is_nil(ical_version) and
+                             Version.match?(to_string(ical_version), ">= 3.0.0")
 
   setup_all do
     Calendar.put_time_zone_database(Tz.TimeZoneDatabase)

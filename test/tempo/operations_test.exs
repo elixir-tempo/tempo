@@ -1283,9 +1283,10 @@ defmodule Tempo.Operations.Test do
       end)
     end
 
-    case mode do
-      :overlapping -> Enum.filter(a_set.intervals, overlaps?)
-      :outside -> Enum.reject(a_set.intervals, overlaps?)
+    if mode == :overlapping do
+      Enum.filter(a_set.intervals, overlaps?)
+    else
+      Enum.reject(a_set.intervals, overlaps?)
     end
   end
 

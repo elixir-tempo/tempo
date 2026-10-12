@@ -82,9 +82,12 @@ defmodule Tempo.Territory do
   end
 
   def resolve(nil) do
-    case Application.get_env(:ex_tempo, :default_territory) do
-      nil -> resolve_from_ambient_locale()
-      value -> resolve(value)
+    value = Application.get_env(:ex_tempo, :default_territory)
+
+    if is_nil(value) do
+      resolve_from_ambient_locale()
+    else
+      resolve(value)
     end
   end
 

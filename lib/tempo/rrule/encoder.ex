@@ -371,26 +371,26 @@ defmodule Tempo.RRule.Encoder do
   ## FREQ + INTERVAL
 
   defp freq_and_interval([{unit, n}], interval) when is_integer(n) and n >= 1 do
-    case Map.get(@freq_for, unit) do
-      nil ->
-        {:error,
-         ConversionError.exception(
-           reason:
-             "Duration unit #{Calendars.inspect(unit)} has no RRULE equivalent. " <>
-               "RRULE supports second/minute/hour/day/week/month/year.",
-           value: interval,
-           target: :rrule
-         )}
+    freq = Map.get(@freq_for, unit)
 
-      freq ->
-        parts =
-          if n == 1 do
-            ["FREQ=#{freq}"]
-          else
-            ["FREQ=#{freq}", "INTERVAL=#{n}"]
-          end
+    if is_nil(freq) do
+      {:error,
+       ConversionError.exception(
+         reason:
+           "Duration unit #{Calendars.inspect(unit)} has no RRULE equivalent. " <>
+             "RRULE supports second/minute/hour/day/week/month/year.",
+         value: interval,
+         target: :rrule
+       )}
+    else
+      parts =
+        if n == 1 do
+          ["FREQ=#{freq}"]
+        else
+          ["FREQ=#{freq}", "INTERVAL=#{n}"]
+        end
 
-        {:ok, parts}
+      {:ok, parts}
     end
   end
 
@@ -503,28 +503,29 @@ defmodule Tempo.RRule.Encoder do
   # that has none is an error naming it, never a part silently dropped. The
   # units after a selection (`L5K2INT9H`) are BY-parts too.
   defp by_parts(%Tempo{time: [{:selection, selection} | units], calendar: calendar}, interval) do
-    case (selection ++ units)
-         |> Keyword.keys()
-         |> Enum.reject(&(&1 in @rrule_tokens))
-         |> Enum.uniq() do
-      [] ->
-        with :ok <- numbers_alone(selection ++ units, interval),
-             {:ok, selection} <- weekdays_named(selection, calendar, interval),
-             {week_start, selection} = week_start(selection, interval),
-             selection = recombine_ordinal_byday(selection, numbered_byday?(selection, interval)),
-             :ok <- allowed_at_frequency(selection ++ units, interval) do
-          {:ok, Enum.flat_map(selection ++ units ++ week_start, &encode_by_entry/1)}
-        end
+    tokens =
+      (selection ++ units)
+      |> Keyword.keys()
+      |> Enum.reject(&(&1 in @rrule_tokens))
+      |> Enum.uniq()
 
-      tokens ->
-        {:error,
-         ConversionError.exception(
-           reason:
-             "RRULE has no form for #{Enum.map_join(tokens, ", ", &token_description/1)}: " <>
-               Calendars.inspect(selection),
-           value: interval,
-           target: :rrule
-         )}
+    if tokens == [] do
+      with :ok <- numbers_alone(selection ++ units, interval),
+           {:ok, selection} <- weekdays_named(selection, calendar, interval),
+           {week_start, selection} = week_start(selection, interval),
+           selection = recombine_ordinal_byday(selection, numbered_byday?(selection, interval)),
+           :ok <- allowed_at_frequency(selection ++ units, interval) do
+        {:ok, Enum.flat_map(selection ++ units ++ week_start, &encode_by_entry/1)}
+      end
+    else
+      {:error,
+       ConversionError.exception(
+         reason:
+           "RRULE has no form for #{Enum.map_join(tokens, ", ", &token_description/1)}: " <>
+             Calendars.inspect(selection),
+         value: interval,
+         target: :rrule
+       )}
     end
   end
 
@@ -585,9 +586,12 @@ defmodule Tempo.RRule.Encoder do
   end
 
   defp calendar_week_start(calendar) do
-    case UnitValues.iso_weekday_from_day_of_week(1, calendar) do
-      1 -> []
-      weekday -> [wkst: weekday]
+    weekday = UnitValues.iso_weekday_from_day_of_week(1, calendar)
+
+    if weekday == 1 do
+      []
+    else
+      [wkst: weekday]
     end
   end
 
@@ -739,9 +743,12 @@ defmodule Tempo.RRule.Encoder do
   defp allowed_at_frequency(parts, interval) do
     unit = frequency(interval)
 
-    case Enum.find_value(parts, &forbidden(&1, unit, parts)) do
-      nil -> :ok
-      why -> {:error, not_allowed(why, interval)}
+    why = Enum.find_value(parts, &forbidden(&1, unit, parts))
+
+    if is_nil(why) do
+      :ok
+    else
+      {:error, not_allowed(why, interval)}
     end
   end
 

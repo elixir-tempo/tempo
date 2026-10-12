@@ -58,9 +58,12 @@ defmodule Tempo.NotBuilt do
   # in every calendar, and is written.
   @spec rrule(Interval.t()) :: :ok | {:error, ConversionError.t()}
   def rrule(%Interval{} = recurrence) do
-    case rule_calendar(recurrence) do
-      nil -> :ok
-      calendar -> rrule_in(recurrence, calendar)
+    calendar = rule_calendar(recurrence)
+
+    if is_nil(calendar) do
+      :ok
+    else
+      rrule_in(recurrence, calendar)
     end
   end
 

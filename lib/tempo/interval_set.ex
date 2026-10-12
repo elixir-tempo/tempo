@@ -705,25 +705,29 @@ defmodule Tempo.IntervalSet do
       |> Calendars.inside()
       |> duration()
     else
-      case set
-           |> coalesce()
-           |> members() do
-        [] ->
-          %Duration{time: [second: 0]}
+      members =
+        set
+        |> coalesce()
+        |> members()
 
-        members ->
-          members
-          |> Enum.map(&Interval.duration/1)
-          |> summed()
+      if members == [] do
+        %Duration{time: [second: 0]}
+      else
+        members
+        |> Enum.map(&Interval.duration/1)
+        |> summed()
       end
     end
   end
 
   # The members' lengths added up, or the first error a member gives.
   defp summed(durations) do
-    case Enum.find(durations, &match?({:error, _reason}, &1)) do
-      nil -> Duration.sum(durations)
-      error -> error
+    error = Enum.find(durations, &match?({:error, _reason}, &1))
+
+    if is_nil(error) do
+      Duration.sum(durations)
+    else
+      error
     end
   end
 
@@ -1404,9 +1408,10 @@ defmodule Tempo.IntervalSet do
   end
 
   defp emit_region(from, to, acc) do
-    case Compare.compare_endpoints(from, to) do
-      :earlier -> add_region(from, to, acc)
-      _not_a_span -> acc
+    if Compare.compare_endpoints(from, to) == :earlier do
+      add_region(from, to, acc)
+    else
+      acc
     end
   end
 
@@ -1415,9 +1420,10 @@ defmodule Tempo.IntervalSet do
   # time on both sides of it is covered, so a region that starts where the
   # one before it ends is that region going on.
   defp add_region(from, to, [%Interval{to: previous_to} = previous | rest] = acc) do
-    case Compare.compare_endpoints(previous_to, from) do
-      :same -> [%{previous | to: to} | rest]
-      _apart -> [%Interval{from: from, to: to} | acc]
+    if Compare.compare_endpoints(previous_to, from) == :same do
+      [%{previous | to: to} | rest]
+    else
+      [%Interval{from: from, to: to} | acc]
     end
   end
 
@@ -1507,9 +1513,10 @@ defmodule Tempo.IntervalSet do
     case Compare.compare_endpoints(next.from, current.to) do
       order when order in [:earlier, :same] ->
         merged_to =
-          case Compare.compare_endpoints(next.to, current.to) do
-            :later -> next.to
-            _ -> current.to
+          if Compare.compare_endpoints(next.to, current.to) == :later do
+            next.to
+          else
+            current.to
           end
 
         {:merged, %{current | to: merged_to}}

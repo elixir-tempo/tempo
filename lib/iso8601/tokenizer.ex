@@ -316,9 +316,12 @@ defmodule Tempo.Iso8601.Tokenizer do
   # innermost thing open. A closer with nothing to close changes nothing, so
   # a run of openers with none closed keeps climbing and is caught.
   defp within_limits(string) do
-    case over_a_limit(string, [], 0) do
-      nil -> :ok
-      reason -> {:error, ParseError.exception(input: string, reason: reason)}
+    reason = over_a_limit(string, [], 0)
+
+    if is_nil(reason) do
+      :ok
+    else
+      {:error, ParseError.exception(input: string, reason: reason)}
     end
   end
 

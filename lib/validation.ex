@@ -427,16 +427,16 @@ defmodule Tempo.Validation do
   # the minute of `T10H30S~`, the month and the day of `2026YT17H?`.
   defp qualify_converted(%Tempo{qualifications: %{}} = tempo, resolved, written, calendar)
        when is_list(resolved) do
-    case Qualification.whole(tempo) do
-      nil ->
-        if written != calendar or qualified_unit_gone?(tempo, resolved) do
-          Qualification.rewritten(tempo, resolved)
-        else
-          tempo
-        end
+    qualification = Qualification.whole(tempo)
 
-      qualification ->
-        %{tempo | qualifications: Qualification.complete(resolved, qualification)}
+    if is_nil(qualification) do
+      if written != calendar or qualified_unit_gone?(tempo, resolved) do
+        Qualification.rewritten(tempo, resolved)
+      else
+        tempo
+      end
+    else
+      %{tempo | qualifications: Qualification.complete(resolved, qualification)}
     end
   end
 
@@ -1731,9 +1731,12 @@ defmodule Tempo.Validation do
   end
 
   defp traditional_numbers({:ok, valid}, {:mask, digits}, read_as) do
-    case Mask.matching(UnitValues.named(1..-1//1, valid), digits) do
-      [] -> no_month_matches_error(digits, valid, read_as)
-      named -> {:ok, named}
+    named = Mask.matching(UnitValues.named(1..-1//1, valid), digits)
+
+    if named == [] do
+      no_month_matches_error(digits, valid, read_as)
+    else
+      {:ok, named}
     end
   end
 
@@ -1794,9 +1797,12 @@ defmodule Tempo.Validation do
   end
 
   defp places_matched(written, places) do
-    case places
-         |> Enum.map(&elem(&1, 0))
-         |> UnitValues.as_values() do
+    as_values =
+      places
+      |> Enum.map(&elem(&1, 0))
+      |> UnitValues.as_values()
+
+    case as_values do
       {:ok, valid} ->
         written
         |> numbers_matched(valid)
@@ -1915,9 +1921,12 @@ defmodule Tempo.Validation do
   """
   def traditional_month_from_ordinal(calendar, year, month)
       when is_integer(year) and is_integer(month) and month > 0 do
-    case Enum.at(calendar.traditional_months(year), month - 1) do
-      nil -> :error
-      traditional -> {:ok, traditional}
+    traditional = Enum.at(calendar.traditional_months(year), month - 1)
+
+    if is_nil(traditional) do
+      :error
+    else
+      {:ok, traditional}
     end
   end
 
@@ -2857,9 +2866,12 @@ defmodule Tempo.Validation do
   end
 
   def validate_zone_existence(%Tempo{time: time} = tempo) do
-    case zone_id(tempo) do
-      nil -> :ok
-      zone -> check_in_zone(tempo, zone, Enum.any?(time, &a_set?/1))
+    zone = zone_id(tempo)
+
+    if is_nil(zone) do
+      :ok
+    else
+      check_in_zone(tempo, zone, Enum.any?(time, &a_set?/1))
     end
   end
 

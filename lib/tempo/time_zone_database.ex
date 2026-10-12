@@ -198,9 +198,12 @@ defmodule Tempo.TimeZoneDatabase do
   def do_days_left_out(zone) when is_binary(zone) do
     key = {__MODULE__, :days_left_out, zone}
 
-    case :persistent_term.get(key, nil) do
-      nil -> found_days_left_out(key, zone, database())
-      days -> days
+    days = :persistent_term.get(key, nil)
+
+    if is_nil(days) do
+      found_days_left_out(key, zone, database())
+    else
+      days
     end
   end
 
@@ -269,9 +272,12 @@ defmodule Tempo.TimeZoneDatabase do
 
   # A day is left out where one gap holds its first reading and its last.
   defp left_out?(zone, date) do
-    case gap_at(zone, {date, {0, 0, 0}}) do
-      nil -> false
-      gap -> gap == gap_at(zone, {date, {23, 59, 59}})
+    gap = gap_at(zone, {date, {0, 0, 0}})
+
+    if is_nil(gap) do
+      false
+    else
+      gap == gap_at(zone, {date, {23, 59, 59}})
     end
   end
 
@@ -371,13 +377,13 @@ defmodule Tempo.TimeZoneDatabase do
   # table that each alone would not.
   defp asked_enough?(zone, blocks, questions) do
     Enum.reduce(blocks, false, fn block, enough? ->
-      case counter(zone, block) do
-        nil ->
-          enough?
+      counter = counter(zone, block)
 
-        counter ->
-          :counters.add(counter, 1, questions)
-          enough? or :counters.get(counter, 1) >= @questions_to_find_a_block
+      if is_nil(counter) do
+        enough?
+      else
+        :counters.add(counter, 1, questions)
+        enough? or :counters.get(counter, 1) >= @questions_to_find_a_block
       end
     end)
   end
@@ -385,9 +391,12 @@ defmodule Tempo.TimeZoneDatabase do
   defp counter(zone, block) do
     key = {__MODULE__, :asked, zone, block}
 
-    case :persistent_term.get(key, nil) do
-      nil -> new_counter(key, zone, database())
-      counter -> counter
+    counter = :persistent_term.get(key, nil)
+
+    if is_nil(counter) do
+      new_counter(key, zone, database())
+    else
+      counter
     end
   end
 
@@ -496,13 +505,13 @@ defmodule Tempo.TimeZoneDatabase do
   end
 
   defp clear_in_blocks?(zone, block, last, moment, margin) do
-    case :persistent_term.get({__MODULE__, :changes, zone, block}, nil) do
-      nil ->
-        false
+    changes = :persistent_term.get({__MODULE__, :changes, zone, block}, nil)
 
-      changes ->
-        not Enum.any?(changes, &(abs(elem(&1, 0) - moment) <= margin)) and
-          clear_in_blocks?(zone, block + 1, last, moment, margin)
+    if is_nil(changes) do
+      false
+    else
+      not Enum.any?(changes, &(abs(elem(&1, 0) - moment) <= margin)) and
+        clear_in_blocks?(zone, block + 1, last, moment, margin)
     end
   end
 
@@ -517,9 +526,12 @@ defmodule Tempo.TimeZoneDatabase do
   defp changes_in(zone, block) do
     key = {__MODULE__, :changes, zone, block}
 
-    case :persistent_term.get(key, nil) do
-      nil -> found_changes(key, zone, block, database())
-      changes -> changes
+    changes = :persistent_term.get(key, nil)
+
+    if is_nil(changes) do
+      found_changes(key, zone, block, database())
+    else
+      changes
     end
   end
 

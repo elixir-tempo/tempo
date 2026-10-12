@@ -274,9 +274,12 @@ defmodule Tempo.Schedule do
       |> span()
       |> Calendars.outside()
     else
-      case plan
-           |> Map.values()
-           |> Enum.map(& &1.early) do
+      early =
+        plan
+        |> Map.values()
+        |> Enum.map(& &1.early)
+
+      case early do
         [_ | _] = schedules -> span_of(schedules)
         [] -> {:error, no_span("A plan with no tasks has no span.")}
       end

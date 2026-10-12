@@ -816,15 +816,13 @@ if Code.ensure_loaded?(ICal) do
     # `punctual: true` so the instantaneous origin is not lost. This
     # covers both the no-DTEND case and an explicit `DTEND == DTSTART`.
     defp ensure_non_degenerate(from, to, metadata) do
-      case Compare.compare_endpoints(from, to) do
-        :same ->
-          {unit, _span} = Tempo.resolution(from)
-          # `from` is a parsed DTSTART — a concrete date or date-time.
-          {:ok, widened} = Math.add_unit(from, unit, from.calendar)
-          {from, widened, Map.put(metadata, :punctual, true)}
-
-        _earlier_or_later ->
-          {from, to, metadata}
+      if Compare.compare_endpoints(from, to) == :same do
+        {unit, _span} = Tempo.resolution(from)
+        # `from` is a parsed DTSTART — a concrete date or date-time.
+        {:ok, widened} = Math.add_unit(from, unit, from.calendar)
+        {from, widened, Map.put(metadata, :punctual, true)}
+      else
+        {from, to, metadata}
       end
     end
 
@@ -877,9 +875,12 @@ if Code.ensure_loaded?(ICal) do
       # after its start. RFC 7953 lists DURATION as the alternative on
       # both VAVAILABILITY and AVAILABLE, so availability needs this
       # as much as events do.
-      case duration_units(duration) do
-        [] -> {:ok, from}
-        units -> {:ok, Tempo.shift(from, units)}
+      units = duration_units(duration)
+
+      if units == [] do
+        {:ok, from}
+      else
+        {:ok, Tempo.shift(from, units)}
       end
     end
 

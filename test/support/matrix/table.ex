@@ -347,13 +347,17 @@ defmodule Tempo.Matrix.Table do
 
   # The errors of the functions that have no answer for a value.
   defp errors(refused) do
-    case refused
-         |> List.flatten()
-         |> Enum.flat_map(&error/1)
-         |> Enum.uniq()
-         |> Enum.sort() do
-      [] -> "none"
-      errors -> Enum.map_join(errors, ", ", &"`#{&1}`")
+    errors =
+      refused
+      |> List.flatten()
+      |> Enum.flat_map(&error/1)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    if errors == [] do
+      "none"
+    else
+      Enum.map_join(errors, ", ", &"`#{&1}`")
     end
   end
 

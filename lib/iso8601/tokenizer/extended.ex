@@ -152,9 +152,10 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
     minutes = List.to_integer(minutes)
     magnitude = hours * 60 + minutes
 
-    case sign do
-      ?+ -> magnitude
-      ?- -> -magnitude
+    if sign == ?+ do
+      magnitude
+    else
+      -magnitude
     end
   end
 

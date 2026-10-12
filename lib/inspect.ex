@@ -45,9 +45,12 @@ defmodule Tempo.Inspect do
     {value, qualification} = hoist_shared_qualification(value)
     {value, zone, tags} = hoist_shared_zone(value)
 
-    case value
-         |> with_calendar_names(implied)
-         |> hoist_calendar_name(implied) do
+    named =
+      value
+      |> with_calendar_names(implied)
+      |> hoist_calendar_name(implied)
+
+    case named do
       {value, calendar} ->
         with_trailers(inspect_value(value), [qualification, zone, calendar, tags])
     end
@@ -66,10 +69,13 @@ defmodule Tempo.Inspect do
   # member's own inside the braces does not parse, so one the members share
   # is written once, after the set, before any suffix.
   defp hoist_shared_qualification(%Tempo.Set{} = set) do
-    case set
-         |> named_values()
-         |> Enum.map(&Qualification.whole/1)
-         |> Enum.uniq() do
+    qualifications =
+      set
+      |> named_values()
+      |> Enum.map(&Qualification.whole/1)
+      |> Enum.uniq()
+
+    case qualifications do
       [qualification] when not is_nil(qualification) ->
         {map_named(set, &%{&1 | qualifications: nil}), inspect_qualification(qualification)}
 
@@ -301,9 +307,12 @@ defmodule Tempo.Inspect do
   end
 
   defp with_calendar_name(%Tempo{} = tempo, implied) do
-    case calendar_name(tempo, implied) do
-      :unnamed -> put_calendar_name(tempo, nil)
-      name -> put_calendar_name(tempo, name)
+    name = calendar_name(tempo, implied)
+
+    if name == :unnamed do
+      put_calendar_name(tempo, nil)
+    else
+      put_calendar_name(tempo, name)
     end
   end
 
@@ -506,9 +515,12 @@ defmodule Tempo.Inspect do
     encoded(interval, "Tempo.Interval", fn iso8601 ->
       body = rendering.(iso8601)
 
-      case interval_tags(interval) do
-        "" -> body
-        tags -> "#Tempo.Interval<" <> body <> " " <> tags <> ">"
+      tags = interval_tags(interval)
+
+      if tags == "" do
+        body
+      else
+        "#Tempo.Interval<" <> body <> " " <> tags <> ">"
       end
     end)
   end
@@ -526,15 +538,13 @@ defmodule Tempo.Inspect do
   # A calendar ISO 8601 cannot name is no obstacle here: the rendering names
   # its module.
   defp encoded(value, tag, render, implied \\ Calendars.default()) do
-    case unencodable(value) do
-      nil ->
-        value
-        |> to_iodata(implied)
-        |> IO.iodata_to_binary()
-        |> render.()
-
-      _construct ->
-        "#" <> tag <> "<not ISO 8601 expressible>"
+    if is_nil(unencodable(value)) do
+      value
+      |> to_iodata(implied)
+      |> IO.iodata_to_binary()
+      |> render.()
+    else
+      "#" <> tag <> "<not ISO 8601 expressible>"
     end
   end
 
@@ -1518,9 +1528,12 @@ defmodule Tempo.Inspect do
   # to `2004Y6M11D%`. The explicit (designator) output form has no
   # *group* representation, so complete is the only available collapse.
   defp canonical_qualifications(%Tempo{qualifications: qualifications} = tempo) do
-    case Qualification.whole(tempo) do
-      nil -> {nil, qualifications}
-      qualification -> {qualification, nil}
+    qualification = Qualification.whole(tempo)
+
+    if is_nil(qualification) do
+      {nil, qualifications}
+    else
+      {qualification, nil}
     end
   end
 

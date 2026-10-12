@@ -138,15 +138,15 @@ defmodule Tempo.Rounding do
   defp half_way_or_more?(%Tempo{time: time, calendar: calendar} = tempo, unit) do
     elapsed = elapsed(below(time, unit), 0)
 
-    case lengths(unit, time, calendar) do
-      [] ->
-        {:error, UnanchoredError.exception(value: tempo, operation: :round)}
+    lengths = lengths(unit, time, calendar)
 
-      lengths ->
-        lengths
-        |> Enum.map(&(2 * elapsed >= &1))
-        |> Enum.uniq()
-        |> one_answer(tempo)
+    if lengths == [] do
+      {:error, UnanchoredError.exception(value: tempo, operation: :round)}
+    else
+      lengths
+      |> Enum.map(&(2 * elapsed >= &1))
+      |> Enum.uniq()
+      |> one_answer(tempo)
     end
   end
 

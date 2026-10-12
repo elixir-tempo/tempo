@@ -359,9 +359,12 @@ defmodule Tempo.Explain do
   end
 
   defp scalar_parts(%Tempo{time: time} = tempo) do
-    case find_unit(time, :selection) do
-      nil -> scalar_value_parts(tempo)
-      selection -> selection_parts(tempo, time, selection)
+    selection = find_unit(time, :selection)
+
+    if is_nil(selection) do
+      scalar_value_parts(tempo)
+    else
+      selection_parts(tempo, time, selection)
     end
   end
 
@@ -1111,15 +1114,15 @@ defmodule Tempo.Explain do
   # "10:30:45". Hours with no minute are the hours they are, "hours 10 and
   # 14", and are not given the minutes they do not have.
   defp clock_times(time) do
-    case find_unit(time, :minute) do
-      nil ->
-        hours_named(values_of(find_unit(time, :hour) || 0))
+    minutes = find_unit(time, :minute)
 
-      minutes ->
-        for hour <- values_of(find_unit(time, :hour) || 0),
-            minute <- values_of(minutes),
-            second <- seconds_written(find_unit(time, :second)),
-            do: "#{two_digit(hour)}:#{two_digit(minute)}#{second}"
+    if is_nil(minutes) do
+      hours_named(values_of(find_unit(time, :hour) || 0))
+    else
+      for hour <- values_of(find_unit(time, :hour) || 0),
+          minute <- values_of(minutes),
+          second <- seconds_written(find_unit(time, :second)),
+          do: "#{two_digit(hour)}:#{two_digit(minute)}#{second}"
     end
   end
 
@@ -1243,18 +1246,24 @@ defmodule Tempo.Explain do
   # margin and, for the single-margin case, the full span the
   # groundings cover (the same widening the certainty API applies).
   defp margin_text(%Tempo{time: time} = tempo) do
-    case margin_entries(time) do
-      [] -> nil
-      entries -> describe_margins(entries, tempo)
+    entries = margin_entries(time)
+
+    if entries == [] do
+      nil
+    else
+      describe_margins(entries, tempo)
     end
   end
 
   defp margin_entries(time) do
     Enum.flat_map(time, fn
       {unit, {_value, options}} when is_list(options) ->
-        case Keyword.get(options, :margin_of_error) do
-          nil -> []
-          margin -> [{unit, margin}]
+        margin = Keyword.get(options, :margin_of_error)
+
+        if is_nil(margin) do
+          []
+        else
+          [{unit, margin}]
         end
 
       _other ->
@@ -1294,9 +1303,12 @@ defmodule Tempo.Explain do
     stripped =
       Enum.map(time, fn
         {unit, {value, options}} when is_list(options) ->
-          case Keyword.delete(options, :margin_of_error) do
-            [] -> {unit, value}
-            rest -> {unit, {value, rest}}
+          rest = Keyword.delete(options, :margin_of_error)
+
+          if rest == [] do
+            {unit, value}
+          else
+            {unit, {value, rest}}
           end
 
         other ->
@@ -1322,13 +1334,13 @@ defmodule Tempo.Explain do
   end
 
   defp qualification_text(%Tempo{qualifications: qualifications} = tempo) do
-    case Qualification.whole(tempo) do
-      nil ->
-        "Per-component qualifications: #{components_qualified(qualifications)}."
+    whole = Qualification.whole(tempo)
 
-      whole ->
-        "Expression-level qualification: #{qualification_word(whole)} " <>
-          "(EDTF #{qualification_symbol(whole)})."
+    if is_nil(whole) do
+      "Per-component qualifications: #{components_qualified(qualifications)}."
+    else
+      "Expression-level qualification: #{qualification_word(whole)} " <>
+        "(EDTF #{qualification_symbol(whole)})."
     end
   end
 
@@ -1380,9 +1392,10 @@ defmodule Tempo.Explain do
       ]
       |> Enum.reject(&(&1 in [nil, false]))
 
-    case parts do
-      [] -> nil
-      _ -> Enum.join(parts, " ")
+    if parts == [] do
+      nil
+    else
+      Enum.join(parts, " ")
     end
   end
 
@@ -1675,19 +1688,19 @@ defmodule Tempo.Explain do
   end
 
   defp metadata_part(m) do
+    s = m[:summary]
+
     text =
-      case m[:summary] do
-        nil ->
-          "Metadata: #{map_size(m)} key(s)."
+      if is_nil(s) do
+        "Metadata: #{map_size(m)} key(s)."
+      else
+        loc = m[:location]
 
-        s ->
-          loc = m[:location]
-
-          if is_binary(loc) do
-            "Event: #{s} @ #{loc}."
-          else
-            "Event: #{s}."
-          end
+        if is_binary(loc) do
+          "Event: #{s} @ #{loc}."
+        else
+          "Event: #{s}."
+        end
       end
 
     {:metadata, text}
@@ -1800,9 +1813,12 @@ defmodule Tempo.Explain do
   # carrying `^` exclusions or an `e`/`o`/`l`/`c` year filter; empty when it has
   # neither.
   defp set_qualifiers(except, filter) do
-    case exclusion_phrase(except) ++ filter_phrase(filter) do
-      [] -> ""
-      parts -> " (" <> Enum.join(parts, "; ") <> ")"
+    parts = exclusion_phrase(except) ++ filter_phrase(filter)
+
+    if parts == [] do
+      ""
+    else
+      " (" <> Enum.join(parts, "; ") <> ")"
     end
   end
 
@@ -1929,14 +1945,14 @@ defmodule Tempo.Explain do
   end
 
   defp member_rule_phrase(member) do
-    case member_name(member) do
-      nil ->
-        member
-        |> rule_phrase()
-        |> capitalised()
+    name = member_name(member)
 
-      name ->
-        "#{name}: #{rule_phrase(member)}"
+    if is_nil(name) do
+      member
+      |> rule_phrase()
+      |> capitalised()
+    else
+      "#{name}: #{rule_phrase(member)}"
     end
   end
 
@@ -2257,16 +2273,22 @@ defmodule Tempo.Explain do
   # does not say (`starts_on/1`), and with what else is to be said of it:
   # that it is no part of the span.
   defp told_endpoint(endpoint, aside \\ nil) do
-    case Enum.reject([starts_on_aside(endpoint), aside], &is_nil/1) do
-      [] -> render_endpoint(endpoint)
-      asides -> "#{render_endpoint(endpoint)} (#{Enum.join(asides, "; ")})"
+    asides = Enum.reject([starts_on_aside(endpoint), aside], &is_nil/1)
+
+    if asides == [] do
+      render_endpoint(endpoint)
+    else
+      "#{render_endpoint(endpoint)} (#{Enum.join(asides, "; ")})"
     end
   end
 
   defp starts_on_aside(endpoint) do
-    case starts_on(endpoint) do
-      nil -> nil
-      date -> "starts on #{date}"
+    date = starts_on(endpoint)
+
+    if is_nil(date) do
+      nil
+    else
+      "starts on #{date}"
     end
   end
 
@@ -2750,9 +2772,12 @@ defmodule Tempo.Explain do
   defp windowed_prose(scope, %Tempo.Interval{from: inner, duration: duration}, within, naming) do
     window = window_phrase(duration, selection_noun(scope ++ inner_selection_of(inner), naming))
 
-    case Enum.reject(within, fn {key, _value} -> key in [:origin_day, :wkst, :skip] end) do
-      [] -> window
-      selectors -> "#{flat_selection_prose(selectors, naming)} within #{window}"
+    selectors = Enum.reject(within, fn {key, _value} -> key in [:origin_day, :wkst, :skip] end)
+
+    if selectors == [] do
+      window
+    else
+      "#{flat_selection_prose(selectors, naming)} within #{window}"
     end
   end
 
@@ -3356,9 +3381,12 @@ defmodule Tempo.Explain do
   end
 
   defp plain_ordinals(members) do
-    case members
-         |> Enum.flat_map(&expand_int/1)
-         |> Enum.sort_by(&{&1 < 0, &1}) do
+    sorted =
+      members
+      |> Enum.flat_map(&expand_int/1)
+      |> Enum.sort_by(&{&1 < 0, &1})
+
+    case sorted do
       [] ->
         []
 

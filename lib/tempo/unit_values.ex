@@ -95,9 +95,12 @@ defmodule Tempo.UnitValues do
   @spec in_period(atom(), keyword(), module()) ::
           {:ok, values()} | {:error, :unanchored | :uncounted | :no_period}
   def in_period(unit, context, calendar) do
-    case listed(unit, context, calendar) do
-      :counted -> counted_in_period(unit, context, calendar)
-      listed -> listed
+    listed = listed(unit, context, calendar)
+
+    if listed == :counted do
+      counted_in_period(unit, context, calendar)
+    else
+      listed
     end
   end
 
@@ -133,15 +136,15 @@ defmodule Tempo.UnitValues do
   # The traditional months of a year are those its calendar numbers, the
   # intercalary one apart, and are counted in a year alone.
   defp listed(:traditional_month, context, calendar) do
-    case whole(context, :year) do
-      nil ->
-        {:error, :unanchored}
+    year = whole(context, :year)
 
-      year ->
-        year
-        |> traditional_months(calendar, :numbered)
-        |> Enum.map(&elem(&1, 0))
-        |> as_values()
+    if is_nil(year) do
+      {:error, :unanchored}
+    else
+      year
+      |> traditional_months(calendar, :numbered)
+      |> Enum.map(&elem(&1, 0))
+      |> as_values()
     end
   end
 
@@ -348,30 +351,42 @@ defmodule Tempo.UnitValues do
   # The last value a unit takes in the period the units before it name. A
   # step asks it of the value it steps from, so no range is built here.
   defp last_in_period(:month, context, calendar) do
-    case whole(context, :year) do
-      nil -> {:error, :unanchored}
-      year -> counted(calendar.months_in_year(year))
+    year = whole(context, :year)
+
+    if is_nil(year) do
+      {:error, :unanchored}
+    else
+      counted(calendar.months_in_year(year))
     end
   end
 
   defp last_in_period(:week, context, calendar) do
-    case whole(context, :year) do
-      nil -> {:error, :unanchored}
-      year -> counted(iso_weeks_in_year(year, calendar))
+    year = whole(context, :year)
+
+    if is_nil(year) do
+      {:error, :unanchored}
+    else
+      counted(iso_weeks_in_year(year, calendar))
     end
   end
 
   defp last_in_period(:calendar_week, context, calendar) do
-    case whole(context, :year) do
-      nil -> {:error, :unanchored}
-      year -> counted(calendar_weeks_in_year(year, calendar))
+    year = whole(context, :year)
+
+    if is_nil(year) do
+      {:error, :unanchored}
+    else
+      counted(calendar_weeks_in_year(year, calendar))
     end
   end
 
   defp last_in_period(:day_of_year, context, calendar) do
-    case whole(context, :year) do
-      nil -> {:error, :unanchored}
-      year -> counted(calendar.days_in_year(year))
+    year = whole(context, :year)
+
+    if is_nil(year) do
+      {:error, :unanchored}
+    else
+      counted(calendar.days_in_year(year))
     end
   end
 
@@ -858,9 +873,12 @@ defmodule Tempo.UnitValues do
   end
 
   defp following_among(values, value) do
-    case Enum.find(numbers(values), &(&1 > value)) do
-      nil -> :last
-      next -> {:ok, next}
+    next = Enum.find(numbers(values), &(&1 > value))
+
+    if is_nil(next) do
+      :last
+    else
+      {:ok, next}
     end
   end
 
@@ -1031,12 +1049,16 @@ defmodule Tempo.UnitValues do
   end
 
   defp preceding_among(values, value) do
-    case values
-         |> numbers()
-         |> Enum.take_while(&(&1 < value))
-         |> List.last() do
-      nil -> :first
-      previous -> {:ok, previous}
+    previous =
+      values
+      |> numbers()
+      |> Enum.take_while(&(&1 < value))
+      |> List.last()
+
+    if is_nil(previous) do
+      :first
+    else
+      {:ok, previous}
     end
   end
 
@@ -1226,14 +1248,16 @@ defmodule Tempo.UnitValues do
   end
 
   def resolve(written, %Range{} = values) when is_list(written) do
-    written
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, resolved} ->
-      case resolve(member, values) do
-        {:ok, value} -> {:cont, {:ok, [value | resolved]}}
-        {:error, _not_taken} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    all_resolved =
+      written
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, resolved} ->
+        case resolve(member, values) do
+          {:ok, value} -> {:cont, {:ok, [value | resolved]}}
+          {:error, _not_taken} = error -> {:halt, error}
+        end
+      end)
+
+    case all_resolved do
       {:ok, resolved} -> {:ok, Enum.reverse(resolved)}
       {:error, _not_taken} = error -> error
     end
@@ -1293,14 +1317,16 @@ defmodule Tempo.UnitValues do
   end
 
   defp resolve_listed(written, values) when is_list(written) do
-    written
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, resolved} ->
-      case resolve_listed(member, values) do
-        {:ok, value} -> {:cont, {:ok, [value | resolved]}}
-        {:error, _not_taken} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    all_resolved =
+      written
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, resolved} ->
+        case resolve_listed(member, values) do
+          {:ok, value} -> {:cont, {:ok, [value | resolved]}}
+          {:error, _not_taken} = error -> {:halt, error}
+        end
+      end)
+
+    case all_resolved do
       {:ok, resolved} ->
         {:ok,
          resolved
@@ -1378,9 +1404,12 @@ defmodule Tempo.UnitValues do
   def from_end(index, [%Range{} | _] = values) when is_integer(index) and index < 0 do
     numbers = numbers(values)
 
-    case Enum.at(numbers, index) do
-      nil -> first_of(values) + length(numbers) + index
-      value -> value
+    value = Enum.at(numbers, index)
+
+    if is_nil(value) do
+      first_of(values) + length(numbers) + index
+    else
+      value
     end
   end
 

@@ -246,14 +246,14 @@ defmodule Tempo.Enumeration.Zone do
   """
   @spec on_a_day_left_out?(Tempo.t()) :: boolean()
   def on_a_day_left_out?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
-    case TimeZoneDatabase.do_days_left_out(zone) do
-      [] ->
-        false
+    days = TimeZoneDatabase.do_days_left_out(zone)
 
-      days ->
-        value
-        |> in_gregorian()
-        |> on_one_of?(days)
+    if days == [] do
+      false
+    else
+      value
+      |> in_gregorian()
+      |> on_one_of?(days)
     end
   end
 
@@ -317,9 +317,12 @@ defmodule Tempo.Enumeration.Zone do
   # value that is no one reading (a set, a mask or a group in a unit) is
   # asked in full.
   defp away_from_every_change?(%Tempo{extended: %{zone_id: zone}} = value) when is_binary(zone) do
-    case value
-         |> in_gregorian()
-         |> first_reading() do
+    one_reading =
+      value
+      |> in_gregorian()
+      |> first_reading()
+
+    case one_reading do
       {:ok, reading} -> TimeZoneDatabase.do_clear_of_changes?(zone, reading, @a_day_or_so)
       :no_one_reading -> false
     end
@@ -352,9 +355,12 @@ defmodule Tempo.Enumeration.Zone do
   @spec clear_of_changes?(Tempo.t(), integer()) :: boolean()
   def clear_of_changes?(%Tempo{extended: %{zone_id: zone}} = value, seconds)
       when is_binary(zone) and is_integer(seconds) do
-    case value
-         |> in_gregorian()
-         |> first_reading() do
+    one_reading =
+      value
+      |> in_gregorian()
+      |> first_reading()
+
+    case one_reading do
       {:ok, reading} ->
         TimeZoneDatabase.do_clear_of_changes?(zone, reading, abs(seconds) + @clear_of_a_change)
 
@@ -423,10 +429,13 @@ defmodule Tempo.Enumeration.Zone do
   # The reading is found by the value's Gregorian date, and given in the
   # value's calendar.
   defp on_the_reading_shown(%Tempo{} = value, zone) do
-    case value
-         |> in_gregorian()
-         |> gregorian_reading_shown(zone)
-         |> in_calendar_of(value) do
+    one_reading =
+      value
+      |> in_gregorian()
+      |> gregorian_reading_shown(zone)
+      |> in_calendar_of(value)
+
+    case one_reading do
       {:ok, shown} -> shown
       :error -> value
     end
@@ -702,9 +711,12 @@ defmodule Tempo.Enumeration.Zone do
   @spec at_its_offset(Tempo.t()) :: Tempo.t()
   def at_its_offset(%Tempo{shift: [_ | _] = written, extended: %{zone_id: zone}} = value)
       when is_binary(zone) and zone != "" do
-    case value
-         |> in_gregorian()
-         |> first_reading() do
+    one_reading =
+      value
+      |> in_gregorian()
+      |> first_reading()
+
+    case one_reading do
       {:ok, reading} -> at_the_offset_of(value, written, offsets_at(zone, reading))
       :no_one_reading -> at_one_offset_or_none(value)
     end

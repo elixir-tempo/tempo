@@ -209,9 +209,12 @@ defmodule Tempo.Allen do
   @spec compose(Interval.relation() | Relations.t(), Interval.relation() | Relations.t()) ::
           Relations.t() | {:error, {:invalid_relation, term()}}
   def compose(first, second) when is_atom(first) and is_atom(second) do
-    case Composition.compose(first, second) do
-      nil -> {:error, {:invalid_relation, first_invalid(first, second)}}
-      relations -> relations
+    relations = Composition.compose(first, second)
+
+    if is_nil(relations) do
+      {:error, {:invalid_relation, first_invalid(first, second)}}
+    else
+      relations
     end
   end
 

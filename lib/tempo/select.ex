@@ -1612,9 +1612,10 @@ defmodule Tempo.Select do
   end
 
   defp next_day(%Date{} = date, end_date) do
-    case Compare.compare_days(date, end_date) do
-      :lt -> {{date.year, date.month, date.day}, UnitValues.day_after(date)}
-      _on_or_after_the_end -> nil
+    if Compare.compare_days(date, end_date) == :lt do
+      {{date.year, date.month, date.day}, UnitValues.day_after(date)}
+    else
+      nil
     end
   end
 
@@ -2833,9 +2834,12 @@ defmodule Tempo.Select do
   # year 1.
   defp named_in_period(time, calendar) do
     Enum.reduce_while(time, {:ok, []}, fn {unit, written}, {:ok, context} ->
-      case named(unit, written, context, calendar) do
-        :none -> {:halt, :none}
-        value -> {:cont, {:ok, context ++ [{unit, value}]}}
+      value = named(unit, written, context, calendar)
+
+      if value == :none do
+        {:halt, :none}
+      else
+        {:cont, {:ok, context ++ [{unit, value}]}}
       end
     end)
   end
@@ -2942,9 +2946,12 @@ defmodule Tempo.Select do
   # `[year, month, day, week]`, and a take_while stops at `:day`
   # before reaching `:week`.
   defp trim_finer_than_constraint(time, c_time) do
-    case finest_unit(c_time) do
-      nil -> time
-      finest -> Enum.filter(time, fn {unit, _} -> not finer_than?(unit, finest) end)
+    finest = finest_unit(c_time)
+
+    if is_nil(finest) do
+      time
+    else
+      Enum.filter(time, fn {unit, _} -> not finer_than?(unit, finest) end)
     end
   end
 
@@ -2975,16 +2982,16 @@ defmodule Tempo.Select do
   # calendar is asked for its weekday (`weekdays_in/2`), so a selector
   # selects the same weekdays in whatever calendar the span is in.
   defp day_of_week_only(c_time, selector_calendar) do
-    case Keyword.get(c_time, :day_of_week) do
-      nil ->
-        :no
+    dow = Keyword.get(c_time, :day_of_week)
 
-      dow ->
-        if Enum.any?([:year, :month, :day, :week], &Keyword.has_key?(c_time, &1)) do
-          :no
-        else
-          {:ok, weekdays_named(dow, selector_calendar)}
-        end
+    if is_nil(dow) do
+      :no
+    else
+      if Enum.any?([:year, :month, :day, :week], &Keyword.has_key?(c_time, &1)) do
+        :no
+      else
+        {:ok, weekdays_named(dow, selector_calendar)}
+      end
     end
   end
 

@@ -511,9 +511,12 @@ defmodule Tempo.Iso8601.Group do
   # year and number it is: `nil` for a value that is none.
   defp division(%Tempo{time: [{:year, year}, {:month, number}]})
        when is_integer(year) and is_integer(number) do
-    case Enum.find(@divisions, &(number in &1)) do
-      nil -> nil
-      kind -> {kind, {year, number}}
+    kind = Enum.find(@divisions, &(number in &1))
+
+    if is_nil(kind) do
+      nil
+    else
+      {kind, {year, number}}
     end
   end
 
@@ -821,29 +824,35 @@ defmodule Tempo.Iso8601.Group do
   # How many groups of `size` the container holds, the last of them short
   # where they do not divide it, or `nil` when the container is not fixed.
   defp group_count(prefix, unit, size, calendar) do
-    case container_maximum(prefix, unit, calendar) do
-      nil -> nil
-      maximum -> div(maximum - Math.unit_minimum(unit) + size, size)
+    maximum = container_maximum(prefix, unit, calendar)
+
+    if is_nil(maximum) do
+      nil
+    else
+      div(maximum - Math.unit_minimum(unit) + size, size)
     end
   end
 
   defp group_numbers(members, count) do
-    members
-    |> Enum.reduce_while([], fn member, numbers ->
-      case member_numbers(member, count) do
-        :unresolved -> {:halt, :unresolved}
-        found -> {:cont, [found | numbers]}
-      end
-    end)
-    |> case do
-      :unresolved ->
-        :unresolved
+    numbers =
+      members
+      |> Enum.reduce_while([], fn member, numbers ->
+        found = member_numbers(member, count)
 
-      numbers ->
-        {:ok,
-         numbers
-         |> Enum.reverse()
-         |> Enum.concat()}
+        if found == :unresolved do
+          {:halt, :unresolved}
+        else
+          {:cont, [found | numbers]}
+        end
+      end)
+
+    if numbers == :unresolved do
+      :unresolved
+    else
+      {:ok,
+       numbers
+       |> Enum.reverse()
+       |> Enum.concat()}
     end
   end
 
@@ -1069,9 +1078,10 @@ defmodule Tempo.Iso8601.Group do
   end
 
   defp season_date_before({:ok, date}, end_date, day) do
-    case Compare.compare_days(date, end_date) do
-      :lt -> {:ok, date}
-      _on_or_after -> season_day_error(day, end_date)
+    if Compare.compare_days(date, end_date) == :lt do
+      {:ok, date}
+    else
+      season_day_error(day, end_date)
     end
   end
 

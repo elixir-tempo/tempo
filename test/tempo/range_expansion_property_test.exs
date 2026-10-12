@@ -179,9 +179,12 @@ defmodule Tempo.RangeExpansionPropertyTest do
   # A set that resolves to a single member materialises as one
   # interval rather than a set — deliberate, so accept both shapes.
   defp members(iso) do
-    case iso
-         |> Tempo.from_iso8601!()
-         |> Tempo.to_interval() do
+    converted =
+      iso
+      |> Tempo.from_iso8601!()
+      |> Tempo.to_interval()
+
+    case converted do
       {:ok, %IntervalSet{} = set} -> IntervalSet.members(set)
       {:ok, %Interval{} = interval} -> [interval]
     end

@@ -117,9 +117,12 @@ defmodule Tempo.Enumeration do
   # (a struct built with a thirteenth month) is the walk's error rather than
   # an empty walk.
   defp walked_by_finer_unit(tempo, calendar) do
-    case tempo
-         |> add_implicit_enumeration()
-         |> Validation.validate(calendar) do
+    validated =
+      tempo
+      |> add_implicit_enumeration()
+      |> Validation.validate(calendar)
+
+    case validated do
       {:ok, %Tempo{time: time}} ->
         [{finer, _settled?} | before] =
           time
@@ -693,9 +696,12 @@ defmodule Tempo.Enumeration do
   end
 
   defp named_in_each(group, contexts, calendar, tempo) do
-    case contexts
-         |> Enum.map(&group_values(group, &1, calendar))
-         |> Enum.uniq() do
+    grouped =
+      contexts
+      |> Enum.map(&group_values(group, &1, calendar))
+      |> Enum.uniq()
+
+    case grouped do
       [{:ok, values}] ->
         {:ok,
          values

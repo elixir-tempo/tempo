@@ -1000,9 +1000,12 @@ defmodule Tempo.Math do
          %Tempo{time: time} = tempo,
          %Tempo.Duration{time: duration_time} = duration
        ) do
-    case unit_the_rule_lacks(time, duration_time) do
-      nil -> stepped_value(tempo, duration)
-      unit -> {:error, rule_unit_error(tempo, unit)}
+    unit = unit_the_rule_lacks(time, duration_time)
+
+    if is_nil(unit) do
+      stepped_value(tempo, duration)
+    else
+      {:error, rule_unit_error(tempo, unit)}
     end
   end
 
@@ -1011,14 +1014,14 @@ defmodule Tempo.Math do
   end
 
   defp add_to_value(tempo, duration) do
-    case wall_zone(tempo) do
-      nil ->
-        tempo
-        |> add_wall(duration)
-        |> landed_in_its_zone(duration)
+    zone = wall_zone(tempo)
 
-      zone ->
-        add_zoned(tempo, duration, zone)
+    if is_nil(zone) do
+      tempo
+      |> add_wall(duration)
+      |> landed_in_its_zone(duration)
+    else
+      add_zoned(tempo, duration, zone)
     end
   end
 
@@ -1473,9 +1476,10 @@ defmodule Tempo.Math do
   # no year does, and where the answer depends on the year it is not short of
   # a year: it holds several.
   defp unanchored_error(%Tempo{time: time} = tempo, duration) do
-    case year_of(time) do
-      :several -> ConversionError.exception(value: tempo, reason: :grouped_component)
-      _no_year -> UnanchoredError.exception(value: tempo, duration: duration)
+    if year_of(time) == :several do
+      ConversionError.exception(value: tempo, reason: :grouped_component)
+    else
+      UnanchoredError.exception(value: tempo, duration: duration)
     end
   end
 
@@ -1611,14 +1615,16 @@ defmodule Tempo.Math do
   end
 
   defp each_span(landed) do
-    landed
-    |> Enum.reduce_while({:ok, []}, fn stepped, {:ok, spans} ->
-      case one_span(Tempo.to_interval(stepped)) do
-        {:ok, span} -> {:cont, {:ok, [span | spans]}}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    all_spans =
+      landed
+      |> Enum.reduce_while({:ok, []}, fn stepped, {:ok, spans} ->
+        case one_span(Tempo.to_interval(stepped)) do
+          {:ok, span} -> {:cont, {:ok, [span | spans]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+
+    case all_spans do
       {:ok, spans} -> {:ok, Enum.reverse(spans)}
       {:error, _reason} = error -> error
     end
@@ -1773,9 +1779,10 @@ defmodule Tempo.Math do
   defp stepped_or_each_candidate({:error, :grouped_component} = refused, tempo, duration) do
     masked = unspecified_as_masks(tempo, :every)
 
-    case find_masks(masked.time) do
-      [] -> refused
-      _masks -> shift_masked(tempo, masked, duration)
+    if find_masks(masked.time) == [] do
+      refused
+    else
+      shift_masked(tempo, masked, duration)
     end
   end
 
@@ -1786,9 +1793,10 @@ defmodule Tempo.Math do
   defp route_value_by_value(tempo, duration) do
     masked = unspecified_as_masks(tempo, :every)
 
-    case find_masks(masked.time) do
-      [] -> shift_each_or_crisp(tempo, duration)
-      _masks -> shift_masked(tempo, masked, duration)
+    if find_masks(masked.time) == [] do
+      shift_each_or_crisp(tempo, duration)
+    else
+      shift_masked(tempo, masked, duration)
     end
   end
 
@@ -2023,10 +2031,12 @@ defmodule Tempo.Math do
   # requires. `2026Y32W + P2D` is `2026Y32W3K`, and seven days later is
   # the next week's Monday.
   defp translate_week_axis_duration(duration_time, calendar) do
-    duration_time
-    |> week_fraction_to_days(calendar)
-    |> Keyword.pop(:day, 0)
-    |> case do
+    popped =
+      duration_time
+      |> week_fraction_to_days(calendar)
+      |> Keyword.pop(:day, 0)
+
+    case popped do
       {0, rest} -> rest
       {days, rest} -> rest ++ [day_of_week: days]
     end
@@ -2372,14 +2382,16 @@ defmodule Tempo.Math do
   # The span of each candidate, shifted. The first candidate that cannot be
   # shifted is the answer for them all.
   defp shifted_spans(candidates, duration) do
-    candidates
-    |> Enum.reduce_while({:ok, []}, fn candidate, {:ok, spans} ->
-      case shifted_span(candidate, duration) do
-        {:ok, span} -> {:cont, {:ok, [span | spans]}}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    all_spans =
+      candidates
+      |> Enum.reduce_while({:ok, []}, fn candidate, {:ok, spans} ->
+        case shifted_span(candidate, duration) do
+          {:ok, span} -> {:cont, {:ok, [span | spans]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+
+    case all_spans do
       {:ok, spans} -> {:ok, Enum.reverse(spans)}
       {:error, _reason} = error -> error
     end
@@ -2433,15 +2445,17 @@ defmodule Tempo.Math do
   end
 
   defp each_stepped(values, %Tempo{} = tempo, annotations, step) do
-    values
-    |> Enum.reduce_while({:ok, []}, fn value, {:ok, landed} ->
-      case step.(value) do
-        %Tempo{} = stepped -> {:cont, {:ok, [stepped | landed]}}
-        {:error, _reason} = error -> {:halt, error}
-        _several_values -> {:halt, {:error, :grouped_component}}
-      end
-    end)
-    |> case do
+    all_landed =
+      values
+      |> Enum.reduce_while({:ok, []}, fn value, {:ok, landed} ->
+        case step.(value) do
+          %Tempo{} = stepped -> {:cont, {:ok, [stepped | landed]}}
+          {:error, _reason} = error -> {:halt, error}
+          _several_values -> {:halt, {:error, :grouped_component}}
+        end
+      end)
+
+    case all_landed do
       {:ok, landed} ->
         landed
         |> Enum.reverse()
@@ -2605,14 +2619,16 @@ defmodule Tempo.Math do
   end
 
   defp spans_of(landed) do
-    landed
-    |> Enum.reduce_while({:ok, []}, fn date, {:ok, spans} ->
-      case one_span(Tempo.to_interval(date)) do
-        {:ok, span} -> {:cont, {:ok, [span | spans]}}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    all_spans =
+      landed
+      |> Enum.reduce_while({:ok, []}, fn date, {:ok, spans} ->
+        case one_span(Tempo.to_interval(date)) do
+          {:ok, span} -> {:cont, {:ok, [span | spans]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+
+    case all_spans do
       {:ok, spans} -> IntervalSet.new(Enum.reverse(spans))
       {:error, _reason} = error -> error
     end
@@ -2622,31 +2638,33 @@ defmodule Tempo.Math do
   # coarse to fine so a sub-year mask sees the concrete coarser values it
   # depends on (a month's valid range needs its year).
   defp fill_masks(time, calendar, which) do
-    time
-    |> Enum.reduce_while({:ok, []}, fn
-      {unit, {:mask, mask}}, {:ok, filled} ->
-        case mask_candidate_bounds(unit, mask, Enum.reverse(filled), calendar) do
-          {:ok, {min_value, max_value}} ->
-            {:cont,
-             {:ok,
-              [
-                {unit,
-                 if which == :min do
-                   min_value
-                 else
-                   max_value
-                 end}
-                | filled
-              ]}}
+    all_filled =
+      time
+      |> Enum.reduce_while({:ok, []}, fn
+        {unit, {:mask, mask}}, {:ok, filled} ->
+          case mask_candidate_bounds(unit, mask, Enum.reverse(filled), calendar) do
+            {:ok, {min_value, max_value}} ->
+              {:cont,
+               {:ok,
+                [
+                  {unit,
+                   if which == :min do
+                     min_value
+                   else
+                     max_value
+                   end}
+                  | filled
+                ]}}
 
-          {:error, _reason} = error ->
-            {:halt, error}
-        end
+            {:error, _reason} = error ->
+              {:halt, error}
+          end
 
-      entry, {:ok, filled} ->
-        {:cont, {:ok, [entry | filled]}}
-    end)
-    |> case do
+        entry, {:ok, filled} ->
+          {:cont, {:ok, [entry | filled]}}
+      end)
+
+    case all_filled do
       {:ok, filled} -> {:ok, Enum.reverse(filled)}
       {:error, _reason} = error -> error
     end
@@ -2805,13 +2823,11 @@ defmodule Tempo.Math do
   defp normalise_duration(duration_time, calendar) do
     {weeks, rest} = Keyword.pop(duration_time, :week, 0)
 
-    case weeks do
-      0 ->
-        rest
-
-      _ ->
-        days = trunc(weeks * calendar.days_in_week())
-        Keyword.update(rest, :day, days, &(&1 + days))
+    if weeks == 0 do
+      rest
+    else
+      days = trunc(weeks * calendar.days_in_week())
+      Keyword.update(rest, :day, days, &(&1 + days))
     end
   end
 
@@ -2907,9 +2923,12 @@ defmodule Tempo.Math do
 
   defp apply_units({:ok, time}, units, duration_time, calendar) do
     Enum.reduce_while(units, {:ok, time}, fn unit, {:ok, acc} ->
-      case Keyword.get(duration_time, unit, 0) do
-        0 -> {:cont, {:ok, acc}}
-        n -> step_or_halt(apply_duration_component(acc, unit, n, calendar))
+      n = Keyword.get(duration_time, unit, 0)
+
+      if n == 0 do
+        {:cont, {:ok, acc}}
+      else
+        step_or_halt(apply_duration_component(acc, unit, n, calendar))
       end
     end)
   end
@@ -3363,9 +3382,12 @@ defmodule Tempo.Math do
   # A clock unit the value does not track counts from zero, and is not
   # written back.
   defp clock_or_zero(time, unit) do
-    case component(time, unit) do
-      :untracked -> {:ok, 0}
-      other -> other
+    other = component(time, unit)
+
+    if other == :untracked do
+      {:ok, 0}
+    else
+      other
     end
   end
 
@@ -3682,20 +3704,22 @@ defmodule Tempo.Math do
   end
 
   defp normalize_busy(busy) when is_list(busy) do
-    busy
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
-      case Tempo.to_interval(member) do
-        {:ok, %Interval{} = interval} ->
-          {:cont, {:ok, [interval | acc]}}
+    gathered =
+      busy
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+        case Tempo.to_interval(member) do
+          {:ok, %Interval{} = interval} ->
+            {:cont, {:ok, [interval | acc]}}
 
-        {:ok, %IntervalSet{} = set} ->
-          {:cont, {:ok, Enum.reverse(IntervalSet.members(set)) ++ acc}}
+          {:ok, %IntervalSet{} = set} ->
+            {:cont, {:ok, Enum.reverse(IntervalSet.members(set)) ++ acc}}
 
-        {:error, _} = error ->
-          {:halt, error}
-      end
-    end)
-    |> case do
+          {:error, _} = error ->
+            {:halt, error}
+        end
+      end)
+
+    case gathered do
       {:ok, intervals} ->
         intervals
         |> Enum.reverse()
@@ -3872,31 +3896,33 @@ defmodule Tempo.Math do
   end
 
   defp walk_forward(pos, pos_s, remaining, spans) do
-    spans
-    |> Enum.reduce_while({pos, pos_s, remaining}, fn
-      {from_s, to_s, _from, to}, {pos, pos_s, remaining} ->
-        cond do
-          # Busy span entirely behind the position (its exclusive end
-          # at or before us) — irrelevant.
-          to_s <= pos_s ->
-            {:cont, {pos, pos_s, remaining}}
+    walked =
+      spans
+      |> Enum.reduce_while({pos, pos_s, remaining}, fn
+        {from_s, to_s, _from, to}, {pos, pos_s, remaining} ->
+          cond do
+            # Busy span entirely behind the position (its exclusive end
+            # at or before us) — irrelevant.
+            to_s <= pos_s ->
+              {:cont, {pos, pos_s, remaining}}
 
-          # Position inside `[from, to)` — eject to the span's end at
-          # no cost, then keep walking.
-          pos_s >= from_s ->
-            {:cont, {to, to_s, remaining}}
+            # Position inside `[from, to)` — eject to the span's end at
+            # no cost, then keep walking.
+            pos_s >= from_s ->
+              {:cont, {to, to_s, remaining}}
 
-          # The free run before this span satisfies what remains.
-          # Equality lands exactly on the span's start: the duration is
-          # fully consumed at the instant the busy time begins.
-          remaining <= from_s - pos_s ->
-            {:halt, {:landed, land(pos, remaining)}}
+            # The free run before this span satisfies what remains.
+            # Equality lands exactly on the span's start: the duration is
+            # fully consumed at the instant the busy time begins.
+            remaining <= from_s - pos_s ->
+              {:halt, {:landed, land(pos, remaining)}}
 
-          true ->
-            {:cont, {to, to_s, remaining - (from_s - pos_s)}}
-        end
-    end)
-    |> case do
+            true ->
+              {:cont, {to, to_s, remaining - (from_s - pos_s)}}
+          end
+      end)
+
+    case walked do
       {:landed, result} -> result
       {pos, _pos_s, remaining} -> land(pos, remaining)
     end

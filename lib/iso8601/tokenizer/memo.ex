@@ -59,9 +59,10 @@ defmodule Tempo.Iso8601.Tokenizer.Memo do
   @doc false
   # Marks where a reading starts, unless it is known to be refused here.
   def start(rest, [], context, _line, _offset, name) do
-    case known(name, rest, context) do
-      :refused -> {:error, "expected #{name}"}
-      _not_tried -> {rest, [{@table, place(rest), context}], context}
+    if known(name, rest, context) == :refused do
+      {:error, "expected #{name}"}
+    else
+      {rest, [{@table, place(rest), context}], context}
     end
   end
 

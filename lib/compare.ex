@@ -568,9 +568,12 @@ defmodule Tempo.Compare do
 
   defp order_points(%Tempo{} = a, %Tempo{} = b) do
     if structural?(a, b) do
-      case compare_time(a.time, b.time) do
-        :eq -> :same
-        order -> order_in_one_zone(a, b, order)
+      order = compare_time(a.time, b.time)
+
+      if order == :eq do
+        :same
+      else
+        order_in_one_zone(a, b, order)
       end
     else
       compare_via_utc(a, b)
@@ -875,9 +878,12 @@ defmodule Tempo.Compare do
   end
 
   def do_compare(%Interval{} = a, %Interval{} = b, options) do
-    case compare_bound(a.from, b.from, :from, options) do
-      :eq -> compare_bound(a.to, b.to, :to, options)
-      order -> order
+    order = compare_bound(a.from, b.from, :from, options)
+
+    if order == :eq do
+      compare_bound(a.to, b.to, :to, options)
+    else
+      order
     end
   end
 
@@ -998,9 +1004,12 @@ defmodule Tempo.Compare do
   def drop_margin_of_error(time) do
     Enum.map(time, fn
       {unit, {value, options}} when is_list(options) ->
-        case Keyword.delete(options, :margin_of_error) do
-          [] -> {unit, value}
-          remaining -> {unit, {value, remaining}}
+        remaining = Keyword.delete(options, :margin_of_error)
+
+        if remaining == [] do
+          {unit, value}
+        else
+          {unit, {value, remaining}}
         end
 
       other ->
@@ -1606,9 +1615,12 @@ defmodule Tempo.Compare do
   # Ambiguous wall time (DST fall-back): prefer the period whose
   # offset matches the explicit disambiguator, else the first period.
   defp ambiguous_offset(periods, preferred) do
-    case Enum.find(periods, &(TimeZoneDatabase.do_total_offset(&1) == preferred)) do
-      nil -> TimeZoneDatabase.do_total_offset(hd(periods))
-      period -> TimeZoneDatabase.do_total_offset(period)
+    period = Enum.find(periods, &(TimeZoneDatabase.do_total_offset(&1) == preferred))
+
+    if is_nil(period) do
+      TimeZoneDatabase.do_total_offset(hd(periods))
+    else
+      TimeZoneDatabase.do_total_offset(period)
     end
   end
 

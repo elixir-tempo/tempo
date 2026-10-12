@@ -581,9 +581,10 @@ defmodule Tempo do
   # A value built with no calendar, or with `nil` for one, is in the
   # calendar a value that names none is in.
   defp in_a_calendar(options) do
-    case Keyword.get(options, :calendar) do
-      nil -> Keyword.put(options, :calendar, Calendars.default())
-      _named -> options
+    if is_nil(Keyword.get(options, :calendar)) do
+      Keyword.put(options, :calendar, Calendars.default())
+    else
+      options
     end
   end
 
@@ -1206,13 +1207,13 @@ defmodule Tempo do
   # which the extended format writes without the ambiguity, or for a time of
   # day, which keeps its `T` in the basic format as an end after a time does.
   defp basic_end_advice(<<year::binary-4, month::binary-2, day::binary-2>>, "", digits) do
-    case month_and_day(digits) do
-      nil ->
-        "Write a time of day with its `T` (`#{year}#{month}#{day}/T#{digits}`), or the end in full."
+    month_day = month_and_day(digits)
 
-      month_day ->
-        "Write a month and a day in the extended format (`#{year}-#{month}-#{day}/#{month_day}`), " <>
-          "a time of day with its `T` (`#{year}#{month}#{day}/T#{digits}`), or the end in full."
+    if is_nil(month_day) do
+      "Write a time of day with its `T` (`#{year}#{month}#{day}/T#{digits}`), or the end in full."
+    else
+      "Write a month and a day in the extended format (`#{year}-#{month}-#{day}/#{month_day}`), " <>
+        "a time of day with its `T` (`#{year}#{month}#{day}/T#{digits}`), or the end in full."
     end
   end
 
@@ -2050,9 +2051,12 @@ defmodule Tempo do
          %__MODULE__{shift: [_ | _], extended: %{} = extended} = value,
          strict?
        ) do
-    case zone_beside(extended) do
-      nil -> {:ok, value}
-      zone -> on_the_clock_of(value, zone, strict?)
+    zone = zone_beside(extended)
+
+    if is_nil(zone) do
+      {:ok, value}
+    else
+      on_the_clock_of(value, zone, strict?)
     end
   end
 
@@ -3334,9 +3338,12 @@ defmodule Tempo do
   end
 
   defp read_span(%Tempo.Interval{} = interval) do
-    case interval
-         |> Interval.resolve_duration_form()
-         |> Interval.endpoints_as_points() do
+    as_points =
+      interval
+      |> Interval.resolve_duration_form()
+      |> Interval.endpoints_as_points()
+
+    case as_points do
       {:ok, %Tempo.Interval{to: nil, duration: %Duration{}}} -> raise uncounted_duration(interval)
       {:ok, span} -> span
       {:error, exception} -> raise exception
@@ -3376,9 +3383,12 @@ defmodule Tempo do
   # `from`'s resolution for such single-granule spans; a wider span keeps
   # the coarsest unit at which the endpoints genuinely differ.
   defp interval_component_resolution(from, to, interval) do
-    case single_granule_unit(from, to) do
-      nil -> Interval.resolution(interval)
-      unit -> unit
+    unit = single_granule_unit(from, to)
+
+    if is_nil(unit) do
+      Interval.resolution(interval)
+    else
+      unit
     end
   end
 
@@ -3705,20 +3715,20 @@ defmodule Tempo do
   defp take_units(%__MODULE__{time: time} = tempo, truncate_to) do
     {dated, selection} = Enum.split_while(time, &(not match?({:selection, _selection}, &1)))
 
-    case Enum.take_while(dated, &(Unit.compare(&1, truncate_to) in [:gt, :eq])) do
-      [] ->
-        {:error,
-         ResolutionError.exception(
-           operation: :trunc,
-           target: truncate_to,
-           current:
-             resolution(tempo)
-             |> elem(0),
-           reason: :empty_resolution
-         )}
+    kept = Enum.take_while(dated, &(Unit.compare(&1, truncate_to) in [:gt, :eq]))
 
-      kept ->
-        %{tempo | time: kept_with_selection(kept, dated, selection, truncate_to)}
+    if kept == [] do
+      {:error,
+       ResolutionError.exception(
+         operation: :trunc,
+         target: truncate_to,
+         current:
+           resolution(tempo)
+           |> elem(0),
+         reason: :empty_resolution
+       )}
+    else
+      %{tempo | time: kept_with_selection(kept, dated, selection, truncate_to)}
     end
   end
 
@@ -5885,15 +5895,17 @@ defmodule Tempo do
   end
 
   defp in_calendar(%IntervalSet{} = set, calendar) do
-    set
-    |> IntervalSet.members()
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
-      case in_calendar(member, calendar) do
-        {:ok, converted} -> {:cont, {:ok, [converted | acc]}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-    |> case do
+    all_converted =
+      set
+      |> IntervalSet.members()
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+        case in_calendar(member, calendar) do
+          {:ok, converted} -> {:cont, {:ok, [converted | acc]}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+
+    case all_converted do
       {:ok, members} -> IntervalSet.new(Enum.reverse(members))
       {:error, reason} -> {:error, reason}
     end
@@ -6200,9 +6212,12 @@ defmodule Tempo do
 
     # `Tempo.Duration.new!/1` re-attaches `second: 0` when only a
     # microsecond is present, so we don't have to here.
-    case integers ++ microsecond do
-      [] -> [second: 0]
-      components -> components
+    components = integers ++ microsecond
+
+    if components == [] do
+      [second: 0]
+    else
+      components
     end
   end
 
@@ -7912,9 +7927,12 @@ defmodule Tempo do
   @shift_units [:year, :month, :week, :day, :hour, :minute, :second]
 
   defp shift_units(units) do
-    case Enum.find(units, &(not shift_unit?(&1))) do
-      nil -> {:ok, units}
-      other -> {:error, shift_unit_error(other)}
+    other = Enum.find(units, &(not shift_unit?(&1)))
+
+    if is_nil(other) do
+      {:ok, units}
+    else
+      {:error, shift_unit_error(other)}
     end
   end
 
@@ -8563,9 +8581,12 @@ defmodule Tempo do
   # a span in each of its groups, which nothing expands, so the interval has
   # no one start to count from or end to count to.
   defp ends_expand(%Interval{from: from, to: to}) do
-    case Enum.find([from, to], &group_of_set_end?/1) do
-      nil -> :ok
-      endpoint -> {:error, materialisation_error(endpoint, :grouped_component)}
+    endpoint = Enum.find([from, to], &group_of_set_end?/1)
+
+    if is_nil(endpoint) do
+      :ok
+    else
+      {:error, materialisation_error(endpoint, :grouped_component)}
     end
   end
 
@@ -8648,15 +8669,17 @@ defmodule Tempo do
   end
 
   defp members_between_points(set) do
-    set
-    |> IntervalSet.members()
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, spans} ->
-      case Interval.endpoints_as_points(member) do
-        {:ok, span} -> {:cont, {:ok, [span | spans]}}
-        {:error, _exception} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    as_points =
+      set
+      |> IntervalSet.members()
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, spans} ->
+        case Interval.endpoints_as_points(member) do
+          {:ok, span} -> {:cont, {:ok, [span | spans]}}
+          {:error, _exception} = error -> {:halt, error}
+        end
+      end)
+
+    case as_points do
       {:ok, spans} -> IntervalSet.new(Enum.reverse(spans), metadata: IntervalSet.metadata(set))
       {:error, _exception} = error -> error
     end
@@ -8832,14 +8855,16 @@ defmodule Tempo do
   end
 
   defp spans_between(values, ends, metadata) do
-    values
-    |> Enum.reduce_while({:ok, []}, fn value, {:ok, spans} ->
-      case span_between(ends.(value), metadata) do
-        {:ok, span} -> {:cont, {:ok, [span | spans]}}
-        {:error, _exception} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    all_spans =
+      values
+      |> Enum.reduce_while({:ok, []}, fn value, {:ok, spans} ->
+        case span_between(ends.(value), metadata) do
+          {:ok, span} -> {:cont, {:ok, [span | spans]}}
+          {:error, _exception} = error -> {:halt, error}
+        end
+      end)
+
+    case all_spans do
       {:ok, spans} -> {:ok, Enum.reverse(spans)}
       {:error, _exception} = error -> error
     end
@@ -9979,24 +10004,24 @@ defmodule Tempo do
   # where `COUNT=2` was nothing, and a window that is no window was passed
   # over. One with no rule is the interval it is, as an interval is.
   defp from_where_its_window_starts(%Tempo.Interval{} = interval, opts) do
-    case Keyword.get(opts, :within) do
-      nil ->
-        {:error,
-         IntervalEndpointsError.exception(
-           interval: interval,
-           operation: "convert a recurrence that has no start",
-           reason: :open_start
-         )}
+    within = Keyword.get(opts, :within)
 
-      within ->
-        case window_start(within, interval) do
-          {:ok, start} ->
-            start = in_rule_zone(start, interval)
-            materialise_from_bound(interval, start, within, counted_from_window(opts, within))
+    if is_nil(within) do
+      {:error,
+       IntervalEndpointsError.exception(
+         interval: interval,
+         operation: "convert a recurrence that has no start",
+         reason: :open_start
+       )}
+    else
+      case window_start(within, interval) do
+        {:ok, start} ->
+          start = in_rule_zone(start, interval)
+          materialise_from_bound(interval, start, within, counted_from_window(opts, within))
 
-          {:error, _} = error ->
-            error
-        end
+        {:error, _} = error ->
+          error
+      end
     end
   end
 
@@ -10543,9 +10568,12 @@ defmodule Tempo do
   # unchanged and otherwise omits the option — letting
   # `IntervalSet.new/2` apply its own default.
   defp coalesce_opt(opts) do
-    case Keyword.get(opts, :coalesce) do
-      nil -> false
-      value -> value
+    value = Keyword.get(opts, :coalesce)
+
+    if is_nil(value) do
+      false
+    else
+      value
     end
   end
 
@@ -12560,9 +12588,12 @@ defmodule Tempo do
     # Read it straight from the AST rather than through `resolution/1`, whose
     # declared `time_unit()` return elides the selection-only keys (`:byday`,
     # `:day_of_week`) this must normalise.
-    case selection
-         |> Enum.reject(&context?/1)
-         |> List.last() do
+    finest =
+      selection
+      |> Enum.reject(&context?/1)
+      |> List.last()
+
+    case finest do
       {finest_unit, _value} ->
         finest_unit
         |> calendar_start_unit(stepped_by(interval))
@@ -13153,15 +13184,17 @@ defmodule Tempo do
   # periods — each starting where the one before ends, as the years of
   # `{2020Y..2024Y}` do — run as one recurrence across them.
   defp reduce_domain_occurrences(domain_intervals, %Tempo.Interval{} = interval) do
-    domain_intervals
-    |> adjacent_periods()
-    |> Enum.reduce_while({:ok, []}, fn {first, last}, {:ok, acc} ->
-      case run_occurrences(interval, Interval.from(first), Interval.to(last)) do
-        {:ok, own} -> {:cont, {:ok, acc ++ own}}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    runs =
+      domain_intervals
+      |> adjacent_periods()
+      |> Enum.reduce_while({:ok, []}, fn {first, last}, {:ok, acc} ->
+        case run_occurrences(interval, Interval.from(first), Interval.to(last)) do
+          {:ok, own} -> {:cont, {:ok, acc ++ own}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+
+    case runs do
       {:ok, intervals} -> IntervalSet.new(intervals)
       {:error, _} = err -> err
     end
@@ -13376,14 +13409,16 @@ defmodule Tempo do
   end
 
   defp close_domain_ranges(%Tempo.Set{set: members} = domain, {bound_from, bound_to}) do
-    members
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
-      case close_domain_range(member, bound_from, bound_to) do
-        {:ok, closed} -> {:cont, {:ok, [closed | acc]}}
-        {:error, _} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    all_closed =
+      members
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+        case close_domain_range(member, bound_from, bound_to) do
+          {:ok, closed} -> {:cont, {:ok, [closed | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case all_closed do
       {:ok, closed} -> {:ok, %{domain | set: Enum.reverse(closed)}}
       {:error, _} = error -> error
     end
@@ -13526,14 +13561,16 @@ defmodule Tempo do
   end
 
   defp members_occurrences(members, opts) do
-    members
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
-      case recurrence_set_member(member, opts) do
-        {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
-        {:error, _} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    all_occurrences =
+      members
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+        case recurrence_set_member(member, opts) do
+          {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case all_occurrences do
       {:ok, occurrences} ->
         {:ok,
          occurrences
@@ -13654,15 +13691,17 @@ defmodule Tempo do
   end
 
   defp others_occurrences(first_pass, _widened_opts, opts) do
-    first_pass
-    |> Enum.reject(&match?({_index, %Conditional{}, _occurrences}, &1))
-    |> Enum.reduce_while({:ok, []}, fn {_index, member, occurrences}, {:ok, acc} ->
-      case in_the_window(member, occurrences, opts) do
-        {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
-        {:error, _} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    in_windows =
+      first_pass
+      |> Enum.reject(&match?({_index, %Conditional{}, _occurrences}, &1))
+      |> Enum.reduce_while({:ok, []}, fn {_index, member, occurrences}, {:ok, acc} ->
+        case in_the_window(member, occurrences, opts) do
+          {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case in_windows do
       {:ok, occurrences} ->
         {:ok,
          occurrences
@@ -13831,15 +13870,17 @@ defmodule Tempo do
   # Every member's occurrences, a conditional's being its member's, tagged with
   # the conditional's metadata as a nested set's are.
   defp first_pass_occurrences(members, opts) do
-    members
-    |> Enum.with_index()
-    |> Enum.reduce_while({:ok, []}, fn {member, index}, {:ok, acc} ->
-      case recurrence_set_member(first_pass_member(member), opts) do
-        {:ok, occurrences} -> {:cont, {:ok, [{index, member, occurrences} | acc]}}
-        {:error, _} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    first_pass =
+      members
+      |> Enum.with_index()
+      |> Enum.reduce_while({:ok, []}, fn {member, index}, {:ok, acc} ->
+        case recurrence_set_member(first_pass_member(member), opts) do
+          {:ok, occurrences} -> {:cont, {:ok, [{index, member, occurrences} | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case first_pass do
       {:ok, entries} -> {:ok, Enum.reverse(entries)}
       {:error, _} = error -> error
     end
@@ -14163,14 +14204,16 @@ defmodule Tempo do
   @spec try_map(Enumerable.t(), (term() -> term())) ::
           {:ok, Tempo.IntervalSet.t()} | {:error, error_reason()}
   def try_map(enumerable, fun) when is_function(fun, 1) do
-    enumerable
-    |> Enum.reduce_while([], fn element, acc ->
-      case to_interval(fun.(element)) do
-        {:ok, interval} -> {:cont, [interval | acc]}
-        {:error, _} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    gathered =
+      enumerable
+      |> Enum.reduce_while([], fn element, acc ->
+        case to_interval(fun.(element)) do
+          {:ok, interval} -> {:cont, [interval | acc]}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case gathered do
       {:error, _} = error -> error
       intervals -> IntervalSet.new(Enum.reverse(intervals))
     end
@@ -14235,14 +14278,16 @@ defmodule Tempo do
   # of a year, of each year the context names. They are listed as a value's
   # values are, no more than `@spans_at_once` of them.
   defp selection_members(tempo, years, finer_context) do
-    years
-    |> Stream.flat_map(&context_members(%{tempo | time: [{:year, &1} | finer_context]}))
-    |> Enum.reduce_while({[], 0}, fn
-      {:error, _exception} = error, _listed -> {:halt, error}
-      _period, {_periods, @spans_at_once} -> {:halt, {:error, too_many_spans_error(tempo)}}
-      period, {periods, count} -> {:cont, {[period | periods], count + 1}}
-    end)
-    |> case do
+    gathered =
+      years
+      |> Stream.flat_map(&context_members(%{tempo | time: [{:year, &1} | finer_context]}))
+      |> Enum.reduce_while({[], 0}, fn
+        {:error, _exception} = error, _listed -> {:halt, error}
+        _period, {_periods, @spans_at_once} -> {:halt, {:error, too_many_spans_error(tempo)}}
+        period, {periods, count} -> {:cont, {[period | periods], count + 1}}
+      end)
+
+    case gathered do
       {:error, _exception} = error -> error
       {periods, _count} -> {:ok, Enum.reverse(periods)}
     end
@@ -14625,9 +14670,12 @@ defmodule Tempo do
   # read in each year of the block and not once for the block, and they are
   # the value itself where every digit is significant (`1950S4` is 1950).
   defp crisp_reading(%Tempo{time: time, calendar: calendar} = tempo) do
-    case time
-         |> Compare.drop_margin_of_error()
-         |> Interval.significant_digits_as_mask() do
+    masked =
+      time
+      |> Compare.drop_margin_of_error()
+      |> Interval.significant_digits_as_mask()
+
+    case masked do
       ^time -> {:ok, tempo}
       crisp -> Validation.validate(%{tempo | time: crisp}, calendar)
     end
@@ -15978,10 +16026,13 @@ defmodule Tempo do
   # Nothing against `duration`: the signs of its components decide, as they
   # agree in a duration as it is written.
   defp zero_length_order(%Duration{time: time} = duration) do
-    case time
-         |> Enum.map(&component_sign/1)
-         |> Enum.uniq()
-         |> List.delete(0) do
+    signs =
+      time
+      |> Enum.map(&component_sign/1)
+      |> Enum.uniq()
+      |> List.delete(0)
+
+    case signs do
       [] -> :eq
       [1] -> :lt
       [-1] -> :gt

@@ -238,10 +238,13 @@ defmodule Tempo.RecurrenceWindowTest do
         {:error, %UnboundedRecurrenceError{}} -> :cut_short
       end
 
+    walked = walked_from_the_start(value, Interval.to(span))
+
     in_window =
-      case walked_from_the_start(value, Interval.to(span)) do
-        :cut_short -> :cut_short
-        walked -> for {from, to} <- walked, from < window_to and to > window_from, do: {from, to}
+      if walked == :cut_short do
+        :cut_short
+      else
+        for {from, to} <- walked, from < window_to and to > window_from, do: {from, to}
       end
 
     {text, window, kept, in_window}

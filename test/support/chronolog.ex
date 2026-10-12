@@ -140,14 +140,12 @@ defmodule Tempo.Network.ChronoLog do
     period1 = synchronism["period1"]
     period2 = synchronism["period2"]
 
-    case synchronism["beforeAfter"] do
-      "a" ->
-        relation = {:delay, boundary2, boundary1, comparison, delay}
-        Network.add_relation(network, relation, period2, period1)
-
-      "b" ->
-        relation = {:delay, boundary1, boundary2, comparison, delay}
-        Network.add_relation(network, relation, period1, period2)
+    if synchronism["beforeAfter"] == "a" do
+      relation = {:delay, boundary2, boundary1, comparison, delay}
+      Network.add_relation(network, relation, period2, period1)
+    else
+      relation = {:delay, boundary1, boundary2, comparison, delay}
+      Network.add_relation(network, relation, period1, period2)
     end
   end
 

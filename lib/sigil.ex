@@ -327,10 +327,13 @@ defmodule Tempo.Sigils do
     # instead of being forced to Gregorian. A `W` modifier is an
     # explicit calendar choice that wins, matching `from_iso8601/2`'s
     # "explicit calendar always wins" rule.
+    calendar = Options.calendar_from(opts)
+
     result =
-      case Options.calendar_from(opts) do
-        nil -> Tempo.from_iso8601(string)
-        calendar -> Tempo.from_iso8601(string, calendar)
+      if is_nil(calendar) do
+        Tempo.from_iso8601(string)
+      else
+        Tempo.from_iso8601(string, calendar)
       end
 
     case result do
@@ -606,14 +609,14 @@ defmodule Tempo.Sigils do
   end
 
   defp index_in_axis!(unit, axis) do
-    case Enum.find_index(axis, &(&1 == unit)) do
-      nil ->
-        raise ArgumentError,
-              "~o sigil in a match context cannot place unit #{Calendars.inspect(unit)} " <>
-                "on the inferred calendar axis #{Calendars.inspect(axis)}"
+    idx = Enum.find_index(axis, &(&1 == unit))
 
-      idx ->
-        idx
+    if is_nil(idx) do
+      raise ArgumentError,
+            "~o sigil in a match context cannot place unit #{Calendars.inspect(unit)} " <>
+              "on the inferred calendar axis #{Calendars.inspect(axis)}"
+    else
+      idx
     end
   end
 

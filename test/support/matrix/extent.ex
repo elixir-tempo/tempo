@@ -98,13 +98,15 @@ defmodule Tempo.Matrix.Extent do
   end
 
   defp members_of(intervals) do
-    Enum.reduce_while(intervals, {:ok, []}, fn interval, {:ok, extents} ->
-      case of_members([interval]) do
-        {:ok, extent} -> {:cont, {:ok, [extent | extents]}}
-        :none -> {:halt, :none}
-      end
-    end)
-    |> case do
+    all_extents =
+      Enum.reduce_while(intervals, {:ok, []}, fn interval, {:ok, extents} ->
+        case of_members([interval]) do
+          {:ok, extent} -> {:cont, {:ok, [extent | extents]}}
+          :none -> {:halt, :none}
+        end
+      end)
+
+    case all_extents do
       {:ok, extents} -> {:ok, Enum.reverse(extents)}
       :none -> :none
     end
@@ -115,16 +117,18 @@ defmodule Tempo.Matrix.Extent do
   end
 
   defp of_members(intervals) do
-    Enum.reduce_while(intervals, {:ok, nil, []}, fn interval, {:ok, line, spans} ->
-      case interval_spans(interval) do
-        {:ok, member_line, member_spans} when line in [nil, member_line] ->
-          {:cont, {:ok, member_line, member_spans ++ spans}}
+    on_one_line =
+      Enum.reduce_while(intervals, {:ok, nil, []}, fn interval, {:ok, line, spans} ->
+        case interval_spans(interval) do
+          {:ok, member_line, member_spans} when line in [nil, member_line] ->
+            {:cont, {:ok, member_line, member_spans ++ spans}}
 
-        _none_or_another_line ->
-          {:halt, :none}
-      end
-    end)
-    |> case do
+          _none_or_another_line ->
+            {:halt, :none}
+        end
+      end)
+
+    case on_one_line do
       {:ok, line, spans} -> {:ok, %{line: line, spans: merge(spans), whole?: true}}
       :none -> :none
     end
@@ -181,18 +185,20 @@ defmodule Tempo.Matrix.Extent do
     yielded = Enum.take(value, @walk_limit + 1)
     whole? = length(yielded) <= @walk_limit
 
-    yielded
-    |> Enum.take(@walk_limit)
-    |> Enum.reduce_while({:ok, nil, []}, fn element, {:ok, line, spans} ->
-      case element_span(element) do
-        {:ok, element_line, element_spans} when line in [nil, element_line] ->
-          {:cont, {:ok, element_line, element_spans ++ spans}}
+    scanned =
+      yielded
+      |> Enum.take(@walk_limit)
+      |> Enum.reduce_while({:ok, nil, []}, fn element, {:ok, line, spans} ->
+        case element_span(element) do
+          {:ok, element_line, element_spans} when line in [nil, element_line] ->
+            {:cont, {:ok, element_line, element_spans ++ spans}}
 
-        _none_or_another_line ->
-          {:halt, :none}
-      end
-    end)
-    |> case do
+          _none_or_another_line ->
+            {:halt, :none}
+        end
+      end)
+
+    case scanned do
       {:ok, nil, []} -> {:ok, %{line: :empty, spans: [], whole?: whole?}}
       {:ok, line, spans} -> {:ok, %{line: line, spans: merge(spans), whole?: whole?}}
       :none -> :none
@@ -598,9 +604,12 @@ defmodule Tempo.Matrix.Extent do
   # which in a year that starts within its months is the first date of the
   # nth month the calendar counts.
   defp date_on(:month, time, calendar) do
-    case time[:day] do
-      nil -> first_of_month(time[:year], time[:month], calendar)
-      day -> calendar_date(time[:year], time[:month], day, calendar)
+    day = time[:day]
+
+    if is_nil(day) do
+      first_of_month(time[:year], time[:month], calendar)
+    else
+      calendar_date(time[:year], time[:month], day, calendar)
     end
   end
 

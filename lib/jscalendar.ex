@@ -292,17 +292,15 @@ if Code.ensure_loaded?(JSCalendar) do
     # not lost. `Tempo.ICal` treats a zero-duration VEVENT the same
     # way; the two formats should not disagree about what a moment is.
     defp ensure_non_degenerate(from, to, metadata) do
-      case Compare.compare_endpoints(from, to) do
-        :same ->
-          {unit, _span} = Tempo.resolution(from)
+      if Compare.compare_endpoints(from, to) == :same do
+        {unit, _span} = Tempo.resolution(from)
 
-          # `from` is a parsed JSCalendar start — always concrete.
-          {:ok, widened} = Math.add_unit(from, unit, from.calendar)
+        # `from` is a parsed JSCalendar start — always concrete.
+        {:ok, widened} = Math.add_unit(from, unit, from.calendar)
 
-          {from, widened, Map.put(metadata, :punctual, true)}
-
-        _earlier_or_later ->
-          {from, to, metadata}
+        {from, widened, Map.put(metadata, :punctual, true)}
+      else
+        {from, to, metadata}
       end
     end
 
@@ -363,12 +361,12 @@ if Code.ensure_loaded?(JSCalendar) do
     # A key that matches nothing is an additional occurrence — RDATE by
     # another name — and the patch for one of those is often empty.
     defp override(%Event{} = event, occurrences, options) do
-      case Occurrence.overridden(event) do
-        [] ->
-          {:ok, occurrences}
+      ids = Occurrence.overridden(event)
 
-        ids ->
-          with({:ok, keyed} <- resolve(ids, event), do: merge(keyed, event, occurrences, options))
+      if ids == [] do
+        {:ok, occurrences}
+      else
+        with({:ok, keyed} <- resolve(ids, event), do: merge(keyed, event, occurrences, options))
       end
     end
 
@@ -385,14 +383,16 @@ if Code.ensure_loaded?(JSCalendar) do
     end
 
     defp resolve(ids, %Event{} = event) do
-      ids
-      |> Enum.reduce_while({:ok, []}, fn id, {:ok, acc} ->
-        case at_zone(id, event.time_zone) do
-          {:ok, from} -> {:cont, {:ok, [{id, from} | acc]}}
-          {:error, _reason} = error -> {:halt, error}
-        end
-      end)
-      |> case do
+      all_keyed =
+        ids
+        |> Enum.reduce_while({:ok, []}, fn id, {:ok, acc} ->
+          case at_zone(id, event.time_zone) do
+            {:ok, from} -> {:cont, {:ok, [{id, from} | acc]}}
+            {:error, _reason} = error -> {:halt, error}
+          end
+        end)
+
+      case all_keyed do
         {:ok, keyed} -> {:ok, Enum.reverse(keyed)}
         {:error, _reason} = error -> error
       end
@@ -430,13 +430,15 @@ if Code.ensure_loaded?(JSCalendar) do
     end
 
     defp collect(results) do
-      results
-      |> Enum.reduce_while({:ok, []}, fn
-        {:excluded, _id}, {:ok, acc} -> {:cont, {:ok, acc}}
-        {{:ok, interval}, _id}, {:ok, acc} -> {:cont, {:ok, [interval | acc]}}
-        {{:error, _reason} = error, _id}, {:ok, _acc} -> {:halt, error}
-      end)
-      |> case do
+      gathered =
+        results
+        |> Enum.reduce_while({:ok, []}, fn
+          {:excluded, _id}, {:ok, acc} -> {:cont, {:ok, acc}}
+          {{:ok, interval}, _id}, {:ok, acc} -> {:cont, {:ok, [interval | acc]}}
+          {{:error, _reason} = error, _id}, {:ok, _acc} -> {:halt, error}
+        end)
+
+      case gathered do
         {:ok, intervals} ->
           {:ok, Enum.sort_by(intervals, &Compare.to_utc_seconds(&1.from))}
 

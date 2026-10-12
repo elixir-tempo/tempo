@@ -864,9 +864,12 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp each_with_units([occurrence | others], units, asked, made) do
-    case with_each_unit(occurrence, units, asked, made) do
-      :more -> :more
-      made -> each_with_units(others, units, asked, made)
+    made = with_each_unit(occurrence, units, asked, made)
+
+    if made == :more do
+      :more
+    else
+      each_with_units(others, units, asked, made)
     end
   end
 
@@ -1106,14 +1109,14 @@ defmodule Tempo.RRule.Selection do
   # it as the origin day does: a part asks what else the selection holds
   # (`picks_within_a_week?/1`), and would take it for a part.
   defp counted_to(options, selection, units) do
-    case at_most(options) do
-      nil ->
-        nil
+    most = at_most(options)
 
-      most ->
-        if units == [] and not picked_among_all?(selection) do
-          most
-        end
+    if is_nil(most) do
+      nil
+    else
+      if units == [] and not picked_among_all?(selection) do
+        most
+      end
     end
   end
 
@@ -1244,9 +1247,12 @@ defmodule Tempo.RRule.Selection do
   # matched was made an occurrence, and the position picked among them.
   defp weekday_with_its_position([{:day_of_week, day}, {:instance, positions} | parts])
        when is_integer(day) do
-    if positions
-       |> List.wrap()
-       |> Enum.all?(&(is_integer(&1) and &1 != 0)) do
+    all_numbered? =
+      positions
+      |> List.wrap()
+      |> Enum.all?(&(is_integer(&1) and &1 != 0))
+
+    if all_numbered? do
       [{:weekday_at, {day, List.wrap(positions)}} | parts]
     else
       [{:day_of_week, day}, {:instance, positions} | parts]
@@ -1530,9 +1536,12 @@ defmodule Tempo.RRule.Selection do
   defp select_times_in_window(start, duration, selectors, wkst) do
     {positions, parts} = Enum.split_with(selectors, &match?({:instance, _positions}, &1))
 
-    case start
-         |> window_days(duration, :touched)
-         |> apply_window_selectors(parts, selectors, wkst) do
+    selected =
+      start
+      |> window_days(duration, :touched)
+      |> apply_window_selectors(parts, selectors, wkst)
+
+    case selected do
       {:error, _reason} = error ->
         error
 
@@ -1662,12 +1671,12 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp days_of_enclosing(candidate, :week, wkst) do
-    case week_date_range(candidate, wkst) do
-      nil ->
-        [candidate]
+    dates = week_date_range(candidate, wkst)
 
-      dates ->
-        swap_dates(candidate, for({year, month, day, _weekday} <- dates, do: {year, month, day}))
+    if is_nil(dates) do
+      [candidate]
+    else
+      swap_dates(candidate, for({year, month, day, _weekday} <- dates, do: {year, month, day}))
     end
   end
 
@@ -2022,9 +2031,12 @@ defmodule Tempo.RRule.Selection do
 
     selection
     |> Enum.flat_map(fn part ->
-      case limit_held_to(part, freq, selection) do
-        nil -> []
-        unit -> [{Map.fetch!(@unit_weight, unit), part}]
+      unit = limit_held_to(part, freq, selection)
+
+      if is_nil(unit) do
+        []
+      else
+        [{Map.fetch!(@unit_weight, unit), part}]
       end
     end)
     |> Enum.sort_by(fn {weight, _part} -> weight end)
@@ -2144,11 +2156,15 @@ defmodule Tempo.RRule.Selection do
   defp next_week_named(weeks, {year, week}, calendar, wkst) do
     starts = UnitValues.week_starts(calendar, year, wkst)
 
-    case weeks
-         |> weeks_named(starts)
-         |> Enum.find(&(&1 > week)) do
-      nil -> first_week_named(weeks, UnitValues.week_starts(calendar, year + 1, wkst))
-      later -> Enum.at(starts, later - 1)
+    later =
+      weeks
+      |> weeks_named(starts)
+      |> Enum.find(&(&1 > week))
+
+    if is_nil(later) do
+      first_week_named(weeks, UnitValues.week_starts(calendar, year + 1, wkst))
+    else
+      Enum.at(starts, later - 1)
     end
   end
 
@@ -2188,16 +2204,22 @@ defmodule Tempo.RRule.Selection do
   # The days from one day of the week on to another, a week for the day
   # itself.
   defp days_on(named, weekday, days_in_week) do
-    case Integer.mod(named - weekday, days_in_week) do
-      0 -> days_in_week
-      days -> days
+    days = Integer.mod(named - weekday, days_in_week)
+
+    if days == 0 do
+      days_in_week
+    else
+      days
     end
   end
 
   defp next_named(named, unit, current, period) when is_integer(current) do
-    case next_after(named, current) do
-      nil -> {:next, period}
-      value -> {:on, unit, value}
+    value = next_after(named, current)
+
+    if is_nil(value) do
+      {:next, period}
+    else
+      {:on, unit, value}
     end
   end
 
@@ -2910,9 +2932,12 @@ defmodule Tempo.RRule.Selection do
   # entry. Used by the POSIX OR filter, where the entries are plain
   # weekdays (the ordinal is `nil`), so only the weekday is compared.
   defp weekday_matches?(%Interval{} = candidate, byday_entries) do
-    case named_weekday_of(candidate) do
-      nil -> false
-      weekday -> Enum.any?(byday_entries, fn {_ordinal, day} -> day == weekday end)
+    weekday = named_weekday_of(candidate)
+
+    if is_nil(weekday) do
+      false
+    else
+      Enum.any?(byday_entries, fn {_ordinal, day} -> day == weekday end)
     end
   end
 
@@ -3012,15 +3037,15 @@ defmodule Tempo.RRule.Selection do
   end
 
   defp expand_weekdays_in_week(%Interval{} = candidate, weekdays, wkst) do
-    case week_date_range(candidate, wkst) do
-      nil ->
-        [candidate]
+    dates = week_date_range(candidate, wkst)
 
-      dates ->
-        matching =
-          for {year, month, day, dow} <- dates, dow in weekdays, do: {year, month, day}
+    if is_nil(dates) do
+      [candidate]
+    else
+      matching =
+        for {year, month, day, dow} <- dates, dow in weekdays, do: {year, month, day}
 
-        swap_dates(candidate, matching)
+      swap_dates(candidate, matching)
     end
   end
 
@@ -3547,9 +3572,12 @@ defmodule Tempo.RRule.Selection do
   # from `wkst` that hold its date. The event is resolved in each year those
   # days are in, a week at the turn of a year being in two.
   defp event_dates_in_week(%Interval{from: %Tempo{calendar: calendar}} = candidate, name, wkst) do
-    case week_date_range(candidate, wkst) do
-      nil -> {:ok, []}
-      days -> event_dates_among(days, name, calendar)
+    days = week_date_range(candidate, wkst)
+
+    if is_nil(days) do
+      {:ok, []}
+    else
+      event_dates_among(days, name, calendar)
     end
   end
 
@@ -4003,9 +4031,10 @@ defmodule Tempo.RRule.Selection do
     # the week the candidate's calendar gives it.
     day_of_week = UnitValues.day_of_week_from_iso_weekday(weekday, calendar)
 
-    case scope do
-      :month -> expand_weekdays_in_month(candidate, [day_of_week])
-      :year -> expand_weekdays_in_year(candidate, [day_of_week])
+    if scope == :month do
+      expand_weekdays_in_month(candidate, [day_of_week])
+    else
+      expand_weekdays_in_year(candidate, [day_of_week])
     end
   end
 
@@ -4054,12 +4083,16 @@ defmodule Tempo.RRule.Selection do
          {start_date, end_date} <- period_bounds(candidate, period) do
       weekday = UnitValues.iso_weekday_from_day_of_week(named, calendar)
 
-      case Enum.flat_map(
-             positions,
-             &resolve_byday_pair(candidate, {&1, weekday}, start_date, end_date, period, wkst)
-           ) do
-        [] -> [:no_such_day]
-        made -> in_order_of_time(made)
+      made =
+        Enum.flat_map(
+          positions,
+          &resolve_byday_pair(candidate, {&1, weekday}, start_date, end_date, period, wkst)
+        )
+
+      if made == [] do
+        [:no_such_day]
+      else
+        in_order_of_time(made)
       end
     else
       _not_one_weekday_of_a_dated_period -> []

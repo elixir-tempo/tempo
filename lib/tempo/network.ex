@@ -272,12 +272,12 @@ defmodule Tempo.Network do
   end
 
   def check(%__MODULE__{relations: relations}) do
-    case Enum.find(relations, &(not Relation.valid_type?(&1.type))) do
-      nil ->
-        :ok
+    relation = Enum.find(relations, &(not Relation.valid_type?(&1.type)))
 
-      relation ->
-        {:error, ArgumentError.exception("Unknown relation #{Calendars.inspect(relation.type)}.")}
+    if is_nil(relation) do
+      :ok
+    else
+      {:error, ArgumentError.exception("Unknown relation #{Calendars.inspect(relation.type)}.")}
     end
   end
 

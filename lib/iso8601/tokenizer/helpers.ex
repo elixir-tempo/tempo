@@ -380,9 +380,12 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
                              [:hour, :minute, :second]
 
   defp first_component_qualification(inner, qualifier) do
-    case Enum.find(inner, &(is_tuple(&1) and elem(&1, 0) in @qualified_from_the_left)) do
-      nil -> [qualification: qualifier]
-      component -> [individual_qualification: {elem(component, 0), qualifier}]
+    component = Enum.find(inner, &(is_tuple(&1) and elem(&1, 0) in @qualified_from_the_left))
+
+    if is_nil(component) do
+      [qualification: qualifier]
+    else
+      [individual_qualification: {elem(component, 0), qualifier}]
     end
   end
 

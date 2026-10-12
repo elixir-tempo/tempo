@@ -268,13 +268,15 @@ defmodule Tempo.Network.Normalize do
   @spec measure(t(), map(), lengths(), :deferring | :final) ::
           {:ok, lengths()} | {:error, Exception.t()}
   def measure(%{measures: measures} = normalized, distances, lengths, mode) do
-    measures
-    |> Enum.with_index()
-    |> Enum.reduce_while(
-      {:ok, %{}, %{}},
-      &measure_one(&1, &2, distances, lengths, normalized, mode)
-    )
-    |> case do
+    all_measured =
+      measures
+      |> Enum.with_index()
+      |> Enum.reduce_while(
+        {:ok, %{}, %{}},
+        &measure_one(&1, &2, distances, lengths, normalized, mode)
+      )
+
+    case all_measured do
       {:ok, measured, _found} -> {:ok, measured}
       {:error, _reason} = error -> error
     end
@@ -285,12 +287,14 @@ defmodule Tempo.Network.Normalize do
   # zone with no known extremes once the solver has settled is an error.
   @spec all_measured(t(), lengths()) :: :ok | {:error, Exception.t()}
   def all_measured(%{measures: measures}, lengths) do
-    measures
-    |> Enum.with_index()
-    |> Enum.find(fn {_measure, index} ->
-      match?(%{lengths: :pending}, Map.get(lengths, index))
-    end)
-    |> case do
+    pending =
+      measures
+      |> Enum.with_index()
+      |> Enum.find(fn {_measure, index} ->
+        match?(%{lengths: :pending}, Map.get(lengths, index))
+      end)
+
+    case pending do
       nil -> :ok
       {measure, _index} -> {:error, unbounded_error(measure)}
     end
@@ -934,16 +938,22 @@ defmodule Tempo.Network.Normalize do
   end
 
   defp earliest(distances, node) do
-    case Map.get(distances, {:origin, node}, :inf) do
-      :inf -> :unbounded
-      weight -> -weight
+    weight = Map.get(distances, {:origin, node}, :inf)
+
+    if weight == :inf do
+      :unbounded
+    else
+      -weight
     end
   end
 
   defp latest(distances, node) do
-    case Map.get(distances, {node, :origin}, :inf) do
-      :inf -> :unbounded
-      weight -> weight
+    weight = Map.get(distances, {node, :origin}, :inf)
+
+    if weight == :inf do
+      :unbounded
+    else
+      weight
     end
   end
 
@@ -1149,14 +1159,16 @@ defmodule Tempo.Network.Normalize do
   end
 
   defp lengths_at(points, measure) do
-    points
-    |> Enum.reduce_while({:ok, []}, fn point, {:ok, measured} ->
-      case length_from(point, measure, :second) do
-        {:ok, length} -> {:cont, {:ok, [{point, length} | measured]}}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    all_lengths =
+      points
+      |> Enum.reduce_while({:ok, []}, fn point, {:ok, measured} ->
+        case length_from(point, measure, :second) do
+          {:ok, length} -> {:cont, {:ok, [{point, length} | measured]}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+
+    case all_lengths do
       {:ok, measured} -> {:ok, Enum.reverse(measured)}
       {:error, _reason} = error -> error
     end
@@ -1165,14 +1177,16 @@ defmodule Tempo.Network.Normalize do
   # Every point where the length changes between two samples, found by
   # bisection (always strictly between them) and added in order.
   defp with_changes([first | rest], measure) do
-    rest
-    |> Enum.reduce_while({:ok, [first], first}, fn point, {:ok, reversed, previous} ->
-      case changes(previous, point, measure) do
-        {:ok, found} -> {:cont, {:ok, [point | Enum.reverse(found, reversed)], point}}
-        {:error, _reason} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    walked =
+      rest
+      |> Enum.reduce_while({:ok, [first], first}, fn point, {:ok, reversed, previous} ->
+        case changes(previous, point, measure) do
+          {:ok, found} -> {:cont, {:ok, [point | Enum.reverse(found, reversed)], point}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+
+    case walked do
       {:ok, reversed, _last} -> {:ok, Enum.reverse(reversed)}
       {:error, _reason} = error -> error
     end

@@ -746,36 +746,34 @@ defimpl Enumerable, for: Tempo.Interval do
   defp do_reduce(position, to, {:cont, acc}, fun) do
     current = reached(position)
 
-    case past_end?(current, to) and not first_of_turn?(position, to) do
-      true ->
-        {:done, acc}
+    if past_end?(current, to) and not first_of_turn?(position, to) do
+      {:done, acc}
+    else
+      # Classify each emitted moment against its zone so the walk
+      # matches the DST-aware `Tempo.Interval.Steps` count/slice and
+      # the implicit `Enumerable.Tempo` walk: skip a spring-forward
+      # gap hour, emit a fall-back hour twice with its two offsets.
+      # The value asked is the one given, a week's day as the date it
+      # names: the days of the last week of 2011 in Samoa were walked
+      # through 30 December, which the zone left out.
+      yielded = yielded(current)
 
-      false ->
-        # Classify each emitted moment against its zone so the walk
-        # matches the DST-aware `Tempo.Interval.Steps` count/slice and
-        # the implicit `Enumerable.Tempo` walk: skip a spring-forward
-        # gap hour, emit a fall-back hour twice with its two offsets.
-        # The value asked is the one given, a week's day as the date it
-        # names: the days of the last week of 2011 in Samoa were walked
-        # through 30 December, which the zone left out.
-        yielded = yielded(current)
+      case Zone.zone_status(yielded) do
+        :gap ->
+          do_reduce({:after, current}, to, {:cont, acc}, fun)
 
-        case Zone.zone_status(yielded) do
-          :gap ->
-            do_reduce({:after, current}, to, {:cont, acc}, fun)
+        {:ambiguous, first_shift, second_shift} ->
+          emit_fold(
+            [%{yielded | shift: first_shift}, %{yielded | shift: second_shift}],
+            current,
+            to,
+            acc,
+            fun
+          )
 
-          {:ambiguous, first_shift, second_shift} ->
-            emit_fold(
-              [%{yielded | shift: first_shift}, %{yielded | shift: second_shift}],
-              current,
-              to,
-              acc,
-              fun
-            )
-
-          :ok ->
-            do_reduce({:after, current}, to, fun.(yielded, acc), fun)
-        end
+        :ok ->
+          do_reduce({:after, current}, to, fun.(yielded, acc), fun)
+      end
     end
   end
 
@@ -858,10 +856,7 @@ defimpl Enumerable, for: Tempo.Interval do
   #    the last boundary — `[first, last)`."
 
   defp past_end?(%Tempo{time: current_time}, %Tempo{time: to_time}) do
-    case compare_time(current_time, to_time) do
-      :lt -> false
-      _ -> true
-    end
+    compare_time(current_time, to_time) != :lt
   end
 
   defp past_end?(%Tempo{} = current, {:as_moments, %Tempo{} = to}) do

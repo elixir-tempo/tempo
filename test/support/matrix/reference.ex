@@ -146,15 +146,17 @@ defmodule Tempo.Matrix.Reference do
   """
   @spec parts(point()) :: {:ok, [extent()]} | :none
   def parts(point) do
-    point
-    |> finer()
-    |> Enum.reduce_while({:ok, []}, fn part, {:ok, spans} ->
-      case span(part) do
-        {:ok, span} -> {:cont, {:ok, [span | spans]}}
-        :none -> {:halt, :none}
-      end
-    end)
-    |> case do
+    spanned =
+      point
+      |> finer()
+      |> Enum.reduce_while({:ok, []}, fn part, {:ok, spans} ->
+        case span(part) do
+          {:ok, span} -> {:cont, {:ok, [span | spans]}}
+          :none -> {:halt, :none}
+        end
+      end)
+
+    case spanned do
       {:ok, spans} -> {:ok, Enum.reverse(spans)}
       :none -> :none
     end

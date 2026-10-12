@@ -107,9 +107,12 @@ defmodule Tempo.Interval.Relations do
   """
   @spec canonical(t()) :: t() | {:error, {:invalid_relation, term()}}
   def canonical(relations) when is_list(relations) do
-    case Enum.find(relations, &(&1 not in full())) do
-      nil -> Enum.filter(full(), &(&1 in relations))
-      invalid -> {:error, {:invalid_relation, invalid}}
+    invalid = Enum.find(relations, &(&1 not in full()))
+
+    if is_nil(invalid) do
+      Enum.filter(full(), &(&1 in relations))
+    else
+      {:error, {:invalid_relation, invalid}}
     end
   end
 

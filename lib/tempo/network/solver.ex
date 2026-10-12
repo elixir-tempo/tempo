@@ -652,9 +652,10 @@ defmodule Tempo.Network.Solver do
     with {:ok, %{dist: distances} = solution} <- solved(network) do
       {from_node, to_node} = trace_nodes(boundary, bound)
 
-      case get(distances, from_node, to_node) do
-        :inf -> {:error, :unbounded}
-        _weight -> trace_of(network, boundary, bound, solution, {from_node, to_node})
+      if get(distances, from_node, to_node) == :inf do
+        {:error, :unbounded}
+      else
+        trace_of(network, boundary, bound, solution, {from_node, to_node})
       end
     end
   end
@@ -712,25 +713,34 @@ defmodule Tempo.Network.Solver do
 
   # node ≤ origin + dist(node, origin)  → latest value of node.
   defp upper(distances, node, normalized) do
-    case get(distances, node, :origin) do
-      :inf -> {:ok, nil}
-      weight -> Normalize.date_at(weight, normalized)
+    weight = get(distances, node, :origin)
+
+    if weight == :inf do
+      {:ok, nil}
+    else
+      Normalize.date_at(weight, normalized)
     end
   end
 
   # origin − node ≤ dist(origin, node)  → node ≥ −dist(origin, node).
   defp lower(distances, node, normalized) do
-    case get(distances, :origin, node) do
-      :inf -> {:ok, nil}
-      weight -> Normalize.date_at(-weight, normalized)
+    weight = get(distances, :origin, node)
+
+    if weight == :inf do
+      {:ok, nil}
+    else
+      Normalize.date_at(-weight, normalized)
     end
   end
 
   # end − start ≤ dist(end, start) → max duration.
   defp max_span(distances, start, finish, normalized) do
-    case get(distances, finish, start) do
-      :inf -> {:ok, nil}
-      weight -> Normalize.duration_of(weight, normalized)
+    weight = get(distances, finish, start)
+
+    if weight == :inf do
+      {:ok, nil}
+    else
+      Normalize.duration_of(weight, normalized)
     end
   end
 
@@ -825,9 +835,12 @@ defmodule Tempo.Network.Solver do
   end
 
   defp reconstruct(next, from, to) do
-    case Map.get(next, {from, to}) do
-      nil -> [from]
-      hop -> [from | reconstruct(next, hop, to)]
+    hop = Map.get(next, {from, to})
+
+    if is_nil(hop) do
+      [from]
+    else
+      [from | reconstruct(next, hop, to)]
     end
   end
 
@@ -1090,9 +1103,12 @@ defmodule Tempo.Network.Solver do
   end
 
   defp duration_label(%Tempo.Duration{time: time}) do
-    case Keyword.get(time, :year) do
-      nil -> Inspect.inspect(%Tempo.Duration{time: time}, %Inspect.Opts{})
-      years -> "#{years} years"
+    years = Keyword.get(time, :year)
+
+    if is_nil(years) do
+      Inspect.inspect(%Tempo.Duration{time: time}, %Inspect.Opts{})
+    else
+      "#{years} years"
     end
   end
 end

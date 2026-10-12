@@ -289,16 +289,18 @@ defmodule Tempo.RRule do
   ## Parsing: text → intermediate keyword list
 
   defp parse_parts(rrule) do
-    rrule
-    |> String.trim()
-    |> String.split(";", trim: true)
-    |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
-      case parse_part(part) do
-        {:ok, tuple} -> {:cont, {:ok, [tuple | acc]}}
-        {:error, _} = err -> {:halt, err}
-      end
-    end)
-    |> case do
+    parsed =
+      rrule
+      |> String.trim()
+      |> String.split(";", trim: true)
+      |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
+        case parse_part(part) do
+          {:ok, tuple} -> {:cont, {:ok, [tuple | acc]}}
+          {:error, _} = err -> {:halt, err}
+        end
+      end)
+
+    case parsed do
       {:ok, list} -> {:ok, Enum.reverse(list)}
       error -> error
     end
@@ -312,9 +314,12 @@ defmodule Tempo.RRule do
   end
 
   defp parse_kv("FREQ", value) do
-    case Map.get(@freq_to_unit, String.upcase(value)) do
-      nil -> {:error, {:unknown_freq, value}}
-      unit -> {:ok, {:freq, unit}}
+    unit = Map.get(@freq_to_unit, String.upcase(value))
+
+    if is_nil(unit) do
+      {:error, {:unknown_freq, value}}
+    else
+      {:ok, {:freq, unit}}
     end
   end
 
@@ -390,9 +395,12 @@ defmodule Tempo.RRule do
   end
 
   defp parse_kv("WKST", value) do
-    case Map.get(@weekdays, String.upcase(value)) do
-      nil -> {:error, {:unknown_wkst, value}}
-      day -> {:ok, {:wkst, day}}
+    day = Map.get(@weekdays, String.upcase(value))
+
+    if is_nil(day) do
+      {:error, {:unknown_wkst, value}}
+    else
+      {:ok, {:wkst, day}}
     end
   end
 
@@ -439,9 +447,12 @@ defmodule Tempo.RRule do
   end
 
   defp lookup_weekday(code) do
-    case Map.get(@weekdays, String.upcase(code)) do
-      nil -> :error
-      day -> {:ok, day}
+    day = Map.get(@weekdays, String.upcase(code))
+
+    if is_nil(day) do
+      :error
+    else
+      {:ok, day}
     end
   end
 

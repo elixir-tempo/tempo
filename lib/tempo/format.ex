@@ -1384,9 +1384,12 @@ defmodule Tempo.Format do
   end
 
   defp shown_unit(%Tempo.Interval{} = interval) do
-    case Tempo.Interval.granularity(interval) do
-      :week -> :day_of_week
-      unit -> unit
+    unit = Tempo.Interval.granularity(interval)
+
+    if unit == :week do
+      :day_of_week
+    else
+      unit
     end
   end
 end

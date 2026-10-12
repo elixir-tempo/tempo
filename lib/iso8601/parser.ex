@@ -9,22 +9,25 @@ defmodule Tempo.Iso8601.Parser do
   alias Tempo.Qualification
 
   def parse(tokens, calendar) do
-    case refused(tokens) do
-      nil -> parse_tokens(tokens, calendar)
-      reason -> {:error, ParseError.exception(reason: reason)}
+    reason = refused(tokens)
+
+    if is_nil(reason) do
+      parse_tokens(tokens, calendar)
+    else
+      {:error, ParseError.exception(reason: reason)}
     end
   end
 
   # What the tokens say that is no value, wherever it is written: the reason
   # it is refused, or `nil`.
   defp refused(tokens) do
-    case backwards_range(tokens) do
-      nil ->
-        short_window(tokens) || shifted_durations(tokens) || no_member(tokens) ||
-          signed_unspecified(tokens)
+    range = backwards_range(tokens)
 
-      range ->
-        backwards_reason(range)
+    if is_nil(range) do
+      short_window(tokens) || shifted_durations(tokens) || no_member(tokens) ||
+        signed_unspecified(tokens)
+    else
+      backwards_reason(range)
     end
   end
 
@@ -486,20 +489,20 @@ defmodule Tempo.Iso8601.Parser do
 
   defp apply_leading_qualification(%Tempo{time: time} = tempo, qualification)
        when is_list(time) do
-    case Enum.find(@resolution_order, &Keyword.has_key?(time, &1)) do
-      nil ->
-        apply_complete_qualification(tempo, qualification)
+    unit = Enum.find(@resolution_order, &Keyword.has_key?(time, &1))
 
-      unit ->
-        qualifications =
-          Map.update(
-            tempo.qualifications || %{},
-            unit,
-            qualification,
-            &Qualification.combine(&1, qualification)
-          )
+    if is_nil(unit) do
+      apply_complete_qualification(tempo, qualification)
+    else
+      qualifications =
+        Map.update(
+          tempo.qualifications || %{},
+          unit,
+          qualification,
+          &Qualification.combine(&1, qualification)
+        )
 
-        %{tempo | qualifications: qualifications}
+      %{tempo | qualifications: qualifications}
     end
   end
 

@@ -152,24 +152,29 @@ defmodule Tempo.Operations do
   ## operand cuts it.
 
   defp on_cycle?(%IntervalSet{} = set) do
-    case IntervalSet.first(set) do
-      nil -> false
-      first -> Cycle.cyclic?(first)
+    first = IntervalSet.first(set)
+
+    if is_nil(first) do
+      false
+    else
+      Cycle.cyclic?(first)
     end
   end
 
   # Each member of a set with the parts it is swept by, in the members'
   # order, each member's parts in the order of their starts.
   defp turns(%IntervalSet{} = set) do
-    set
-    |> IntervalSet.members()
-    |> Enum.reduce_while({:ok, []}, fn member, {:ok, turns} ->
-      case Cycle.parts(member) do
-        {:ok, parts} -> {:cont, {:ok, [{member, in_order(parts)} | turns]}}
-        {:error, _exception} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    in_turn =
+      set
+      |> IntervalSet.members()
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, turns} ->
+        case Cycle.parts(member) do
+          {:ok, parts} -> {:cont, {:ok, [{member, in_order(parts)} | turns]}}
+          {:error, _exception} = error -> {:halt, error}
+        end
+      end)
+
+    case in_turn do
       {:ok, turns} -> {:ok, Enum.reverse(turns)}
       {:error, _exception} = error -> error
     end
@@ -335,9 +340,12 @@ defmodule Tempo.Operations do
   defp maybe_anchor_to_window(a, b, class_a, class_b, opts) do
     classes = {anchor_class(a), anchor_class(b)}
 
-    case Keyword.get(opts, :within) do
-      nil -> {:ok, a, b}
-      within -> place_on_window(a, b, classes, {class_a, class_b}, within)
+    within = Keyword.get(opts, :within)
+
+    if is_nil(within) do
+      {:ok, a, b}
+    else
+      place_on_window(a, b, classes, {class_a, class_b}, within)
     end
   end
 
@@ -409,15 +417,17 @@ defmodule Tempo.Operations do
   defp anchor_to_days(%IntervalSet{} = unanchored_set, %IntervalSet{} = window_set) do
     times_of_day = IntervalSet.members(unanchored_set)
 
-    window_set
-    |> IntervalSet.members()
-    |> Enum.reduce_while({:ok, []}, fn window, {:ok, placed} ->
-      case placed_on(times_of_day, window) do
-        {:ok, on_window} -> {:cont, {:ok, [on_window | placed]}}
-        {:error, _exception} = error -> {:halt, error}
-      end
-    end)
-    |> case do
+    on_windows =
+      window_set
+      |> IntervalSet.members()
+      |> Enum.reduce_while({:ok, []}, fn window, {:ok, placed} ->
+        case placed_on(times_of_day, window) do
+          {:ok, on_window} -> {:cont, {:ok, [on_window | placed]}}
+          {:error, _exception} = error -> {:halt, error}
+        end
+      end)
+
+    case on_windows do
       {:ok, placed} ->
         placed
         |> Enum.reverse()
@@ -636,9 +646,12 @@ defmodule Tempo.Operations do
   # with any class).
 
   defp anchor_class(%IntervalSet{} = set) do
-    case IntervalSet.first(set) do
-      nil -> :empty
-      first -> anchor_class(first)
+    first = IntervalSet.first(set)
+
+    if is_nil(first) do
+      :empty
+    else
+      anchor_class(first)
     end
   end
 
@@ -1109,9 +1122,10 @@ defmodule Tempo.Operations do
     b_res = finest_resolution(b_set)
 
     target =
-      case Unit.compare(a_res, b_res) do
-        :lt -> a_res
-        _ -> b_res
+      if Unit.compare(a_res, b_res) == :lt do
+        a_res
+      else
+        b_res
       end
 
     with {:ok, a_aligned} <- apply_resolution(a_set, target),
@@ -1143,9 +1157,10 @@ defmodule Tempo.Operations do
   defp extend_or_pass(%Tempo{} = tempo, target) do
     {current, _} = Tempo.resolution(tempo)
 
-    case Unit.compare(target, current) do
-      :lt -> extend_endpoint(tempo, target)
-      _eq_or_gt -> {:ok, tempo}
+    if Unit.compare(target, current) == :lt do
+      extend_endpoint(tempo, target)
+    else
+      {:ok, tempo}
     end
   end
 
@@ -1491,16 +1506,18 @@ defmodule Tempo.Operations do
   end
 
   defp later_endpoint(x, y) do
-    case Compare.compare_endpoints(x, y) do
-      :later -> x
-      _ -> y
+    if Compare.compare_endpoints(x, y) == :later do
+      x
+    else
+      y
     end
   end
 
   defp earlier_endpoint(x, y) do
-    case Compare.compare_endpoints(x, y) do
-      :earlier -> x
-      _ -> y
+    if Compare.compare_endpoints(x, y) == :earlier do
+      x
+    else
+      y
     end
   end
 
@@ -1747,9 +1764,10 @@ defmodule Tempo.Operations do
   # Emit a one-interval list if `from < to`, empty otherwise.
   # `metadata` is carried on the emitted interval.
   defp maybe_emit(from, to, metadata) do
-    case Compare.compare_endpoints(from, to) do
-      :earlier -> [%Interval{from: from, to: to, metadata: metadata}]
-      _ -> []
+    if Compare.compare_endpoints(from, to) == :earlier do
+      [%Interval{from: from, to: to, metadata: metadata}]
+    else
+      []
     end
   end
 

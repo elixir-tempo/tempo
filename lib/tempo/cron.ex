@@ -212,9 +212,12 @@ defmodule Tempo.Cron do
   def to_rule(expression) when is_binary(expression) do
     trimmed = String.trim(expression)
 
-    case Map.get(@aliases, String.downcase(trimmed)) do
-      nil -> parse_fields(trimmed, expression)
-      expanded -> parse_fields(expanded, expression)
+    expanded = Map.get(@aliases, String.downcase(trimmed))
+
+    if is_nil(expanded) do
+      parse_fields(trimmed, expression)
+    else
+      parse_fields(expanded, expression)
     end
   end
 
@@ -414,9 +417,12 @@ defmodule Tempo.Cron do
   # and every firing is one minute long, or one second with six or
   # seven fields.
   defp cascade(fields) do
-    case Enum.find(@cascade_order, fn field -> not nil?(Map.fetch!(fields, field)) end) do
-      nil -> default_cascade(fields)
-      field -> build_cascade(field, fields)
+    field = Enum.find(@cascade_order, fn field -> not nil?(Map.fetch!(fields, field)) end)
+
+    if is_nil(field) do
+      default_cascade(fields)
+    else
+      build_cascade(field, fields)
     end
   end
 
@@ -664,15 +670,17 @@ defmodule Tempo.Cron do
   ## ---------------------------------------------------------
 
   defp parse_list(string, field, range) do
-    string
-    |> String.split(",", trim: true)
-    |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
-      case parse_part(part, field, range) do
-        {:ok, list} -> {:cont, {:ok, acc ++ list}}
-        err -> {:halt, err}
-      end
-    end)
-    |> case do
+    parsed =
+      string
+      |> String.split(",", trim: true)
+      |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
+        case parse_part(part, field, range) do
+          {:ok, list} -> {:cont, {:ok, acc ++ list}}
+          err -> {:halt, err}
+        end
+      end)
+
+    case parsed do
       {:ok, []} ->
         {:error, CronError.exception(field: field, value: string, reason: "empty field")}
 
@@ -688,15 +696,17 @@ defmodule Tempo.Cron do
   end
 
   defp parse_list_with_names(string, field, range, names) do
-    string
-    |> String.split(",", trim: true)
-    |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
-      case parse_part_with_names(part, field, range, names) do
-        {:ok, list} -> {:cont, {:ok, acc ++ list}}
-        err -> {:halt, err}
-      end
-    end)
-    |> case do
+    parsed =
+      string
+      |> String.split(",", trim: true)
+      |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
+        case parse_part_with_names(part, field, range, names) do
+          {:ok, list} -> {:cont, {:ok, acc ++ list}}
+          err -> {:halt, err}
+        end
+      end)
+
+    case parsed do
       {:ok, list} ->
         {:ok,
          list

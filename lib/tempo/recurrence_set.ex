@@ -144,9 +144,12 @@ defmodule Tempo.RecurrenceSet do
   end
 
   defp validate_members(members) do
-    case Enum.find_value(members, &member_error/1) do
-      nil -> :ok
-      error -> {:error, error}
+    error = Enum.find_value(members, &member_error/1)
+
+    if is_nil(error) do
+      :ok
+    else
+      {:error, error}
     end
   end
 

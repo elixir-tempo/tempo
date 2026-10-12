@@ -68,14 +68,14 @@ defmodule Tempo.SetOperationsMeasureTest do
   # so what is measured is what a caller builds; and each is read once, a
   # test asking for the same few points thousands of times.
   defp point(line, slot) do
-    case Process.get({:point, line, slot}) do
-      nil ->
-        point = read_point(line, slot)
-        Process.put({:point, line, slot}, point)
-        point
+    held = Process.get({:point, line, slot})
 
-      point ->
-        point
+    if is_nil(held) do
+      point = read_point(line, slot)
+      Process.put({:point, line, slot}, point)
+      point
+    else
+      held
     end
   end
 

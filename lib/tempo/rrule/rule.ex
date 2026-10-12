@@ -311,9 +311,12 @@ defmodule Tempo.RRule.Rule do
   # The month after a leap month that follows a year's last is the first of
   # the next year, where the rule's period for the year has no month to give.
   defp moved_within_the_year(leap_months, last_month, :forward) do
-    case Enum.filter(leap_months, fn {month, :leap} -> month >= last_month end) do
-      [] -> :ok
-      after_the_last -> {:error, {:unsupported_skip, {:forward, [bymonth: after_the_last]}}}
+    after_the_last = Enum.filter(leap_months, fn {month, :leap} -> month >= last_month end)
+
+    if after_the_last == [] do
+      :ok
+    else
+      {:error, {:unsupported_skip, {:forward, [bymonth: after_the_last]}}}
     end
   end
 
@@ -830,9 +833,12 @@ defmodule Tempo.RRule.Rule do
   # Months as a rule lists them, or as a selection holds them: one number,
   # or a list of numbers and ranges.
   defp several?(months) do
-    case months
-         |> List.wrap()
-         |> Enum.flat_map(&each_month/1) do
+    listed_months =
+      months
+      |> List.wrap()
+      |> Enum.flat_map(&each_month/1)
+
+    case listed_months do
       [_first, _second | _rest] -> true
       _one_or_none -> false
     end

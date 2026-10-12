@@ -86,9 +86,12 @@ defmodule Tempo.Qualification do
   def whole(%Tempo{time: time, qualifications: %{} = qualifications}) when is_list(time) do
     units = present(time)
 
-    case units
-         |> Enum.map(&Map.get(qualifications, &1))
-         |> Enum.uniq() do
+    of_units =
+      units
+      |> Enum.map(&Map.get(qualifications, &1))
+      |> Enum.uniq()
+
+    case of_units do
       [qualification] when not is_nil(qualification) ->
         if map_size(qualifications) == length(units) do
           qualification

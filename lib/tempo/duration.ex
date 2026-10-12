@@ -629,9 +629,12 @@ defmodule Tempo.Duration do
   def to_unit(duration, unit, options \\ [])
 
   def to_unit(%__MODULE__{} = duration, unit, options) when unit in @fixed_units do
-    case Keyword.get(options, :relative_to) do
-      nil -> to_unit_nominal(duration, unit)
-      reference -> to_unit_relative(duration, unit, Calendars.inside(reference))
+    reference = Keyword.get(options, :relative_to)
+
+    if is_nil(reference) do
+      to_unit_nominal(duration, unit)
+    else
+      to_unit_relative(duration, unit, Calendars.inside(reference))
     end
   end
 

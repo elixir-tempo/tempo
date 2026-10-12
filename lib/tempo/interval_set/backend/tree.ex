@@ -42,9 +42,12 @@ defmodule Tempo.IntervalSet.Backend.Tree do
 
   @impl true
   def accepts(intervals) do
-    case Enum.find(intervals, &(not indexable?(&1))) do
-      nil -> :ok
-      interval -> {:error, ArgumentError.exception(tree_requires_anchored(interval))}
+    interval = Enum.find(intervals, &(not indexable?(&1)))
+
+    if is_nil(interval) do
+      :ok
+    else
+      {:error, ArgumentError.exception(tree_requires_anchored(interval))}
     end
   end
 

@@ -408,9 +408,12 @@ defmodule Tempo.RRule.MonthlyWeeklyPartsTest do
   # The moment an occurrence starts or ends at, or the value itself where it
   # names none.
   defp moment(endpoint) do
-    case endpoint
-         |> Tempo.extend_resolution(:second)
-         |> Tempo.to_naive_datetime() do
+    as_moment =
+      endpoint
+      |> Tempo.extend_resolution(:second)
+      |> Tempo.to_naive_datetime()
+
+    case as_moment do
       {:ok, moment} -> moment
       {:error, _no_moment} -> endpoint
     end

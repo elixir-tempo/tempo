@@ -637,17 +637,17 @@ defmodule Tempo.Interval do
   end
 
   defp validate_unit(unit, from) when is_atom(unit) and unit in @iteration_units do
-    case endpoint_resolution_unit(from) do
-      nil ->
-        {:ok, unit}
+    resolution_unit = endpoint_resolution_unit(from)
 
-      resolution_unit ->
-        case Unit.compare(unit, resolution_unit) do
-          # Finer units carry a smaller sort key, so :lt means finer.
-          :lt -> {:ok, unit}
-          :eq -> {:ok, nil}
-          :gt -> {:error, coarser_unit_error(unit, resolution_unit)}
-        end
+    if is_nil(resolution_unit) do
+      {:ok, unit}
+    else
+      case Unit.compare(unit, resolution_unit) do
+        # Finer units carry a smaller sort key, so :lt means finer.
+        :lt -> {:ok, unit}
+        :eq -> {:ok, nil}
+        :gt -> {:error, coarser_unit_error(unit, resolution_unit)}
+      end
     end
   end
 
@@ -922,17 +922,17 @@ defmodule Tempo.Interval do
   # §8.2.1) is qualified in every component, those it takes from the start
   # among them, as the same end written in full is.
   defp qualified_with_start(%Tempo{time: time} = completed, written, from, borrowed) do
-    case Qualification.whole(written) do
-      nil ->
-        taken = Map.take(from.qualifications || %{}, borrowed)
+    qualification = Qualification.whole(written)
 
-        %{
-          completed
-          | qualifications: nil_if_empty(Map.merge(taken, written.qualifications || %{}))
-        }
+    if is_nil(qualification) do
+      taken = Map.take(from.qualifications || %{}, borrowed)
 
-      qualification ->
-        %{completed | qualifications: Qualification.complete(time, qualification)}
+      %{
+        completed
+        | qualifications: nil_if_empty(Map.merge(taken, written.qualifications || %{}))
+      }
+    else
+      %{completed | qualifications: Qualification.complete(time, qualification)}
     end
   end
 
@@ -950,12 +950,18 @@ defmodule Tempo.Interval do
   # times, which cannot be read as the end's missing prefix.
   defp higher_order_than(from_units, rank) do
     Enum.take_while(from_units, fn {unit, value} ->
-      is_integer(value) and
-        case unit_rank(unit) do
-          nil -> false
-          from_rank -> from_rank > rank
-        end
+      is_integer(value) and ranked_above?(unit, rank)
     end)
+  end
+
+  defp ranked_above?(unit, rank) do
+    from_rank = unit_rank(unit)
+
+    if is_nil(from_rank) do
+      false
+    else
+      from_rank > rank
+    end
   end
 
   defp unit_rank(unit) when is_atom(unit) do
@@ -1150,9 +1156,12 @@ defmodule Tempo.Interval do
     if Keyword.get(time, unit) < unit_max(unit) do
       true
     else
-      case coarser_time_unit(unit) do
-        :day -> false
-        coarser -> Keyword.has_key?(time, coarser) and carry_safe?(time, coarser)
+      coarser = coarser_time_unit(unit)
+
+      if coarser == :day do
+        false
+      else
+        Keyword.has_key?(time, coarser) and carry_safe?(time, coarser)
       end
     end
   end
@@ -1986,12 +1995,13 @@ defmodule Tempo.Interval do
   end
 
   def empty?(%__MODULE__{from: %Tempo{} = from, to: %Tempo{} = to} = interval) do
-    case Compare.compare_endpoints(from, to) do
-      :earlier -> false
+    if Compare.compare_endpoints(from, to) == :earlier do
+      false
       # A span with no year that ends before it starts runs through the end
       # of its cycle (`T23H/T0H`, the last hour of the day), and one that
       # ends where it starts is once round it (`T0H/T0H`, the whole day).
-      _same_or_later -> not Cycle.cyclic?(interval)
+    else
+      not Cycle.cyclic?(interval)
     end
   end
 
@@ -3861,14 +3871,16 @@ defmodule Tempo.Interval do
   defp union_over_choices(choices_a, choices_b) do
     pairs = for choice_a <- choices_a, choice_b <- choices_b, do: {choice_a, choice_b}
 
-    pairs
-    |> Enum.reduce_while({:ok, MapSet.new()}, fn {choice_a, choice_b}, {:ok, acc} ->
-      case possible_relations(choice_a, choice_b) do
-        {:error, _} = error -> {:halt, error}
-        possible -> {:cont, {:ok, MapSet.union(acc, possible)}}
-      end
-    end)
-    |> case do
+    all_possible =
+      pairs
+      |> Enum.reduce_while({:ok, MapSet.new()}, fn {choice_a, choice_b}, {:ok, acc} ->
+        case possible_relations(choice_a, choice_b) do
+          {:error, _} = error -> {:halt, error}
+          possible -> {:cont, {:ok, MapSet.union(acc, possible)}}
+        end
+      end)
+
+    case all_possible do
       {:ok, possible} -> possible
       error -> error
     end
@@ -4234,9 +4246,12 @@ defmodule Tempo.Interval do
   defp margin_spec(%Tempo{time: time}) do
     Enum.find_value(time, fn
       {unit, {value, options}} when is_integer(value) and is_list(options) ->
-        case Keyword.get(options, :margin_of_error) do
-          nil -> nil
-          margin -> {unit, margin}
+        margin = Keyword.get(options, :margin_of_error)
+
+        if is_nil(margin) do
+          nil
+        else
+          {unit, margin}
         end
 
       _ ->
@@ -4350,9 +4365,12 @@ defmodule Tempo.Interval do
   defp margin_duration(%Tempo{time: time}) do
     Enum.find_value(time, fn
       {unit, {value, options}} when is_integer(value) and is_list(options) ->
-        case Keyword.get(options, :margin_of_error) do
-          nil -> nil
-          margin -> Duration.new!([{unit, margin}])
+        margin = Keyword.get(options, :margin_of_error)
+
+        if is_nil(margin) do
+          nil
+        else
+          Duration.new!([{unit, margin}])
         end
 
       _ ->

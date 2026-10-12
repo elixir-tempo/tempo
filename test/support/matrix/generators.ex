@@ -289,9 +289,12 @@ defmodule Tempo.Matrix.Generators do
 
   # The point one unit coarser than a point, with the point.
   defp around(point) do
-    case coarser(point) do
-      nil -> []
-      whole -> [constant({point, whole}), constant({whole, point})]
+    whole = coarser(point)
+
+    if is_nil(whole) do
+      []
+    else
+      [constant({point, whole}), constant({whole, point})]
     end
   end
 
