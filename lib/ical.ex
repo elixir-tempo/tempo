@@ -486,16 +486,16 @@ if Code.ensure_loaded?(ICal) do
     # each carries its own metadata. Coalescing would collapse these and silently
     # lose event identity. Callers who want coalesced free/busy spans can union
     # the set with itself or call a future explicit coalesce helper.
-    defp build_interval_set(%ICal{events: events} = calendar, opts) do
-      with {:ok, intervals} <- convert_events(events, opts),
-           {:ok, kept} <- Tempo.occurrences_within(intervals, opts) do
+    defp build_interval_set(%ICal{events: events} = calendar, options) do
+      with {:ok, intervals} <- convert_events(events, options),
+           {:ok, kept} <- Tempo.occurrences_within(intervals, options) do
         IntervalSet.new(kept, metadata: calendar_metadata(calendar), coalesce: false)
       end
     end
 
-    defp convert_events(events, opts) do
+    defp convert_events(events, options) do
       Enum.reduce_while(events, {:ok, []}, fn event, {:ok, acc} ->
-        case event_to_intervals(event, opts) do
+        case event_to_intervals(event, options) do
           {:ok, ivs} -> {:cont, {:ok, ivs ++ acc}}
           {:error, _} = err -> {:halt, err}
         end
@@ -539,22 +539,22 @@ if Code.ensure_loaded?(ICal) do
     ## Event → Interval(s)
     ## ------------------------------------------------------------
 
-    defp event_to_intervals(%ICal.Event{dtstart: nil}, _opts) do
+    defp event_to_intervals(%ICal.Event{dtstart: nil}, _options) do
       # iCal technically requires DTSTART, but some exports
       # contain events without one. Skip silently — they can't be
       # placed on a time line.
       {:ok, []}
     end
 
-    defp event_to_intervals(%ICal.Event{rrule: nil} = event, _opts) do
+    defp event_to_intervals(%ICal.Event{rrule: nil} = event, _options) do
       case single_event_to_interval(event) do
         {:ok, iv} -> {:ok, [iv]}
         {:error, _} = err -> err
       end
     end
 
-    defp event_to_intervals(%ICal.Event{rrule: rrule} = event, opts) do
-      case expand_recurrence(event, rrule, opts) do
+    defp event_to_intervals(%ICal.Event{rrule: rrule} = event, options) do
+      case expand_recurrence(event, rrule, options) do
         {:ok, intervals} -> {:ok, intervals}
         {:error, _} = err -> err
       end
@@ -596,8 +596,8 @@ if Code.ensure_loaded?(ICal) do
     #
     # EXRULE is RFC-deprecated and the `ical` library does not
     # surface it, so we don't need to handle it.
-    defp expand_recurrence(event, %ICal.Recurrence{} = rule, opts) do
-      if rule.count == nil and rule.until == nil and not Keyword.has_key?(opts, :within) do
+    defp expand_recurrence(event, %ICal.Recurrence{} = rule, options) do
+      if rule.count == nil and rule.until == nil and not Keyword.has_key?(options, :within) do
         {:error,
          UnboundedRecurrenceError.exception(
            reason:
@@ -609,7 +609,8 @@ if Code.ensure_loaded?(ICal) do
         rule = on_the_days_of_an_all_day_event(rule, event.dtstart)
 
         with {:ok, base} <- single_event_to_interval(event),
-             {:ok, occurrences} <- Expander.expand(rule, base.from, expander_opts(opts, base)) do
+             {:ok, occurrences} <-
+               Expander.expand(rule, base.from, expander_options(options, base)) do
           {:ok, combine_occurrences(occurrences, event, base)}
         end
       end
@@ -628,9 +629,9 @@ if Code.ensure_loaded?(ICal) do
       rule
     end
 
-    defp expander_opts(opts, base) do
+    defp expander_options(options, base) do
       []
-      |> maybe_put(:within, Keyword.get(opts, :within))
+      |> maybe_put(:within, Keyword.get(options, :within))
       |> Keyword.put(:metadata, base.metadata)
       |> Keyword.put(:base_to, base.to)
     end

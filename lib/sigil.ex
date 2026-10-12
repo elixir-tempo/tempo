@@ -303,8 +303,8 @@ defmodule Tempo.Sigils do
   rules, and expansion-time errors.
 
   """
-  defmacro sigil_o({:<<>>, _meta, [_string]} = sigil, opts) do
-    do_sigil(__CALLER__.context, sigil, opts)
+  defmacro sigil_o({:<<>>, _meta, [_string]} = sigil, options) do
+    do_sigil(__CALLER__.context, sigil, options)
   end
 
   @doc """
@@ -317,18 +317,18 @@ defmodule Tempo.Sigils do
   specification.
 
   """
-  defmacro sigil_TEMPO({:<<>>, _meta, [_string]} = sigil, opts) do
-    do_sigil(__CALLER__.context, sigil, opts)
+  defmacro sigil_TEMPO({:<<>>, _meta, [_string]} = sigil, options) do
+    do_sigil(__CALLER__.context, sigil, options)
   end
 
-  defp do_sigil(nil, {:<<>>, _meta, [string]}, opts) do
+  defp do_sigil(nil, {:<<>>, _meta, [string]}, options) do
     # No calendar modifier → defer to the string's own IXDTF
     # `[u-ca=NAME]` suffix (via `from_iso8601/1`), so
     # `~o"5786-01-01[u-ca=hebrew]"` resolves to the Hebrew calendar
     # instead of being forced to Gregorian. A `W` modifier is an
     # explicit calendar choice that wins, matching `from_iso8601/2`'s
     # "explicit calendar always wins" rule.
-    calendar = Options.calendar_from(opts)
+    calendar = Options.calendar_from(options)
 
     result =
       if is_nil(calendar) do
@@ -368,7 +368,7 @@ defmodule Tempo.Sigils do
   @ordinal_axis [:year, :day_of_year, :hour, :minute, :second]
   @season_axis [:year, :season]
 
-  defp do_sigil(:match, {:<<>>, _meta, [string]}, opts) do
+  defp do_sigil(:match, {:<<>>, _meta, [string]}, options) do
     # Match-context modifiers are always binding letters — a
     # departure from value context, where `W` selects the ISO
     # week calendar. The sigil string is therefore always parsed
@@ -376,7 +376,7 @@ defmodule Tempo.Sigils do
     # not constrain the target's `:calendar` field either, so a
     # Gregorian-looking sigil still matches e.g. a Hebrew value
     # at the same `time` prefix.
-    bindings = bindings_from_modifiers(opts)
+    bindings = bindings_from_modifiers(options)
 
     case Tempo.read(string, Calendars.default()) do
       {:ok, parsed} -> build_match_pattern(parsed, bindings)
@@ -384,7 +384,7 @@ defmodule Tempo.Sigils do
     end
   end
 
-  defp do_sigil(:guard, {:<<>>, _meta, [_string]}, _opts) do
+  defp do_sigil(:guard, {:<<>>, _meta, [_string]}, _options) do
     raise ArgumentError, "invalid expression in guard"
   end
 

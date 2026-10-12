@@ -1439,7 +1439,7 @@ defmodule Tempo.Math do
 
   # A plain crisp anchored datetime: an integer year/month/day prefix
   # with every remaining component a plain integer — no mask, no
-  # `{value, opts}` annotation, no `{value, precision}` microsecond, no
+  # `{value, options}` annotation, no `{value, precision}` microsecond, no
   # range or group.
   defp plain_datetime?([{:year, y}, {:month, m}, {:day, d} | rest])
        when is_integer(y) and is_integer(m) and is_integer(d) do
@@ -2737,8 +2737,8 @@ defmodule Tempo.Math do
   # with a keyword-list tail is an annotation.
   defp strip_component_annotations(time) do
     Enum.map_reduce(time, %{}, fn
-      {unit, {value, opts}}, annotations when is_integer(value) and is_list(opts) ->
-        {{unit, value}, Map.put(annotations, unit, opts)}
+      {unit, {value, options}}, annotations when is_integer(value) and is_list(options) ->
+        {{unit, value}, Map.put(annotations, unit, options)}
 
       entry, annotations ->
         {entry, annotations}
@@ -2753,7 +2753,7 @@ defmodule Tempo.Math do
     Enum.map(time, fn
       {unit, value} = entry when is_integer(value) ->
         case annotations do
-          %{^unit => opts} -> {unit, {value, opts}}
+          %{^unit => options} -> {unit, {value, options}}
           _ -> entry
         end
 

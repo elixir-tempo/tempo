@@ -1301,13 +1301,13 @@ defmodule Tempo.Format do
         :y
       end
 
-    year_opts =
+    year_options =
       options
       |> Keyword.put(:format, year_format)
       |> Keyword.drop([:fields])
 
-    with {:ok, from_str} <- Localize.Date.to_string(to_locale_map(from), year_opts),
-         {:ok, to_str} <- Localize.Date.to_string(to_locale_map(to), year_opts) do
+    with {:ok, from_str} <- Localize.Date.to_string(to_locale_map(from), year_options),
+         {:ok, to_str} <- Localize.Date.to_string(to_locale_map(to), year_options) do
       if from_str == to_str do
         {:ok, from_str}
       else

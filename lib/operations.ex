@@ -88,8 +88,8 @@ defmodule Tempo.Operations do
                | Interval.t()
                | IntervalSet.t()
                | Tempo.Set.t()
-  def do_align(a, b, opts \\ []) do
-    with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+  def do_align(a, b, options \\ []) do
+    with {:ok, {a_set, b_set}} <- align_members(a, b, options),
          {:ok, a_set} <- split_crossers(a_set),
          {:ok, b_set} <- split_crossers(b_set) do
       {:ok, {a_set, b_set}}
@@ -99,25 +99,25 @@ defmodule Tempo.Operations do
   # The operands as the operations take them: aligned, and each member whole.
   # A span with no year that runs through its cycle's end is one member here,
   # and is cut where its cycle ends only to be swept (`turns/1`).
-  defp align_members(a, b, opts) do
+  defp align_members(a, b, options) do
     # A `%Tempo.RecurrenceSet{}` operand is materialised against the other
     # operand (its window), so `intersection(diary, holidays)` needs no explicit
     # `:within` — the diary supplies it. An explicit `:within` still wins.
-    with :ok <- Tempo.check_within_option(opts, "a set operation") do
-      a = resolve_recurrence_set(a, b, opts)
-      b = resolve_recurrence_set(b, a, opts)
-      align_resolved(a, b, opts)
+    with :ok <- Tempo.check_within_option(options, "a set operation") do
+      a = resolve_recurrence_set(a, b, options)
+      b = resolve_recurrence_set(b, a, options)
+      align_resolved(a, b, options)
     end
   end
 
-  defp align_resolved(a, b, opts) do
+  defp align_resolved(a, b, options) do
     with :ok <- validate_operand(a),
          :ok <- validate_operand(b),
          :ok <- Interval.same_frame(a, b),
-         {:ok, class_a, class_b} <- compatible_classes(a, b, opts),
-         {:ok, a_set} <- to_aligned_set(a, class_a, opts),
-         {:ok, b_set} <- to_aligned_set(b, class_b, opts),
-         {:ok, a_set, b_set} <- maybe_anchor_to_window(a_set, b_set, class_a, class_b, opts),
+         {:ok, class_a, class_b} <- compatible_classes(a, b, options),
+         {:ok, a_set} <- to_aligned_set(a, class_a, options),
+         {:ok, b_set} <- to_aligned_set(b, class_b, options),
+         {:ok, a_set, b_set} <- maybe_anchor_to_window(a_set, b_set, class_a, class_b, options),
          {:ok, b_set} <- convert_calendar(b_set, a_set),
          {:ok, a_set, b_set} <- canonicalize_axes(a_set, b_set),
          {:ok, a_set, b_set} <- align_resolution(a_set, b_set) do
@@ -337,9 +337,9 @@ defmodule Tempo.Operations do
   ## operand on the same cycle, as `complement/2`'s is, and is an error only
   ## where a dated operand needs a dated window.
 
-  defp maybe_anchor_to_window(a, b, class_a, class_b, opts) do
+  defp maybe_anchor_to_window(a, b, class_a, class_b, options) do
     classes = {anchor_class(a), anchor_class(b)}
-    place_on_window(a, b, classes, {class_a, class_b}, Keyword.get(opts, :within))
+    place_on_window(a, b, classes, {class_a, class_b}, Keyword.get(options, :within))
   end
 
   # No window places nothing.
@@ -590,10 +590,10 @@ defmodule Tempo.Operations do
 
   ## Anchor-class detection and compatibility check.
 
-  defp compatible_classes(a, b, opts) do
+  defp compatible_classes(a, b, options) do
     class_a = anchor_class(a)
     class_b = anchor_class(b)
-    within = Keyword.get(opts, :within)
+    within = Keyword.get(options, :within)
 
     cond do
       class_a == :empty ->
@@ -738,8 +738,8 @@ defmodule Tempo.Operations do
   # a day's holiday meets a meeting at 10:00 that day. If it cannot (no usable
   # window), it is left as-is for `validate_operand/1` to reject with a clear
   # error.
-  defp resolve_recurrence_set(%Tempo.RecurrenceSet{} = recurrence_set, counterparty, opts) do
-    within = Keyword.get(opts, :within, counterparty)
+  defp resolve_recurrence_set(%Tempo.RecurrenceSet{} = recurrence_set, counterparty, options) do
+    within = Keyword.get(options, :within, counterparty)
 
     case Tempo.to_interval_set(recurrence_set, within: within) do
       {:ok, %IntervalSet{} = set} -> set
@@ -747,15 +747,15 @@ defmodule Tempo.Operations do
     end
   end
 
-  defp resolve_recurrence_set(other, _counterparty, _opts) do
+  defp resolve_recurrence_set(other, _counterparty, _options) do
     other
   end
 
-  defp to_aligned_set(%IntervalSet{} = set, _class, _opts) do
+  defp to_aligned_set(%IntervalSet{} = set, _class, _options) do
     {:ok, set}
   end
 
-  defp to_aligned_set(other, _class, _opts) do
+  defp to_aligned_set(other, _class, _options) do
     case Tempo.to_interval_set(other) do
       {:ok, %IntervalSet{} = set} -> {:ok, set}
       {:error, _} = err -> err
@@ -1225,14 +1225,14 @@ defmodule Tempo.Operations do
   @spec do_union(operand, operand | [operand], keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_union(a, b, opts \\ [])
+  def do_union(a, b, options \\ [])
 
-  def do_union(a, operands, opts) when is_list(operands) do
-    fold_operands(a, operands, opts, &do_union/3)
+  def do_union(a, operands, options) when is_list(operands) do
+    fold_operands(a, operands, options, &do_union/3)
   end
 
-  def do_union(a, b, opts) do
-    with {:ok, {a_set, b_set}} <- align_members(a, b, opts) do
+  def do_union(a, b, options) do
+    with {:ok, {a_set, b_set}} <- align_members(a, b, options) do
       IntervalSet.new(IntervalSet.members(a_set) ++ IntervalSet.members(b_set),
         metadata: a_set.metadata
       )
@@ -1310,15 +1310,15 @@ defmodule Tempo.Operations do
   @spec do_intersection(operand, operand | [operand], keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_intersection(a, b, opts \\ [])
+  def do_intersection(a, b, options \\ [])
 
-  def do_intersection(a, operands, opts) when is_list(operands) do
-    fold_operands(a, operands, opts, &do_intersection/3)
+  def do_intersection(a, operands, options) when is_list(operands) do
+    fold_operands(a, operands, options, &do_intersection/3)
   end
 
-  def do_intersection(a, b, opts) do
-    with {:ok, resolve} <- metadata_resolver(Keyword.get(opts, :metadata, :left)),
-         {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+  def do_intersection(a, b, options) do
+    with {:ok, resolve} <- metadata_resolver(Keyword.get(options, :metadata, :left)),
+         {:ok, {a_set, b_set}} <- align_members(a, b, options),
          {:ok, shared} <- shared(a_set, b_set, resolve) do
       IntervalSet.new(shared, metadata: a_set.metadata)
     end
@@ -1355,8 +1355,8 @@ defmodule Tempo.Operations do
   @spec do_members_overlapping(operand, operand, keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_members_overlapping(a, b, opts \\ []) do
-    with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+  def do_members_overlapping(a, b, options \\ []) do
+    with {:ok, {a_set, b_set}} <- align_members(a, b, options),
          {:ok, kept} <- kept_members(a_set, b_set, :overlapping) do
       IntervalSet.new(kept, metadata: a_set.metadata)
     end
@@ -1526,7 +1526,7 @@ defmodule Tempo.Operations do
 
   * `set` is any Tempo value.
 
-  * `opts` is a keyword list of options.
+  * `options` is a keyword list of options.
 
   ### Options
 
@@ -1552,13 +1552,13 @@ defmodule Tempo.Operations do
   """
   @spec do_complement(operand, keyword()) :: {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_complement(set, opts) do
-    with :ok <- Tempo.check_within_option(opts, "Tempo.complement/2") do
-      complement_within(set, Keyword.get(opts, :within), opts)
+  def do_complement(set, options) do
+    with :ok <- Tempo.check_within_option(options, "Tempo.complement/2") do
+      complement_within(set, Keyword.get(options, :within), options)
     end
   end
 
-  defp complement_within(_set, nil, _opts) do
+  defp complement_within(_set, nil, _options) do
     {:error,
      UnboundedRecurrenceError.exception(
        reason:
@@ -1567,11 +1567,11 @@ defmodule Tempo.Operations do
      )}
   end
 
-  defp complement_within(set, within, opts) do
+  defp complement_within(set, within, options) do
     # The input is coalesced so gaps are computed against the
     # union-of-covered-instants, not against overlapping members
     # individually.
-    with {:ok, {window_set, input_set}} <- align_members(within, set, opts),
+    with {:ok, {window_set, input_set}} <- align_members(within, set, options),
          covered = IntervalSet.coalesce(input_set),
          {:ok, gaps} <- cut_members(window_set, covered, &sweep_difference/2) do
       IntervalSet.new(gaps, metadata: window_set.metadata)
@@ -1620,14 +1620,14 @@ defmodule Tempo.Operations do
   @spec do_difference(operand, operand | [operand], keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_difference(a, b, opts \\ [])
+  def do_difference(a, b, options \\ [])
 
-  def do_difference(a, operands, opts) when is_list(operands) do
-    fold_operands(a, operands, opts, &do_difference/3)
+  def do_difference(a, operands, options) when is_list(operands) do
+    fold_operands(a, operands, options, &do_difference/3)
   end
 
-  def do_difference(a, b, opts) do
-    with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+  def do_difference(a, b, options) do
+    with {:ok, {a_set, b_set}} <- align_members(a, b, options),
          {:ok, left} <- cut_members(a_set, b_set, &sweep_difference/2) do
       IntervalSet.new(left, metadata: a_set.metadata)
     end
@@ -1638,13 +1638,13 @@ defmodule Tempo.Operations do
   # operand, so there is no ambiguity. An empty list is the identity —
   # `a` alone, coerced to a set — which makes "subtract whatever is
   # busy" work without the caller special-casing "nothing is busy".
-  defp fold_operands(a, [], opts, _operation) do
-    as_set(a, opts)
+  defp fold_operands(a, [], options, _operation) do
+    as_set(a, options)
   end
 
-  defp fold_operands(a, operands, opts, operation) do
+  defp fold_operands(a, operands, options, operation) do
     Enum.reduce_while(operands, {:ok, a}, fn operand, {:ok, acc} ->
-      case operation.(acc, operand, opts) do
+      case operation.(acc, operand, options) do
         {:ok, result} -> {:cont, {:ok, result}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -1653,8 +1653,8 @@ defmodule Tempo.Operations do
 
   # Coerce a lone operand to its `IntervalSet` form using the same
   # preflight every operation runs.
-  defp as_set(a, opts) do
-    with {:ok, {a_set, _b_set}} <- align_members(a, a, opts) do
+  defp as_set(a, options) do
+    with {:ok, {a_set, _b_set}} <- align_members(a, a, options) do
       {:ok, a_set}
     end
   end
@@ -1683,8 +1683,8 @@ defmodule Tempo.Operations do
   @spec do_members_outside(operand, operand, keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_members_outside(a, b, opts \\ []) do
-    with {:ok, {a_set, b_set}} <- align_members(a, b, opts),
+  def do_members_outside(a, b, options \\ []) do
+    with {:ok, {a_set, b_set}} <- align_members(a, b, options),
          {:ok, kept} <- kept_members(a_set, b_set, :outside) do
       IntervalSet.new(kept, metadata: a_set.metadata)
     end
@@ -1788,9 +1788,9 @@ defmodule Tempo.Operations do
   @spec do_symmetric_difference(operand, operand, keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_symmetric_difference(a, b, opts \\ []) do
-    with {:ok, a_minus_b} <- do_difference(a, b, opts),
-         {:ok, b_minus_a} <- do_difference(b, a, opts) do
+  def do_symmetric_difference(a, b, options \\ []) do
+    with {:ok, a_minus_b} <- do_difference(a, b, options),
+         {:ok, b_minus_a} <- do_difference(b, a, options) do
       IntervalSet.new(IntervalSet.members(a_minus_b) ++ IntervalSet.members(b_minus_a),
         metadata: a_minus_b.metadata
       )
@@ -1819,9 +1819,9 @@ defmodule Tempo.Operations do
   @spec do_members_in_exactly_one(operand, operand, keyword()) ::
           {:ok, IntervalSet.t()} | {:error, term()}
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_members_in_exactly_one(a, b, opts \\ []) do
-    with {:ok, a_minus_b} <- do_members_outside(a, b, opts),
-         {:ok, b_minus_a} <- do_members_outside(b, a, opts) do
+  def do_members_in_exactly_one(a, b, options \\ []) do
+    with {:ok, a_minus_b} <- do_members_outside(a, b, options),
+         {:ok, b_minus_a} <- do_members_outside(b, a, options) do
       IntervalSet.new(IntervalSet.members(a_minus_b) ++ IntervalSet.members(b_minus_a),
         metadata: a_minus_b.metadata
       )
@@ -1845,10 +1845,10 @@ defmodule Tempo.Operations do
   """
   @spec do_disjoint?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_disjoint?(a, b, opts \\ []) do
+  def do_disjoint?(a, b, options \\ []) do
     Interval.reject_mixed_frame!(a, b)
 
-    case do_intersection(a, b, opts) do
+    case do_intersection(a, b, options) do
       {:ok, %IntervalSet{} = result} -> IntervalSet.do_empty?(result)
       {:error, exception} -> raise exception
     end
@@ -1866,8 +1866,8 @@ defmodule Tempo.Operations do
   """
   @spec do_overlaps?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_overlaps?(a, b, opts \\ []) do
-    not do_disjoint?(a, b, opts)
+  def do_overlaps?(a, b, options \\ []) do
+    not do_disjoint?(a, b, options)
   end
 
   @doc """
@@ -1885,10 +1885,10 @@ defmodule Tempo.Operations do
   """
   @spec do_within?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_within?(a, b, opts \\ []) do
+  def do_within?(a, b, options \\ []) do
     Interval.reject_mixed_frame!(a, b)
 
-    case do_difference(a, b, opts) do
+    case do_difference(a, b, options) do
       {:ok, %IntervalSet{} = result} -> IntervalSet.do_empty?(result)
       {:error, exception} -> raise exception
     end
@@ -1907,8 +1907,8 @@ defmodule Tempo.Operations do
   """
   @spec do_contains?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_contains?(a, b, opts \\ []) do
-    do_within?(b, a, opts)
+  def do_contains?(a, b, options \\ []) do
+    do_within?(b, a, options)
   end
 
   @doc """
@@ -1927,8 +1927,8 @@ defmodule Tempo.Operations do
   """
   @spec do_equal?(operand, operand, keyword()) :: boolean()
         when operand: Tempo.t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()
-  def do_equal?(a, b, opts \\ []) do
-    case do_align(a, b, opts) do
+  def do_equal?(a, b, options \\ []) do
+    case do_align(a, b, options) do
       {:ok, {a_set, b_set}} ->
         a_members = IntervalSet.members(IntervalSet.merged(a_set))
         b_members = IntervalSet.members(IntervalSet.merged(b_set))

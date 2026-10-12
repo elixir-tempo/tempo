@@ -822,29 +822,29 @@ defmodule Tempo.Inspect do
 
   Renders as `#Tempo.IntervalSet<[...]>` with each interval
   inspected via its own protocol implementation. At most
-  `opts.limit` members are shown (the `Inspect.Opts` default is
+  `options.limit` members are shown (the `Inspect.Opts` default is
   `50`); when the set is larger, the shown members are followed by
   the current locale's ellipsis via `Localize.ellipsis/1`. Set-level
   metadata appears as a trailing label when present. Empty sets
   render as `#Tempo.IntervalSet<[]>`.
 
   """
-  def inspect_interval_set(%Tempo.IntervalSet{metadata: metadata} = set, opts) do
+  def inspect_interval_set(%Tempo.IntervalSet{metadata: metadata} = set, options) do
     if IntervalSet.do_empty?(set) do
       "#Tempo.IntervalSet<[]" <> set_metadata_tag(metadata) <> ">"
     else
-      inspect_interval_set_members(set, metadata, opts)
+      inspect_interval_set_members(set, metadata, options)
     end
   end
 
-  defp inspect_interval_set_members(set, metadata, opts) do
-    {shown, truncated?} = take_within_limit(set, opts.limit)
+  defp inspect_interval_set_members(set, metadata, options) do
+    {shown, truncated?} = take_within_limit(set, options.limit)
 
     rendered =
       Enum.map(shown, fn iv ->
         Kernel.inspect(
           iv,
-          opts
+          options
           |> Map.from_struct()
           |> Enum.into([])
         )

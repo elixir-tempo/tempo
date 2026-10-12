@@ -22,7 +22,7 @@ defmodule Tempo.Select do
   operations — the result composes directly into
   `Tempo.union/2`, `Tempo.intersection/2`, `Tempo.difference/2`.
 
-  `Tempo.select/2` is a **pure function**. It has no `opts`, no
+  `Tempo.select/2` is a **pure function**. It has no `options`, no
   ambient locale read, no implicit territory resolution. Every
   input that can affect the result is a value on the selector.
   Locale-dependent constraints like "workdays" or "weekends" are

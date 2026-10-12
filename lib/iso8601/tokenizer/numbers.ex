@@ -48,7 +48,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
 
   alias Tempo.Microsecond
 
-  def positive_number(combinator \\ empty(), opts)
+  def positive_number(combinator \\ empty(), options)
 
   def positive_number(combinator, n) when is_integer(n) do
     combinator
@@ -69,10 +69,10 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     |> label("positive number")
   end
 
-  def positive_number(combinator, opts) do
+  def positive_number(combinator, options) do
     combinator
     |> choice([
-      integer(opts)
+      integer(options)
       |> fraction_or_significant()
       |> optional(error_range())
       |> lookahead_not(unspecified_or_set())
@@ -81,7 +81,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
       |> reduce(:normalize_mask)
       |> unwrap_and_tag(:mask),
       digit_or_unspecified()
-      |> times(opts)
+      |> times(options)
       |> reduce(:normalize_mask)
       |> unwrap_and_tag(:mask)
     ])
@@ -106,7 +106,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     ])
   end
 
-  def positive_integer(combinator \\ empty(), opts)
+  def positive_integer(combinator \\ empty(), options)
 
   def positive_integer(combinator, n) when is_integer(n) do
     combinator
@@ -128,10 +128,10 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     |> label("positive integer")
   end
 
-  def positive_integer(combinator, opts) do
+  def positive_integer(combinator, options) do
     combinator
     |> choice([
-      integer(opts)
+      integer(options)
       |> lookahead_not(unspecified())
       |> optional(exponent())
       |> optional(significant())
@@ -142,25 +142,25 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
       |> reduce(:normalize_mask)
       |> unwrap_and_tag(:mask),
       digit_or_unspecified()
-      |> times(opts)
+      |> times(options)
       |> reduce(:normalize_mask)
       |> unwrap_and_tag(:mask)
     ])
     |> label("positive integer")
   end
 
-  def maybe_negative_number(combinator \\ empty(), opts) do
+  def maybe_negative_number(combinator \\ empty(), options) do
     combinator
     |> optional(negative())
-    |> positive_number(opts)
+    |> positive_number(options)
     |> reduce(:form_number)
     |> label("maybe negative number")
   end
 
-  def maybe_negative_integer(combinator \\ empty(), opts) do
+  def maybe_negative_integer(combinator \\ empty(), options) do
     combinator
     |> optional(negative())
-    |> positive_integer(opts)
+    |> positive_integer(options)
     |> reduce(:form_number)
     |> label("maybe negative integer")
   end
@@ -168,19 +168,19 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # No indicator: a bare `[...]` here would be ambiguous with a
   # top-level one-of set (`[1984,1986,1988]`), so only `{...}`
   # (all-of) is accepted in the designator-less position.
-  def positive_number_or_integer_set(tag, opts) do
+  def positive_number_or_integer_set(tag, options) do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
-      positive_number(opts)
+      positive_number(options)
     ])
     |> unwrap_and_tag(tag)
   end
 
-  def maybe_negative_number_or_integer_set(indicator, tag, opts) do
+  def maybe_negative_number_or_integer_set(indicator, tag, options) do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
-      maybe_negative_number(opts)
+      maybe_negative_number(options)
     ])
     |> ignore(string(indicator))
     |> unwrap_and_tag(tag)
@@ -192,11 +192,11 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # qualifier is always *individual* (§8.2.3) — the designator makes
   # each component self-delimiting — so it emits the same
   # `:individual_qualification` token the implicit left-qualifier does.
-  def qualified_number_or_integer_set(indicator, tag, opts) do
+  def qualified_number_or_integer_set(indicator, tag, options) do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
-      maybe_negative_number(opts)
+      maybe_negative_number(options)
     ])
     |> unwrap_and_tag(tag)
     |> optional(left_qualifier(tag))
@@ -211,20 +211,20 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # `:microsecond {value, precision}` component, preserving the digit
   # count (and therefore the resolution / interval width). Folding to a
   # float would discard significant trailing zeros (`.120` vs `.12`).
-  def implicit_second_or_integer_set(opts) do
+  def implicit_second_or_integer_set(options) do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
-      positive_integer(opts)
+      positive_integer(options)
     ])
     |> unwrap_and_tag(:second)
     |> optional(fraction())
   end
 
-  def explicit_second_or_integer_set(indicator, opts) do
+  def explicit_second_or_integer_set(indicator, options) do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
-      maybe_negative_integer(opts)
+      maybe_negative_integer(options)
     ])
     |> unwrap_and_tag(:second)
     |> optional(choice([fraction(), fractions()]))
@@ -272,19 +272,19 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     fractions
   end
 
-  def positive_integer_or_integer_set(tag, opts) do
+  def positive_integer_or_integer_set(tag, options) do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
-      positive_integer(opts)
+      positive_integer(options)
     ])
     |> unwrap_and_tag(tag)
   end
 
-  def maybe_negative_integer_or_integer_set(indicator, tag, opts) do
+  def maybe_negative_integer_or_integer_set(indicator, tag, options) do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
-      maybe_negative_integer(opts)
+      maybe_negative_integer(options)
     ])
     |> ignore(string(indicator))
     |> unwrap_and_tag(tag)
@@ -296,22 +296,22 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # selection's position (§12.9, an integer). It matters where `S` follows
   # the number as the seconds designator: `0S1I` is second 0 and position 1,
   # not zero to one significant digit.
-  def maybe_negative_exact_integer_or_integer_set(indicator, tag, opts) do
+  def maybe_negative_exact_integer_or_integer_set(indicator, tag, options) do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
       optional(negative())
-      |> exact_integer(opts)
+      |> exact_integer(options)
       |> reduce(:form_number)
     ])
     |> ignore(string(indicator))
     |> unwrap_and_tag(tag)
   end
 
-  defp exact_integer(combinator, opts) do
+  defp exact_integer(combinator, options) do
     combinator
     |> choice([
-      integer(opts)
+      integer(options)
       |> lookahead_not(unspecified())
       |> optional(exponent())
       |> optional(error_range())
@@ -321,7 +321,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
       |> reduce(:normalize_mask)
       |> unwrap_and_tag(:mask),
       digit_or_unspecified()
-      |> times(opts)
+      |> times(options)
       |> reduce(:normalize_mask)
       |> unwrap_and_tag(:mask)
     ])

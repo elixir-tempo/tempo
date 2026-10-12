@@ -139,7 +139,7 @@ defmodule Tempo.IntervalSet.Backend do
 
   @optional_callbacks accepts: 1
 
-  defmacro __using__(_opts) do
+  defmacro __using__(_options) do
     quote do
       @behaviour Tempo.IntervalSet.Backend
 

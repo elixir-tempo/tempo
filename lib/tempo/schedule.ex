@@ -419,42 +419,42 @@ defmodule Tempo.Schedule do
     |> put_to(options)
   end
 
-  defp put_duration(opts, nil) do
-    opts
+  defp put_duration(period_options, nil) do
+    period_options
   end
 
-  defp put_duration(opts, duration) do
-    Keyword.put(opts, :duration, duration)
+  defp put_duration(period_options, duration) do
+    Keyword.put(period_options, :duration, duration)
   end
 
-  defp put_from(opts, options) do
+  defp put_from(period_options, options) do
     cond do
       Keyword.has_key?(options, :start) ->
-        Keyword.put(opts, :from, Keyword.fetch!(options, :start))
+        Keyword.put(period_options, :from, Keyword.fetch!(options, :start))
 
       Keyword.has_key?(options, :not_before) ->
-        Keyword.put(opts, :from, {:not_before, Keyword.fetch!(options, :not_before)})
+        Keyword.put(period_options, :from, {:not_before, Keyword.fetch!(options, :not_before)})
 
       true ->
-        within(opts, :from, :not_before, options)
+        within(period_options, :from, :not_before, options)
     end
   end
 
-  defp put_to(opts, options) do
+  defp put_to(period_options, options) do
     if Keyword.has_key?(options, :deadline) do
-      Keyword.put(opts, :to, {:not_after, Keyword.fetch!(options, :deadline)})
+      Keyword.put(period_options, :to, {:not_after, Keyword.fetch!(options, :deadline)})
     else
-      within(opts, :to, :not_after, options)
+      within(period_options, :to, :not_after, options)
     end
   end
 
   # The window's start bounds the task's start and its end the task's end,
   # where no other option has bounded them.
-  defp within(opts, bound, kind, options) do
+  defp within(period_options, bound, kind, options) do
     case window_ends(Keyword.get(options, :within)) do
       {:ok, {from, to}} ->
         Keyword.put(
-          opts,
+          period_options,
           bound,
           {kind,
            if bound == :from do
@@ -465,7 +465,7 @@ defmodule Tempo.Schedule do
         )
 
       :error ->
-        opts
+        period_options
     end
   end
 

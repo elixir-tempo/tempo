@@ -7423,7 +7423,7 @@ defmodule Tempo do
   # quarter-of-year on a year-resolution value still works. A value on the
   # week axis is read by its week and its day, and one that holds a day of
   # the year by that day: several of them are no one date to read.
-  defp require_ymd!(%Tempo{time: time} = tempo, function, opts \\ []) do
+  defp require_ymd!(%Tempo{time: time} = tempo, function, options \\ []) do
     year = whole!(tempo, :year, function)
 
     cond do
@@ -7439,7 +7439,7 @@ defmodule Tempo do
         ordinal_date_ymd(year, whole!(tempo, :day_of_year, function), tempo.calendar)
 
       true ->
-        month_date_ymd!(tempo, function, year, Keyword.get(opts, :default_day, 1))
+        month_date_ymd!(tempo, function, year, Keyword.get(options, :default_day, 1))
     end
   end
 
@@ -8466,19 +8466,19 @@ defmodule Tempo do
           keyword()
         ) ::
           {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
-  def to_interval(value, opts \\ []) do
-    if Calendars.outside?([value, opts]) do
-      Calendars.outside(to_interval(Calendars.inside(value), Calendars.inside(opts)))
+  def to_interval(value, options \\ []) do
+    if Calendars.outside?([value, options]) do
+      Calendars.outside(to_interval(Calendars.inside(value), Calendars.inside(options)))
     else
-      do_to_interval(value, opts)
+      do_to_interval(value, options)
     end
   end
 
-  defp do_to_interval(value, opts) do
-    if Group.abstract_season?(value) or Group.abstract_season?(Keyword.get(opts, :within)) do
-      season_to_interval(value, opts)
+  defp do_to_interval(value, options) do
+    if Group.abstract_season?(value) or Group.abstract_season?(Keyword.get(options, :within)) do
+      season_to_interval(value, options)
     else
-      value_to_interval(value, opts)
+      value_to_interval(value, options)
     end
   end
 
@@ -8487,42 +8487,42 @@ defmodule Tempo do
   # names, a territory winning over a locale, and with neither in the
   # application's default territory and then the current locale's
   # (`Tempo.Territory.resolve/1`).
-  defp season_to_interval(value, opts) do
-    with {:ok, value} <- with_seasons_dated(value, opts),
-         {:ok, within} <- with_seasons_dated(Keyword.get(opts, :within), opts) do
-      value_to_interval(value, window_with_dates(opts, within))
+  defp season_to_interval(value, options) do
+    with {:ok, value} <- with_seasons_dated(value, options),
+         {:ok, within} <- with_seasons_dated(Keyword.get(options, :within), options) do
+      value_to_interval(value, window_with_dates(options, within))
     end
   end
 
-  defp window_with_dates(opts, nil) do
-    opts
+  defp window_with_dates(options, nil) do
+    options
   end
 
-  defp window_with_dates(opts, within) do
-    Keyword.put(opts, :within, within)
+  defp window_with_dates(options, within) do
+    Keyword.put(options, :within, within)
   end
 
-  defp value_to_interval(value, opts) do
-    with :ok <- check_bound_option(opts, "Tempo.to_interval/2"),
-         opts = window_in_value_frame(value, opts),
+  defp value_to_interval(value, options) do
+    with :ok <- check_bound_option(options, "Tempo.to_interval/2"),
+         options = window_in_value_frame(value, options),
          :ok <- ends_expand(value),
          value = counted_from_points(value),
          value = Selection.read_in_its_period(value),
-         {:ok, value} <- placed_on_window(value, Keyword.get(opts, :within)),
-         :one_start <- recurrence_from_each_value(value, opts),
+         {:ok, value} <- placed_on_window(value, Keyword.get(options, :within)),
+         :one_start <- recurrence_from_each_value(value, options),
          :ok <- rule_has_a_date(value),
          :ok <- counted_in_steps(value),
          :ok <- walkable(value) do
-      case open_window_start(Keyword.get(opts, :within)) do
+      case open_window_start(Keyword.get(options, :within)) do
         {:ok, window_from} ->
-          occurrences_from(value, window_from, opts)
+          occurrences_from(value, window_from, options)
 
         {:error, _reason} = error ->
           error
 
         :bounded ->
           value
-          |> materialise(opts)
+          |> materialise(options)
           |> spans_between_points(value)
       end
     end
@@ -8647,10 +8647,10 @@ defmodule Tempo do
   end
 
   # A `:within` window with no zone bounds a value in a zone in that zone.
-  defp window_in_value_frame(value, opts) do
-    case Keyword.fetch(opts, :within) do
-      {:ok, window} -> Keyword.put(opts, :within, Interval.window_in_frame_of(window, value))
-      :error -> opts
+  defp window_in_value_frame(value, options) do
+    case Keyword.fetch(options, :within) do
+      {:ok, window} -> Keyword.put(options, :within, Interval.window_in_frame_of(window, value))
+      :error -> options
     end
   end
 
@@ -8812,26 +8812,26 @@ defmodule Tempo do
   # no one start, where `R2/2026Y6M{1,15}D/P1D` gave the two days from each.
   defp recurrence_from_each_value(
          %Interval{recurrence: recurrence, from: %__MODULE__{} = from} = interval,
-         opts
+         options
        )
        when recurrence != 1 do
-    from_each(from, &%{interval | from: &1}, interval, opts)
+    from_each(from, &%{interval | from: &1}, interval, options)
   end
 
   defp recurrence_from_each_value(
          %Interval{from: %__MODULE__{} = from, to: to, duration: %Duration{}} = interval,
-         opts
+         options
        )
        when to in [nil, :undefined] do
-    from_each(from, &%{interval | from: &1}, interval, opts)
+    from_each(from, &%{interval | from: &1}, interval, options)
   end
 
   defp recurrence_from_each_value(
          %Interval{from: from, to: %__MODULE__{} = to, duration: %Duration{}} = interval,
-         opts
+         options
        )
        when from in [nil, :undefined] do
-    from_each(to, &%{interval | to: &1}, interval, opts)
+    from_each(to, &%{interval | to: &1}, interval, options)
   end
 
   # An interval written with two ends, one of which holds a set, is the span
@@ -8849,16 +8849,16 @@ defmodule Tempo do
            duration: nil
          } =
            interval,
-         opts
+         options
        ) do
     case {Enumeration.names_each_value?(from), Enumeration.names_each_value?(to)} do
-      {true, false} -> between_each(from, &[from: &1, to: to], interval, opts)
-      {false, true} -> between_each(to, &[from: from, to: &1], interval, opts)
+      {true, false} -> between_each(from, &[from: &1, to: to], interval, options)
+      {false, true} -> between_each(to, &[from: from, to: &1], interval, options)
       _one_span_or_a_set_at_each_end -> :one_start
     end
   end
 
-  defp recurrence_from_each_value(_value, _opts) do
+  defp recurrence_from_each_value(_value, _options) do
     :one_start
   end
 
@@ -8867,10 +8867,10 @@ defmodule Tempo do
   # interval's ends are in, so a value at or after the end it runs to is
   # the error it is alone. They are kept apart, overlapping as they do,
   # unless `:coalesce` is asked.
-  defp between_each(%__MODULE__{} = endpoint, ends, %Interval{metadata: metadata}, opts) do
+  defp between_each(%__MODULE__{} = endpoint, ends, %Interval{metadata: metadata}, options) do
     with {:ok, values} <- Enumeration.expand(endpoint),
          {:ok, spans} <- spans_between(values, ends, metadata) do
-      IntervalSet.new(spans, coalesce: coalesce_opt(opts))
+      IntervalSet.new(spans, coalesce: coalesce_opt(options))
     end
   end
 
@@ -8902,10 +8902,10 @@ defmodule Tempo do
   @spans_at_once Tempo.Limit.values_at_once()
 
   # The interval with each value of an end that holds a set in its place.
-  defp from_each(%__MODULE__{} = endpoint, with_value, interval, opts) do
+  defp from_each(%__MODULE__{} = endpoint, with_value, interval, options) do
     case Enumeration.expand(endpoint) do
       {:ok, values} ->
-        occurrences_from_each(Enum.map(values, with_value), interval, opts, {[], 0})
+        occurrences_from_each(Enum.map(values, with_value), interval, options, {[], 0})
 
       {:error, _exception} = error ->
         error
@@ -8917,27 +8917,27 @@ defmodule Tempo do
 
   # The occurrences from each start, gathered with their count: no more than
   # `@spans_at_once` are given, as from one start.
-  defp occurrences_from_each(_starts, interval, _opts, {_occurrences, count})
+  defp occurrences_from_each(_starts, interval, _options, {_occurrences, count})
        when count > @spans_at_once do
     {:error, too_many_spans_error(interval)}
   end
 
-  defp occurrences_from_each([], _interval, opts, {occurrences, _count}) do
-    IntervalSet.new(occurrences, coalesce: coalesce_opt(opts))
+  defp occurrences_from_each([], _interval, options, {occurrences, _count}) do
+    IntervalSet.new(occurrences, coalesce: coalesce_opt(options))
   end
 
-  defp occurrences_from_each([from_one | from_others], interval, opts, {occurrences, count}) do
-    case to_interval(from_one, opts) do
+  defp occurrences_from_each([from_one | from_others], interval, options, {occurrences, count}) do
+    case to_interval(from_one, options) do
       {:ok, %Interval{} = occurrence} ->
         occurrences_from_each(
           from_others,
           interval,
-          opts,
+          options,
           {[occurrence | occurrences], count + 1}
         )
 
       {:ok, %IntervalSet{} = set} ->
-        gathered_from_each(set, from_others, interval, opts, {occurrences, count})
+        gathered_from_each(set, from_others, interval, options, {occurrences, count})
 
       {:error, _exception} = error ->
         error
@@ -8946,11 +8946,11 @@ defmodule Tempo do
 
   # An open-ended window gives each start's occurrences lazily, and lazy sets
   # are not merged.
-  defp gathered_from_each(set, starts, interval, opts, {occurrences, count}) do
+  defp gathered_from_each(set, starts, interval, options, {occurrences, count}) do
     if IntervalSet.do_bounded?(set) do
       own = IntervalSet.members(set)
       gathered = {Enum.reverse(own, occurrences), count + Enum.count(own)}
-      occurrences_from_each(starts, interval, opts, gathered)
+      occurrences_from_each(starts, interval, options, gathered)
     else
       {:error,
        ConversionError.exception(
@@ -9183,11 +9183,11 @@ defmodule Tempo do
   # With an open-ended window, a value with no end of its own walks its
   # occurrences lazily from the window's start; any other value materialises as
   # in a bounded window, keeping what overlaps the time from the start on.
-  defp occurrences_from(value, window_from, opts) do
+  defp occurrences_from(value, window_from, options) do
     if unending?(value) do
-      lazy_occurrences(value, window_from, opts)
+      lazy_occurrences(value, window_from, options)
     else
-      materialise(value, opts)
+      materialise(value, options)
     end
   end
 
@@ -9275,38 +9275,38 @@ defmodule Tempo do
   # materialised (beyond a calendar's range); an error in the first window is
   # returned, and a computed event with no date in a later one is raised when
   # the walk reaches it (`walked/5`).
-  defp lazy_occurrences(value, window_from, opts) do
+  defp lazy_occurrences(value, window_from, options) do
     base =
       value
       |> cadence_unit()
       |> walk_base()
 
-    walk_opts = Keyword.delete(opts, :coalesce)
+    walk_options = Keyword.delete(options, :coalesce)
 
     with %Tempo{} = first_to <- walk_end(window_from, base, 0),
-         {:ok, first} <- walk_window(value, window_from, first_to, walk_opts) do
+         {:ok, first} <- walk_window(value, window_from, first_to, walk_options) do
       found = IntervalSet.members(first)
       horizon = horizon_after(Math.add(window_from, @occurrence_horizon), found)
 
       later =
         {first_to, 1, horizon}
-        |> Stream.unfold(&walk_next(&1, value, base, walk_opts))
+        |> Stream.unfold(&walk_next(&1, value, base, walk_options))
         |> Stream.concat()
 
       {:ok, IntervalSet.lazy(Stream.concat(found, later), metadata: IntervalSet.metadata(first))}
     end
   end
 
-  defp walk_next({_window_from, _step, horizon}, _value, _base, _opts)
+  defp walk_next({_window_from, _step, horizon}, _value, _base, _options)
        when not is_struct(horizon, Tempo) do
     nil
   end
 
-  defp walk_next({window_from, step, horizon}, value, base, opts) do
+  defp walk_next({window_from, step, horizon}, value, base, options) do
     with :earlier <- Compare.compare_endpoints(window_from, horizon),
          %Tempo{} = window_to <- walk_end(window_from, base, step) do
       value
-      |> walk_window(window_from, window_to, opts)
+      |> walk_window(window_from, window_to, options)
       |> walked(window_from, window_to, step, horizon)
     else
       _past_the_horizon_or_unreachable -> nil
@@ -9340,10 +9340,10 @@ defmodule Tempo do
     nil
   end
 
-  defp walk_window(value, window_from, window_to, opts) do
+  defp walk_window(value, window_from, window_to, options) do
     window = %Tempo.Interval{from: window_from, to: window_to}
 
-    case materialise(value, Keyword.put(opts, :within, window)) do
+    case materialise(value, Keyword.put(options, :within, window)) do
       {:ok, %IntervalSet{} = set} -> {:ok, set}
       {:ok, %Tempo.Interval{} = interval} -> IntervalSet.new([interval])
       {:error, _reason} = error -> error
@@ -9473,7 +9473,7 @@ defmodule Tempo do
   end
 
   # A recurrence of no occurrences (`R0/2026-06-15/P1D`) is an empty set.
-  defp materialise(%Tempo.Interval{recurrence: 0}, _opts) do
+  defp materialise(%Tempo.Interval{recurrence: 0}, _options) do
     IntervalSet.new([])
   end
 
@@ -9492,7 +9492,7 @@ defmodule Tempo do
            from: %Tempo{} = from,
            duration: %Tempo.Duration{} = duration
          } = interval,
-         opts
+         options
        )
        when is_integer(n) and n > 1 do
     {from, floor, interval} = selection_start(from, interval)
@@ -9506,7 +9506,7 @@ defmodule Tempo do
 
     walk =
       iterate_recurrence(
-        {from, counted_from(floor, opts), 0},
+        {from, counted_from(floor, options), 0},
         step,
         occurrence_end_fn(from, duration, interval),
         fn _start -> true end,
@@ -9516,8 +9516,8 @@ defmodule Tempo do
       )
 
     with {:ok, intervals} <- walk,
-         {:ok, kept} <- keep_within(intervals, opts) do
-      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
+         {:ok, kept} <- keep_within(intervals, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
     end
   end
 
@@ -9536,11 +9536,11 @@ defmodule Tempo do
            duration: %Tempo.Duration{} = duration,
            to: %Tempo{} = until
          } = interval,
-         opts
+         options
        ) do
     {from, floor, interval} = selection_start(from, interval)
     occurrence_end = occurrence_end_fn(from, duration, interval)
-    within = Keyword.get(opts, :within)
+    within = Keyword.get(options, :within)
     first = first_period_reaching({from, duration, occurrence_end}, interval, within)
 
     walk =
@@ -9555,8 +9555,8 @@ defmodule Tempo do
 
     with {:ok, intervals} <- walk,
          under_until = Enum.filter(intervals, &starts_under_until?(&1, until)),
-         {:ok, kept} <- keep_within(under_until, opts) do
-      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
+         {:ok, kept} <- keep_within(under_until, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
     end
   end
 
@@ -9574,10 +9574,10 @@ defmodule Tempo do
            duration: %Tempo.Duration{},
            to: to
          } = interval,
-         opts
+         options
        )
        when to in [nil, :undefined] do
-    materialise_unending(interval, Keyword.get(opts, :within), opts)
+    materialise_unending(interval, Keyword.get(options, :within), options)
   end
 
   # A count-1 recurrence carrying a BY-rule selection —
@@ -9597,7 +9597,7 @@ defmodule Tempo do
            repeat_rule: %Tempo{},
            to: to
          } = interval,
-         opts
+         options
        )
        when to in [nil, :undefined] do
     {from, floor, interval} = selection_start(from, interval)
@@ -9610,7 +9610,7 @@ defmodule Tempo do
       end
 
     case iterate_recurrence(
-           {from, counted_from(floor, opts), 0},
+           {from, counted_from(floor, options), 0},
            step,
            occurrence_end_fn(from, duration, interval),
            fn _start -> true end,
@@ -9619,7 +9619,7 @@ defmodule Tempo do
            1
          ) do
       {:ok, [%Tempo.Interval{} = first | _]} ->
-        one_occurrence_within(first, opts)
+        one_occurrence_within(first, options)
 
       {:ok, []} ->
         {:error,
@@ -9646,7 +9646,7 @@ defmodule Tempo do
            to: to,
            metadata: metadata
          } = interval,
-         _opts
+         _options
        )
        when to in [nil, :undefined] and
               (is_map_key(metadata, :occurrence_base_to) or
@@ -9678,11 +9678,11 @@ defmodule Tempo do
            recurrence: 1,
            metadata: metadata
          } = interval,
-         opts
+         options
        )
        when to in [nil, :undefined] do
     if Keyword.has_key?(time, :selection) do
-      selected_spans(from, &{&1, Math.add(&1, duration)}, metadata, opts)
+      selected_spans(from, &{&1, Math.add(&1, duration)}, metadata, options)
     else
       with {:ok, _one_start} <- Interval.endpoints_as_points(interval) do
         from
@@ -9709,12 +9709,12 @@ defmodule Tempo do
            to: %Tempo{},
            repeat_rule: %Tempo{time: [{:selection, selection} | _units]}
          } = interval,
-         opts
+         options
        ) do
     if List.keymember?(selection, :interval, 0) do
       {:error, NotBuilt.rule_to_an_end(interval)}
     else
-      selected_back_from(interval, opts)
+      selected_back_from(interval, options)
     end
   end
 
@@ -9730,7 +9730,7 @@ defmodule Tempo do
            to: %Tempo{},
            repeat_rule: %Tempo{}
          } = interval,
-         _opts
+         _options
        )
        when recurrence != :infinity do
     {:error, NotBuilt.rule_to_an_end(interval)}
@@ -9746,10 +9746,10 @@ defmodule Tempo do
            recurrence: 1,
            metadata: metadata
          } = interval,
-         opts
+         options
        ) do
     if Keyword.has_key?(time, :selection) do
-      selected_spans(to, &{Math.subtract(&1, duration), &1}, metadata, opts)
+      selected_spans(to, &{Math.subtract(&1, duration), &1}, metadata, options)
     else
       with {:ok, _one_end} <- Interval.endpoints_as_points(interval) do
         to
@@ -9769,8 +9769,8 @@ defmodule Tempo do
   # range (`{2017Y..}`, `{..2016Y}`) takes its missing end from the window, so it
   # needs one. A cadence longer than one period (`R/{1848Y..}/P4Y/…`) keeps every
   # nth period, phased from the domain's first stated value.
-  defp materialise(%Tempo.Interval{from: %Tempo.Set{set: [_ | _]} = domain} = interval, opts) do
-    with {:ok, window} <- within_window(opts),
+  defp materialise(%Tempo.Interval{from: %Tempo.Set{set: [_ | _]} = domain} = interval, options) do
+    with {:ok, window} <- within_window(options),
          {:ok, reach} <- domain_reach_window(window, interval),
          {:ok, closed_domain} <- close_domain_ranges(domain, reach),
          {:ok, domain_set} <- to_interval(closed_domain) do
@@ -9790,10 +9790,10 @@ defmodule Tempo do
   # the years matching the `:even` / `:odd` / `:leap` filter.
   defp materialise(
          %Tempo.Interval{from: %Tempo.Set{set: [], except: [], filter: filter}} = interval,
-         opts
+         options
        )
        when not is_nil(filter) do
-    with {:ok, occurrences} <- to_interval(%{interval | from: nil}, opts) do
+    with {:ok, occurrences} <- to_interval(%{interval | from: nil}, options) do
       occurrences
       |> IntervalSet.members()
       |> filter_domain_years(filter)
@@ -9804,8 +9804,8 @@ defmodule Tempo do
   # An exclusions-only domain (`R/^2026/P1Y/FL…N`) has no window of its own, so
   # it needs a `:within` window: materialise the recurrence there, then subtract
   # the excluded values.
-  defp materialise(%Tempo.Interval{from: %Tempo.Set{set: [], except: except}} = interval, opts) do
-    with {:ok, occurrences} <- to_interval(%{interval | from: nil}, opts),
+  defp materialise(%Tempo.Interval{from: %Tempo.Set{set: [], except: except}} = interval, options) do
+    with {:ok, occurrences} <- to_interval(%{interval | from: nil}, options),
          {:ok, excluded} <- to_interval(%Tempo.Set{type: :all, set: except}) do
       difference(occurrences, excluded)
     end
@@ -9829,11 +9829,11 @@ defmodule Tempo do
   # both ends with no cadence (`../..`) is the span it is.
   defp materialise(
          %Tempo.Interval{from: from, to: to, recurrence: recurrence, duration: cadence} = interval,
-         opts
+         options
        )
        when from in [nil, :undefined] and to in [nil, :undefined] and
               (recurrence != 1 or is_struct(cadence, Tempo.Duration)) do
-    from_where_its_window_starts(interval, opts)
+    from_where_its_window_starts(interval, options)
   end
 
   # A rule with no start that runs until an end, as an RRULE with `UNTIL`
@@ -9850,9 +9850,9 @@ defmodule Tempo do
            duration: %Tempo.Duration{},
            to: %Tempo{}
          } = interval,
-         opts
+         options
        ) do
-    from_where_its_window_starts(interval, opts)
+    from_where_its_window_starts(interval, options)
   end
 
   # A recurrence written with a start and an end (`R5/2026-06-15/2026-06-20`,
@@ -9874,12 +9874,12 @@ defmodule Tempo do
            duration: nil,
            repeat_rule: rule
          } = interval,
-         opts
+         options
        )
        when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) or
               (recurrence == 1 and is_struct(rule, Tempo)) do
     with {:ok, duration} <- duration(from, to) do
-      case materialise(%{interval | to: nil, duration: duration}, opts) do
+      case materialise(%{interval | to: nil, duration: duration}, options) do
         # An exception holds its values as a caller holds them.
         {:error, %UnboundedRecurrenceError{} = error} ->
           {:error, %{error | interval: Calendars.outside(interval)}}
@@ -9903,25 +9903,25 @@ defmodule Tempo do
            duration: %Tempo.Duration{} = duration,
            to: %Tempo{} = to
          } = interval,
-         opts
+         options
        )
        when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
     back = Duration.negate(duration)
     metadata = strip_span_directives(interval.metadata)
 
-    with {:ok, occurrences} <- occurrences_back(to, back, recurrence, interval, metadata, opts),
-         {:ok, kept} <- keep_within(occurrences, opts) do
-      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
+    with {:ok, occurrences} <- occurrences_back(to, back, recurrence, interval, metadata, options),
+         {:ok, kept} <- keep_within(occurrences, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
     end
   end
 
   # A single interval is its own span, each end read as the point it names:
   # `20C/21C` is `2000Y/2100Y`.
-  defp materialise(%Tempo.Interval{} = interval, _opts) do
+  defp materialise(%Tempo.Interval{} = interval, _options) do
     Interval.endpoints_as_points(interval)
   end
 
-  defp materialise(%Tempo.IntervalSet{} = set, _opts) do
+  defp materialise(%Tempo.IntervalSet{} = set, _options) do
     {:ok, set}
   end
 
@@ -9932,9 +9932,9 @@ defmodule Tempo do
   # members resolve in a second pass over the others' occurrences. The window's
   # start rule holds for every member, a concrete one included: a one-off 2026
   # member is not among the set's occurrences within 2027.
-  defp materialise(%Tempo.RecurrenceSet{members: members, metadata: metadata}, opts) do
-    with {:ok, occurrences} <- set_member_occurrences(members, opts),
-         {:ok, kept} <- keep_within(occurrences, opts) do
+  defp materialise(%Tempo.RecurrenceSet{members: members, metadata: metadata}, options) do
+    with {:ok, occurrences} <- set_member_occurrences(members, options),
+         {:ok, kept} <- keep_within(occurrences, options) do
       IntervalSet.new(kept, metadata: metadata)
     end
   end
@@ -9942,16 +9942,16 @@ defmodule Tempo do
   # A value's metadata (`new/1`'s `:metadata`) moves to the interval or
   # intervals it materialises to, so each endpoint is the value alone and
   # compares equal to it written plainly.
-  defp materialise(%Tempo{metadata: metadata} = tempo, opts) when map_size(metadata) > 0 do
-    with {:ok, materialised} <- to_interval(%{tempo | metadata: %{}}, opts) do
+  defp materialise(%Tempo{metadata: metadata} = tempo, options) when map_size(metadata) > 0 do
+    with {:ok, materialised} <- to_interval(%{tempo | metadata: %{}}, options) do
       {:ok, with_value_metadata(materialised, metadata)}
     end
   end
 
-  defp materialise(%Tempo{time: time} = tempo, opts) do
+  defp materialise(%Tempo{time: time} = tempo, options) do
     case Enum.split_while(time, &(not match?({:selection, _}, &1))) do
       {context, [{:selection, selection} | trailing]} ->
-        materialise_selection(tempo, context, selection, trailing, opts)
+        materialise_selection(tempo, context, selection, trailing, options)
 
       {_time, []} ->
         materialise_value(tempo)
@@ -9972,22 +9972,22 @@ defmodule Tempo do
   #
   # A set of durations names lengths of time and no time, so it has no span,
   # as one duration has none.
-  defp materialise(%Tempo.Set{set: [%Duration{} | _durations]} = set, _opts) do
+  defp materialise(%Tempo.Set{set: [%Duration{} | _durations]} = set, _options) do
     {:error, ConversionError.exception(value: set, reason: :bare_duration)}
   end
 
-  defp materialise(%Tempo.Set{type: :all, set: members, except: [_ | _] = except} = set, opts) do
+  defp materialise(%Tempo.Set{type: :all, set: members, except: [_ | _] = except} = set, options) do
     with {:ok, included} <- members_to_interval_set(members, set),
          {:ok, excluded} <- members_to_interval_set(except, set) do
-      difference(included, excluded, opts)
+      difference(included, excluded, options)
     end
   end
 
-  defp materialise(%Tempo.Set{type: :all, set: members} = set, _opts) do
+  defp materialise(%Tempo.Set{type: :all, set: members} = set, _options) do
     members_to_interval_set(members, set)
   end
 
-  defp materialise(%Tempo.Set{type: :one} = value, _opts) do
+  defp materialise(%Tempo.Set{type: :one} = value, _options) do
     {:error, ConversionError.exception(value: value, reason: :one_of_set)}
   end
 
@@ -9995,7 +9995,7 @@ defmodule Tempo do
   # so it materialises to every value from `first` to `last` at the range's own
   # resolution — a year range yields years, a month range months. An open-ended
   # range (`:undefined` endpoint) spans no finite set and cannot materialise.
-  defp materialise(%Tempo.Range{first: %Tempo{} = first, last: %Tempo{} = last} = range, _opts) do
+  defp materialise(%Tempo.Range{first: %Tempo{} = first, last: %Tempo{} = last} = range, _options) do
     {unit, _level} = resolution(first)
 
     first
@@ -10004,15 +10004,15 @@ defmodule Tempo do
     |> members_to_interval_set(range)
   end
 
-  defp materialise(%Tempo.Range{} = range, _opts) do
+  defp materialise(%Tempo.Range{} = range, _options) do
     {:error, ConversionError.exception(value: range, reason: :open_range)}
   end
 
-  defp materialise(%Tempo.Duration{} = value, _opts) do
+  defp materialise(%Tempo.Duration{} = value, _options) do
     {:error, ConversionError.exception(value: value, reason: :bare_duration)}
   end
 
-  defp materialise(value, _opts) do
+  defp materialise(value, _options) do
     {:error, ConversionError.exception(value: value, target: Tempo.Interval)}
   end
 
@@ -10023,8 +10023,8 @@ defmodule Tempo do
   # `FREQ=DAILY;BYDAY=SU;COUNT=1` from 2019 within 2026 was a Sunday of 2019,
   # where `COUNT=2` was nothing, and a window that is no window was passed
   # over. One with no rule is the interval it is, as an interval is.
-  defp from_where_its_window_starts(%Tempo.Interval{} = interval, opts) do
-    within = Keyword.get(opts, :within)
+  defp from_where_its_window_starts(%Tempo.Interval{} = interval, options) do
+    within = Keyword.get(options, :within)
 
     if is_nil(within) do
       {:error,
@@ -10037,7 +10037,7 @@ defmodule Tempo do
       case window_start(within, interval) do
         {:ok, start} ->
           start = in_rule_zone(start, interval)
-          materialise_from_bound(interval, start, within, counted_from_window(opts, within))
+          materialise_from_bound(interval, start, within, counted_from_window(options, within))
 
         {:error, _} = error ->
           error
@@ -10045,8 +10045,8 @@ defmodule Tempo do
     end
   end
 
-  defp one_occurrence_within(%Tempo.Interval{} = occurrence, opts) do
-    case keep_within([occurrence], opts) do
+  defp one_occurrence_within(%Tempo.Interval{} = occurrence, options) do
+    case keep_within([occurrence], options) do
       {:ok, [kept]} -> {:ok, kept}
       {:ok, []} -> IntervalSet.new([])
       {:error, _reason} = error -> error
@@ -10069,14 +10069,14 @@ defmodule Tempo do
   # none it cannot be materialised. A window running back from each anchor
   # carries occurrences into the window from periods after it, so the walk goes
   # on to the last of those.
-  defp materialise_unending(interval, nil, _opts) do
+  defp materialise_unending(interval, nil, _options) do
     {:error, UnboundedRecurrenceError.exception(interval: interval)}
   end
 
   defp materialise_unending(
          %Tempo.Interval{from: from, duration: duration} = interval,
          within,
-         opts
+         options
        ) do
     with {:ok, window_to} <- bound_upper(within),
          {_forward, backward} = window_reach(interval),
@@ -10093,8 +10093,8 @@ defmodule Tempo do
              selection_fn(interval, duration),
              interval.metadata
            ),
-         {:ok, kept} <- keep_within(intervals, opts) do
-      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
+         {:ok, kept} <- keep_within(intervals, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
     end
   end
 
@@ -10254,15 +10254,15 @@ defmodule Tempo do
   # occurrence's own span can run on past its period, so a
   # recurrence that reaches out of its periods walks from the first period
   # whose occurrences can reach the window, and keeps those that overlap it.
-  defp materialise_from_bound(interval, start, within, opts) do
+  defp materialise_from_bound(interval, start, within, options) do
     case window_reach(interval) do
       {[], []} ->
         %{interval | from: start_in_repeat_calendar(start, interval)}
-        |> to_interval(opts)
+        |> to_interval(options)
         |> filter_to_bound_window(interval, within)
 
       reach ->
-        materialise_reaching(interval, start, reach, opts)
+        materialise_reaching(interval, start, reach, options)
     end
   end
 
@@ -10270,11 +10270,11 @@ defmodule Tempo do
   # starts, and the walk keeps none that starts before the walk does, so the
   # walk starts that much earlier again. The walk's end reaches on in
   # `materialise_unending/3`.
-  defp materialise_reaching(interval, start, {forward, backward}, opts) do
+  defp materialise_reaching(interval, start, {forward, backward}, options) do
     with {:ok, %Tempo{} = reach_from} <- reach_start(start, interval, forward),
          %Tempo{} = carried_from <- carried(reach_from, backward, :back),
          %Tempo{} = walk_from <- at_start_resolution(carried_from, start, interval) do
-      to_interval(%{interval | from: start_in_repeat_calendar(walk_from, interval)}, opts)
+      to_interval(%{interval | from: start_in_repeat_calendar(walk_from, interval)}, options)
     end
   end
 
@@ -10587,8 +10587,8 @@ defmodule Tempo do
   # so this helper passes the caller's explicit opt through
   # unchanged and otherwise omits the option — letting
   # `IntervalSet.new/2` apply its own default.
-  defp coalesce_opt(opts) do
-    value = Keyword.get(opts, :coalesce)
+  defp coalesce_opt(options) do
+    value = Keyword.get(options, :coalesce)
 
     if is_nil(value) do
       false
@@ -11214,30 +11214,30 @@ defmodule Tempo do
   defp selected_back_from(
          %Tempo.Interval{to: to, duration: duration, recurrence: recurrence, metadata: metadata} =
            interval,
-         opts
+         options
        ) do
     {anchor, _floor, anchored} = selection_start(to, %{interval | from: to, to: nil})
     %{select: select, once?: once?} = selection_parts(selected_by_the_rule(anchored, duration))
     asked = {duration, select, strip_span_directives(metadata)}
 
-    with {:ok, as_far_back?} <- as_far_back(recurrence, interval, opts),
+    with {:ok, as_far_back?} <- as_far_back(recurrence, interval, options),
          {:ok, selected} <- selected_back({anchor, to}, asked, as_far_back?, 0, []) do
       selected
       |> one_of_each_start(once?)
       |> nearest_the_end(recurrence)
-      |> counted_back(recurrence, opts)
+      |> counted_back(recurrence, options)
     end
   end
 
   # How far back a walk goes: for a count until it has that many, and with
   # no count to the start of its `:within` window, without which it has no
   # first occurrence.
-  defp as_far_back(count, _interval, _opts) when is_integer(count) do
+  defp as_far_back(count, _interval, _options) when is_integer(count) do
     {:ok, fn _period, found -> Enum.count_until(found, count) < count end}
   end
 
-  defp as_far_back(:infinity, interval, opts) do
-    case bound_lower(Keyword.get(opts, :within)) do
+  defp as_far_back(:infinity, interval, options) do
+    case bound_lower(Keyword.get(options, :within)) do
       %Tempo{} = window_from ->
         {:ok, fn period, _found -> ends_after?(period.to, window_from) end}
 
@@ -11320,25 +11320,25 @@ defmodule Tempo do
 
   # One occurrence is the interval it is, as that of a rule from a start is,
   # and more are a set. A `:within` window keeps those that overlap it.
-  defp counted_back([%Tempo.Interval{} = one], 1, opts) do
-    one_occurrence_within(one, opts)
+  defp counted_back([%Tempo.Interval{} = one], 1, options) do
+    one_occurrence_within(one, options)
   end
 
-  defp counted_back(occurrences, _recurrence, opts) do
-    with {:ok, kept} <- keep_within(occurrences, opts) do
-      IntervalSet.new(kept, coalesce: coalesce_opt(opts))
+  defp counted_back(occurrences, _recurrence, options) do
+    with {:ok, kept} <- keep_within(occurrences, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
     end
   end
 
   # The occurrences of a recurrence written with a duration and an end, earliest
   # first: a count's, or an unending one's back to the start of its `:within`
   # window, without which it has no first occurrence.
-  defp occurrences_back(to, back, count, _interval, metadata, _opts) when is_integer(count) do
+  defp occurrences_back(to, back, count, _interval, metadata, _options) when is_integer(count) do
     occurrences_back_to(to, back, metadata, 0, fn k, _occurrence -> k < count end, [])
   end
 
-  defp occurrences_back(to, back, :infinity, interval, metadata, opts) do
-    case Keyword.fetch(opts, :within) do
+  defp occurrences_back(to, back, :infinity, interval, metadata, options) do
+    case Keyword.fetch(options, :within) do
       {:ok, within} -> occurrences_back_within(to, back, bound_lower(within), metadata)
       :error -> {:error, UnboundedRecurrenceError.exception(interval: interval)}
     end
@@ -12055,17 +12055,17 @@ defmodule Tempo do
   # The floor of a walk that is counted from a window's start, which the
   # conversion of a rule with no start says in the option `:counted_from`:
   # it is no option of a caller's.
-  defp counted_from(floor, opts) do
-    case Keyword.get(opts, :counted_from) do
+  defp counted_from(floor, options) do
+    case Keyword.get(options, :counted_from) do
       %Tempo{} = window_from -> {floor, window_from}
       _no_window -> floor
     end
   end
 
-  defp counted_from_window(opts, within) do
+  defp counted_from_window(options, within) do
     case window_lower(within) do
-      %Tempo{} = window_from -> Keyword.put(opts, :counted_from, window_from)
-      _no_lower -> opts
+      %Tempo{} = window_from -> Keyword.put(options, :counted_from, window_from)
+      _no_lower -> options
     end
   end
 
@@ -13307,8 +13307,8 @@ defmodule Tempo do
   # A caller's `:within` as a half-open `{window_from, window_to}` start window,
   # or `:none` when no window is given (a domain, a count or an UNTIL then
   # bounds the recurrence alone). An open-ended window has no `window_to`.
-  defp within_window(opts) do
-    case Keyword.fetch(opts, :within) do
+  defp within_window(options) do
+    case Keyword.fetch(options, :within) do
       {:ok, within} -> window_edges(within)
       :error -> {:ok, :none}
     end
@@ -13334,8 +13334,8 @@ defmodule Tempo do
   # One rule for every recurrence: the occurrences kept are those that overlap
   # the caller's window, `[from, to)` — one already in progress when the window
   # opens, and one that runs past its end. No window keeps them all.
-  defp keep_within(occurrences, opts) do
-    with {:ok, window} <- within_window(opts) do
+  defp keep_within(occurrences, options) do
+    with {:ok, window} <- within_window(options) do
       {:ok, occurrences_in_window(occurrences, window)}
     end
   end
@@ -13585,19 +13585,19 @@ defmodule Tempo do
   # A recurrence set's occurrences, member by member. A set holding a conditional
   # member (`Tempo.RecurrenceSet.keep_when/2`, `move_when/2`) resolves in two
   # passes, since a conditional depends on the other members' occurrences.
-  defp set_member_occurrences(members, opts) do
+  defp set_member_occurrences(members, options) do
     if Enum.any?(members, &match?(%Conditional{}, &1)) do
-      conditional_set_occurrences(members, opts)
+      conditional_set_occurrences(members, options)
     else
-      members_occurrences(members, opts)
+      members_occurrences(members, options)
     end
   end
 
-  defp members_occurrences(members, opts) do
+  defp members_occurrences(members, options) do
     all_occurrences =
       members
       |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
-        case recurrence_set_member(member, opts) do
+        case recurrence_set_member(member, options) do
           {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
           {:error, _} = error -> {:halt, error}
         end
@@ -13621,14 +13621,14 @@ defmodule Tempo do
   # against the others' and keeps those that overlap the window. The other
   # members materialise over the window itself, exactly as in a set without
   # conditionals.
-  defp conditional_set_occurrences(members, opts) do
+  defp conditional_set_occurrences(members, options) do
     conditionals = Enum.filter(members, &match?(%Conditional{}, &1))
 
     with :ok <- validate_conditionals(conditionals),
-         {:ok, window} <- conditional_window(conditionals, opts),
-         {:ok, first_pass, first_opts} <- first_pass(members, conditionals, window, opts),
-         {:ok, reads} <- conditional_reads(first_pass, first_opts),
-         {:ok, others_occurrences} <- others_occurrences(first_pass, first_opts, opts) do
+         {:ok, window} <- conditional_window(conditionals, options),
+         {:ok, first_pass, first_options} <- first_pass(members, conditionals, window, options),
+         {:ok, reads} <- conditional_reads(first_pass, first_options),
+         {:ok, others_occurrences} <- others_occurrences(first_pass, first_options, options) do
       resolved =
         for {index, %Conditional{} = conditional, occurrences} <- first_pass,
             occurrence <- occurrences,
@@ -13653,23 +13653,24 @@ defmodule Tempo do
   # of what a set of sixteen yearly rules and a bridge took. A condition
   # that moves an occurrence can move one into the window from before it,
   # so a set that holds one is read over the widened window, as it was.
-  defp first_pass(members, _conditionals, :none, opts) do
-    read_over(members, opts)
+  defp first_pass(members, _conditionals, :none, options) do
+    read_over(members, options)
   end
 
-  defp first_pass(members, conditionals, window, opts) do
+  defp first_pass(members, conditionals, window, options) do
     with true <- Enum.all?(conditionals, &match?(%Conditional{to_next: nil}, &1)),
-         {:ok, first_pass, ^opts} = read <- read_over(members, opts),
+         {:ok, first_pass, ^options} = read <- read_over(members, options),
          false <- reaches_past?(first_pass, window) do
       read
     else
       {:error, _reason} = error -> error
-      _a_condition_reaches_past_the_window -> read_over(members, widened_opts(opts, window))
+      _a_condition_reaches_past_the_window -> read_over(members, widened_options(options, window))
     end
   end
 
-  defp read_over(members, opts) do
-    with {:ok, first_pass} <- first_pass_occurrences(members, opts), do: {:ok, first_pass, opts}
+  defp read_over(members, options) do
+    with {:ok, first_pass} <- first_pass_occurrences(members, options),
+         do: {:ok, first_pass, options}
   end
 
   # Whether a day a condition reads from one of its occurrences is outside
@@ -13713,7 +13714,7 @@ defmodule Tempo do
   # those its window holds: each was converted a second time, which was a
   # third of what a set with one bridge took. A member that is counted or
   # placed from its window's start is converted in the window, as it was.
-  defp others_occurrences(first_pass, opts, opts) do
+  defp others_occurrences(first_pass, options, options) do
     others =
       for {_index, member, occurrences} <- first_pass,
           not is_struct(member, Conditional),
@@ -13723,12 +13724,12 @@ defmodule Tempo do
     {:ok, others}
   end
 
-  defp others_occurrences(first_pass, _widened_opts, opts) do
+  defp others_occurrences(first_pass, _widened_options, options) do
     in_windows =
       first_pass
       |> Enum.reject(&match?({_index, %Conditional{}, _occurrences}, &1))
       |> Enum.reduce_while({:ok, []}, fn {_index, member, occurrences}, {:ok, acc} ->
-        case in_the_window(member, occurrences, opts) do
+        case in_the_window(member, occurrences, options) do
           {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
           {:error, _} = error -> {:halt, error}
         end
@@ -13746,11 +13747,11 @@ defmodule Tempo do
     end
   end
 
-  defp in_the_window(member, occurrences, opts) do
+  defp in_the_window(member, occurrences, options) do
     if same_in_any_window?(member) do
       {:ok, occurrences}
     else
-      recurrence_set_member(member, opts)
+      recurrence_set_member(member, options)
     end
   end
 
@@ -13803,13 +13804,13 @@ defmodule Tempo do
   # occurrences whose metadata includes a `:falls_on` map — never its own — or
   # every occurrence of a `:falls_on` recurrence set, materialised over the same
   # widened window.
-  defp conditional_reads(first_pass, opts) do
+  defp conditional_reads(first_pass, options) do
     tally = occurrence_tally(first_pass)
 
     first_pass
     |> Enum.filter(&match?({_index, %Conditional{}, _occurrences}, &1))
     |> Enum.reduce_while({:ok, %{}}, fn {index, conditional, _occurrences}, {:ok, reads} ->
-      case condition_spans(conditional, index, tally, opts) do
+      case condition_spans(conditional, index, tally, options) do
         {:ok, spans} -> {:cont, {:ok, Map.put(reads, index, spans)}}
         {:error, _} = error -> {:halt, error}
       end
@@ -13820,9 +13821,9 @@ defmodule Tempo do
          %Conditional{falls_on: %Tempo.RecurrenceSet{} = reference},
          _index,
          _tally,
-         opts
+         options
        ) do
-    with {:ok, occurrences} <- to_interval_set(reference, opts) do
+    with {:ok, occurrences} <- to_interval_set(reference, options) do
       spans =
         for %Tempo.Interval{from: %Tempo{}, to: %Tempo{}} = occurrence <-
               IntervalSet.members(occurrences),
@@ -13832,7 +13833,7 @@ defmodule Tempo do
     end
   end
 
-  defp condition_spans(%Conditional{falls_on: falls_on}, index, tally, _opts) do
+  defp condition_spans(%Conditional{falls_on: falls_on}, index, tally, _options) do
     spans =
       for {other, from, to, metadata} <- tally,
           other != index,
@@ -13847,8 +13848,8 @@ defmodule Tempo do
   # edge — so a condition near an edge reads the occurrences just outside it.
   # Without a window (or with an empty one) the members bound themselves and
   # nothing widens.
-  defp conditional_window(conditionals, opts) do
-    with {:ok, window} <- within_window(opts) do
+  defp conditional_window(conditionals, options) do
+    with {:ok, window} <- within_window(options) do
       widened_window(window, conditional_reach(conditionals))
     end
   end
@@ -13888,8 +13889,8 @@ defmodule Tempo do
     end)
   end
 
-  defp widened_opts(opts, {_bound_from, _bound_to, widened}) do
-    Keyword.put(opts, :within, widened)
+  defp widened_options(options, {_bound_from, _bound_to, widened}) do
+    Keyword.put(options, :within, widened)
   end
 
   defp in_conditional_window?(_occurrence, :none) do
@@ -13902,12 +13903,12 @@ defmodule Tempo do
 
   # Every member's occurrences, a conditional's being its member's, tagged with
   # the conditional's metadata as a nested set's are.
-  defp first_pass_occurrences(members, opts) do
+  defp first_pass_occurrences(members, options) do
     first_pass =
       members
       |> Enum.with_index()
       |> Enum.reduce_while({:ok, []}, fn {member, index}, {:ok, acc} ->
-        case recurrence_set_member(first_pass_member(member), opts) do
+        case recurrence_set_member(first_pass_member(member), options) do
           {:ok, occurrences} -> {:cont, {:ok, [{index, member, occurrences} | acc]}}
           {:error, _} = error -> {:halt, error}
         end
@@ -14015,9 +14016,9 @@ defmodule Tempo do
   # recurrence set is one member (a holiday and its observed days): its own
   # metadata tags every occurrence its members produce. Anything else is not a
   # member, so it is an error rather than a raise.
-  defp recurrence_set_member(%module{metadata: metadata} = member, opts)
+  defp recurrence_set_member(%module{metadata: metadata} = member, options)
        when module in [Tempo.Interval, Tempo.RecurrenceSet] do
-    with {:ok, materialised} <- to_interval(member, opts) do
+    with {:ok, materialised} <- to_interval(member, options) do
       occurrences =
         materialised
         |> recurrence_set_occurrences()
@@ -14027,13 +14028,13 @@ defmodule Tempo do
     end
   end
 
-  defp recurrence_set_member(%Tempo{} = member, opts) do
-    with {:ok, materialised} <- to_interval(member, opts) do
+  defp recurrence_set_member(%Tempo{} = member, options) do
+    with {:ok, materialised} <- to_interval(member, options) do
       {:ok, recurrence_set_occurrences(materialised)}
     end
   end
 
-  defp recurrence_set_member(member, _opts) do
+  defp recurrence_set_member(member, _options) do
     {:error, ConversionError.exception(value: member, reason: :recurrence_set_member)}
   end
 
@@ -14292,16 +14293,16 @@ defmodule Tempo do
   # selection per year it names. A `:within` window keeps the dates that overlap
   # it and narrows the years before any is resolved; a context without a year
   # takes its years from the window, so it needs one.
-  defp materialise_selection(%Tempo{} = tempo, context, selection, trailing, opts) do
+  defp materialise_selection(%Tempo{} = tempo, context, selection, trailing, options) do
     rule = %{tempo | time: [selection: selection]}
     cadence = %Tempo.Duration{time: [{selection_cadence_unit(context), 1}]}
     finer_context = Keyword.delete(context, :year)
 
-    with {:ok, window} <- within_window(opts),
+    with {:ok, window} <- within_window(options),
          {:ok, years} <- selection_years(tempo, Keyword.get(context, :year), window),
          {:ok, members} <- selection_members(tempo, years, finer_context) do
       members
-      |> members_selection(rule, cadence, points_as(opts), tempo)
+      |> members_selection(rule, cadence, points_as(options), tempo)
       |> keep_occurrences_in_window(window)
       |> with_trailing_units(trailing, tempo)
     end
@@ -14370,8 +14371,8 @@ defmodule Tempo do
   # How a point a selection makes is given: as the span a unit of its
   # resolution long, as an occurrence of a recurrence is, or as the value
   # it is, which `Tempo.select/2` asks for (`selected_in/1`).
-  defp points_as(opts) do
-    Keyword.get(opts, :points_as, :spans)
+  defp points_as(options) do
+    Keyword.get(options, :points_as, :spans)
   end
 
   defp sized(occurrences, true, :values) do
@@ -14542,8 +14543,8 @@ defmodule Tempo do
   # An interval that starts or ends on a selection (ISO 8601-2 §12.11.3):
   # `2018Y9ML1K1IN/P5D` is the five days from the first Monday of September
   # 2018, one span for each date the selection gives.
-  defp selected_spans(%Tempo{} = endpoint, span_of, metadata, opts) do
-    with {:ok, %IntervalSet{} = selected} <- to_interval(endpoint, opts) do
+  defp selected_spans(%Tempo{} = endpoint, span_of, metadata, options) do
+    with {:ok, %IntervalSet{} = selected} <- to_interval(endpoint, options) do
       selected
       |> IntervalSet.members()
       |> Enum.map(fn %Tempo.Interval{from: date} ->

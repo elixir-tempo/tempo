@@ -178,21 +178,21 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec new([Interval.t()], keyword()) :: {:ok, t()} | {:error, term()}
-  def new(intervals, opts \\ []) when is_list(intervals) do
+  def new(intervals, options \\ []) when is_list(intervals) do
     if Calendars.outside?(intervals) do
       intervals
       |> Calendars.inside()
-      |> new(opts)
+      |> new(options)
       |> Calendars.outside()
     else
-      built(intervals, opts)
+      built(intervals, options)
     end
   end
 
-  defp built(intervals, opts) do
+  defp built(intervals, options) do
     intervals = Enum.map(intervals, &Interval.resolve_duration_form/1)
 
-    backend = resolve_backend(Keyword.get(opts, :backend, Backend.List))
+    backend = resolve_backend(Keyword.get(options, :backend, Backend.List))
 
     with :ok <- validate_all_bounded(intervals),
          {:ok, intervals} <- in_one_calendar(intervals),
@@ -203,7 +203,7 @@ defmodule Tempo.IntervalSet do
       # instant-set form (touching or overlapping intervals merged
       # into larger spans) must either pass `coalesce: true` here
       # or apply `coalesce/1` explicitly after construction.
-      coalesce? = Keyword.get(opts, :coalesce, false)
+      coalesce? = Keyword.get(options, :coalesce, false)
 
       sorted = Enum.sort(intervals, &compare_from/2)
 
@@ -214,11 +214,11 @@ defmodule Tempo.IntervalSet do
           sorted
         end
 
-      metadata = Keyword.get(opts, :metadata, %{})
+      metadata = Keyword.get(options, :metadata, %{})
 
       {:ok,
        %__MODULE__{
-         intervals: backend.from_list(final, opts),
+         intervals: backend.from_list(final, options),
          metadata: metadata,
          backend: backend
        }}
@@ -363,8 +363,8 @@ defmodule Tempo.IntervalSet do
   Raising version of `new/1`.
   """
   @spec new!([Interval.t()], keyword()) :: t()
-  def new!(intervals, opts \\ []) do
-    case new(intervals, opts) do
+  def new!(intervals, options \\ []) do
+    case new(intervals, options) do
       {:ok, set} -> set
       {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
     end

@@ -26,8 +26,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 * [ ] **A guide to selection** — the selector vocabulary is the module doc of `Tempo.Select`, whose 30 one-line examples no test runs (each was run by hand on 2026-10-11 and matched). As `guides/selection.md` they would be run by `test/guides_test.exs`, beside the set operations' guide.
 
-* [ ] **`opts` in the engine** — `lib/operations.ex` and others name a keyword list `opts` where the house name is `options`; the documented functions of `Tempo` take `options` since 2026-10-11.
-
 * [ ] **Livebooks install 2.0 at the release** — `getting-started`, `tempo_tour`, `scheduling-workbook` and `uncertain-dates-workbook` install `{:ex_tempo, "~> 1.6"}` and the Melbourne deck `~> 1.6.3`, while their code uses the 2.0 names: at the 2.0.0 release each installs `~> 2.0`, as `everyday-holidays` already does.
 
 * [ ] **`rescue` in the library** — three sites rescue an exception where the rest of Tempo passes tagged tuples. A raise in a NimbleParsec combinator, rescued at the parser's boundary, is an acceptable escape hatch where there is no other (user, 2026-10-08). The one rescue of `lib/iso8601/parser.ex` is not in a combinator: it is around `parse_date/1`, which builds a value from the tokens once the combinators have run, and raises a `Tempo.ParseError` at fourteen places (the order of a group or a selection beside a unit, a century that is no one whole number). To confirm with the user whether it stands under the same allowance; the other way is to make each check where `Tempo.Iso8601.Parser.refused/1` scans the tokens before they are built. `lib/ical.ex` (`parse/2`, `available/2`) rescues what `ICal.from_ics/1` raises for text it cannot read, the `ical` library having no form that returns an error; to report. `lib/inspect.ex` no longer does (2026-10-08).
@@ -67,6 +65,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **`opts` in the engine** — every keyword list of options, and every `Inspect.Opts`, is named `options` in `lib/`: 392 names in 14 files, two private functions among them, with the parsed code proved the same but for the names. 2026-10-13.
 
 * [x] **Week dates by callbacks** — Tempo asks every calendar a week date by Calendrical's `date_from_week_date/3`, `week_date_from_date/3` and `weeks_in_week_year/1`, where it counted one itself by ISO 8601's rule; its own week arithmetic is removed. 2026-10-13.
 
