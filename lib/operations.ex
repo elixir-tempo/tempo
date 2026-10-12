@@ -339,14 +339,12 @@ defmodule Tempo.Operations do
 
   defp maybe_anchor_to_window(a, b, class_a, class_b, opts) do
     classes = {anchor_class(a), anchor_class(b)}
+    place_on_window(a, b, classes, {class_a, class_b}, Keyword.get(opts, :within))
+  end
 
-    within = Keyword.get(opts, :within)
-
-    if is_nil(within) do
-      {:ok, a, b}
-    else
-      place_on_window(a, b, classes, {class_a, class_b}, within)
-    end
+  # No window places nothing.
+  defp place_on_window(a, b, _classes, _compatible, nil) do
+    {:ok, a, b}
   end
 
   # Neither operand has a time of day to place.

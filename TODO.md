@@ -68,6 +68,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **Two conditionals of the code-rules rewrite that dialyzer could not narrow** — CI's lint row failed on `8cdf0f9` with five `missing_range` findings: an `if` that tests a variable for `nil` or a constant does not tell dialyzer what the variable is in the other branch, where the `case` it replaced did. `Tempo.UnitValues.in_period/3` is a `with :counted <- …` and the window of a set operation is told by a clause of `place_on_window/5`. Dialyzer was not run locally (the user's rule): CI is the check. 2026-10-12.
+
 * [x] **tempo_holidays' year gates beside a rule of another calendar** — on the user's word ("update tempo_holidays so that it converts each gate to the rule's calendar when it builds the member"), its 16 such rules write each Gregorian gate as the years of the rule's calendar whose occurrence falls in it, and its conformance run is as it was (168,186 matched, 0 mismatched). The change is in tempo_holidays' working tree for the user to commit, and needs this `main` pushed first. 2026-10-12.
 
 * [x] **An open-ended domain beside a window of another calendar** — `close_domain_range/3` closed an open range with the window's bound as it stood, so `{..1435Y}` of an Islamic rule within the Gregorian 2014 was a range of two calendars that selected nothing; the bound is now the day it starts on, in the range's calendar, at the range's resolution. Found by tempo_holidays' year gates. 2026-10-12.

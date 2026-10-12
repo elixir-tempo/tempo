@@ -95,12 +95,8 @@ defmodule Tempo.UnitValues do
   @spec in_period(atom(), keyword(), module()) ::
           {:ok, values()} | {:error, :unanchored | :uncounted | :no_period}
   def in_period(unit, context, calendar) do
-    listed = listed(unit, context, calendar)
-
-    if listed == :counted do
+    with :counted <- listed(unit, context, calendar) do
       counted_in_period(unit, context, calendar)
-    else
-      listed
     end
   end
 
