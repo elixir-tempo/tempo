@@ -3316,15 +3316,18 @@ defmodule Tempo.Math do
     :fallback
   end
 
-  # A week of a calendar of weeks so many weeks on is the calendar's own
-  # `plus/6`. Any other value is counted a week at a time, in whichever
-  # calendar of months it is: none is known by its name for a shorter way.
+  # A week so many weeks on, in one step and in every calendar alike: the
+  # first day of the week as a date (`date_from_week_date/3`), that many
+  # weeks on by the calendar's own `plus/6`, and the week that day is in
+  # (`week_date_from_date/3`).
   defp weeks_by_the_calendar([{:year, year}, {:week, week} | rest], n, calendar)
        when is_integer(year) and is_integer(week) and week > 0 do
-    if Tempo.week_based_calendar?(calendar) do
-      week_of_a_calendar_of_weeks(year, week, rest, n, calendar)
+    with %Date{} = first <- calendar.date_from_week_date(year, week, 1),
+         {year, month, day} <- calendar.plus(first.year, first.month, first.day, :weeks, n, []),
+         {week_year, week, _day} <- calendar.week_date_from_date(year, month, day) do
+      {:ok, [{:year, week_year}, {:week, week} | rest]}
     else
-      :by_count
+      _by_count -> :by_count
     end
   end
 
@@ -3332,27 +3335,17 @@ defmodule Tempo.Math do
     :by_count
   end
 
-  defp week_of_a_calendar_of_weeks(year, week, rest, n, calendar) do
-    with true <- calendar.valid_date?(year, week, 1),
-         {year, week, _day} <- calendar.plus(year, week, 1, :weeks, n, []) do
-      {:ok, [{:year, year}, {:week, week} | rest]}
-    else
-      _by_count -> :by_count
-    end
-  end
-
-  # A day of a week of a calendar of weeks so many days on is the calendar's
-  # own `plus/6` too.
+  # A day of a week so many days on is the same three questions.
   defp days_of_week_by_the_calendar(
          [{:year, year}, {:week, week}, {:day_of_week, day} | rest],
          n,
          calendar
        )
        when is_integer(year) and is_integer(week) and is_integer(day) do
-    with true <- Tempo.week_based_calendar?(calendar),
-         true <- calendar.valid_date?(year, week, day),
-         {year, week, day} <- calendar.plus(year, week, day, :days, n, []) do
-      {:ok, [{:year, year}, {:week, week}, {:day_of_week, day} | rest]}
+    with %Date{} = date <- calendar.date_from_week_date(year, week, day),
+         {year, month, day} <- calendar.plus(date.year, date.month, date.day, :days, n, []),
+         {week_year, week, day_of_week} <- calendar.week_date_from_date(year, month, day) do
+      {:ok, [{:year, week_year}, {:week, week}, {:day_of_week, day_of_week} | rest]}
     else
       _by_count -> :by_count
     end

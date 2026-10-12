@@ -1826,23 +1826,16 @@ defmodule Tempo.UnitValues do
   # 8601's weeks (`W`) start on Monday, the first the one that holds the
   # year's fourth day; a calendar's own (`w`) are those it numbers.
 
-  # ISO 8601's weeks start on a Monday, weekday 1.
-  @monday 1
-
   @doc false
-  # The date of day `day` of ISO 8601 week `week` of `year` (`W`). A
-  # week-based calendar's weeks are its own dates. A month-based calendar's
-  # follow ISO 8601's rule over the calendar's own year, as RFC 7529
-  # applies it to any calendar: each week starts on a Monday, and week 1 is
-  # the one holding the year's fourth day. Every calendar of months is asked
-  # the same way: no calendar is known by its name for a shorter one.
+  # The date of day `day` of ISO 8601 week `week` of `year` (`W`), which
+  # every calendar answers (`date_from_week_date/3`): ISO 8601's rule over
+  # the calendar's own year, as RFC 7529 applies it to any calendar, each
+  # week starting on a Monday and week 1 the one holding the year's fourth
+  # day. A calendar of weeks answers with its own date.
   def date_from_iso_week(year, week, day, calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      Date.new(year, week, day, calendar)
-    else
-      calendar
-      |> iso_week_start(year, week)
-      |> date_in_week(day, calendar)
+    case calendar.date_from_week_date(year, week, day) do
+      %Date{} = date -> {:ok, date}
+      {:error, _reason} -> {:error, :invalid_date}
     end
   end
 
@@ -1871,46 +1864,13 @@ defmodule Tempo.UnitValues do
   end
 
   @doc false
-  # How many ISO 8601 weeks (`W`) `year` has: a week-based calendar's own
-  # count, or the weeks ISO 8601's rule gives a month-based calendar's year.
+  # How many ISO 8601 weeks (`W`) `year` has, which every calendar answers
+  # (`weeks_in_week_year/1`), or none for a year it does not have.
   def iso_weeks_in_year(year, calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      calendar_weeks_in_year(year, calendar)
-    else
-      iso_week_count(calendar, year)
+    case calendar.weeks_in_week_year(year) do
+      weeks when is_integer(weeks) -> weeks
+      {:error, _reason} -> 0
     end
-  end
-
-  # The weeks from the first day of a year's week 1 to the first day of the
-  # next year's, as Calendrical counts them: 52 or 53.
-  defp iso_week_count(calendar, year) do
-    with {:ok, first} <- first_week_start(calendar, year, @monday),
-         {:ok, next_first} <- first_week_start(calendar, year + 1, @monday),
-         weeks when is_integer(weeks) <- counted_between(first, next_first, :weeks) do
-      weeks
-    else
-      _no_first_week -> 0
-    end
-  end
-
-  # The first day of week `week` of `year`: that many weeks on from week 1's,
-  # by Calendrical's arithmetic, when the year has the week. It is reached in
-  # one step, where listing the year's weeks to find it took one for each.
-  defp iso_week_start(calendar, year, week) when is_integer(week) and week >= 1 do
-    with {:ok, first} <- first_week_start(calendar, year, @monday),
-         {:ok, next_first} <- first_week_start(calendar, year + 1, @monday),
-         {start_year, month, day} <-
-           calendar.plus(first.year, first.month, first.day, :weeks, week - 1, []),
-         {:ok, start} <- Date.new(start_year, month, day, calendar),
-         :lt <- Compare.compare_days(start, next_first) do
-      start
-    else
-      _no_such_week -> nil
-    end
-  end
-
-  defp iso_week_start(_calendar, _year, _week) do
-    nil
   end
 
   # How many weeks `year` has in the calendar's own numbering (`w`), or 0
@@ -2009,22 +1969,6 @@ defmodule Tempo.UnitValues do
       %Date{} = fourth_day -> {:ok, Kday.kday_on_or_before(fourth_day, first_day)}
       {:error, _reason} -> :error
     end
-  end
-
-  # The `day`th day of the week that starts on `week_start`, from
-  # Calendrical's arithmetic.
-  defp date_in_week(%Date{} = week_start, day, calendar) when is_integer(day) do
-    with true <- day in days_of_a_week(calendar),
-         {year, month, day_of_month} <-
-           calendar.plus(week_start.year, week_start.month, week_start.day, :days, day - 1, []) do
-      Date.new(year, month, day_of_month, calendar)
-    else
-      _no_such_day -> {:error, :invalid_date}
-    end
-  end
-
-  defp date_in_week(_week_start, _day, _calendar) do
-    {:error, :invalid_date}
   end
 
   @doc false

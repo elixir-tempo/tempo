@@ -173,24 +173,13 @@ defmodule Tempo.Enumeration.Zone do
     :error
   end
 
-  # A date of a calendar as a day of a week: the fields of the date itself
-  # in a calendar of weeks, and in any other its ISO 8601 week, which the
-  # calendar answers over its own year (`iso_week_of_year/3`), with the day
-  # of that week counted from Monday.
+  # A date of a calendar as a day of a week, which every calendar answers
+  # (`week_date_from_date/3`): ISO 8601's rule over the calendar's own year,
+  # and the date's own fields in a calendar of weeks.
   defp day_of_a_week(%Date{year: year, month: month, day: day}, calendar) do
-    if Tempo.week_based_calendar?(calendar) do
-      {:ok, year, month, day}
-    else
-      day_of_an_iso_week(year, month, day, calendar)
-    end
-  end
-
-  defp day_of_an_iso_week(year, month, day, calendar) do
-    with {week_year, week} when is_integer(week) <- calendar.iso_week_of_year(year, month, day),
-         {day_of_week, _first, _last} <- calendar.day_of_week(year, month, day, :monday) do
-      {:ok, week_year, week, day_of_week}
-    else
-      _no_week -> :error
+    case calendar.week_date_from_date(year, month, day) do
+      {week_year, week, day_of_week} -> {:ok, week_year, week, day_of_week}
+      {:error, _reason} -> :error
     end
   end
 

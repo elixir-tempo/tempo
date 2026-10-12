@@ -34,11 +34,12 @@ CALENDAR = {
     ("year_of_era", 3),
 }
 
-# The callbacks of the `Calendrical` behaviour at Calendrical `d461f5a`.
+# The callbacks of the `Calendrical` behaviour at Calendrical `274280f`.
 CALENDRICAL_REQUIRED = {
     ("calendar_base", 0), ("calendar_year", 3), ("cardinal_day", 3), ("cardinal_month", 1),
     ("cldr_calendar_type", 0), ("cyclic_year", 3), ("date_from_day_of_year", 2),
-    ("date_from_iso_days", 1), ("date_to_iso_days", 3), ("dates_in_gregorian_year", 3),
+    ("date_from_iso_days", 1), ("date_from_week_date", 3), ("date_to_iso_days", 3),
+    ("dates_in_gregorian_year", 3),
     ("day_numbers", 2), ("days_in_month", 1), ("days_in_week", 0), ("days_in_year", 1),
     ("diff", 3), ("era_calendar_type", 0), ("extended_year", 3), ("iso_week_of_year", 3),
     ("leap_month", 1), ("lunar_month_of_year", 2), ("month", 2), ("month_numbers", 1),
@@ -47,7 +48,8 @@ CALENDRICAL_REQUIRED = {
     ("plus", 6), ("quadrimester", 2), ("quarter", 2), ("related_gregorian_year", 3),
     ("semester", 2), ("solar_term", 2), ("traditional_leap_month", 1),
     ("traditional_months", 1), ("week", 2), ("week_of_month", 3), ("week_of_year", 3),
-    ("weeks_in_month", 2), ("weeks_in_year", 1), ("year", 1), ("years_in_cycle", 0),
+    ("week_date_from_date", 3), ("weeks_in_month", 2), ("weeks_in_week_year", 1),
+    ("weeks_in_year", 1), ("year", 1), ("years_in_cycle", 0),
 }
 CALENDRICAL_OPTIONAL = {
     ("calendar_from_cldr_calendar_type", 1), ("cldr_calendar_type", 3),
@@ -457,8 +459,6 @@ DECIDERS = collections.OrderedDict([
         ("lib/tempo.ex", "date_units", "Tempo"),
         ("lib/iso8601/group.ex", "calendar_week", None),
         ("lib/tempo/unit_values.ex", "calendar_weeks_in_year", None),
-        ("lib/tempo/unit_values.ex", "iso_weeks_in_year", "UnitValues"),
-        ("lib/tempo/unit_values.ex", "date_from_iso_week", "UnitValues"),
     ]),
     ("A year that begins on another day than the first of its first month", [
         ("lib/tempo/unit_values.ex", "year_begins_with_first_month?", "UnitValues"),
@@ -903,7 +903,7 @@ def write(census):
 
     emit("## 3. Calls on a calendar")
     emit("")
-    emit(f"{len(dynamic)} calls, of {len(functions)} functions at the arities shown. \"Declared\" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `d461f5a`, less `counted_from_one?/0`, which is removed (48 callbacks, 4 of them optional).")
+    emit(f"{len(dynamic)} calls, of {len(functions)} functions at the arities shown. \"Declared\" is where the function is a callback: of Elixir's `Calendar` behaviour (1.20.4, 28 callbacks, all required) or of the `Calendrical` behaviour at Calendrical `274280f` (51 callbacks, 4 of them optional).")
     emit("")
     emit(table(["Function", "Declared", "Calls", "Lines"], [
         [f"`{name}/{count}`", status(name, count), total,

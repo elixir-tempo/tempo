@@ -1,6 +1,6 @@
 # One calendar surface
 
-**Status:** in progress, 2026-10-12
+**Status:** in progress, 2026-10-13
 
 Tempo is to know nothing of how a calendar is implemented (the user, 2026-10-10: "Tempo, by design, should not know anything about a calendars implementation", and no special cases for a calendar are acceptable). Today it knows a great deal, and this plan is to take that knowledge out and leave one surface that every calendar answers alike. It rests on a census of the whole implementation, [calendar-surface-census.md](calendar-surface-census.md): 109 files and 36,162 lines of code read by a script, every match written, nothing sampled. The decisions at the foot were taken on 2026-10-10 and the work is under way: the tasks at the end say what is done, and what waits on Calendrical is in its `TODO.md`.
 
@@ -295,9 +295,9 @@ The border was first built, on 2026-10-11, as a hidden module (`Tempo.Border`) t
 
 ## What still decides by a calendar's answer
 
-The census sorts the 42 functions it lists, called at 224 places, by how each stands after the user's rulings of 2026-10-12. No line of code outside `Tempo.Calendars` names a calendar module, and no calendar is probed for what it exports.
+The census sorts the 40 functions it lists, called at 202 places, by how each stands after the user's rulings of 2026-10-12. No line of code outside `Tempo.Calendars` names a calendar module, and no calendar is probed for what it exports.
 
-* **Asks a calendar its kind** (17 functions, 102 places) — `calendar_base/0`, asked by `Tempo.week_based_calendar?/1` and its wrappers, and one CLDR type asked for how a year is worded (`worded_as_gregorian?/1`, which is Localize's to answer). This stands. The user, 2026-10-12: "Week calendars are 2026Y25W2D format", and a month written for one "should be considered invalid". A calendar of weeks holds a year, a week and a day of the week, written `2026Y25W2K` (ISO 8601-2's designator for the day of the week is `K`, and `2026Y25W2D` is read by no calendar), and a month, a day of a month or a day of the year written or given for one is a `Tempo.InvalidDateError`, where it was read as the Gregorian day and converted. So whether a calendar is of weeks is what the calendar says of its own dates, asked in one function, and no calendar is asked its `parsing_calendar/0`. The places counted rose by 5 with that change: the six that ask whether a month is written for a calendar of weeks asked it through `parsing_calendar/0` before, and were not counted.
+* **Asks a calendar its kind** (15 functions, 80 places) — `calendar_base/0`, asked by `Tempo.week_based_calendar?/1` and its wrappers, and one CLDR type asked for how a year is worded (`worded_as_gregorian?/1`, which is Localize's to answer). This stands. The user, 2026-10-12: "Week calendars are 2026Y25W2D format", and a month written for one "should be considered invalid". A calendar of weeks holds a year, a week and a day of the week, written `2026Y25W2K` (ISO 8601-2's designator for the day of the week is `K`, and `2026Y25W2D` is read by no calendar), and a month, a day of a month or a day of the year written or given for one is a `Tempo.InvalidDateError`, where it was read as the Gregorian day and converted. So whether a calendar is of weeks is what the calendar says of its own dates, asked in one function, and no calendar is asked its `parsing_calendar/0`. The places counted rose by 5 with that change, the six that ask whether a month is written for a calendar of weeks having asked it through `parsing_calendar/0` before, uncounted, and fell by 22 when a week date went to the calendar's callbacks.
 
 * **Asks whether a calendar is the notation's own** (9 functions, 84 places) — left, on the user's word ("Leave them"). Each is a place where a standard is written in the Gregorian calendar: ISO 8601-2's seasons, an RRULE of RFC 5545, the zone database, a recurrence with no start beside a window (deferred), and what is written with no calendar named (`~o`, the suffix left out, prose). `Tempo.Calendars.default/0`, `zone/0` and `rule/0` are among them: they give the calendar of a value that names none, of the zone database and of RFC 5545, and ask nothing of a calendar.
 
@@ -315,7 +315,7 @@ A calendar that has months and one that has weeks are two kinds of calendar in C
 
 ### Week dates by callbacks
 
-Decided by the user on 2026-10-12 ("Add the callbacks"): `date_from_week_date/3`, `week_date_from_date/3` and `weeks_in_week_year/1`, required of every calendar, count a week date by ISO 8601's rule over the calendar's own year, and a calendar of weeks answers with its own dates. They are written in Calendrical and, for `Calendar.ISO`, in `Localize.Calendar.ISO`. Tempo's calls of them (in `Tempo.UnitValues`, `Tempo.Math` and the zone enumeration), which replace its own week arithmetic, wait on those two being pushed.
+Decided by the user on 2026-10-12 ("Add the callbacks"): `date_from_week_date/3`, `week_date_from_date/3` and `weeks_in_week_year/1`, required of every calendar, count a week date by ISO 8601's rule over the calendar's own year, and a calendar of weeks answers with its own dates. They are written in Calendrical and, for `Calendar.ISO`, in `Localize.Calendar.ISO`. Tempo calls them (in `Tempo.UnitValues`, `Tempo.Math` and the zone enumeration) where it counted a week date itself, at Calendrical `274280f` and Localize `ce73d12b`.
 
 ## What this plan has not done
 
@@ -339,13 +339,13 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 
 * [ ] **What a call of the library's own API costs** — 77 documented functions are called by other modules of the library ([public-surface-census.md](public-surface-census.md) lists them). Each such call pays the guard of a first clause, or a reading of its arguments by `Tempo.Calendars.outside?/1` that finds nothing, and no more. The hidden module behind each documented one that was decided on 2026-10-11 for this was built and withdrawn by the user on 2026-10-12 ("I would expect the basic function body to be in the same module as the documentation"). To measure, the hot ones first: `Tempo.Network.Normalize` measures a length through `Tempo.from_elixir/1` and `Tempo.to_date/1`, 146,000 times for an undated Gregorian year.
 
-* [ ] **Week dates by callbacks** — Tempo asks `date_from_week_date/3`, `week_date_from_date/3` and `weeks_in_week_year/1` where it counted a week date itself. Written against local checkouts of Calendrical and Localize, with the suite passing; it is committed once both are pushed and the locks moved.
-
 * [ ] **What is left to settle** — `validated/1`'s clause for the notation's calendar, which goes when `Localize.Calendar.ISO` declares Calendrical's behaviour, and `worded_as_gregorian?/1`, which asks a CLDR type for what is Localize's to word. The rest of the census stands by the user's rulings of 2026-10-12.
 
 * [ ] **Calendrical an optional dependency, with no conditional code** — the user, 2026-10-11. With every question asked of the value's calendar, what is left is 9 calls of Calendrical's own modules (its parser, `validate_calendar/1`, `calendar_from_cldr_calendar_type/1`, `Kday`, `Ecclesiastical`, the additional calendars) and the calendars named for week dates: each is to become a callback, a question of Localize, or a module the caller gives.
 
 ### Done
+
+* [x] **Week dates by callbacks** — Tempo asks every calendar `date_from_week_date/3`, `week_date_from_date/3` and `weeks_in_week_year/1` where it counted a week date itself, and its own week arithmetic is removed: a step of 520 weeks in the default calendar is 34 µs where it was 3.7 ms. 2026-10-13.
 
 * [x] **A calendar of weeks is a kind of calendar, and takes no month** — the user, 2026-10-12, after the attempt above: its dates are a year, a week and a day of the week, and a month, a day of a month or a day of the year written or given for one is an error. `Tempo.week_based_calendar?/1` stays the one function that asks `calendar_base/0`; `parsing_calendar/0` is asked nowhere. 2026-10-12.
 
