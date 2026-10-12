@@ -70,6 +70,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **An open-ended domain beside a window of another calendar** — `close_domain_range/3` closed an open range with the window's bound as it stood, so `{..1435Y}` of an Islamic rule within the Gregorian 2014 was a range of two calendars that selected nothing; the bound is now the day it starts on, in the range's calendar, at the range's resolution. Found by tempo_holidays' year gates. 2026-10-12.
+
 * [x] **The two code rules of 2026-10-12 in existing code** — no `case` or `if` tests a pipeline (63 places: a pipeline of one step is the call it is, a longer one is bound to a named variable first), and a `case` of two branches that takes no value apart is an `if` (147 places), in 54 files. The 91 two-branch `case`s with a guard are as they were, for the user to rule on. 2026-10-12.
 
 * [x] **Extensions come last, and apply to the whole expression** — the user, 2026-10-12: "edtf and ixdtf extensions are only valid after all date/time expressions. The extensions apply to the whole expression, always. Explicit conversion to another calendar is permitted." A suffix inside an interval, a set, a range or a recurrence is a `Tempo.ParseError`, an interval is in one zone (`Tempo.Interval.new/1` returns an error for two), a recurrence's domain is in the recurrence's calendar, and `Tempo.to_iso8601/1` returns an error for a struct given parts in two zones or calendars. 2026-10-12.

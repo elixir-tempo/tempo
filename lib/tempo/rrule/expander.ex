@@ -35,7 +35,6 @@ defmodule Tempo.RRule.Expander do
   #
   # See `plans/rrule-full-expansion.md` for the roadmap.
 
-  alias Tempo.Calendars
   alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.RRule.Rule
@@ -291,10 +290,12 @@ defmodule Tempo.RRule.Expander do
   # The `ical` library is optional — guard the clauses so Tempo
   # compiles when it isn't present.
   if Code.ensure_loaded?(ICal.Recurrence) do
-    # Aliased inside the `ical`-conditional block: `RRuleError` is only
-    # referenced by the ical→rule mapping below, so a module-level alias
-    # would be unused when `ical` is absent (e.g. a downstream that does
-    # not depend on it), emitting an unused-alias warning.
+    # Aliased inside the `ical`-conditional block: `RRuleError` and
+    # `Calendars` are only referenced by the ical→rule mapping below, so a
+    # module-level alias would be unused when `ical` is absent (e.g. a
+    # downstream that does not depend on it), emitting an unused-alias
+    # warning.
+    alias Tempo.Calendars
     alias Tempo.RRuleError
 
     @doc """

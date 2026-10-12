@@ -469,6 +469,8 @@ Tempo 2.0 gives each word in its API one meaning. The table maps each 1.x name t
 
 ### Fixed
 
+* A recurrence's open-ended domain is closed by a `:within` window of another calendar in the domain's own calendar: `R/{..1435Y}/P1Y/FL3M12DN[u-ca=islamic-umalqura]` within `2014Y` is 13 January 2014, where the Gregorian year closed the range as the Islamic year of that number and nothing was selected.
+
 * `Tempo.new/1` and `Tempo.Duration.new/1` return an `ArgumentError` for an argument that is no list of components (a tuple, a date, a string), where they raised `FunctionClauseError`.
 
 * A month that a change of calendar begins after its first day starts on the first day it has, and is ordered as that day is: February 1918 in Russia's reform calendar (`Calendrical.Reform.calendar_for(:RU)`) starts on the 14th, where it started on a 1 February the calendar does not have. A calendar is asked the months of a year and the days of a month wherever a value is extended, compared or stepped.

@@ -177,6 +177,66 @@ defmodule Tempo.ExclusionDomainTest do
     end
   end
 
+  describe "an open-ended domain beside a window of another calendar" do
+    # A window is another expression, and may be of another calendar. The
+    # end it gives an open range is a year of the range's calendar: a
+    # Gregorian year closed a range of Islamic years as the Islamic year of
+    # that number, and `{..1435Y}` within 2014 selected nothing.
+    defp gregorian_starts(text, window) do
+      {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!(text), within: window)
+
+      for interval <- IntervalSet.members(set) do
+        {:ok, date} =
+          interval
+          |> Interval.from()
+          |> Tempo.to_date()
+
+        Date.convert!(date, Calendar.ISO)
+      end
+    end
+
+    test "is closed in its own calendar, at either end" do
+      # 12 Rabi al-awwal 1435 is 13 January 2014.
+      for domain <- [
+            "{..1435Y}",
+            "{1435Y..}",
+            "{..1433Y,1435Y,1439Y..}",
+            "{..1436Y}",
+            "{1434Y..}"
+          ] do
+        text = "R/#{domain}/P1Y/FL3M12DN[u-ca=islamic-umalqura]"
+        assert {domain, gregorian_starts(text, ~o"2014Y")} == {domain, [~D[2014-01-13]]}
+      end
+    end
+
+    test "leaves out the years its range leaves out" do
+      for domain <- ["{..1434Y}", "{1436Y..}", "{..1434Y,1436Y..}"] do
+        text = "R/#{domain}/P1Y/FL3M12DN[u-ca=islamic-umalqura]"
+        assert {domain, gregorian_starts(text, ~o"2014Y")} == {domain, []}
+      end
+    end
+
+    test "gives what the rule with no domain gives, in the years the domain holds" do
+      # The date falls twice in 2015: 3 January (1436) and 23 December (1437).
+      open = gregorian_starts("R/../P1Y/FL3M12DN[u-ca=islamic-umalqura]", ~o"2013Y/2018Y")
+
+      assert open ==
+               [~D[2013-01-24], ~D[2014-01-13], ~D[2015-01-03], ~D[2015-12-23], ~D[2016-12-11]] ++
+                 [~D[2017-11-30]]
+
+      from_1436 = "R/{1436Y..}/P1Y/FL3M12DN[u-ca=islamic-umalqura]"
+      assert gregorian_starts(from_1436, ~o"2013Y/2018Y") == Enum.drop(open, 2)
+
+      to_1436 = "R/{..1436Y}/P1Y/FL3M12DN[u-ca=islamic-umalqura]"
+      assert gregorian_starts(to_1436, ~o"2013Y/2018Y") == Enum.take(open, 3)
+    end
+
+    test "is closed as before by a window of its own calendar" do
+      assert gregorian_starts("R/{..2019Y,2021Y..}/P1Y/FL12M25DN", ~o"2019Y/2023Y") ==
+               [~D[2019-12-25], ~D[2021-12-25], ~D[2022-12-25]]
+    end
+  end
+
   describe "an open-ended domain takes its missing end from the window" do
     test "an open upper end runs to the window's end" do
       {:ok, set} = Tempo.to_interval(~o"R/{2023Y..}/P1Y/FL1M2DN", within: ~o"{2021..2027}Y")

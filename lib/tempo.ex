@@ -13429,7 +13429,7 @@ defmodule Tempo do
          _bound_from,
          %Tempo{} = bound_to
        ) do
-    with %Tempo{} = last <- trunc_to_resolution_of(bound_to, first) do
+    with {:ok, last} <- closing_end(bound_to, first) do
       {:ok, %{range | last: last}}
     end
   end
@@ -13439,13 +13439,26 @@ defmodule Tempo do
          %Tempo{} = bound_from,
          _bound_to
        ) do
-    with %Tempo{} = first <- trunc_to_resolution_of(bound_from, last) do
+    with {:ok, first} <- closing_end(bound_from, last) do
       {:ok, %{range | first: first}}
     end
   end
 
   defp close_domain_range(member, _bound_from, _bound_to) do
     {:ok, member}
+  end
+
+  # The end a bound gives an open range: the day the bound starts on, as a
+  # day of the range's calendar, at the range's resolution. A window is
+  # another expression and may be of another calendar, where a range is in
+  # one: a Gregorian year closed a range of Hebrew years as the year of
+  # that number.
+  defp closing_end(%Tempo{} = bound, %Tempo{calendar: calendar} = like) do
+    with {:ok, day} <- start_at_unit(bound, :day),
+         {:ok, %Tempo{} = there} <- to_calendar(day, calendar),
+         %Tempo{} = closed <- trunc_to_resolution_of(there, like) do
+      {:ok, closed}
+    end
   end
 
   defp trunc_to_resolution_of(value, like) do
