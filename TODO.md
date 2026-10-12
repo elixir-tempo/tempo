@@ -26,8 +26,6 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ### Release and housekeeping
 
-* [ ] **Exports nothing outside their module calls** — 67 functions exported and called by their own module alone become `defp`, and 6 with no caller at all are removed. The census and the evaluation are [plans/public-surface.md](plans/public-surface.md).
-
 * [ ] **A guide to selection** — the selector vocabulary is the module doc of `Tempo.Select`, whose 30 one-line examples no test runs (each was run by hand on 2026-10-11 and matched). As `guides/selection.md` they would be run by `test/guides_test.exs`, beside the set operations' guide.
 
 * [ ] **`opts` in the engine** — `lib/operations.ex` and others name a keyword list `opts` where the house name is `options`; the documented functions of `Tempo` take `options` since 2026-10-11.
@@ -69,6 +67,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 * [ ] **`Calendar.ISO`'s week numbers follow the locale in Localize** — in Localize's next commit after `9fa075f5`, `Y`, `w` and `W` for a `Calendar.ISO` value are the locale's weeks (1 January 2027 is in week 1 of 2027 in `en`, week 53 of 2026 in `de`), ISO 8601's only where the locale's week data is Monday and four days or with `-u-ca-iso8601`. Tempo passes no week pattern to Localize today, so nothing changes until it does. Noted from the Localize session.
 
 ## Done
+
+* [x] **Exports nothing outside their module calls** — of the 67 functions only their own module called and the 6 nothing called, 60 are private, 10 are removed (the 6, and 4 that only called themselves) and 3 stay exported, since tests call them through the tests' proxies of the engine, which the census had not counted. The census counts those calls now, and no call of a function by itself: no exported function is called by its own module alone, or by nothing. 2026-10-12.
 
 * [x] **The names of the second forms are gone** — the user, 2026-10-11 ("Remove the names") and 2026-10-12 ("Fail at compile time"). The 53 functions that were documented and are not (22 on `Tempo.Interval`, 14 on `Tempo.Operations`, 7 on `Tempo.TimeZoneDatabase` and 10 others; 48 of them were in 1.6.4) no longer exist under those names: 52 are the library's own under `do_<name>` where they are defined, `Tempo.validate_zone_offset/1` is removed, and a call of an old name is a compile-time warning. 2026-10-12.
 

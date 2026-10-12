@@ -2155,7 +2155,7 @@ defmodule Tempo.Validation do
     end
   end
 
-  def year_week_day(year, week, day, rest, :month, calendar) do
+  defp year_week_day(year, week, day, rest, :month, calendar) do
     case UnitValues.date_from_iso_week(year, week, day, calendar) do
       {:ok, date} ->
         prepend_year(
@@ -2173,7 +2173,7 @@ defmodule Tempo.Validation do
     end
   end
 
-  def year_week_day(year, week, day, rest, :week, calendar) do
+  defp year_week_day(year, week, day, rest, :week, calendar) do
     prepend_year(year, resolve([{:week, week}, {:day_of_week, day} | rest], calendar))
   end
 
@@ -2259,7 +2259,7 @@ defmodule Tempo.Validation do
   # first day by Calendrical, so a thirteen-month year counts as the
   # calendar numbers it. A group whose first year the calendar does not
   # have has no first day to count from.
-  def year_and_month(%Range{first: first_year, last: last_year}, month, calendar) do
+  defp year_and_month(%Range{first: first_year, last: last_year}, month, calendar) do
     with {:ok, {start_year, start_month, start_day}} <- first_day_of_year(first_year, calendar),
          {year, month_of_year, _day} when year >= first_year and year <= last_year <-
            calendar.plus(start_year, start_month, start_day, :months, month - 1, []) do
@@ -2283,7 +2283,7 @@ defmodule Tempo.Validation do
   # date the calendar gives that month where the year begins within it
   # (March 1751 in `Calendrical.Reform.England` begins on the 25th). The
   # day counted to is held by one of the group's months.
-  def month_and_day(year, %Range{first: first_month, last: last_month}, day, calendar) do
+  defp month_and_day(year, %Range{first: first_month, last: last_month}, day, calendar) do
     with {:ok, {start_year, start_month, start_day}} <-
            UnitValues.start_date([year: year, month: first_month], calendar),
          {^year, month, day_of_month} <-

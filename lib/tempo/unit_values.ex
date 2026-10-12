@@ -1677,46 +1677,6 @@ defmodule Tempo.UnitValues do
     end
   end
 
-  @doc false
-  # The whole numbers a time list's year is asked by: itself, the members of
-  # a set and the two ends of each range in one, the number a margin of
-  # error or significant digits are written on, and the lowest and the
-  # highest year a mask stands for. An unspecified year names none.
-  @spec whole_years(term()) :: [integer()]
-  def whole_years(year) when is_integer(year) do
-    [year]
-  end
-
-  def whole_years(%Range{first: first, last: last}) do
-    [first, last]
-  end
-
-  def whole_years({year, annotations}) when is_integer(year) and is_list(annotations) do
-    [year]
-  end
-
-  # A mask is asked of the lowest and the highest year it stands for.
-  def whole_years({:mask, [:negative | digits]}) do
-    digits
-    |> Mask.mask_bounds()
-    |> Tuple.to_list()
-    |> Enum.map(&(-&1))
-  end
-
-  def whole_years({:mask, digits}) when is_list(digits) do
-    digits
-    |> Mask.mask_bounds()
-    |> Tuple.to_list()
-  end
-
-  def whole_years(years) when is_list(years) do
-    Enum.flat_map(years, &whole_years/1)
-  end
-
-  def whole_years(_mask_or_none) do
-    []
-  end
-
   ## The days of a week
   #
   # `K` counts the days of the week of the value that holds it: the
@@ -1944,10 +1904,9 @@ defmodule Tempo.UnitValues do
     nil
   end
 
-  @doc false
   # How many weeks `year` has in the calendar's own numbering (`w`), or 0
   # for a calendar that numbers no weeks.
-  def calendar_weeks_in_year(year, calendar) do
+  defp calendar_weeks_in_year(year, calendar) do
     case calendar.weeks_in_year(year) do
       {weeks, _days_in_last_week} when is_integer(weeks) -> weeks
       weeks when is_integer(weeks) -> weeks

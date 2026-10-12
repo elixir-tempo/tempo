@@ -127,15 +127,13 @@ The user, 2026-10-11, each asked with the census in hand:
 
 * **No doc names what is hidden** — `mix docs` warned of 43 references to a hidden function, module or type after the decisions, and of none now.
 
-* **The surface now** — of 972 exported functions that NimbleParsec did not generate, 265 are documented (384 before), 139 of them the primary API; 236 are `@doc false` in a documented module (160 callbacks), 471 in a hidden module, and none is without a `@doc`. None of the 53 names that were documented and are not is exported any longer. A documented function takes a caller's value by the guard `Tempo.Calendars.is_outside/1` (57 places) or by asking `Tempo.Calendars.outside?/1` (70). No documented function is called by the library alone, and none is in the engine.
+* **The surface now** — of 902 exported functions that NimbleParsec did not generate, 265 are documented (384 before), 139 of them the primary API; 234 are `@doc false` in a documented module (160 callbacks), 403 in a hidden module, and none is without a `@doc`. None is called by its own module alone, and none by nothing. None of the 53 names that were documented and are not is exported any longer. A documented function takes a caller's value by the guard `Tempo.Calendars.is_outside/1` (57 places) or by asking `Tempo.Calendars.outside?/1` (70). No documented function is called by the library alone, and none is in the engine.
 
 ## Tasks
 
-* [ ] **Exports only their own module calls** — 67 functions become `defp` (2 in documented modules, 65 in hidden ones).
-
-* [ ] **Dead exports** — 6 functions removed.
-
 ### Done
+
+* [x] **Exports only their own module calls, and dead exports** — 60 functions are private (the tokenizer's six entry parsers by `defparsecp`), 10 are removed (the 6 with no caller, and `parse_time/1`, `parse_datetime/1` and `parse_interval/1` of the parser and `Tempo.UnitValues.whole_years/1`, which only called themselves), and 3 stay exported: `Tempo.Compare.start_point/1`, `Tempo.RRule.Expander.from_ical_recurrence/1` and `Tempo.Iso8601.Parser.parse_date/1`, which tests call through the tests' proxies of the engine. The census had counted neither those calls nor a function's call of itself apart, and counts both rightly now: none is left in either column. 2026-10-12.
 
 * [x] **The names of the second forms are gone** — the user, 2026-10-12, asked again with what a 1.x caller gets today (`Tempo.Interval.at_least?/2` raised `UndefinedFunctionError` for `Calendar.ISO.calendar_base/0` from inside, where `Tempo.Interval.before?/2` happened to answer): "Fail at compile time". Each of the 53 is renamed where it is defined, to `do_<name>` (the prefix is mine), its body staying where it was: 22 on `Tempo.Interval`, 14 on `Tempo.Operations`, 7 on `Tempo.TimeZoneDatabase`, 2 each on `Tempo.Format`, `Tempo.IntervalSet` and `Tempo.Compare`, and `Tempo.Select.select/2`, `Tempo.Clock.utc_now/0` and `Tempo.ZoneOffsetMismatchError.format_offset/1`; `Tempo.validate_zone_offset/1`, a delegate nothing called, is removed. 48 of the 53 were documented in 1.6.4, and the migration guide maps each or says it has no replacement. A test that called an old name with a function of the same name on `Tempo` calls that one. 2026-10-12.
 

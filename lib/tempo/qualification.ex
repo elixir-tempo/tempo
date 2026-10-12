@@ -27,12 +27,6 @@ defmodule Tempo.Qualification do
   @date_units [:year, :month, :day, :day_of_year, :week, :day_of_week]
 
   @doc false
-  # The units a qualifier can be written for (§8.3).
-  def units do
-    @units
-  end
-
-  @doc false
   # The qualifications of a value all of whose components are qualified
   # alike: a complete qualification (§8.2.1) of the units of `time`.
   def complete(_time, nil) do

@@ -14,7 +14,6 @@ defmodule Tempo.Iso8601.AST do
   # is the validator of record for these shapes.
 
   alias Tempo.Calendars
-  alias Tempo.Duration
   alias Tempo.Interval
   alias Tempo.Qualification
 
@@ -82,14 +81,6 @@ defmodule Tempo.Iso8601.AST do
   """
   def build_interval(tokens) do
     Interval.build(tokens)
-  end
-
-  @doc """
-  Build a `%Tempo.Duration{}` from tokenizer output. Tokens are a
-  keyword list of `{unit, amount}` pairs.
-  """
-  def build_duration(tokens) do
-    Duration.build(tokens)
   end
 
   # Date components in resolution order (coarsest → finest). Group

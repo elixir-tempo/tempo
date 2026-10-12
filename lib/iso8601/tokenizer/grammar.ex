@@ -94,7 +94,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> optional(extended_suffix())
   end
 
-  def interval_or_time_or_duration(combinator \\ empty()) do
+  defp interval_or_time_or_duration(combinator \\ empty()) do
     combinator
     |> choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser}),
@@ -284,25 +284,25 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> unwrap_and_tag(:day_of_year)
   end
 
-  def implicit_ordinal_date do
+  defp implicit_ordinal_date do
     parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
     |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_year_p}))
   end
 
-  def extended_ordinal_date do
+  defp extended_ordinal_date do
     extended_year()
     |> ignore(dash())
     |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_year_p}))
   end
 
-  def explicit_ordinal_date do
+  defp explicit_ordinal_date do
     explicit_year()
     |> concat(explicit_day_of_year())
   end
 
   # Week date
 
-  def implicit_week_date do
+  defp implicit_week_date do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_year_p})
       |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_week_p}))
@@ -317,7 +317,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def extended_week_date do
+  defp extended_week_date do
     choice([
       extended_year()
       |> ignore(dash())
@@ -343,19 +343,6 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
 
   defp day_of_week_or_one_of do
     or_one_of(parsec({Tempo.Iso8601.Tokenizer.Date, :implicit_day_of_week_p}), :day_of_week)
-  end
-
-  def explicit_week_date do
-    choice([
-      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_century_decade_or_year_p})
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_week_p}))
-      |> concat(explicit_day_of_week()),
-      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_century_decade_or_year_p})
-      |> concat(parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_week_p})),
-      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_week_p})
-      |> concat(explicit_day_of_week()),
-      parsec({Tempo.Iso8601.Tokenizer.Date, :explicit_week_p})
-    ])
   end
 
   # Time
@@ -467,7 +454,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def duration_date_elements do
+  defp duration_date_elements do
     times(duration_date_element(), min: 1)
   end
 
@@ -477,7 +464,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> times(duration_time_element(), min: 1)
   end
 
-  def duration_date_element do
+  defp duration_date_element do
     choice([
       maybe_negative_number(min: 1)
       |> ignore(string("C"))
@@ -500,7 +487,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def duration_time_element do
+  defp duration_time_element do
     choice([
       maybe_negative_number(min: 1)
       |> ignore(string("H"))
@@ -542,16 +529,16 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def selection_date_elements do
+  defp selection_date_elements do
     times(selection_date_element(), min: 1)
   end
 
-  def selection_time_elements do
+  defp selection_time_elements do
     ignore(string("T"))
     |> times(selection_time_element(), min: 1)
   end
 
-  def selection_date_element do
+  defp selection_date_element do
     choice([
       maybe_negative_integer_or_integer_set("Y", :year, min: 1),
       maybe_negative_integer_or_integer_set("M", :month, min: 1),
@@ -583,7 +570,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def selection_time_element do
+  defp selection_time_element do
     choice([
       maybe_negative_integer_or_integer_set("H", :hour, min: 1),
       maybe_negative_integer_or_integer_set("M", :minute, min: 1),
@@ -605,7 +592,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # is the canonical, emitted form, following the lowercase-extension convention.
   # The uppercase `Q` shipped in 1.6.x before the convention, so it is still
   # accepted on input (liberal in) and re-emitted as `q` (conservative out).
-  def week_start do
+  defp week_start do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
@@ -625,7 +612,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # An event that happens at an instant may name the zone whose date it takes
   # after an `@` — an IANA zone or a `±HH:MM` offset, `(march-equinox@+09:00)e`
   # — kept as part of the name. It resolves per period via `Tempo.Event`.
-  def selection_event do
+  defp selection_event do
     ignore(string("("))
     |> ascii_string([?a..?z], 1)
     |> ascii_string([?a..?z, ?0..?9, ?-], min: 0)
@@ -758,7 +745,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     {:error, "a range of years runs from one whole year to another"}
   end
 
-  def explicit_year do
+  defp explicit_year do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
@@ -771,7 +758,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # The year value is tagged here (rather than by the caller) so an
   # optional ISO 8601-2 §8.3 explicit qualifier can be emitted between
   # the value and the `Y` designator (`2018?Y`).
-  def explicit_year_with_sign do
+  defp explicit_year_with_sign do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
@@ -783,7 +770,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> label("explicit year with sign")
   end
 
-  def explicit_year_bc do
+  defp explicit_year_bc do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       maybe_negative_number(min: 1)
@@ -850,7 +837,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # and ordinal numberings coincide). In a selection frame the tag survives
   # unresolved — a recurrence has no year — and materialisation resolves it per
   # year. The same combinator serves both frames.
-  def traditional_month do
+  defp traditional_month do
     choice([
       traditional_month_number()
       |> ignore(string("+"))
@@ -890,7 +877,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # A week after a month is a week of the month, which the calendar numbers
   # (`Tempo.UnitValues.weeks_of_month/3`), where a week after a year is an
   # ISO 8601 week of the year.
-  def week_of_month do
+  defp week_of_month do
     maybe_negative_number_or_integer_set("W", :week, min: 1)
   end
 
@@ -919,7 +906,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def explicit_day_of_month do
+  defp explicit_day_of_month do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group})
       |> optional(qualified_number_or_integer_set("D", :day, min: 1)),
@@ -937,7 +924,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def explicit_day_of_week do
+  defp explicit_day_of_week do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
@@ -957,7 +944,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def explicit_day_of_year do
+  defp explicit_day_of_year do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :group}),
       parsec({Tempo.Iso8601.Tokenizer.Set, :selection}),
@@ -971,12 +958,12 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # Year has priority order over century and
   # decade
 
-  def implicit_decade do
+  defp implicit_decade do
     before_year_one_or_not(positive_integer(3))
     |> unwrap_and_tag(:decade)
   end
 
-  def explicit_decade do
+  defp explicit_decade do
     before_year_one_or_not(positive_number(min: 1))
     |> ignore(string("J"))
     |> unwrap_and_tag(:decade)
@@ -1009,7 +996,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # only outside a set, where it separates the members: the first of
   # `[19,20]` and of `[19..20]` was read as the hour 19, beside the century
   # the second member is.
-  def implicit_century do
+  defp implicit_century do
     before_year_one_or_not(positive_integer(2))
     |> lookahead_not(colon())
     |> lookahead_not(
@@ -1019,7 +1006,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> unwrap_and_tag(:century)
   end
 
-  def explicit_century do
+  defp explicit_century do
     before_year_one_or_not(positive_number(min: 1))
     |> ignore(string("C"))
     |> unwrap_and_tag(:century)
@@ -1034,7 +1021,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def explicit_hour do
+  defp explicit_hour do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :time_group})
       |> optional(maybe_negative_number_or_integer_set("H", :hour, min: 1)),
@@ -1050,7 +1037,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def explicit_minute do
+  defp explicit_minute do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :time_group})
       |> optional(maybe_negative_number_or_integer_set("M", :minute, min: 1)),
@@ -1066,7 +1053,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     ])
   end
 
-  def explicit_second do
+  defp explicit_second do
     choice([
       parsec({Tempo.Iso8601.Tokenizer.Set, :time_group})
       |> optional(explicit_second_or_integer_set("S", min: 1)),
@@ -1173,7 +1160,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # A sign is required if no Z indicator
   # A sign is optional if there is a Z indicator
 
-  def shift_indicator do
+  defp shift_indicator do
     choice([
       ignore(zulu())
       |> concat(sign())
@@ -1228,7 +1215,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # the set's plain members when the set materialises, as in
   # `{2020Y..2030Y,^2026Y}`. The tokeniser tags it `{:except, …}`; the parser
   # routes it to `%Tempo.Set{}`'s `:except`. A non-conformant Tempo extension.
-  def time_or_range_member(combinator \\ empty()) do
+  defp time_or_range_member(combinator \\ empty()) do
     combinator
     |> choice([
       ignore(string("^"))
@@ -1248,7 +1235,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
   # A text that starts with `..` is a range with no start, or an interval
   # that starts so (`../2026`), and is read by the alternatives in the order
   # they had.
-  def time_or_range(combinator \\ empty()) do
+  defp time_or_range(combinator \\ empty()) do
     combinator
     |> choice([
       lookahead_not(string(".."))
@@ -1422,7 +1409,7 @@ defmodule Tempo.Iso8601.Tokenizer.Grammar do
     |> label("list of integers or ranges")
   end
 
-  def integer_or_range(combinator \\ empty()) do
+  defp integer_or_range(combinator) do
     combinator
     |> choice([
       maybe_negative_integer(min: 1)

@@ -178,12 +178,11 @@ defmodule Tempo.Iso8601.Tokenizer.Date do
   # days a month has where the value is validated, and one of a caller's own
   # with more is asked as any other is. A run of digits alone is still told
   # from a time of day by them (`a_date_and_no_time_of_day/5`).
-  @doc false
-  def classify_explicit_date(rest, [:__explicit_datetime__ | tokens], context, _line, _offset) do
+  defp classify_explicit_date(rest, [:__explicit_datetime__ | tokens], context, _line, _offset) do
     {rest, [{:datetime, Enum.reverse(tokens)}], context}
   end
 
-  def classify_explicit_date(rest, [:__explicit_date__ | tokens], context, _line, _offset) do
+  defp classify_explicit_date(rest, [:__explicit_date__ | tokens], context, _line, _offset) do
     date =
       tokens
       |> Enum.reverse()

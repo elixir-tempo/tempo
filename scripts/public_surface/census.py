@@ -158,12 +158,23 @@ for function in functions:
         index[(function["module"], function["name"], arity)].append(function)
 
 
+PROXY = "Tempo.Test.Engine."
+
+
 def load(path, from_tests):
     for line in open(path):
         fields = line.rstrip("\n").split("\t")
         if len(fields) != 6:
             continue
-        module, name, arity, caller, _function, site = fields
+        module, name, arity, caller, calling, site = fields
+        # A test reaches an engine module through its proxy
+        # (`Tempo.Test.Engine.Compare` for `Tempo.Compare`), and a call of the
+        # proxy's function is a call of the engine's.
+        if module.startswith(PROXY):
+            module = "Tempo." + module[len(PROXY):]
+        # A function's call of itself is no caller of it.
+        if caller == module and calling == f"{name}/{arity}":
+            continue
         for function in index.get((module, name, int(arity)), []):
             if from_tests or not site.startswith("lib/"):
                 function["tests"] += 1

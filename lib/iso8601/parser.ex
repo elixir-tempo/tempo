@@ -659,7 +659,7 @@ defmodule Tempo.Iso8601.Parser do
     end)
   end
 
-  def parse_set(set) do
+  defp parse_set(set) do
     Enum.map(set, &parse_set_member/1)
   end
 
@@ -984,37 +984,9 @@ defmodule Tempo.Iso8601.Parser do
 
   # Time
 
-  def parse_time([h | t]) do
-    [h | parse_time(t)]
-  end
-
-  def parse_time([]) do
-    []
-  end
-
   # Datetime
 
-  def parse_datetime([h | t]) do
-    [h | parse_datetime(t)]
-  end
-
-  def parse_datetime([]) do
-    []
-  end
-
   # Interval
-
-  def parse_interval([{:date, date} | t]) do
-    [{:date, parse_date(date)} | parse_interval(t)]
-  end
-
-  def parse_interval([h | t]) do
-    [h | parse_interval(t)]
-  end
-
-  def parse_interval([]) do
-    []
-  end
 
   # Duration
 
@@ -1113,14 +1085,14 @@ defmodule Tempo.Iso8601.Parser do
     false
   end
 
-  def reduce_sublists(list) do
+  defp reduce_sublists(list) do
     Enum.map(list, fn
       list when is_list(list) -> reduce_list(list)
       other -> other
     end)
   end
 
-  def group_min_max(group) do
+  defp group_min_max(group) do
     group =
       Keyword.delete(group, :nth)
       |> Keyword.delete(:all_of)
@@ -1130,7 +1102,7 @@ defmodule Tempo.Iso8601.Parser do
     Tempo.unit_min_max(sorted)
   end
 
-  def selection_min_max(selection) do
+  defp selection_min_max(selection) do
     Tempo.unit_min_max(selection)
   end
 
@@ -1386,11 +1358,11 @@ defmodule Tempo.Iso8601.Parser do
   # `{:signed_fraction, sign, second, fraction}` tuple and a lifted
   # microsecond is a `{value, precision}` pair.
 
-  def adjust_for_direction([{:direction, :negative} | rest]) do
+  defp adjust_for_direction([{:direction, :negative} | rest]) do
     Enum.map(rest, &negate_duration_component/1)
   end
 
-  def adjust_for_direction(other) do
+  defp adjust_for_direction(other) do
     other
   end
 
@@ -1454,7 +1426,7 @@ defmodule Tempo.Iso8601.Parser do
     other
   end
 
-  def wrap(term, atom) do
+  defp wrap(term, atom) do
     {atom, term}
   end
 end

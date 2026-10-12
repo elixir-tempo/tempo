@@ -69,11 +69,10 @@ defmodule Tempo.Enumeration do
   # The decimal places of a second a microsecond has: no fraction is finer.
   @finest_precision 6
 
-  @doc false
   # The walk of a value as it is written. A value with no set, range, mask or
   # group in it is walked as the one value it is.
   @spec walk(Tempo.t()) :: walk()
-  def walk(%Tempo{calendar: calendar} = tempo) do
+  defp walk(%Tempo{calendar: calendar} = tempo) do
     start(tempo, walked_as_written(tempo, calendar), calendar)
   end
 
@@ -1297,7 +1296,7 @@ defmodule Tempo.Enumeration do
   # The value written with the unit below its own as an enumeration, which a
   # walk yields. Raises for a value with no finer unit to walk by, as
   # `Enum` has no error to return.
-  def add_implicit_enumeration(%Tempo{} = tempo) do
+  defp add_implicit_enumeration(%Tempo{} = tempo) do
     case implicit_enumeration(tempo) do
       {:ok, enumerated} ->
         enumerated

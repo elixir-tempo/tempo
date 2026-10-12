@@ -36,10 +36,9 @@ defmodule Tempo.NotBuilt do
   @stepped_by_rrule_calendar [:year, :month]
   @selected_by_rrule_calendar [:month, :day, :day_of_year, :week]
 
-  @doc false
   # The refusal of `target` for `value`, naming `calendar`.
   @spec error(term(), atom(), module()) :: ConversionError.t()
-  def error(value, target, calendar) do
+  defp error(value, target, calendar) do
     ConversionError.exception(
       value: value,
       target: target,

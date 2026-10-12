@@ -165,16 +165,6 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     |> label("maybe negative integer")
   end
 
-  def positive_number_or_integer_set(indicator, tag, opts) do
-    choice([
-      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
-      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
-      positive_number(opts)
-    ])
-    |> ignore(string(indicator))
-    |> unwrap_and_tag(tag)
-  end
-
   # No indicator: a bare `[...]` here would be ambiguous with a
   # top-level one-of set (`[1984,1986,1988]`), so only `{...}`
   # (all-of) is accepted in the designator-less position.
@@ -248,7 +238,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
   # its digits: `Tempo.Validation.resolve/2` holds them to one precision and
   # lists the fractions a range names, so a range costs nothing here. A
   # negative count is no fraction, and neither is a set of one of (`[...]`).
-  def fractions do
+  defp fractions do
     decimal_sign()
     |> ignore(string("{"))
     |> choice([
@@ -287,16 +277,6 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
       parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
       positive_integer(opts)
     ])
-    |> unwrap_and_tag(tag)
-  end
-
-  def positive_integer_or_integer_set(indicator, tag, opts) do
-    choice([
-      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_all}),
-      parsec({Tempo.Iso8601.Tokenizer.Set, :integer_set_one}),
-      positive_integer(opts)
-    ])
-    |> ignore(string(indicator))
     |> unwrap_and_tag(tag)
   end
 
@@ -442,7 +422,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     {List.to_integer(digit_chars), length(digit_chars)}
   end
 
-  def error_range do
+  defp error_range do
     ignore(string("±"))
     |> integer(min: 1)
     |> optional(exponent())
@@ -450,7 +430,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     |> unwrap_and_tag(:margin_of_error)
   end
 
-  def digit_or_unspecified do
+  defp digit_or_unspecified do
     choice([
       digit(),
       unspecified(),
@@ -458,7 +438,7 @@ defmodule Tempo.Iso8601.Tokenizer.Numbers do
     ])
   end
 
-  def unspecified_or_set do
+  defp unspecified_or_set do
     choice([
       unspecified(),
       ascii_char([?{])

@@ -157,11 +157,6 @@ defmodule Tempo.Iso8601.Tokenizer.Helpers do
     |> replace(:"X*")
   end
 
-  def day_of_week do
-    ascii_char([?1..?7])
-    |> reduce({List, :to_integer, []})
-  end
-
   def quarter do
     ascii_char([?1..?4])
     |> ascii_char([?Q])

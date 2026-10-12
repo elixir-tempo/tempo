@@ -1439,12 +1439,11 @@ defmodule Tempo do
          do: {:error, InvalidCalendarError.exception(calendar: calendar)}
   end
 
-  @doc false
-  def attach_extended(result, nil) do
+  defp attach_extended(result, nil) do
     result
   end
 
-  def attach_extended(%__MODULE__{extended: existing} = tempo, extended) do
+  defp attach_extended(%__MODULE__{extended: existing} = tempo, extended) do
     # An endpoint-local `:extended` parsed from a per-endpoint IXDTF
     # suffix (`2022-06-15T10:00[Europe/Paris]/…`) takes precedence
     # over a top-level suffix. The top-level suffix is only used as
@@ -1455,7 +1454,7 @@ defmodule Tempo do
     end
   end
 
-  def attach_extended(%Tempo.Range{} = range, extended) do
+  defp attach_extended(%Tempo.Range{} = range, extended) do
     %{
       range
       | first: attach_extended(range.first, extended),
@@ -1463,7 +1462,7 @@ defmodule Tempo do
     }
   end
 
-  def attach_extended(%Tempo.Interval{} = interval, extended) do
+  defp attach_extended(%Tempo.Interval{} = interval, extended) do
     # A top-level suffix on an interval propagates to each endpoint
     # unless that endpoint carries its own IXDTF info (which the
     # parser has already attached to `endpoint.extended`).
@@ -1478,11 +1477,11 @@ defmodule Tempo do
   # A set's suffix is each member's that has none of its own, as an
   # interval's is each endpoint's: `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]`
   # is two times in Paris. Its calendar is already the members' calendar.
-  def attach_extended(%Tempo.Set{} = set, extended) do
+  defp attach_extended(%Tempo.Set{} = set, extended) do
     map_members(set, &attach_extended(&1, %{extended | calendar: nil}))
   end
 
-  def attach_extended(other, _extended) do
+  defp attach_extended(other, _extended) do
     other
   end
 
@@ -17933,12 +17932,11 @@ defmodule Tempo do
 
   @valid_units Unit.units()
 
-  @doc false
-  def validate_unit(unit) when unit in @valid_units do
+  defp validate_unit(unit) when unit in @valid_units do
     {:ok, unit}
   end
 
-  def validate_unit(unit) do
+  defp validate_unit(unit) do
     {:error, InvalidUnitError.exception(unit: unit, valid_units: @valid_units)}
   end
 end

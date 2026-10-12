@@ -407,9 +407,9 @@ defmodule Tempo.Iso8601.Tokenizer do
 
   # The IXDTF suffix alone, which follows a value the scan of the plain
   # forms has read (`plain_with_suffix/2`).
-  defparsec :suffix_only,
-            Extended.extended_suffix()
-            |> eos()
+  defparsecp :suffix_only,
+             Extended.extended_suffix()
+             |> eos()
 
   # A second entry point admitting *only* a duration. `duration_parser`
   # already tags its result `:duration`, so the token shape matches what
@@ -418,9 +418,9 @@ defmodule Tempo.Iso8601.Tokenizer do
   # value that merely *starts* with a duration (`P1D/2026-06-15`, or a
   # duration carrying a qualifier) is rejected rather than silently
   # truncated.
-  defparsec :duration_only,
-            parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser})
-            |> eos()
+  defparsecp :duration_only,
+             parsec({Tempo.Iso8601.Tokenizer.Set, :duration_parser})
+             |> eos()
 
   # Profile entry points, one per shape a caller may want to *require*.
   # Each wraps its core parser in `profile_tokenizer/1` (so EDTF
@@ -428,19 +428,19 @@ defmodule Tempo.Iso8601.Tokenizer do
   # `eos/0`, which is what turns a shape into a profile: `2026-06-15` is
   # not a datetime, and `2026-06-15/2026-06-20` is not a date, even
   # though the general grammar can begin parsing both as one.
-  defparsec :date_only,
-            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Date, :date_parser}))
-            |> eos()
+  defparsecp :date_only,
+             profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Date, :date_parser}))
+             |> eos()
 
-  defparsec :datetime_only,
-            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_parser}))
-            |> eos()
+  defparsecp :datetime_only,
+             profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Date, :datetime_parser}))
+             |> eos()
 
-  defparsec :time_only,
-            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Time, :time_parser}))
-            |> eos()
+  defparsecp :time_only,
+             profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Time, :time_parser}))
+             |> eos()
 
-  defparsec :interval_only,
-            profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser}))
-            |> eos()
+  defparsecp :interval_only,
+             profile_tokenizer(parsec({Tempo.Iso8601.Tokenizer.Set, :interval_parser}))
+             |> eos()
 end
