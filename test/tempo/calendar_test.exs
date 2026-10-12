@@ -574,6 +574,35 @@ defmodule Tempo.CalendarTest do
       end
     end
 
+    test "a range of a set is in the set's calendar, and names none itself" do
+      set = Tempo.from_iso8601!("[5786-06-15..5786-07-01][u-ca=hebrew]")
+      [range] = set.set
+
+      assert {range.first.calendar, range.last.calendar} ==
+               {Calendrical.Hebrew, Calendrical.Hebrew}
+
+      assert Tempo.to_iso8601!(set) == "[5786Y6M15D..5786Y7M1D][u-ca=hebrew]"
+      assert set == Tempo.from_iso8601!("[5786-06-15..5786-07-01]", Calendrical.Hebrew)
+
+      # A calendar is written for a whole expression. One on a range's end
+      # was read where both ends named the same one, and one on a single
+      # end was an error that said the ends had different units.
+      for text <- [
+            "[5786-06-15[u-ca=hebrew]..5786-07-01]",
+            "[5786-06-15..5786-07-01[u-ca=hebrew]]",
+            "[5786-06-15[u-ca=hebrew]..5786-07-01[u-ca=hebrew]]",
+            "[5786-06-15[u-ca=hebrew]..2026-07-01[u-ca=gregory]]",
+            "[..5786-07-01[u-ca=hebrew]]",
+            "{5786-06-15[u-ca=hebrew]..}"
+          ] do
+        assert {:error, %Tempo.ParseError{} = error} = Tempo.from_iso8601(text)
+
+        assert Exception.message(error) ==
+                 "A calendar is written for a whole expression, and an end of a range is " <>
+                   "none: write `[u-ca=…]` once, after the expression"
+      end
+    end
+
     test "an interval is in one calendar, whichever end names it" do
       on_the_start = Tempo.from_iso8601!("5786-06-15[u-ca=hebrew]/5786-10-01")
       on_the_end = Tempo.from_iso8601!("5786-06-15/5786-10-01[u-ca=hebrew]")

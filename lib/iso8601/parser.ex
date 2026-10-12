@@ -671,17 +671,17 @@ defmodule Tempo.Iso8601.Parser do
   end
 
   defp parse_set_member({:range, [{_, from}, {_, to}]}) do
-    from = parse_date(from)
-    to = parse_date(to)
+    from = end_of_a_range(parse_date(from))
+    to = end_of_a_range(parse_date(to))
     validate_range(from, to)
   end
 
   defp parse_set_member({:range, [from, :undefined]}) do
-    {:range, [parse_date(from), :undefined]}
+    {:range, [end_of_a_range(parse_date(from)), :undefined]}
   end
 
   defp parse_set_member({:range, [:undefined, to]}) do
-    {:range, [:undefined, parse_date(to)]}
+    {:range, [:undefined, end_of_a_range(parse_date(to))]}
   end
 
   # A range of one unit (`[1900..2000]`, `{19C..20C}`), each end read as the
@@ -1333,6 +1333,21 @@ defmodule Tempo.Iso8601.Parser do
   # A range from one value up to another by ones, both counted from one end.
   defp by_ones?(%Range{first: first, last: last, step: step}) do
     step == 1 and first <= last and same_end?(first, last)
+  end
+
+  # A calendar is written for a whole expression, and an end of a range is
+  # none: a range is in the calendar the set is written for, the one a
+  # `[u-ca=…]` after the set names.
+  defp end_of_a_range(tokens) do
+    case Keyword.get(tokens, :extended) do
+      %{calendar: calendar} when not is_nil(calendar) ->
+        raise ParseError,
+              "A calendar is written for a whole expression, and an end of a range is none: " <>
+                "write `[u-ca=…]` once, after the expression"
+
+      _no_calendar ->
+        tokens
+    end
   end
 
   # Ranges must have the same units. One written backwards never reaches

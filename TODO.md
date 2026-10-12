@@ -68,6 +68,8 @@ What each operation gives each shape of value is not listed here cell by cell: [
 
 ## Done
 
+* [x] **No calendar inside a range** — the user, 2026-10-12: "A calendar only applies to an expression so a range should not allow a calendar inside it". `[u-ca=…]` on an end of a range of a set is a `Tempo.ParseError` that says where it is written (after the set), in each of its forms; one on a single end had been an error that said the ends had different units. 2026-10-12.
+
 * [x] **Exports nothing outside their module calls** — of the 67 functions only their own module called and the 6 nothing called, 60 are private, 10 are removed (the 6, and 4 that only called themselves) and 3 stay exported, since tests call them through the tests' proxies of the engine, which the census had not counted. The census counts those calls now, and no call of a function by itself: no exported function is called by its own module alone, or by nothing. 2026-10-12.
 
 * [x] **The names of the second forms are gone** — the user, 2026-10-11 ("Remove the names") and 2026-10-12 ("Fail at compile time"). The 53 functions that were documented and are not (22 on `Tempo.Interval`, 14 on `Tempo.Operations`, 7 on `Tempo.TimeZoneDatabase` and 10 others; 48 of them were in 1.6.4) no longer exist under those names: 52 are the library's own under `do_<name>` where they are defined, `Tempo.validate_zone_offset/1` is removed, and a call of an old name is a compile-time warning. 2026-10-12.

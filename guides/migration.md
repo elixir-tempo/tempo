@@ -61,6 +61,8 @@ These keep their names and change their meaning:
 
 * **`Tempo.IntervalSet.new/2` given intervals of several calendars** — brings each to the first interval's calendar, as the set operations do, where 1.x kept each in its own.
 
+* **A calendar on an end of a range** — an error: `[u-ca=…]` is written once, after the set the range is in.
+
 * **An interval with ends of two calendars** — an error, where 1.x kept each end in its own: `Tempo.Interval.new/1` refuses the pair, and in text a `[u-ca=…]` on either end names the calendar of both. Convert one end with `Tempo.to_calendar/2` first.
 
 * **`duration/1` and `duration/2`** — counted in the unit the endpoints are written in, where 1.x counted seconds.

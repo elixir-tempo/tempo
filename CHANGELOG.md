@@ -10,6 +10,8 @@
 
 * An interval is in one calendar. `Tempo.Interval.new/1` returns a `Tempo.IntervalEndpointsError` for two ends of different calendars, where it answered an interval of both, and in text a `[u-ca=…]` on either end names the calendar of both ends, two that name different calendars being a `Tempo.ParseError`.
 
+* A calendar is written for a whole expression: `[u-ca=…]` on an end of a range of a set is a `Tempo.ParseError`, where two ends naming the same calendar were read. It is written once, after the set, as `[5786-06-15..5786-07-01][u-ca=hebrew]`.
+
 * A set's members are in one calendar. `Tempo.IntervalSet.new/2` brings an interval of another calendar to its first interval's, as a set operation brings its second operand to its first's, where it kept each member in the calendar it was given in.
 
 * A solar term is the calendar's to answer, and `Calendar.ISO` reckons none: `(qingming)e` on a value that names no calendar is a `Tempo.EventError` whose reason is `{:no_solar_terms, Calendar.ISO}`, as `Tempo.Event.date("qingming", 2026)` is. A value of `[u-ca=gregory]` or of a lunisolar calendar has its solar terms, and `Tempo.Event.date/3` takes the calendar to ask.

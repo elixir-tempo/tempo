@@ -1337,14 +1337,9 @@ defmodule Tempo do
     map_members(set, &maybe_resolve_endpoint_calendars(&1, :from_ixdtf_or_default))
   end
 
-  # A member of a set is in the calendar its own suffix names, and a range
-  # in one is in one calendar, as an interval is.
-  defp maybe_resolve_endpoint_calendars(%Tempo.Range{} = range, :from_ixdtf_or_default) do
-    {first, last} = Interval.propagate_calendar({range.first, range.last})
-
-    %{range | first: resolve_endpoint_calendar(first), last: resolve_endpoint_calendar(last)}
-  end
-
+  # A member of a set is in the calendar its own suffix names. A range's
+  # ends name none (the reader refuses one there), and are in the calendar
+  # the set is written for.
   defp maybe_resolve_endpoint_calendars(%__MODULE__{} = member, :from_ixdtf_or_default) do
     resolve_endpoint_calendar(member)
   end
@@ -1353,22 +1348,14 @@ defmodule Tempo do
     other
   end
 
-  # An interval, and a range of a set, is in one calendar: its ends name one
-  # between them, and two that name different ones are no one expression.
+  # An interval is in one calendar: its ends name one between them, and two
+  # that name different ones are no one expression.
   defp in_one_calendar(%Interval{
          from: %__MODULE__{calendar: from_calendar},
          to: %__MODULE__{calendar: to_calendar}
        })
        when from_calendar != to_calendar do
-    {:error, two_calendars("An interval", from_calendar, to_calendar)}
-  end
-
-  defp in_one_calendar(%Tempo.Range{
-         first: %__MODULE__{calendar: first_calendar},
-         last: %__MODULE__{calendar: last_calendar}
-       })
-       when first_calendar != last_calendar do
-    {:error, two_calendars("A range", first_calendar, last_calendar)}
+    {:error, two_calendars(from_calendar, to_calendar)}
   end
 
   defp in_one_calendar(%Tempo.Set{set: members, except: except}) do
@@ -1386,10 +1373,10 @@ defmodule Tempo do
     end
   end
 
-  defp two_calendars(what, first, second) do
+  defp two_calendars(first, second) do
     ParseError.exception(
       reason:
-        "#{what} is in one calendar, and its ends name two: " <>
+        "An interval is in one calendar, and its ends name two: " <>
           "#{Calendars.name(first)} and #{Calendars.name(second)}"
     )
   end
