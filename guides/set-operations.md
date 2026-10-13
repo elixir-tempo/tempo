@@ -352,7 +352,7 @@ Note that `≡` here is covered-instant equality (via `Tempo.equal?/2`), not mem
 |---|---|
 | An empty set on either side | Follows algebraic identities |
 | Open-ended interval (`1985/..`) as operand | An error: bound the interval first |
-| Unbounded recurrence (`R/…/P1M`) | Bounded by the `:within` window, or by the other operand's whole stretch |
+| An operand with no end (`R/…/P1M`, a set with no last member) | Bounded by the `:within` window. With none, an intersection and a difference from a bounded operand lie within the other operand; a union, a symmetric difference and a difference from the operand with no end are sets with no last member; two operands with no end have a union and need a window for anything else |
 | `Tempo.Duration` | An error: a duration is no set of instants |
 | A one-of set (`[a,b,c]`) | An error: one of several values is no set of them; ask `Tempo.certainty/3` |
 | Cross-calendar operands | Second operand converted to the first's calendar; the result is in the first's |

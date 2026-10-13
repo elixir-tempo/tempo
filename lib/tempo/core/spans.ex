@@ -1091,6 +1091,12 @@ defmodule Tempo.Spans do
     if placed == recurrence, do: recurrence, else: in_window(placed, window)
   end
 
+  # A set read from a stream is placed already: its members are come to one
+  # at a time, and are not gone through to be placed.
+  def placed_in(%Tempo{form: {kind, members}} = set, _window)
+      when kind in [:all, :one] and not is_list(members),
+      do: set
+
   def placed_in(%Tempo{form: {kind, members}} = set, %Tempo{form: {:value, _}} = window)
       when kind in [:all, :one] do
     placed = %{set | form: {kind, Enum.map(members, &placed_in(&1, window))}}

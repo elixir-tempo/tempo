@@ -33,7 +33,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ### Defects and gaps
 
-* [ ] **Set operations with an operand that has no end: decided 2026-10-14, to build.** The result is as bounded as the mathematics makes it, for a recurrence with no end and a set read from a stream alike. Where the answer lies inside the bounded operand (`intersection` in either order, `difference(bounded, endless)`) the endless operand is windowed by the other, which is exact. Where it does not (`union` in either order, `difference(endless, bounded)`) the answer is an endless set, in time order, bounded by `:within`. Of two endless operands `union` and `difference` are endless sets, and `intersection` is refused without `:within`, since two that never meet are searched for ever. See `plans/decisions.md`, 9.
+* [ ] **A predicate with an operand that has no end takes it within the other operand**, as the set operations did before decision 9: `Tempo.within?(~o"R/2026-06-01/P1W/FL1KN", ~o"2026-06")` is true, every Monday for ever being read as June's Mondays. `within?/2`, `contains?/2`, `equal?/2`, `before?/2`, `after?/2` and `adjacent?/2` want the rule the operations have: an answer where one follows from the ends, and an error where it would be searched for.
 
 * [ ] **RFC 7529's `RSCALE` and `SKIP`, and a significant `WKST`, are read: decided 2026-10-14, to build.** In an RRULE and a JSCalendar rule: `RSCALE` is the recurrence's calendar, `SKIP` a new part of a rule, and the week start as decision 14 rules. With them RFC 5545's three unread examples are read, and RFC 7529's leap-month notation (`BYMONTH=5L`). See `plans/decisions.md`, 13.
 
@@ -62,6 +62,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ## Done since the rewrite
 
+* [x] Decision 9 built (2026-10-14): a set operation with an operand that has no end is as bounded as it makes its answer, with the corrections of decision 21.
 * [x] Decisions 10 to 12 built (2026-10-14): a list selection in time order, a cron rule with no start, a `Date.Range` from `to_elixir/1`.
 * [x] **A solar term on a value with no calendar** is the Gregorian calendar's, asked for by the adapter (`Tempo.Calendar.solar_term/3`), since `Localize.Calendar.ISO` has no astronomy. Decided 2026-10-14.
 * [x] The redesign, phases 0 to 8 (sections 12 to 20 of the plan).

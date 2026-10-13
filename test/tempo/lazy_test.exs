@@ -59,8 +59,6 @@ defmodule Tempo.LazyTest do
       end
 
       for result <- [
-            Tempo.union(set, ~o"2026-07-15"),
-            Tempo.intersection(set, ~o"2026"),
             Tempo.to_interval(set),
             Tempo.members(set),
             Tempo.to_string(set),
@@ -69,8 +67,16 @@ defmodule Tempo.LazyTest do
         assert {:error, %ConversionError{reason: :too_many_values}} = result
       end
 
+      # A set operation is as bounded as it makes its answer
+      # (`endless_operands_test.exs`): within the other operand, or a set
+      # with no last member itself.
+      assert {:ok, in_2026} = Tempo.intersection(set, ~o"2026")
+      assert IntervalSet.count(in_2026) == 7
+      assert {:ok, union} = Tempo.union(set, ~o"2026-07-15")
+      refute Tempo.bounded?(union)
+
       assert {:error, %ConversionError{reason: :unbounded}} = Tempo.duration(set)
-      assert_raise ConversionError, fn -> Tempo.overlaps?(set, ~o"2026") end
+      assert Tempo.overlaps?(set, ~o"2026")
       assert_raise ConversionError, fn -> Enum.count(set) end
     end
   end

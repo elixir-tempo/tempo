@@ -118,6 +118,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * What needs every member of a set with no last member (a selection over a span with no end) is a `Tempo.ConversionError`, where some operations did not return; a `:within` window bounds such a set.
 
+* A set operation with an operand that has no end is as bounded as it makes its answer: an intersection lies within the other operand, and a union or a difference from the endless operand is a set with no last member. Two operands with no end have a union and need `:within` for anything else.
+
 * A set has ISO 8601 text and is inspected as it, where `Tempo.to_iso8601/1` raised on one.
 
 ## [v1.6.4] — 2026-09-03

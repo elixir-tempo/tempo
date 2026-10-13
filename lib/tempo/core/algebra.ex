@@ -117,15 +117,10 @@ defmodule Tempo.Algebra do
     end)
   end
 
-  defp window_for(%Tempo{form: {:every, _, :infinity, _}}, other, options),
-    do: options[:within] || other
-
+  # An operand with no end, a recurrence or a set read from a stream, is
+  # bounded by the window or by the other operand's whole stretch.
   defp window_for(expression, other, options) do
-    cond do
-      options[:within] != nil -> options[:within]
-      not anchored?(expression) and other != nil and anchored?(other) -> nil
-      true -> nil
-    end
+    if endless?(expression), do: options[:within] || other, else: options[:within]
   end
 
   defp bounded(spans, expression), do: Limit.take(spans, expression)
@@ -143,7 +138,9 @@ defmodule Tempo.Algebra do
   defp one_frame(_a, b, [], [_ | _], options), do: one_frame(b, b, [], [], options)
   defp one_frame(a, _b, [_ | _], [], options), do: one_frame(a, a, [], [], options)
 
-  defp one_frame(a, b, _pa, _pb, options) do
+  defp one_frame(a, b, _pa, _pb, options), do: frames_agree(a, b, options)
+
+  defp frames_agree(a, b, options) do
     window = options[:within]
     a_placed = placed(a, window)
     b_placed = placed(b, window)
@@ -193,7 +190,86 @@ defmodule Tempo.Algebra do
     |> Enum.sort_by(&{&1.start, &1.stop})
   end
 
-  # ── The sweep ─────────────────────────────────────────────────────────
+  # ── Operands with no end ──────────────────────────────────────────────
+
+  @doc "Whether an expression has no last span: a recurrence with no end, or a set read from a stream."
+  @spec endless?(term()) :: boolean()
+  def endless?(%Tempo{form: {:every, _first, :infinity, _rule}}), do: true
+  def endless?(%Tempo{} = expression), do: Spans.lazy?(expression)
+  def endless?(_other), do: false
+
+  @doc """
+  How an operation is answered where an operand has no end and no window is
+  given. A result is as bounded as the operation makes it: where it lies
+  within a bounded operand (an intersection, and a difference from a bounded
+  first operand) it is `:bounded`, and the operand with no end is taken
+  within the other by `aligned/3`. Where it does not (a union, a symmetric
+  difference, a difference from an operand with no end) the two operands
+  are given as streams of positioned spans in the order of time, with their
+  frame, for a result that has no end either. Of two operands with no end
+  only the union is answered so: any other operation on them is an error,
+  since two that never meet, or one that covers the other from some day on,
+  are searched for ever for a result that is not there.
+  """
+  @spec streamed(atom(), Tempo.t(), Tempo.t(), keyword()) ::
+          :bounded
+          | {:ok, frame(), Enumerable.t(), Enumerable.t()}
+          | {:error, Exception.t()}
+  def streamed(operation, a, b, options) do
+    with :ok <- operable(a, b) do
+      if options[:within],
+        do: :bounded,
+        else: by_ends(operation, endless?(a), endless?(b), a, b)
+    end
+  end
+
+  defp by_ends(_operation, false, false, _a, _b), do: :bounded
+
+  # Two operands with no end are searched for ever where no result is come
+  # to: two that never meet, or one that covers the other from some day on.
+  # Only their union has a next member whatever they are.
+  defp by_ends(operation, true, true, a, _b) when operation != :union,
+    do: {:error, ConversionError.exception(value: a, reason: :unbounded)}
+
+  defp by_ends(:intersection, _a_endless?, _b_endless?, _a, _b), do: :bounded
+  defp by_ends(:difference, false, true, _a, _b), do: :bounded
+
+  defp by_ends(_operation, _a_endless?, _b_endless?, a, b) do
+    with {:ok, frame} <- frames_agree(a, b, []),
+         {:ok, in_a} <- spans_in_order(a, :a),
+         {:ok, in_b} <- spans_in_order(b, :b) do
+      on_a_line(frame, in_a, in_b)
+    end
+  end
+
+  # A cycle has an end to run through, and its operands are swept whole.
+  defp on_a_line(%{length: nil} = frame, in_a, in_b), do: {:ok, frame, in_a, in_b}
+  defp on_a_line(_cycle, _in_a, _in_b), do: :bounded
+
+  # An operand's positioned spans in the order of time: a stream of them for
+  # an operand with no end, whose spans come in that order, and the sorted
+  # list for one that has an end.
+  defp spans_in_order(expression, side) do
+    if endless?(expression) do
+      with {:ok, spans} <- Spans.spans(expression, []),
+           do: {:ok, Stream.map(spans, &positioned!(&1, side))}
+    else
+      operand(expression, nil, side, [])
+    end
+  end
+
+  defp positioned!(span, side) do
+    case Spans.extent(span) do
+      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) ->
+        %{start: start, stop: stop, span: span, side: side}
+
+      {:ok, _open} ->
+        raise ConversionError.exception(value: span, reason: :open)
+
+      {:error, exception} ->
+        raise exception
+    end
+  end
 
   # ── One set ───────────────────────────────────────────────────────────
 
@@ -284,6 +360,22 @@ defmodule Tempo.Algebra do
     end
   end
 
+  @doc """
+  A member brought to a frame's calendar and zone, for a set whose members
+  are come to one at a time: what `gathered/2` does for each member of a
+  list. A member that cannot be brought there raises its error.
+  """
+  @spec brought!(Tempo.t(), frame()) :: Tempo.t()
+  def brought!(%Tempo{} = member, %{calendar: calendar, zone: zone}) do
+    with {:ok, member} <- in_calendar(member, calendar) do
+      in_zone(member, zone, {nil, member})
+    end
+    |> brought_or_raise()
+  end
+
+  defp brought_or_raise({:ok, member}), do: member
+  defp brought_or_raise({:error, exception}), do: raise(exception)
+
   defp each_member(members, fun) do
     members
     |> Enum.reduce_while({:ok, []}, fn member, {:ok, done} ->
@@ -368,6 +460,157 @@ defmodule Tempo.Algebra do
     |> elem(0)
     |> Enum.reverse()
     |> joined(frame)
+  end
+
+  # ── The sweep, one result at a time ───────────────────────────────────
+
+  @doc """
+  The results of an operation over two operands given in the order of time,
+  as a stream: the one sweep, taking each operand's next span as it is come
+  to, for operands with no end. `:difference` and `:symmetric_difference`
+  are swept; a result is given when it closes.
+  """
+  @spec swept(:difference | :symmetric_difference, Enumerable.t(), Enumerable.t()) ::
+          Enumerable.t()
+  def swept(operation, in_a, in_b) do
+    keep? = kept(operation)
+
+    Stream.resource(
+      fn ->
+        %{a: cursor(in_a), b: cursor(in_b), active: [], covering: %{a: [], b: []}, open: nil}
+      end,
+      &next_result(&1, keep?),
+      &closed/1
+    )
+  end
+
+  defp kept(:difference), do: fn in_a, in_b -> in_a > 0 and in_b == 0 end
+  defp kept(:symmetric_difference), do: fn in_a, in_b -> in_a > 0 != in_b > 0 end
+
+  @doc "The members of two operands given in the order of time, as one stream in that order."
+  @spec merged(Enumerable.t(), Enumerable.t()) :: Enumerable.t()
+  def merged(in_a, in_b) do
+    Stream.resource(
+      fn -> %{a: cursor(in_a), b: cursor(in_b)} end,
+      &next_member/1,
+      &closed/1
+    )
+  end
+
+  defp next_member(%{a: nil, b: nil} = state), do: {:halt, state}
+  defp next_member(%{a: {member, _}, b: nil} = state), do: {[member], advanced(state, :a)}
+  defp next_member(%{a: nil, b: {member, _}} = state), do: {[member], advanced(state, :b)}
+
+  defp next_member(%{a: {from_a, _}, b: {from_b, _}} = state) do
+    if {from_a.start, from_a.stop} <= {from_b.start, from_b.stop},
+      do: {[from_a], advanced(state, :a)},
+      else: {[from_b], advanced(state, :b)}
+  end
+
+  # The next position an edge stands at, the edges there applied, and the
+  # result that closes there if one does.
+  defp next_result(state, keep?) do
+    case next_position(state) do
+      nil -> {:halt, state}
+      position -> at_position(state, position, keep?)
+    end
+  end
+
+  defp next_position(%{a: a, b: b, active: active}) do
+    [head_start(a), head_start(b) | Enum.map(active, & &1.stop)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.min(fn -> nil end)
+  end
+
+  defp head_start(nil), do: nil
+  defp head_start({member, _continuation}), do: member.start
+
+  # The closes at a position are applied and judged before its opens are,
+  # so a result ends where the members covering it end, and a member that
+  # begins there begins another. A sweep of operands that have an end joins
+  # two such results into one span; here the join is not made, since members
+  # that abut for ever (the weeks of a weekly rule) would be one span that
+  # never closes.
+  defp at_position(state, position, keep?) do
+    {closing, active} = Enum.split_with(state.active, &(&1.stop == position))
+    closes = for p <- closing, do: {position, :close, p.side, p}
+    {ended, state} = edges_applied(%{state | active: active}, closes, keep?, position)
+
+    {opening_a, state} = opening(state, :a, position, [])
+    {opening_b, state} = opening(state, :b, position, [])
+    opens = for p <- opening_a ++ opening_b, do: {position, :open, p.side, p}
+    state = %{state | active: state.active ++ opening_a ++ opening_b}
+    {ended_by_an_open, state} = edges_applied(state, opens, keep?, position)
+
+    {ended ++ ended_by_an_open, state}
+  end
+
+  defp edges_applied(state, [], _keep?, _position), do: {[], state}
+
+  defp edges_applied(state, edges, keep?, position) do
+    covering =
+      Enum.reduce(edges, state.covering, fn {_, kind, side, p}, acc ->
+        step(acc, kind, side, p)
+      end)
+
+    state = %{state | covering: covering}
+    turned(state, keep?.(length(covering.a), length(covering.b)), position, edges)
+  end
+
+  defp turned(%{open: nil} = state, true, position, edges) do
+    opened = %{
+      start: position,
+      opened: edge_model(edges, :open),
+      a: List.first(state.covering.a),
+      b: List.first(state.covering.b)
+    }
+
+    {[], %{state | open: opened}}
+  end
+
+  # A result opened by a position's closes and closed by its opens has no
+  # length, and is none.
+  defp turned(%{open: %{start: position}} = state, false, position, _edges),
+    do: {[], %{state | open: nil}}
+
+  defp turned(%{open: %{} = open} = state, false, position, edges) do
+    result = Map.merge(open, %{stop: position, closed: edge_model(edges, :close)})
+    {[result], %{state | open: nil}}
+  end
+
+  defp turned(state, _as_before, _position, _edges), do: {[], state}
+
+  # The spans of a side that begin at a position, taken from its stream.
+  defp opening(state, side, position, taken) do
+    case Map.fetch!(state, side) do
+      {%{start: ^position} = member, _continuation} ->
+        opening(advanced(state, side), side, position, [member | taken])
+
+      _later_or_none ->
+        {Enum.reverse(taken), state}
+    end
+  end
+
+  # A stream held at its next member: the member and the rest, or nil at its end.
+  defp cursor(enumerable) do
+    advance(&Enumerable.reduce(enumerable, &1, fn member, _ -> {:suspend, member} end))
+  end
+
+  defp advance(continuation) do
+    case continuation.({:cont, nil}) do
+      {:suspended, member, continuation} -> {member, continuation}
+      {_done_or_halted, _} -> nil
+    end
+  end
+
+  defp advanced(state, side) do
+    {_member, continuation} = Map.fetch!(state, side)
+    Map.put(state, side, advance(continuation))
+  end
+
+  defp closed(state) do
+    for {_member, continuation} <- [state.a, state.b], do: continuation.({:halt, nil})
+    :ok
   end
 
   # The operand end a result's end is written as: a member's start where one

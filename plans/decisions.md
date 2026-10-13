@@ -84,7 +84,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-14).** Window by the other operand, and where that would be wrong answer with an endless set: "a `union` would return an infinite recurrence - but thats not really different to the recurrence with no end as the first operand." Agreed in full as: the result is as bounded as the mathematics makes it. With A endless and B bounded, `intersection` in either order and `difference(B, A)` lie inside B, so A is windowed by B, which is exact. `union` in either order and `difference(A, B)` are endless sets, in time order, bounded by `:within`; windowing `difference(A, B)` by B would drop all of A after B ends. Of two endless operands, `union` and `difference` are endless sets, and `intersection` is refused without `:within`, since two that never meet (every Monday and every Tuesday) are searched for ever. A recurrence with no end and a set read from a stream follow the one rule.
 
-* **State.** To build.
+* **State.** Built, with the two corrections of decision 21: `Tempo.Algebra.streamed/4`, `swept/3` and `merged/2`, `test/tempo/endless_operands_test.exs`.
 
 ## 10. The order of a selection by a list of selectors
 
@@ -191,3 +191,27 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Put with the question, not ruled on.** The months of a meteorological season (March to May in the north) are a convention and not a computation, so they are held in Tempo with the hemisphere asked of Localize, as in October, and are not Calendrical's to answer.
 
 * **State.** To build.
+
+## 20. Where the months of a meteorological season are held
+
+* **Question.** Are the months of a meteorological season (March to May in the north) held in Tempo, or are they Calendrical's to answer?
+
+* **Context.** Put with decision 19 and left open there. The months are a convention and not a computation; in October they were held in Tempo, with the hemisphere asked of Localize.
+
+* **Decision (2026-10-14).** "meteorological season months in Tempo is ok for now". Held in Tempo, and open to being moved later.
+
+* **State.** To build, with decision 19.
+
+## 21. Two corrections to decision 9, found in building it
+
+* **Question.** None was put: these are two things the building of decision 9 showed, recorded so that the release documents say what is built and not what was first agreed.
+
+* **Of two operands with no end, only the union is answered.** Decision 9 said a `difference` of two such operands is an endless set, on the reasoning that each next member takes finite work. That was wrong: where one operand covers the other from some day on (every week as whole weeks, less every second day as two days), no result is ever come to and the search does not end. The same holds for a symmetric difference. So `intersection`, `difference` and `symmetric_difference` of two operands with no end are a `Tempo.ConversionError` (`:unbounded`) without `:within`, and `union` alone is an endless set.
+
+* **A result with no end keeps apart what abuts.** A sweep of operands that have an end joins two results that meet into one span. An endless recurrence whose occurrences abut (every week, as whole weeks) less a bounded span would be one span that never closes, so the sweep that answers one result at a time ends a result where the members covering it end, and begins another where the next member begins. The time covered is the same; the spans are the operand's members, less what was taken out. With `:within` given to the operation the whole sweep is used and results that meet are joined as before.
+
+* **Also found.** `Tempo.symmetric_difference/3` follows the rule of `union/3` (an endless set with one operand with no end), which decision 9 did not name. A predicate with an operand with no end (`Tempo.within?/2` and its kin) still takes that operand within the other, which answers wrongly in one case at least: every Monday for ever is "within" June. It is in `TODO.md` as a defect and was not changed.
+
+* **Decision.** Mine, in building (2026-10-14); for the user to overrule.
+
+* **State.** Built.

@@ -878,24 +878,44 @@ defmodule Tempo do
   * `:within` is a `t:t/0`, the window the operation works in: a value with
     no year is placed on each of its periods, and a recurrence with no end
     is bounded by it. Required when one operand has a year and the other
-    none. A recurrence with no end and no window is bounded by the other
-    operand.
+    none.
+
+  ### An operand with no end
+
+  With no window, an operation on an operand with no end (a recurrence with
+  no count, or a set with no last member) is as bounded as it makes its
+  answer. An `intersection/3`, and a `difference/3` from an operand that has
+  an end, lie within that operand, and the other is taken within it. A
+  `union/3`, a `symmetric_difference/3` and a `difference/3` from an operand
+  with no end have no end themselves: the answer is a set with no last
+  member, in the order of time, which `:within` bounds wherever it is asked
+  for. Of two operands with no end only the union is answered; any other
+  operation on them needs a window.
 
   ### Returns
 
-  * `{:ok, set}`, a `t:t/0` of the `:all` form.
+  * `{:ok, set}`, a `t:t/0` of the `:all` form, with no last member where
+    the answer has no end.
 
   * `{:error, %Tempo.FrameError{}}` when the operands share no frame: one
     zoned and one not, one with a year and one without and no window, two
     with no year on different cycles.
 
   * `{:error, %Tempo.ConversionError{}}` for a duration, a one-of set, an
-    open end, or more than 10,000 spans (the application's `:max_values_at_once`).
+    open end, more than 10,000 spans (the application's
+    `:max_values_at_once`), or two operands with no end in an operation
+    other than a union.
 
   ### Examples
 
       iex> Tempo.union(~o"2026-01", ~o"2026-03")
       {:ok, ~o"{2026-01/2026-01,2026-03/2026-03}"}
+
+      iex> {:ok, every_week_and_a_day} = Tempo.union(~o"R/2026-06-01/P1W", ~o"2026-06-10")
+      iex> Tempo.bounded?(every_week_and_a_day)
+      false
+      iex> Tempo.members(every_week_and_a_day, within: ~o"2026-06-01/2026-06-14")
+      {:ok, [~o"2026-06-01/2026-06-07", ~o"2026-06-08/2026-06-14", ~o"2026-06-10/2026-06-10"]}
 
       iex> {:ok, both} = Tempo.union(~o"2026-01", ~o"2026-02")
       iex> Tempo.IntervalSet.count(both)
@@ -904,8 +924,13 @@ defmodule Tempo do
   """
   @spec union(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def union(a, b, options \\ []) do
-    with :ok <- Options.check(options, @set_options, "Tempo.union/3"),
-         {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+    with :ok <- Options.check(options, @set_options, "Tempo.union/3") do
+      united(Algebra.streamed(:union, a, b, options), a, b, options)
+    end
+  end
+
+  defp united(:bounded, a, b, options) do
+    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
       members =
         Algebra.whole(pa ++ pb)
         |> Enum.sort_by(&{&1.start, &1.stop})
@@ -914,6 +939,13 @@ defmodule Tempo do
       Algebra.gathered(members, calendar: frame.calendar, zone: frame.zone, metadata: a.metadata)
     end
   end
+
+  defp united({:ok, frame, in_a, in_b}, a, _b, _options) do
+    members = in_a |> Algebra.merged(in_b) |> Stream.map(&Algebra.brought!(&1.span, frame))
+    {:ok, set_of(members, %{a | calendar: frame.calendar, zone: frame.zone})}
+  end
+
+  defp united({:error, _exception} = error, _a, _b, _options), do: error
 
   # A member kept whole is brought to the result's calendar, as the sweep's results are.
   # A recurrence over a domain (`R/{2020Y..2024Y}/P1Y/F…`) is bounded by it.
@@ -944,7 +976,8 @@ defmodule Tempo do
   ### Options
 
   * `:within` is a `t:t/0`, the window an expression with no end of its own (a
-    recurrence with no count) or no year is placed in.
+    recurrence with no count) or no year is placed in. With none, an operand
+    with no end is treated as `union/3` says.
 
   * `:metadata` says which member's metadata a result carries: `:first` (the
     default), `:second`, `:merge`, or a function of the two.
@@ -966,7 +999,7 @@ defmodule Tempo do
   """
   @spec intersection(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def intersection(a, b, options \\ []),
-    do: operate(&Algebra.intersection/3, a, b, options, "Tempo.intersection/3")
+    do: operate(:intersection, a, b, options, "Tempo.intersection/3")
 
   @doc """
   The difference of two expressions: every instant in the first and not the
@@ -982,7 +1015,8 @@ defmodule Tempo do
   ### Options
 
   * `:within` is a `t:t/0`, the window an expression with no end of its own (a
-    recurrence with no count) or no year is placed in.
+    recurrence with no count) or no year is placed in. With none, an operand
+    with no end is treated as `union/3` says.
 
   * `:metadata` says which member's metadata a result carries: `:first` (the
     default), `:second`, `:merge`, or a function of the two.
@@ -998,13 +1032,17 @@ defmodule Tempo do
       iex> Tempo.difference(~o"2026", ~o"2026-06")
       {:ok, ~o"{2026/2026-05,2026-07/2026}"}
 
+      iex> {:ok, free_weeks} = Tempo.difference(~o"R/2026-06-01/P1W", ~o"2026-06-10/2026-06-20")
+      iex> Tempo.members(free_weeks, within: ~o"2026-06-01/2026-06-14")
+      {:ok, [~o"2026-06-01/2026-06-07", ~o"2026-06-08/2026-06-09"]}
+
       iex> Tempo.difference(~o"2026-06-15T09/2026-06-15T17", ~o"2026-06-15T12/2026-06-15T13")
       {:ok, ~o"{2026-06-15T09/2026-06-15T12,2026-06-15T13/2026-06-15T17}"}
 
   """
   @spec difference(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def difference(a, b, options \\ []),
-    do: operate(&Algebra.difference/3, a, b, options, "Tempo.difference/3")
+    do: operate(:difference, a, b, options, "Tempo.difference/3")
 
   @doc """
   The symmetric difference of two expressions: every instant in exactly one
@@ -1019,7 +1057,8 @@ defmodule Tempo do
   ### Options
 
   * `:within` is a `t:t/0`, the window an expression with no end of its own (a
-    recurrence with no count) or no year is placed in.
+    recurrence with no count) or no year is placed in. With none, an operand
+    with no end is treated as `union/3` says.
 
   * `:metadata` says which member's metadata a result carries: `:first` (the
     default), `:second`, `:merge`, or a function of the two.
@@ -1038,7 +1077,7 @@ defmodule Tempo do
   """
   @spec symmetric_difference(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def symmetric_difference(a, b, options \\ []),
-    do: operate(&Algebra.symmetric_difference/3, a, b, options, "Tempo.symmetric_difference/3")
+    do: operate(:symmetric_difference, a, b, options, "Tempo.symmetric_difference/3")
 
   @doc """
   The complement of an expression within a window: every instant of the
@@ -1075,7 +1114,7 @@ defmodule Tempo do
   def complement(a, options) do
     case Keyword.get(options, :within) do
       %__MODULE__{} = window ->
-        operate(&Algebra.difference/3, window, a, options, "Tempo.complement/2")
+        operate(:difference, window, a, options, "Tempo.complement/2")
 
       _ ->
         {:error, ConversionError.exception(value: a, reason: :unbounded)}
@@ -1189,12 +1228,34 @@ defmodule Tempo do
   end
 
   defp operate(operation, a, b, options, function) do
-    with :ok <- Options.check(options, @set_options, function),
-         {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
-      spans = pa |> operation.(pb, frame) |> Enum.map(&Algebra.written(&1, frame, options))
+    with :ok <- Options.check(options, @set_options, function) do
+      operated(Algebra.streamed(operation, a, b, options), operation, a, b, options)
+    end
+  end
+
+  # A result with an end is swept whole; one with no end is a set whose
+  # members are come to one at a time, in the order of time.
+  defp operated(:bounded, operation, a, b, options) do
+    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+      spans = operation |> sweep(pa, pb, frame) |> Enum.map(&Algebra.written(&1, frame, options))
       {:ok, set_of(spans, %{a | calendar: frame.calendar, zone: frame.zone})}
     end
   end
+
+  defp operated({:ok, frame, in_a, in_b}, operation, a, _b, options) do
+    spans =
+      operation |> Algebra.swept(in_a, in_b) |> Stream.map(&Algebra.written(&1, frame, options))
+
+    {:ok, set_of(spans, %{a | calendar: frame.calendar, zone: frame.zone})}
+  end
+
+  defp operated({:error, _exception} = error, _operation, _a, _b, _options), do: error
+
+  defp sweep(:intersection, pa, pb, frame), do: Algebra.intersection(pa, pb, frame)
+  defp sweep(:difference, pa, pb, frame), do: Algebra.difference(pa, pb, frame)
+
+  defp sweep(:symmetric_difference, pa, pb, frame),
+    do: Algebra.symmetric_difference(pa, pb, frame)
 
   defp members_where(filter, a, b, options, function) do
     with :ok <- Options.check(options, @set_options, function),
