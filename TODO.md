@@ -57,6 +57,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ### Ideas, not committed to
 
+* [ ] **Revisit the calendar adapter.** Every calendar question goes through `Tempo.Calendar`, and `test/tempo/calendar_surface_test.exs` holds the library to it; what the adapter itself still knows (the `Calendar.ISO` table, the Gregorian for a solar term, Easter and the registry lookup by name) is left as it is for now (2026-10-14).
 * [ ] **A `Tempo.Intervallic` protocol**, so that a struct of the caller's (`%Booking{check_in, check_out}`) takes part in relations and set operations without being copied into a `%Tempo{}`.
 
 * [ ] **A guide to selection**: the selector vocabulary, with `Tempo.selection/1` beside each written form.
