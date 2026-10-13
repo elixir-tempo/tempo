@@ -61,7 +61,8 @@ defmodule Tempo.Cron do
   ### Options
 
   * `:from` is the first instant firings are counted from, a
-    `t:Tempo.t/0` with a date; the default is the first minute of 2000.
+    `t:Tempo.t/0` with a date. With none the rule has no start, as cron
+    gives it none, and its firings are asked for in a window (`:within`).
 
   * `:metadata` is a map carried on the recurrence and every firing.
 
@@ -82,6 +83,10 @@ defmodule Tempo.Cron do
       iex> {:ok, quarter_hours} = Tempo.Cron.parse("*/15 * * * *", from: ~o"2026-06-01T00:00:00")
       iex> quarter_hours |> Tempo.to_interval!(within: ~o"2026-06-01T00") |> Tempo.IntervalSet.count()
       4
+
+      iex> {:ok, mondays} = Tempo.Cron.parse("0 9 * * 1")
+      iex> Tempo.to_iso8601(mondays)
+      {:ok, "R/../P1M/FL1KT9H0MN"}
 
       iex> {:error, %ArgumentError{}} = Tempo.Cron.parse("@reboot")
 
@@ -362,7 +367,7 @@ defmodule Tempo.Cron do
     rule = %{freq: cadence} |> Map.merge(parts_as_rule(parts)) |> Map.merge(day)
 
     rule
-    |> RRule.from_rule(Keyword.put_new_lazy(options, :from, &reference/0))
+    |> RRule.from_rule(options)
     |> day_before_times()
   end
 
@@ -388,9 +393,6 @@ defmodule Tempo.Cron do
   end
 
   defp day_before_times(read), do: read
-
-  # The first minute of 2000: where firings are counted from when no start is given.
-  defp reference, do: Tempo.new!(year: 2000, month: 1, day: 1, hour: 0, minute: 0)
 
   # A `*` day of the week constrains nothing, and a `*` day of the month
   # constrains nothing beside a restricted day of the week.

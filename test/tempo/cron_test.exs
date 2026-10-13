@@ -177,6 +177,22 @@ defmodule Tempo.CronTest do
     end
   end
 
+  describe "a rule given no start" do
+    test "has none, as an RRULE has none" do
+      assert Cron.parse("0 9 * * 1") == {:ok, ~o"R/../P1M/FL1KT9H0MN"}
+    end
+
+    test "has its firings in a window, and none without one" do
+      {:ok, mondays} = Cron.parse("0 9 * * 1")
+      {:ok, set} = Tempo.to_interval(mondays, within: ~o"2026-06-01/2026-06-14")
+
+      assert IntervalSet.map(set, &Interval.from/1) ==
+               [~o"2026-06-01T09:00", ~o"2026-06-08T09:00"]
+
+      assert {:error, %Tempo.ConversionError{reason: :unbounded}} = Tempo.members(mondays)
+    end
+  end
+
   describe "aliases and fields" do
     test "an alias is its five fields" do
       assert Cron.parse("@daily", from: ~o"2026-01-01") ==

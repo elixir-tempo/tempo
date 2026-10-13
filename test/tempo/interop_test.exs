@@ -110,6 +110,21 @@ defmodule Tempo.InteropTest do
     end
   end
 
+  describe "an interval of two dates" do
+    test "is the range of them, and a range is the interval back" do
+      range = Date.range(~D[2026-06-15], ~D[2026-06-20])
+      assert Tempo.to_elixir(~o"2026-06-15/2026-06-20") == {:ok, range}
+      assert Tempo.to_elixir(~o"2026-06-15/20") == {:ok, range}
+      assert Tempo.to_elixir(Tempo.from_elixir!(range)) == {:ok, range}
+    end
+
+    test "is a range of its own calendar" do
+      {:ok, range} = Tempo.to_elixir(~o"5786-07-15/5786-07-20[u-ca=hebrew]")
+      assert range.first == Date.new!(5786, 7, 15, Calendrical.Hebrew)
+      assert Enum.count(range) == 6
+    end
+  end
+
   describe "what has no Elixir value" do
     test "is an error that says so, for each conversion" do
       for result <- [
@@ -118,7 +133,9 @@ defmodule Tempo.InteropTest do
             Tempo.to_time(~o"2026-06-15"),
             Tempo.to_naive_datetime(~o"2026-06"),
             Tempo.to_elixir(~o"2026-06"),
-            Tempo.to_elixir(~o"2026-06-15/2026-06-20"),
+            Tempo.to_elixir(~o"2026-06/2026-07"),
+            Tempo.to_elixir(~o"2026-06-15T09/2026-06-15T17"),
+            Tempo.to_elixir(~o"2026-06-15/.."),
             Tempo.from_elixir(:nonsense)
           ] do
         assert {:error, %Tempo.ConversionError{reason: :not_an_elixir_value}} = result

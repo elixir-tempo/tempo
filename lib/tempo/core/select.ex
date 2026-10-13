@@ -559,10 +559,17 @@ defmodule Tempo.Select do
     end
   end
 
+  # A list answers as a set does, in the order of time and each span once,
+  # whatever order its members are written in and however often one is named.
   defp apply_selector(selector, period, options) when is_list(selector) do
-    if selector != [] and Enum.all?(selector, &(is_integer(&1) or is_struct(&1, Range))),
-      do: in_period(period, [day: selector], options),
-      else: each_picked(selector, &apply_selector(&1, period, options))
+    picked =
+      if selector != [] and Enum.all?(selector, &(is_integer(&1) or is_struct(&1, Range))),
+        do: in_period(period, [day: selector], options),
+        else: each_picked(selector, &apply_selector(&1, period, options))
+
+    with {:ok, picked} <- picked do
+      {:ok, picked |> Enum.uniq_by(&Spans.extent/1) |> Enum.sort_by(&start_of/1)}
+    end
   end
 
   defp apply_selector(%Range{} = range, period, options),

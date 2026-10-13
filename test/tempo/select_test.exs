@@ -52,6 +52,14 @@ defmodule Tempo.SelectTest do
       assert {:error, %ArgumentError{}} = Tempo.select(~o"2026-06", ~o"2026-06-15")
     end
 
+    test "a list answers in the order of time, each span once" do
+      assert days(Tempo.select(~o"2026-06", [~o"20D", ~o"5D", ~o"5D"])) == [5, 20]
+      assert days(Tempo.select(~o"2026-06", [20, 5, 5, 4..6])) == [4, 5, 6, 20]
+
+      assert texts(Tempo.select(~o"2026-06/2026-07", [~o"20D", ~o"5D"])) ==
+               ["2026Y6M5D", "2026Y6M20D", "2026Y7M5D", "2026Y7M20D"]
+    end
+
     test "keeps the period's metadata on each value" do
       term = Tempo.put_metadata(~o"2027-07-19/2027-07-21", %{term: 3})
       {:ok, days} = Tempo.select(term, Tempo.workdays(:AU))

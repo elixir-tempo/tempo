@@ -21,7 +21,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **Calendrical 1.4 and Localize on hex.** `mix.exs` takes both from GitHub `main`; a release needs published versions. Calendrical has one behaviour that every calendar answers, `Localize.Calendar.ISO` among them by shape (Calendrical's `localize_calendar_iso_test.exs` and its laws test hold it there); `leap_month/1`, `weeks_in_month/2` and `month_week/3` left the behaviour on 2026-10-14, as nothing called them and another callback answers each.
 
-* [ ] **`tempo_network` 0.1.0.** The companion package (`~/Development/tempo/tempo_network`) is built and its gates pass against a path dependency on this repository; it needs its own repository, and `{:ex_tempo, "~> 2.0"}` once 2.0 is on hex. It reaches the engine in one file (`Tempo.Network.Calendar` calls `Tempo.Calendar`): either that stays an agreed private seam, or Tempo gives a public way to ask a calendar the same six questions.
+* [ ] **`tempo_network` 0.1.0.** The companion package (`~/Development/tempo/tempo_network`) is built and its gates pass against a path dependency on this repository; it needs its own repository, and `{:ex_tempo, "~> 2.0"}` once 2.0 is on hex. It calls the hidden `Tempo.Calendar` in one file (`Tempo.Network.Calendar`), an agreed private seam for now (`plans/decisions.md`, 15), so a change to the adapter checks the companions.
 
 * [ ] **Companions on 2.0.** `tempo_sql` and `tempo_holidays` move to `~> 2.0` once it is on hex. `tempo_holidays` builds its rules with `Tempo.every/2` and `Tempo.selection/1`, where it wrote text to be read.
 
@@ -29,25 +29,21 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ### Decisions for the user
 
-* [ ] **A selection by a list of selectors** answers in the list's order, not time's (section 19).
-
-* [ ] **`Tempo.Cron.parse/2` with no `:from`** starts at the first minute of 2000, where an open start would say "no start" as `Tempo.RRule.parse/2` does (section 19).
-
-* [ ] **`Tempo.to_elixir/1` of an interval of dates** is an error, where a `Date.Range` would mirror `from_elixir/2` (section 19).
-
-* [ ] **Set operations with an operand that has no end.** A recurrence with no end takes its other operand as its window; a set read from a stream is refused (`:too_many_values`). One rule for both is wanted: the refusal is the safe one, and a union with an endless operand has no finite answer under either.
+Each decision is recorded in `plans/decisions.md` when it is made, with its question, its context and the answer; what it leaves to build moves to the defects and gaps below.
 
 ### Defects and gaps
 
-* [ ] **RFC 7529's `RSCALE` and `SKIP`** are refused in an RRULE and in a JSCalendar rule, and a week that starts on another day than Monday is refused where it changes the weeks counted (three of RFC 5545's examples). The published 1.6 read all three. Each wants a rule counted in a calendar or a week other than the expression's own, which the one-calendar rule (law 5) does not have a form for; whether to give it one is a decision.
+* [ ] **Set operations with an operand that has no end: decided 2026-10-14, to build.** The result is as bounded as the mathematics makes it, for a recurrence with no end and a set read from a stream alike. Where the answer lies inside the bounded operand (`intersection` in either order, `difference(bounded, endless)`) the endless operand is windowed by the other, which is exact. Where it does not (`union` in either order, `difference(endless, bounded)`) the answer is an endless set, in time order, bounded by `:within`. Of two endless operands `union` and `difference` are endless sets, and `intersection` is refused without `:within`, since two that never meet are searched for ever. See `plans/decisions.md`, 9.
+
+* [ ] **RFC 7529's `RSCALE` and `SKIP`, and a significant `WKST`, are read: decided 2026-10-14, to build.** In an RRULE and a JSCalendar rule: `RSCALE` is the recurrence's calendar, `SKIP` a new part of a rule, and the week start as decision 14 rules. With them RFC 5545's three unread examples are read, and RFC 7529's leap-month notation (`BYMONTH=5L`). See `plans/decisions.md`, 13.
 
 * [ ] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused.
 
-* [ ] **`cron`'s `28W` to `31W`** are refused: the weekday nearest a day a short month may not have depends on the month's length, which a rule's parts cannot say. It wants a part that rolls a day to a weekday within its month, as `Tempo.roll_to_workday/3` rolls a value.
+* [ ] **A part of a rule that rolls a day to the nearest weekday within its month: decided 2026-10-14, to build.** By it every `nW` of cron is one rule and `28W` to `31W` are read, and a holiday is observed on the nearest weekday. It is written inside the selection as the event part is, `L31D(modified-nearest)rN`. The weekdays are the locale's: the `:locale` option, or the current locale. See `plans/decisions.md`, 16 to 18.
 
 * [ ] **An exclusion that cannot be read is passed over** in a recurrence's domain (`Tempo.Spans.without/3` answers the stream unchanged on an error). It should be the error.
 
-* [ ] **A season has no dates** until a calendar answers one for a territory (`Tempo.to_interval/2` of `2026-21` is `:season`). Calendrical's to provide.
+* [ ] **Seasons as decided in October are rebuilt: decided 2026-10-14, to build.** Codes 25 to 32 from Astro; codes 21 to 24 with a locale or a territory, the hemisphere from Localize (`plans/seasons-by-locale.md`). The rewrite left a season read and written only. See `plans/decisions.md`, 19.
 
 * [ ] **A solar term of a year before 0 is a day late**: `Tempo.Event.date("qingming", -3000, Calendrical.Chinese)` is 7 April and the moment is on the 6th. Calendrical's `solar_term/3` takes `trunc/1` of the moment where it wants `floor/1`. Upstream.
 
@@ -66,6 +62,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Done since the rewrite
 
+* [x] Decisions 10 to 12 built (2026-10-14): a list selection in time order, a cron rule with no start, a `Date.Range` from `to_elixir/1`.
 * [x] **A solar term on a value with no calendar** is the Gregorian calendar's, asked for by the adapter (`Tempo.Calendar.solar_term/3`), since `Localize.Calendar.ISO` has no astronomy. Decided 2026-10-14.
 * [x] The redesign, phases 0 to 8 (sections 12 to 20 of the plan).
 * [x] The migration guide and the changelog, from the published 1.6.4.

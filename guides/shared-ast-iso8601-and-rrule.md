@@ -232,7 +232,7 @@ A cron expression is read into the same form by `Tempo.Cron.parse/2`: each restr
 
 ```elixir
 iex> Tempo.Cron.parse("0 9 * * 1-5")
-{:ok, ~o"R/2000Y1M1DT0H0M/P1M/FL{1,2,3,4,5}KT9H0MN"}
+{:ok, ~o"R/../P1M/FL{1,2,3,4,5}KT9H0MN"}
 
 iex> {:ok, weekday_mornings} = Tempo.Cron.parse("0 9 * * 1-5", from: ~o"2026-06-01T00:00")
 iex> Enum.map(Enum.take(weekday_mornings, 2), &Tempo.Interval.from/1)
@@ -241,11 +241,11 @@ iex> Enum.map(Enum.take(weekday_mornings, 2), &Tempo.Interval.from/1)
 
 > *"**Nine o'clock** on **Monday to Friday**."*
 
-A cron has no start of its own, so one is given as `:from`, and is the first minute of 2000 otherwise. Where both the day of the month and the day of the week are restricted, cron fires on either, which no one selection says — every part of a selection holds at once — so the answer is a set of two recurrences:
+A cron has no start of its own, so the rule read from one has none unless one is given as `:from`, and its firings are asked for in a window. Where both the day of the month and the day of the week are restricted, cron fires on either, which no one selection says — every part of a selection holds at once — so the answer is a set of two recurrences:
 
 ```elixir
 iex> Tempo.Cron.parse("0 0 13 * 5")
-{:ok, ~o"{R/2000Y1M1DT0H0M/P1M/FL13DT0H0MN,R/2000Y1M1DT0H0M/P1M/FL5KT0H0MN}"}
+{:ok, ~o"{R/../P1M/FL13DT0H0MN,R/../P1M/FL5KT0H0MN}"}
 ```
 
 ## Why one form

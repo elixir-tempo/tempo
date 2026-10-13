@@ -75,7 +75,7 @@ defmodule Tempo.Interop do
 
   # ── To Elixir ─────────────────────────────────────────────────────────
 
-  @doc "The Elixir struct a value fills: a date, a time, a naive or a zoned date and time, a duration."
+  @doc "The Elixir struct a value fills: a date, a time, a naive or a zoned date and time, a duration; and the range of dates an interval of two dates is."
   @spec to(Tempo.t() | Duration.t()) :: {:ok, struct()} | {:error, Exception.t()}
   def to(%Duration{units: units}), do: {:ok, Elixir.Duration.new!(units)}
 
@@ -85,8 +85,30 @@ defmodule Tempo.Interop do
     filled(value, date?, Keyword.has_key?(units, :hour), zoned?)
   end
 
+  # An interval of two dates is the range of them: both hold their last day,
+  # the interval by how an end written to a date is read and the range by
+  # what a `Date.Range` is.
+  def to(%Tempo{form: {:span, %Tempo{} = from, %Tempo{} = to}} = interval) do
+    with true <- a_date?(from) and a_date?(to),
+         {:ok, %Date{} = first} <- to_date(placed(from, interval)),
+         {:ok, %Date{} = last} <- to_date(placed(to, interval)) do
+      {:ok, Date.range(first, last)}
+    end
+    |> a_range(interval)
+  end
+
   def to(other),
     do: {:error, ConversionError.exception(value: other, reason: :not_an_elixir_value)}
+
+  defp a_date?(%Tempo{form: {:value, units}}), do: Keyword.keys(units) == [:year, :month, :day]
+  defp a_date?(_end), do: false
+
+  defp placed(%Tempo{} = an_end, %Tempo{calendar: calendar}), do: %{an_end | calendar: calendar}
+
+  defp a_range({:ok, %Date.Range{}} = range, _interval), do: range
+
+  defp a_range(_not_dates, interval),
+    do: {:error, ConversionError.exception(value: interval, reason: :not_an_elixir_value)}
 
   defp filled(value, true, true, true), do: to_datetime(value)
   defp filled(value, true, true, false), do: to_naive(value)

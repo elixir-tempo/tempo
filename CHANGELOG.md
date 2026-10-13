@@ -36,6 +36,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.select/3` selects in every period of its base and answers values of the selector's resolution, where it selected in the first period and answered intervals.
 
+* `Tempo.select/3` by a list of selectors or of days answers in the order of time, each span once, whatever the order of the list.
+
 * `Tempo.workdays/2` answers a `Tempo.Workdays`, and the workday functions are named `add_workdays/3`, `next_workday/2`, `count_workdays/2` and their like.
 
 * A week date, an ordinal date and a season are kept as written (`~o"2026Y25W2K"`, `~o"2026Y166O"`, `~o"2026Y21M"`), where they were resolved as they were read. A season has no dates.
@@ -97,6 +99,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * `Tempo.RRule.to_string/1`, `Tempo.ICal.parse/2` and `parse_file/2`, `Tempo.JSCalendar.parse/2`.
 
 * `Tempo.Cron.parse/2` reads the extensions `L`, `LW`, `15W`, `5L` and `5#2` in its day fields.
+
+* `Tempo.Cron.parse/2` with no `:from` reads a rule with no start, as `Tempo.RRule.parse/2` does; its firings are asked for with `:within`.
+
+* `Tempo.to_elixir/1` of an interval of two dates is their `Date.Range`, so `Tempo.from_elixir/2` of a range comes back as it went.
 
 * `Tempo.duration/2` with `leap_seconds: true`, `Tempo.LeapSeconds.spanned/1` and `count/1`.
 
