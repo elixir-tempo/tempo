@@ -21,10 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # OTP 26 is not supported: the tokenizer's `@compile` optimiser-off
-        # flags expose an OTP-26 code-generation bug in the unoptimised binary-
-        # matching path (a bogus multi-terabyte allocation at runtime). OTP 27
-        # is the minimum. See the README.
+        # Erlang/OTP 27 is the oldest release Tempo is built and tested on.
         include:
           # Every row pins the latest patch of its Elixir minor and its OTP
           # major, verified against the release tags. Bump every row that
@@ -123,12 +120,15 @@ jobs:
         if: ${{ !matrix.lint }}
         run: mix test
 
-      # The lint row runs the tests once, under coverage: `mix test --cover`
-      # fails below the threshold, the default 90%, with the modules of
-      # `test/support` and the generated parsers left out (`mix.exs`).
+      # The lint row runs every test once, under coverage: the suite, every
+      # example of the README and the guides held to the answer it prints,
+      # and the totality check (every operation on every value of the corpus
+      # answers or returns a named error). `mix test --cover` fails below the
+      # threshold, the default 90%, with the modules of `test/support` left
+      # out (`mix.exs`).
       - name: Run tests with coverage
         if: matrix.lint
-        run: mix test --cover
+        run: mix test --cover --include guides --include total
 
       - name: Restore PLT cache
         if: matrix.lint

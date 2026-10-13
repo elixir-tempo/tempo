@@ -1,0 +1,959 @@
+defmodule Tempo.ICal.Test do
+  use ExUnit.Case, async: true
+
+  import Tempo.Sigils
+
+  alias Tempo.Boundaries
+  alias Tempo.ICal
+  alias Tempo.IntervalSet
+
+  doctest Tempo.ICal
+
+  # Tests for `Tempo.ICal.parse/2` — iCalendar → IntervalSet
+  # conversion with event metadata preserved on each interval.
+  #
+  # Three input sources:
+  #
+  # 1. Synthetic ICS strings defined inline — run on every CI.
+  # 2. Public fixtures borrowed from the `ical` library's own
+  #    test suite (`test/support/data/ical_fixtures/*.ics`,
+  #    MIT-licensed, attribution in the directory README).
+  # 3. A private Apple Calendar export at
+  #    `test/support/data/ical_apple_example_export.ics` — not
+  #    committed, tests against it run only when the file exists.
+
+  @apple_fixture "test/support/data/ical_apple_example_export.ics"
+  @fixtures_dir "test/support/data/ical_fixtures"
+
+  # Tempo allows `ical ~> 2.0 or ~> 3.0`. Floating date-times (no `Z`,
+  # no `TZID`) are surfaced as zone-less values only from ical 3.0
+  # onward — 2.x coerced them to a zoned `DateTime`. The floating
+  # assertions below therefore compile only when the resolved parser
+  # is 3.0+.
+  Application.ensure_loaded(:ical)
+
+  ical_version = Application.spec(:ical, :vsn)
+
+  @ical_floating_supported not is_nil(ical_version) and
+                             Version.match?(to_string(ical_version), ">= 3.0.0")
+
+  setup_all do
+    Calendar.put_time_zone_database(Tz.TimeZoneDatabase)
+    :ok
+  end
+
+  describe "parse/2 — simple events" do
+    test "a single datetime event becomes one interval with metadata" do
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:evt-1
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T100000Z
+      DTEND:20220615T110000Z
+      SUMMARY:Team standup
+      DESCRIPTION:Daily sync
+      LOCATION:Zoom
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      assert {:ok, set} = ICal.parse(ics)
+      assert IntervalSet.count(set) == 1
+
+      [iv] = IntervalSet.members(set)
+      assert iv.metadata.uid == "evt-1"
+      assert iv.metadata.summary == "Team standup"
+      assert iv.metadata.description == "Daily sync"
+      assert iv.metadata.location == "Zoom"
+    end
+
+    test "calendar metadata attaches to the IntervalSet" do
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Vendor//Product//EN
+      CALSCALE:GREGORIAN
+      METHOD:PUBLISH
+      END:VCALENDAR
+      """
+
+      assert {:ok, set} = ICal.parse(ics)
+      assert set.metadata.prodid == "-//Vendor//Product//EN"
+      assert set.metadata.version == "2.0"
+      assert set.metadata.scale == "GREGORIAN"
+      assert set.metadata.method == "PUBLISH"
+    end
+
+    test "all-day event uses day-resolution endpoints" do
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:holiday-1
+      DTSTAMP:20220101T000000Z
+      DTSTART;VALUE=DATE:20220704
+      DTEND;VALUE=DATE:20220705
+      SUMMARY:Independence Day
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      [iv] = IntervalSet.members(set)
+
+      assert Boundaries.from(iv) == [year: 2022, month: 7, day: 4]
+      assert Boundaries.to(iv) == [year: 2022, month: 7, day: 5]
+      assert iv.metadata.summary == "Independence Day"
+    end
+
+    test "multi-day event spans the half-open range" do
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:trip-1
+      DTSTAMP:20220101T000000Z
+      DTSTART;VALUE=DATE:20220913
+      DTEND;VALUE=DATE:20220916
+      SUMMARY:Conference trip
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      [iv] = IntervalSet.members(set)
+      assert Boundaries.from(iv)[:day] == 13
+      assert Boundaries.to(iv)[:day] == 16
+    end
+
+    test "all-day event with no DTEND spans exactly one day (RFC 5545 §3.6.1)" do
+      import Tempo.Sigils
+
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:allday-no-dtend
+      DTSTAMP:20220101T000000Z
+      DTSTART;VALUE=DATE:20220704
+      SUMMARY:Independence Day
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      [iv] = IntervalSet.members(set)
+
+      # `to` advances by one day and stays at day resolution — no
+      # drift into a finer (hour) unit.
+      assert Boundaries.from(iv) == [year: 2022, month: 7, day: 4]
+      assert Boundaries.to(iv) == [year: 2022, month: 7, day: 5]
+      assert Tempo.duration(iv) == ~o"P1D"
+    end
+
+    test "timed event with no DTEND materialises as a one-unit punctual span (RFC 5545 §3.6.1)" do
+      import Tempo.Sigils
+
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:timed-no-dtend
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220704T090000Z
+      SUMMARY:Reminder
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      [iv] = IntervalSet.members(set)
+
+      # RFC 5545 calls this a zero-duration point, but Tempo's domain
+      # has no zero-extent intervals: the punctual event becomes the
+      # one-second span [09:00:00, 09:00:01).
+      assert Boundaries.from(iv) == [year: 2022, month: 7, day: 4, hour: 9, minute: 0, second: 0]
+      assert Boundaries.to(iv) == [year: 2022, month: 7, day: 4, hour: 9, minute: 0, second: 1]
+      assert Tempo.duration(iv) == ~o"PT1S"
+      refute Tempo.empty?(iv)
+    end
+
+    test "an explicit DTEND equal to DTSTART is also materialised, not zero-extent" do
+      import Tempo.Sigils
+
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:explicit-equal
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220704T090000Z
+      DTEND:20220704T090000Z
+      SUMMARY:Marker
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      [iv] = IntervalSet.members(set)
+
+      # The same chokepoint catches an explicit zero-duration DTEND.
+      assert Tempo.duration(iv) == ~o"PT1S"
+      refute Tempo.empty?(iv)
+    end
+
+    test "no imported interval is ever zero-extent (the domain invariant holds)" do
+      # A calendar mixing a punctual reminder with a normal meeting must
+      # never yield a degenerate interval — the invariant the interval
+      # domain (and the set operations built on it) relies on.
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:reminder
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220704T090000Z
+      SUMMARY:Reminder
+      END:VEVENT
+      BEGIN:VEVENT
+      UID:meeting
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220704T100000Z
+      DTEND:20220704T110000Z
+      SUMMARY:Meeting
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+
+      refute Enum.any?(IntervalSet.members(set), &Tempo.empty?/1)
+    end
+
+    test "overlapping events are preserved (no coalesce)" do
+      # Two events at the same time with different summaries.
+      # Without `coalesce: false` they would merge and lose one
+      # event's metadata.
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:evt-a
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T100000Z
+      DTEND:20220615T110000Z
+      SUMMARY:Event A
+      END:VEVENT
+      BEGIN:VEVENT
+      UID:evt-b
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T100000Z
+      DTEND:20220615T110000Z
+      SUMMARY:Event B
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      assert IntervalSet.count(set) == 2
+
+      summaries =
+        IntervalSet.members(set)
+        |> Enum.map(& &1.metadata.summary)
+        |> Enum.sort()
+
+      assert summaries == ["Event A", "Event B"]
+    end
+
+    test "non-overlapping events are sorted by from" do
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:later
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220616T100000Z
+      DTEND:20220616T110000Z
+      SUMMARY:Later
+      END:VEVENT
+      BEGIN:VEVENT
+      UID:earlier
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T100000Z
+      DTEND:20220615T110000Z
+      SUMMARY:Earlier
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      assert Enum.map(IntervalSet.members(set), & &1.metadata.summary) == ["Earlier", "Later"]
+    end
+  end
+
+  if @ical_floating_supported do
+    describe "parse/2 — floating (zone-less) date-times" do
+      # RFC 5545 §3.3.5 "FORM #1": a DATE-TIME with neither a `Z`
+      # suffix nor a `TZID` parameter is a *floating* time — the same
+      # wall-clock reading in whatever zone the observer is in. As of
+      # `ical` 3.0 these parse to `NaiveDateTime` (previously they were
+      # coerced to a zoned `DateTime`); Tempo maps them to a genuinely
+      # zone-less `%Tempo{}` (`extended: nil`), preserving the floating
+      # semantics rather than inventing a zone.
+
+      test "a floating DATE-TIME event becomes a zone-less interval" do
+        ics = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:floating-1
+        DTSTAMP:20220101T000000Z
+        DTSTART:20220615T100000
+        DTEND:20220615T113000
+        SUMMARY:Floating meeting
+        END:VEVENT
+        END:VCALENDAR
+        """
+
+        assert {:ok, set} = ICal.parse(ics)
+        assert [iv] = IntervalSet.members(set)
+
+        # Zone-less: no invented UTC/offset, unlike a `Z`-suffixed value
+        # whose `extended` carries `zone_id: "Etc/UTC"`.
+        assert Tempo.floating?(iv)
+        assert Tempo.floating?(iv)
+
+        assert Boundaries.from(iv) == [
+                 year: 2022,
+                 month: 6,
+                 day: 15,
+                 hour: 10,
+                 minute: 0,
+                 second: 0
+               ]
+
+        assert Boundaries.to(iv) == [
+                 year: 2022,
+                 month: 6,
+                 day: 15,
+                 hour: 11,
+                 minute: 30,
+                 second: 0
+               ]
+
+        assert iv.metadata.summary == "Floating meeting"
+      end
+
+      test "a floating recurrence with floating RDATE and EXDATE materialises correctly" do
+        ics = """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:floating-rec
+        DTSTAMP:20220101T000000Z
+        DTSTART:20220103T090000
+        DTEND:20220103T100000
+        RRULE:FREQ=WEEKLY;COUNT=3
+        RDATE:20220201T090000
+        EXDATE:20220110T090000
+        SUMMARY:Floating standup
+        END:VEVENT
+        END:VCALENDAR
+        """
+
+        assert {:ok, set} = ICal.parse(ics)
+
+        starts =
+          set
+          |> IntervalSet.members()
+          |> Enum.map(&{Boundaries.from(&1)[:month], Boundaries.from(&1)[:day]})
+
+        # RRULE Jan 3 / 10 / 17, minus EXDATE Jan 10, plus RDATE Feb 1.
+        assert starts == [{1, 3}, {1, 17}, {2, 1}]
+
+        # Every occurrence stays floating — the recurrence machinery
+        # doesn't anchor a zone-less base to a zone.
+        assert Enum.all?(IntervalSet.members(set), &Tempo.floating?(&1))
+      end
+    end
+  end
+
+  describe "parse/2 — recurrence" do
+    test "a rule passes over a month or a year that lacks DTSTART's day" do
+      # RFC 5545 §3.3.10: an instance with an invalid date is ignored and not
+      # counted. A rule on the 31st lists the months of 31 days, and one on
+      # 29 February the leap years.
+      event = fn dtstart, rrule ->
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:missing-day
+        DTSTAMP:20260101T000000Z
+        #{dtstart}
+        SUMMARY:On a day some months lack
+        RRULE:#{rrule}
+        END:VEVENT
+        END:VCALENDAR
+        """
+      end
+
+      occurrences = fn ics ->
+        {:ok, set} = ICal.parse(ics)
+        Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1)
+      end
+
+      assert occurrences.(event.("DTSTART;VALUE=DATE:20260131", "FREQ=MONTHLY;COUNT=4")) ==
+               [
+                 "2026Y1M31D/2026Y1M31D",
+                 "2026Y3M31D/2026Y3M31D",
+                 "2026Y5M31D/2026Y5M31D",
+                 "2026Y7M31D/2026Y7M31D"
+               ]
+
+      assert occurrences.(event.("DTSTART;VALUE=DATE:20240229", "FREQ=YEARLY;COUNT=3")) ==
+               ["2024Y2M29D/2024Y2M29D", "2028Y2M29D/2028Y2M29D", "2032Y2M29D/2032Y2M29D"]
+
+      # An event with an end keeps its length on each day it is listed.
+      timed = "DTSTART:20260131T090000\nDTEND:20260131T100000"
+
+      assert occurrences.(event.(timed, "FREQ=MONTHLY;COUNT=3")) ==
+               [
+                 "2026Y1M31DT9H0M0S/T10H0M0S",
+                 "2026Y3M31DT9H0M0S/T10H0M0S",
+                 "2026Y5M31DT9H0M0S/T10H0M0S"
+               ]
+    end
+
+    test "FREQ=WEEKLY;COUNT=3 — three weekly occurrences" do
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:weekly-1
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T100000Z
+      DTEND:20220615T110000Z
+      SUMMARY:Weekly standup
+      RRULE:FREQ=WEEKLY;COUNT=3
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      assert IntervalSet.count(set) == 3
+
+      # Each occurrence keeps its summary; days are 7 apart.
+      days =
+        IntervalSet.members(set)
+        |> Enum.map(&Boundaries.from(&1)[:day])
+
+      assert days == [15, 22, 29]
+
+      assert Enum.all?(IntervalSet.members(set), fn iv ->
+               iv.metadata.summary == "Weekly standup"
+             end)
+    end
+
+    test "FREQ=WEEKLY;UNTIL=... — every occurrence up to UNTIL" do
+      # Every Wednesday in June 2022, up to but not past Jul 1.
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:until-1
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220601T090000Z
+      DTEND:20220601T100000Z
+      SUMMARY:Weekly until
+      RRULE:FREQ=WEEKLY;UNTIL=20220701T000000Z
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      assert IntervalSet.count(set) == 5
+      # All in June.
+      assert Enum.all?(IntervalSet.members(set), fn iv -> Boundaries.from(iv)[:month] == 6 end)
+    end
+
+    test "FREQ=WEEKLY;INTERVAL=2;COUNT=4 — every other week, 4 occurrences" do
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:biweekly
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220601T090000Z
+      DTEND:20220601T100000Z
+      RRULE:FREQ=WEEKLY;INTERVAL=2;COUNT=4
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      assert IntervalSet.count(set) == 4
+
+      # 14-day spacing: Jun 1, Jun 15, Jun 29, Jul 13.
+      days =
+        IntervalSet.members(set)
+        |> Enum.map(&{Boundaries.from(&1)[:month], Boundaries.from(&1)[:day]})
+
+      assert days == [{6, 1}, {6, 15}, {6, 29}, {7, 13}]
+    end
+
+    test "unbounded recurrence (no COUNT, no UNTIL) requires :within" do
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:forever
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220601T090000Z
+      DTEND:20220601T100000Z
+      RRULE:FREQ=DAILY
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      assert {:error, reason} = ICal.parse(ics)
+      assert %Tempo.ConversionError{reason: :unbounded} = reason
+      assert Exception.message(reason) =~ ":within"
+    end
+
+    test "unbounded recurrence with :within — materialises within the window" do
+      import Tempo.Sigils
+
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:daily-bounded
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220601T090000Z
+      DTEND:20220601T100000Z
+      RRULE:FREQ=DAILY
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      # A window written to a date runs through it: the first to the seventh.
+      {:ok, set} = ICal.parse(ics, within: ~o"2022-06-01/2022-06-07")
+      assert IntervalSet.count(set) == 7
+    end
+
+    test "BYDAY=1MO now materialises via Phase C (no fallback)" do
+      # Pre-Phase-C, any BY-rule in an RRULE triggered a
+      # first-occurrence-only fallback. Phase C lifted every
+      # RFC 5545 BY-rule into the interpreter, so events like
+      # "1st Monday of every month" expand fully. Unbounded
+      # rules still need a `:within` option — nothing special
+      # about BY-rules in that respect.
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:byday-1
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220606T090000Z
+      DTEND:20220606T100000Z
+      RRULE:FREQ=MONTHLY;BYDAY=1MO;COUNT=3
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+      assert IntervalSet.count(set) == 3
+
+      # No fallback metadata — all fully materialised.
+      assert Enum.all?(IntervalSet.members(set), fn iv ->
+               iv.metadata[:recurrence_note] == nil
+             end)
+
+      pairs =
+        Enum.map(IntervalSet.members(set), fn iv ->
+          {Boundaries.from(iv)[:year], Boundaries.from(iv)[:month], Boundaries.from(iv)[:day]}
+        end)
+
+      # 1st Mondays of Jun/Jul/Aug 2022: 6, 4, 1.
+      assert pairs == [{2022, 6, 6}, {2022, 7, 4}, {2022, 8, 1}]
+    end
+  end
+
+  describe "parse/2 — an all-day event's rule" do
+    # RFC 5545 §3.3.10 has BYSECOND, BYMINUTE and BYHOUR ignored where
+    # DTSTART is a DATE, and §3.6.1 has such an event a day long where it
+    # states no end. The measure is `Date` alone: each day the rule lists,
+    # from its midnight to the next.
+    @epoch ~N[0000-01-01 00:00:00]
+
+    defp all_day(lines) do
+      Enum.join(
+        [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Test//EN",
+          "BEGIN:VEVENT",
+          "UID:all-day",
+          "DTSTAMP:20260101T000000Z"
+        ] ++ lines ++ ["END:VEVENT", "END:VCALENDAR", ""],
+        "\r\n"
+      )
+    end
+
+    defp spans(ics) do
+      {:ok, set} = ICal.parse(ics)
+
+      for span <- IntervalSet.members(set) do
+        {microseconds(moment(Boundaries.from(span))), microseconds(moment(Boundaries.to(span)))}
+      end
+    end
+
+    defp moment(units) do
+      NaiveDateTime.new!(
+        units[:year],
+        units[:month],
+        units[:day],
+        units[:hour] || 0,
+        units[:minute] || 0,
+        units[:second] || 0
+      )
+    end
+
+    defp microseconds(%NaiveDateTime{} = moment) do
+      NaiveDateTime.diff(moment, @epoch, :microsecond)
+    end
+
+    defp days(dates) do
+      for date <- dates do
+        {microseconds(NaiveDateTime.new!(date, ~T[00:00:00])),
+         microseconds(NaiveDateTime.new!(Date.add(date, 1), ~T[00:00:00]))}
+      end
+    end
+
+    test "recurs on its days, whatever times of day the rule names" do
+      for {rule, dates} <- [
+            {"FREQ=DAILY;BYHOUR=9", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"FREQ=DAILY;BYHOUR=9,15", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"FREQ=DAILY;BYMINUTE=30", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"FREQ=DAILY;BYSECOND=15", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=15",
+             [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            # 31 January 2026 is a Saturday: the weekday is kept, and the hour is not.
+            {"FREQ=WEEKLY;BYDAY=SA;BYHOUR=9", [~D[2026-01-31], ~D[2026-02-07], ~D[2026-02-14]]},
+            {"FREQ=MONTHLY;BYMONTHDAY=31;BYHOUR=9",
+             [~D[2026-01-31], ~D[2026-03-31], ~D[2026-05-31]]}
+          ] do
+        ics = all_day(["DTSTART;VALUE=DATE:20260131", "RRULE:#{rule};COUNT=3"])
+
+        assert {rule, spans(ics)} == {rule, days(dates)}
+      end
+
+      assert Date.day_of_week(~D[2026-01-31]) == 6
+    end
+
+    test "is the rule without them" do
+      with_times =
+        all_day(["DTSTART;VALUE=DATE:20260131", "RRULE:FREQ=DAILY;BYHOUR=9,15;COUNT=5"])
+
+      without = all_day(["DTSTART;VALUE=DATE:20260131", "RRULE:FREQ=DAILY;COUNT=5"])
+
+      assert spans(with_times) == spans(without)
+    end
+
+    test "keeps the event's own end on each day" do
+      ics =
+        all_day([
+          "DTSTART;VALUE=DATE:20260131",
+          "DTEND;VALUE=DATE:20260202",
+          "RRULE:FREQ=WEEKLY;BYHOUR=9;COUNT=2"
+        ])
+
+      two_days = fn date ->
+        {microseconds(NaiveDateTime.new!(date, ~T[00:00:00])),
+         microseconds(NaiveDateTime.new!(Date.add(date, 2), ~T[00:00:00]))}
+      end
+
+      assert spans(ics) == [two_days.(~D[2026-01-31]), two_days.(~D[2026-02-07])]
+    end
+
+    test "leaves the times of day of an event that has one" do
+      # The hours named are after the start at 08:00, so each day has two.
+      ics = all_day(["DTSTART:20260131T080000", "RRULE:FREQ=DAILY;BYHOUR=9,15;COUNT=4"])
+
+      at = fn date, hour ->
+        from = NaiveDateTime.new!(date, Time.new!(hour, 0, 0))
+        {microseconds(from), microseconds(NaiveDateTime.add(from, 1, :second))}
+      end
+
+      assert spans(ics) ==
+               [
+                 at.(~D[2026-01-31], 9),
+                 at.(~D[2026-01-31], 15),
+                 at.(~D[2026-02-01], 9),
+                 at.(~D[2026-02-01], 15)
+               ]
+    end
+  end
+
+  describe "parse/2 — edge cases" do
+    test "an event with no DTSTART is passed over, and the others are read" do
+      # RFC 5545 requires DTSTART of an event in a calendar with no METHOD,
+      # and some exports hold events without one: it has no place in time.
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:has-start
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T100000Z
+      DTEND:20220615T110000Z
+      SUMMARY:Normal event
+      END:VEVENT
+      BEGIN:VEVENT
+      UID:has-no-start
+      DTSTAMP:20220101T000000Z
+      SUMMARY:An event with no start
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(ics)
+
+      assert [interval] = IntervalSet.members(set)
+      assert Tempo.metadata(interval).summary == "Normal event"
+    end
+
+    test "malformed ics returns an empty result without raising" do
+      # The underlying `ical` library is tolerant: non-iCalendar
+      # input parses to an empty calendar, not a raise. We pass
+      # that through — the caller sees zero intervals.
+      assert {:ok, set} = ICal.parse("not valid ical")
+      assert IntervalSet.members(set) == []
+    end
+  end
+
+  describe "metadata propagation through set operations" do
+    test "intersection preserves A-side per-interval metadata" do
+      import Tempo.Sigils
+
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:meeting
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T100000Z
+      DTEND:20220615T110000Z
+      SUMMARY:Design review
+      LOCATION:Room 101
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, events} = ICal.parse(ics)
+
+      # The events are in UTC, so the hours they are met with are too: a
+      # value with no zone and a zoned one are not combined.
+      work_hours = ~o"2022-06-15T09Z/2022-06-15T17Z"
+
+      assert {:error, %Tempo.FrameError{}} =
+               Tempo.intersection(events, ~o"2022-06-15T09/2022-06-15T17")
+
+      {:ok, overlap} = Tempo.intersection(events, work_hours)
+      assert IntervalSet.count(overlap) == 1
+
+      [iv] = IntervalSet.members(overlap)
+      # Event metadata survives the intersection.
+      assert iv.metadata.summary == "Design review"
+      assert iv.metadata.location == "Room 101"
+    end
+
+    test "difference preserves A-side per-interval metadata across splits" do
+      import Tempo.Sigils
+
+      ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//EN
+      BEGIN:VEVENT
+      UID:long-event
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T080000Z
+      DTEND:20220615T120000Z
+      SUMMARY:Long session
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, events} = ICal.parse(ics)
+      break_time = ~o"2022-06-15T10Z/2022-06-15T11Z"
+
+      # Instant-level difference: the event member is trimmed into
+      # the pre-break and post-break portions. Both carry the
+      # source event's metadata.
+      {:ok, remaining} = Tempo.difference(events, break_time)
+      assert IntervalSet.count(remaining) == 2
+
+      assert Enum.all?(IntervalSet.members(remaining), fn iv ->
+               iv.metadata.summary == "Long session"
+             end)
+    end
+
+    test "IntervalSet-level metadata follows the first operand" do
+      a_ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Calendar-A//EN
+      BEGIN:VEVENT
+      UID:a-1
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T100000Z
+      DTEND:20220615T110000Z
+      SUMMARY:A's event
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      b_ics = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Calendar-B//EN
+      BEGIN:VEVENT
+      UID:b-1
+      DTSTAMP:20220101T000000Z
+      DTSTART:20220615T100000Z
+      DTEND:20220615T110000Z
+      SUMMARY:B's event
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, a} = ICal.parse(a_ics)
+      {:ok, b} = ICal.parse(b_ics)
+
+      {:ok, result} = Tempo.intersection(a, b)
+      # The set-level metadata comes from the first operand.
+      assert result.metadata.prodid == "-//Calendar-A//EN"
+    end
+  end
+
+  describe "parse/2 — public fixtures (borrowed from ical library)" do
+    test "one_event.ics parses and carries full metadata" do
+      path = Path.join(@fixtures_dir, "one_event.ics")
+      {:ok, set} = ICal.parse_file(path)
+      [iv] = IntervalSet.members(set)
+
+      assert iv.metadata.uid == "1001"
+      assert iv.metadata.summary == "Going fishing"
+      assert iv.metadata.location =~ "Toronto"
+      assert "Fishing" in (iv.metadata.categories || [])
+      # The `ical` library's normalisation is not uniform —
+      # STATUS comes through as an atom, CLASS as a string. We
+      # pass both through as-is rather than coerce; callers can
+      # match on either shape.
+      assert iv.metadata.status == :tentative
+      assert iv.metadata.classification == "PRIVATE"
+    end
+
+    test "attendees.ics — the event has no DTSTART, so it's skipped cleanly" do
+      # This fixture is a bare VEVENT with ATTENDEE lines but no
+      # DTSTART — Tempo.ICal skips DTSTART-less events (since they
+      # can't be placed on the time line). The test exists mainly
+      # to prove we don't crash on incomplete events.
+      path = Path.join(@fixtures_dir, "attendees.ics")
+      {:ok, set} = ICal.parse_file(path)
+      assert IntervalSet.members(set) == []
+    end
+
+    test "timezone_event.ics parses (zoned events)" do
+      path = Path.join(@fixtures_dir, "timezone_event.ics")
+      assert {:ok, set} = ICal.parse_file(path)
+      assert IntervalSet.members(set) != []
+    end
+
+    test "calendar_name.ics surfaces X-WR-CALNAME on the set's metadata" do
+      path = Path.join(@fixtures_dir, "calendar_name.ics")
+      {:ok, set} = ICal.parse_file(path)
+      # Even if the fixture uses a plain WR-CALNAME, the metadata
+      # should be a plain string.
+      if set.metadata[:name] do
+        assert is_binary(set.metadata[:name])
+      end
+    end
+
+    test "recurrance_with_count.ics expands to N occurrences" do
+      path = Path.join(@fixtures_dir, "recurrance_with_count.ics")
+      {:ok, set} = ICal.parse_file(path)
+      # The fixture has FREQ=DAILY;COUNT=3 so expansion gives us
+      # three day-long occurrences.
+      assert IntervalSet.count(set) == 3
+    end
+  end
+
+  # The Apple Calendar fixture is gitignored (see .gitignore) — it's
+  # a real personal calendar used locally as a "real-world" parse
+  # target, not committed to the repo. CI never sees it. Compile
+  # the describe block only when the fixture is present so CI
+  # doesn't try to run tests whose setup can't produce an `ics`
+  # context.
+  if File.exists?(@apple_fixture) do
+    describe "parse/2 — real Apple Calendar export" do
+      @describetag :real_ical_fixture
+
+      setup do
+        {:ok, ics: File.read!(@apple_fixture)}
+      end
+
+      test "parses without error and produces an IntervalSet", %{ics: ics} do
+        assert {:ok, set} = ICal.parse(ics)
+        assert %Tempo{} = set
+        assert IntervalSet.members(set) != []
+      end
+
+      test "preserves every event's summary on its interval", %{ics: ics} do
+        {:ok, set} = ICal.parse(ics)
+        # Every interval should have a summary (optional in RFC 5545
+        # but present in every real export we've seen).
+        summaries =
+          IntervalSet.members(set)
+          |> Enum.map(& &1.metadata[:summary])
+          |> Enum.reject(&is_nil/1)
+
+        assert summaries != []
+      end
+
+      test "calendar name from X-WR-CALNAME is captured", %{ics: ics} do
+        {:ok, set} = ICal.parse(ics)
+        # The Apple export carries an X-WR-CALNAME; it should come
+        # through as a plain string, not a wrapped struct.
+        case set.metadata[:name] do
+          nil -> :ok
+          name when is_binary(name) -> :ok
+        end
+      end
+    end
+  end
+end

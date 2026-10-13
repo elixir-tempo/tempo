@@ -42,6 +42,10 @@ The reader makes the half-open bound and the writer writes a span back as it was
 
 A span lies on the UTC line (a year and a zone or a shift), the floating line (a year, no zone) or a cycle (no year). Two spans relate, compare or combine only on one frame; a floating value beside a zoned one is a `Tempo.FrameError`. What Tempo cannot answer by the laws is a named error, never a guess: an option a function does not take, a reading a zone's clock skips, a base with no year.
 
+### Build from parts, never from text
+
+A program that holds the parts of an expression builds it from them: `Tempo.new/1` for a value, `Tempo.Interval.new/1`, `Tempo.Duration.new/1`, `Tempo.IntervalSet.new/2`, and `Tempo.every/2`, `Tempo.selection/1` and `Tempo.one_of/1` for a recurrence, a selection and a one-of set. Interpolating parts into ISO 8601 text and reading it back (`Tempo.from_iso8601!("#{year}-01-01")`) is a defect, in the library, its tests, its guides and its companions. Text is read where text is what was given: a user's input, a file, an example of the written form. The builders and the reader make one form (`test/tempo/build_test.exs` holds them to it), so a shape that cannot be built is a builder to add, not a string to write.
+
 ### The API and the engine
 
 `Tempo` is the API: each operation is documented there, validates its arguments and calls one engine function. The engine is under `lib/tempo/core/` (`Tempo.Unit`, `Scale`, `Zone`, `Limit`, `Spans`, `Algebra`, `Select`, `Shift` and the rest) and is `@moduledoc false`: it is no part of the public API, and public docs do not refer to it.

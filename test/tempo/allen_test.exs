@@ -7,6 +7,8 @@ defmodule Tempo.AllenTest do
   # cell and composes with equals as identity, and the everyday predicates of
   # `Tempo` agree with their relation sets for two single spans.
 
+  import Tempo.Sigils
+
   alias Tempo.Allen
   alias Tempo.Interval
 
@@ -42,9 +44,7 @@ defmodule Tempo.AllenTest do
   end
 
   test "the everyday predicates of two single spans are their relation sets" do
-    day = fn n ->
-      Tempo.from_iso8601!("2026-01-#{String.pad_leading(Integer.to_string(n), 2, "0")}")
-    end
+    day = fn n -> Tempo.new!(year: 2026, month: 1, day: n) end
 
     span = fn {from, to} ->
       Interval.new!(from: day.(from + 1), to: day.(to))
@@ -69,6 +69,48 @@ defmodule Tempo.AllenTest do
         assert fun.(sa, sb) == relation in Allen.predicate(predicate),
                "#{predicate} of #{inspect(a)} and #{inspect(b)} (#{relation})"
       end
+    end
+  end
+
+  describe "the relations as predicates" do
+    test "each holds when it is the relation" do
+      june = ~o"2026-06"
+
+      assert Allen.meets?(june, ~o"2026-07")
+      assert Allen.met_by?(~o"2026-07", june)
+      assert Allen.precedes?(june, ~o"2026-08")
+      assert Allen.preceded_by?(~o"2026-08", june)
+      assert Allen.during?(~o"2026-06-15", june)
+      assert Allen.contains?(june, ~o"2026-06-15")
+      assert Allen.starts?(~o"2026-06-01", june)
+      assert Allen.started_by?(june, ~o"2026-06-01")
+      assert Allen.finishes?(~o"2026-06-30", june)
+      assert Allen.finished_by?(june, ~o"2026-06-30")
+      assert Allen.equals?(june, ~o"2026-06-01/2026-06-30")
+      assert Allen.overlaps?(~o"2026-05-15/2026-06-15", june)
+      assert Allen.overlapped_by?(june, ~o"2026-05-15/2026-06-15")
+      refute Allen.meets?(june, ~o"2026-08")
+    end
+
+    test "the everyday predicates are named, and each is a set of relations" do
+      assert Enum.sort(Allen.predicates()) ==
+               [:adjacent, :after, :before, :contains, :disjoint, :equal, :overlaps, :within]
+
+      assert Allen.predicate(:adjacent) == [:meets, :met_by]
+      assert Allen.predicate(:meets) == [:meets]
+    end
+
+    test "two expressions that share no frame raise the error a relation returns" do
+      assert_raise Tempo.FrameError, fn -> Allen.meets?(~o"2026-06-15T10", ~o"2026-06-15T10Z") end
+    end
+  end
+
+  describe "membership" do
+    test "an expression holds what lies within it" do
+      assert ~o"2026-06-15" in ~o"2026-06"
+      refute ~o"2026-07-15" in ~o"2026-06"
+      refute :nonsense in ~o"2026-06"
+      refute ~o"2026-06-15T10Z" in ~o"2026-06"
     end
   end
 end

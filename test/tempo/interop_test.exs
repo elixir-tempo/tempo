@@ -109,4 +109,54 @@ defmodule Tempo.InteropTest do
       assert Tempo.to_datetime(value) == {:ok, datetime}
     end
   end
+
+  describe "what has no Elixir value" do
+    test "is an error that says so, for each conversion" do
+      for result <- [
+            Tempo.to_date(~o"T10"),
+            Tempo.to_date(~o"2026-06"),
+            Tempo.to_time(~o"2026-06-15"),
+            Tempo.to_naive_datetime(~o"2026-06"),
+            Tempo.to_elixir(~o"2026-06"),
+            Tempo.to_elixir(~o"2026-06-15/2026-06-20"),
+            Tempo.from_elixir(:nonsense)
+          ] do
+        assert {:error, %Tempo.ConversionError{reason: :not_an_elixir_value}} = result
+      end
+    end
+
+    test "a floating value is no moment" do
+      assert {:error, %Tempo.ConversionError{reason: :floating}} =
+               Tempo.to_datetime(~o"2026-06-15T10:00:00")
+    end
+  end
+
+  describe "a duration" do
+    test "goes to Elixir's and comes back" do
+      assert Tempo.to_elixir(~o"P1DT2H") == {:ok, Duration.new!(day: 1, hour: 2)}
+      assert Tempo.from_elixir(Duration.new!(day: 1, hour: 2)) == {:ok, ~o"P1DT2H"}
+    end
+  end
+
+  describe "a part of a second" do
+    test "keeps its precision both ways" do
+      assert Tempo.from_elixir(~T[10:30:00.5]) == {:ok, ~o"T10:30:00.5"}
+      assert Tempo.to_elixir(~o"T10:30:00.5") == {:ok, ~T[10:30:00.5]}
+      assert Tempo.to_time(~o"T10:30:00") == {:ok, ~T[10:30:00]}
+    end
+  end
+
+  describe "an hour a clock shows twice" do
+    test "is its first showing, as Elixir's own conversion gives" do
+      assert {:ok, first} = Tempo.to_datetime(~o"2026-11-01T01:30:00[America/New_York]")
+      assert first.zone_abbr == "EDT"
+    end
+  end
+
+  describe "the raising forms" do
+    test "return the value, or raise the error" do
+      assert Tempo.from_elixir!(~D[2026-06-15]) == ~o"2026-06-15"
+      assert_raise Tempo.ConversionError, fn -> Tempo.from_elixir!(:nonsense) end
+    end
+  end
 end

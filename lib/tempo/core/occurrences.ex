@@ -77,7 +77,8 @@ defmodule Tempo.Occurrences do
     with {:ok, recurrence} <- RRule.from_rule(rule, rule_options),
          :ok <- bounded(recurrence, options),
          {:ok, spans} <- Spans.spans(recurrence, Keyword.take(options, [:within])),
-         {:ok, spans} <- each(Enum.take(spans, Limit.values()), &resolved/1) do
+         {:ok, spans} <- Limit.take(spans, recurrence),
+         {:ok, spans} <- each(spans, &resolved/1) do
       {:ok, Enum.map(spans, &%{&1 | metadata: event.metadata})}
     end
   end

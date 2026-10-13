@@ -1,10 +1,9 @@
-name: Exhaustive tests
+name: Totality check
 
-# The tests tagged `:exhaustive` are the long runs the push workflow leaves
-# out: the operation matrix's 1.2 million cells, every monthly, weekly and
-# yearly rule the parts make, and every text of the plain forms the scan
-# reads. They take about sixteen minutes on sixteen cores, and an hour or
-# more on a hosted runner, so they run once a week and when asked for.
+# The totality check (`test/tempo/total_test.exs`) is the long run the push
+# workflow leaves out: every operation on every value of the corpus answers,
+# or returns or raises a named error. It takes minutes, so it runs once a week
+# and when asked for.
 
 on:
   schedule:
@@ -21,9 +20,9 @@ permissions:
 
 jobs:
   exhaustive:
-    name: "Exhaustive tests (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})"
+    name: "Totality check (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 60
 
     strategy:
       matrix:
@@ -77,5 +76,5 @@ jobs:
       - name: Compile (warnings as errors)
         run: mix compile --warnings-as-errors
 
-      - name: Run the exhaustive tests
-        run: mix test --only exhaustive
+      - name: Run the totality check
+        run: mix test --only total

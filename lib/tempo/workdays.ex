@@ -13,7 +13,7 @@ defmodule Tempo.Workdays do
 
   """
 
-  alias Tempo.{ConversionError, Duration, Limit, Options, Shift, Spans, Territory}
+  alias Tempo.{ConversionError, Duration, Options, Shift, Spans, Territory}
 
   @conventions [:following, :preceding, :modified_following, :modified_preceding]
 
@@ -127,8 +127,14 @@ defmodule Tempo.Workdays do
   # The next workday on from a value, a day at a time in one direction.
   @doc false
   @spec step(Tempo.t(), 1 | -1, t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  # Whether a value is a workday, or the error for a set with no end.
+  defp whole_workday?(value, workdays) do
+    with :ok <- Spans.whole(value), do: workday?(value, workdays)
+  end
+
   def step(value, direction, workdays) do
-    with {:ok, moved} <- Shift.shift(value, Duration.new!(day: direction)) do
+    with :ok <- Spans.whole(value),
+         {:ok, moved} <- Shift.shift(value, Duration.new!(day: direction)) do
       case workday?(moved, workdays) do
         true -> {:ok, moved}
         false -> step(moved, direction, workdays)
@@ -140,7 +146,7 @@ defmodule Tempo.Workdays do
   @doc "The nearest workday: the value when it is one, else the closer of the next and the previous, the next on a tie."
   @spec nearest(Tempo.t(), t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def nearest(%Tempo{} = value, %__MODULE__{} = workdays) do
-    case workday?(value, workdays) do
+    case whole_workday?(value, workdays) do
       true -> {:ok, value}
       false -> nearest_from(value, workdays, 1)
       {:error, _} = error -> error
@@ -167,7 +173,7 @@ defmodule Tempo.Workdays do
   @spec roll(Tempo.t(), t(), atom()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def roll(%Tempo{} = value, %__MODULE__{} = workdays, convention)
       when convention in @conventions do
-    case workday?(value, workdays) do
+    case whole_workday?(value, workdays) do
       true -> {:ok, value}
       false -> rolled(value, workdays, convention)
       {:error, _} = error -> error
@@ -205,8 +211,17 @@ defmodule Tempo.Workdays do
   @doc "How many workdays an expression's days hold."
   @spec count(Tempo.t(), t()) :: {:ok, non_neg_integer()} | {:error, Exception.t()}
   def count(%Tempo{} = expression, %__MODULE__{} = workdays) do
-    with {:ok, days} <- Spans.walk(expression, :day, []) do
-      {:ok, days |> Enum.take(Limit.values()) |> Enum.count(&(workday?(&1, workdays) == true))}
+    with :ok <- ended(expression),
+         {:ok, days} <- Spans.walk(expression, :day, []) do
+      {:ok, Enum.count(days, &(workday?(&1, workdays) == true))}
     end
+  end
+
+  # Days are counted as they are walked, so any number of them is counted;
+  # an expression with no end has no count.
+  defp ended(expression) do
+    if Tempo.bounded?(expression),
+      do: :ok,
+      else: {:error, ConversionError.exception(value: expression, reason: :unbounded)}
   end
 end

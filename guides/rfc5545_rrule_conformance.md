@@ -51,7 +51,7 @@ iex> Tempo.to_iso8601(rule)
 | `BYWEEKNO` | ✓ | ISO 8601 weeks; from -1 back from the year's last. |
 | `BYMONTH` | ✓ | |
 | `BYSETPOS` | ✓ | Applied last, to what the other parts select in each period. |
-| `WKST` | `MO` only | A week begins on Monday, as ISO 8601's do. Another day is an error. |
+| `WKST` | `MO`, or any day where it changes nothing | A week begins on Monday, as ISO 8601's do. Another day is read where the standard says it is not significant, and is an error where it is: a weekly rule of every second week or more that names weekdays, and a yearly rule that names weeks of the year. |
 
 ### Parts coarser and finer than the frequency
 
@@ -244,7 +244,7 @@ An occurrence's length is no part of an RRULE and is not written; iCalendar carr
 
 `Tempo.RRule.parse/2` returns `{:error, %ArgumentError{}}` that names what it does not read, rather than a rule that is nearly it:
 
-* **`WKST` other than `MO`.**
+* **`WKST` other than `MO` where it changes the weeks counted.**
 
 * **Numbered weekdays of several days in one `BYDAY`** (`BYDAY=2MO,2WE`).
 

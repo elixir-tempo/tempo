@@ -653,6 +653,53 @@ iex> Enum.take(daily, 2)
 
 ---
 
+### How do I build a recurrence from parts, without writing its text?
+
+When a program holds the parts (a month from a form, a weekday from a table), build the recurrence from them. `Tempo.every/2` takes the cadence, where it starts, how it ends and what it selects in each repeat; `Tempo.selection/1` builds what is selected on its own. What they build is what the text reads to, so nothing is written to be read back.
+
+```elixir
+iex> month = 11
+iex> {:ok, thanksgiving} = Tempo.every(~o"P1Y", select: [month: month, day_of_week: 4, instance: 4])
+iex> thanksgiving
+~o"R/../P1Y/FL11M4K4IN"
+
+iex> thanksgiving
+...> |> Tempo.to_interval!(within: ~o"2026/2027")
+...> |> Tempo.IntervalSet.map(&Tempo.Interval.from/1)
+[~o"2026Y11M26D", ~o"2027Y11M25D"]
+```
+
+> *"**Every** year, **select** in November the Thursdays, and of them the **fourth**."*
+
+A selection made first, and others within what it gives, is a nested `:selection`. Good Friday is the Friday in the week before Easter:
+
+```elixir
+iex> {:ok, good_friday} =
+...>   Tempo.every(~o"P1Y",
+...>     select: [selection: [event: "easter"], window: ~o"-P7D", day_of_week: 5, instance: -1]
+...>   )
+iex> good_friday
+...> |> Tempo.to_interval!(within: ~o"2026/2027")
+...> |> Tempo.IntervalSet.map(&Tempo.Interval.from/1)
+[~o"2026Y4M3D", ~o"2027Y3M26D"]
+```
+
+> *"**Every** year, take **Easter**, open a **window** of the week before it, and **select** its last Friday."*
+
+### How do I read a cron schedule?
+
+`Tempo.Cron.parse/2` reads five, six or seven fields into a recurrence, with the extensions of Vixie cron and Quartz for the last day of a month (`L`), its last weekday (`LW`), the weekday nearest a day (`15W`), the last of a weekday (`5L`) and the nth (`5#2`).
+
+```elixir
+iex> {:ok, month_end} = Tempo.Cron.parse("0 17 LW * *", from: ~o"2026-01-01T00:00")
+iex> month_end
+...> |> Tempo.to_interval!(within: ~o"2026-01/2026-03")
+...> |> Tempo.IntervalSet.map(&Tempo.Interval.from/1)
+[~o"2026Y1M30DT17H0M", ~o"2026Y2M27DT17H0M", ~o"2026Y3M31DT17H0M"]
+```
+
+> *"At five in the afternoon on the **last weekday** of each month."*
+
 ## 8. iCalendar import
 
 ### How do I import an `.ics` file?

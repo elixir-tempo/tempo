@@ -13,7 +13,7 @@ defmodule Tempo.RRule do
   as RFC 5545 §3.3.10 has it. The same lowering serves `Tempo.Cron` and
   `Tempo.JSCalendar`, which build the rule from their own vocabularies.
 
-  Not read: RFC 7529's `RSCALE` and `SKIP`, and a `WKST` other than Monday,
+  Not read: RFC 7529's `RSCALE` and `SKIP`, and a `WKST` other than Monday where it changes the weeks counted,
   each an error naming what is unsupported.
 
   """
@@ -204,8 +204,7 @@ defmodule Tempo.RRule do
 
   defp part("WKST", value) do
     case Map.fetch(@weekdays, String.upcase(value)) do
-      {:ok, 1} -> {:ok, :wkst, 1}
-      {:ok, _} -> {:error, argument("a WKST other than MO is not supported")}
+      {:ok, day} -> {:ok, :wkst, day}
       :error -> {:error, argument("#{inspect(value)} is not a WKST")}
     end
   end
@@ -268,12 +267,26 @@ defmodule Tempo.RRule do
       Map.has_key?(rule, :count) and Map.has_key?(rule, :until) ->
         {:error, argument("COUNT and UNTIL exclude each other")}
 
+      week_start_counts?(rule) ->
+        {:error, argument("a WKST other than MO is not supported")}
+
       true ->
-        {:ok, rule}
+        {:ok, Map.delete(rule, :wkst)}
     end
   end
 
   defp checked(error), do: error
+
+  # RFC 5545 section 3.3.10: the day a week starts on is significant in a
+  # weekly rule of every second week or more that names weekdays, and in a
+  # yearly rule that names weeks of the year. Tempo's weeks start on Monday;
+  # another start is read where it changes nothing and refused where it would.
+  defp week_start_counts?(%{wkst: day} = rule) when day != 1 do
+    (rule.freq == :week and Map.get(rule, :interval, 1) > 1 and Map.has_key?(rule, :byday)) or
+      (rule.freq == :year and Map.has_key?(rule, :byweekno))
+  end
+
+  defp week_start_counts?(_rule), do: false
 
   # ── Rule to recurrence ────────────────────────────────────────────────
 
@@ -413,6 +426,7 @@ defmodule Tempo.RRule do
       |> push(rule, :bysecond)
       |> push_instance(rule, numbered)
       |> Enum.reverse()
+      |> numbered_before_times(numbered)
       |> windowed(duration)
 
     cond do
@@ -427,6 +441,25 @@ defmodule Tempo.RRule do
         {cadence, {:ok, parts}}
     end
   end
+
+  # A numbered weekday (`2MO`) is the nth of its weekday in the period, and
+  # the times of day beside it are times on that day (RFC 5545 section
+  # 3.3.10): it is selected first, where a position after the times would
+  # count among the times too, as BYSETPOS does.
+  defp numbered_before_times(parts, {day, n}) do
+    if Enum.any?(parts, fn {unit, _} -> unit in [:hour, :minute, :second] end) do
+      {before, times} =
+        parts
+        |> Keyword.drop([:day_of_week, :instance])
+        |> Enum.split_while(fn {unit, _} -> unit not in [:hour, :minute, :second] end)
+
+      before ++ [selection: [day_of_week: day, instance: n]] ++ times
+    else
+      parts
+    end
+  end
+
+  defp numbered_before_times(parts, nil), do: parts
 
   defp push_years(acc, %{byyear: years}), do: [{:year, years} | acc]
   defp push_years(acc, _rule), do: acc
@@ -621,14 +654,26 @@ defmodule Tempo.RRule do
 
   defp by_parts(parts, r) do
     frequency = frequency_of(r)
-    {weekday, parts} = Keyword.pop(parts, :day_of_week)
-    {instance, parts} = Keyword.pop(parts, :instance)
+    {weekday, instance, parts} = weekday_and_position(parts)
 
     with :ok <- expressible(parts, r),
          :ok <- allowed(parts, frequency, r),
          :ok <- positioned(weekday, instance, parts, frequency, r) do
       named = Enum.map(parts, fn {unit, held} -> "#{by_name(unit)}=#{listed(held)}" end)
       {:ok, named ++ byday_parts(weekday, instance)}
+    end
+  end
+
+  # A numbered weekday selected before the times of day is BYDAY's `2MO`.
+  defp weekday_and_position(parts) do
+    case Keyword.pop(parts, :selection) do
+      {[day_of_week: day, instance: n], rest} when is_integer(day) ->
+        {day, n, rest}
+
+      _no_numbered_weekday ->
+        {weekday, parts} = Keyword.pop(parts, :day_of_week)
+        {instance, parts} = Keyword.pop(parts, :instance)
+        {weekday, instance, parts}
     end
   end
 

@@ -128,17 +128,7 @@ defmodule Tempo.Algebra do
     end
   end
 
-  defp bounded(spans, expression) do
-    limit = Limit.values()
-
-    case Enum.take(spans, limit + 1) do
-      taken when length(taken) > limit ->
-        {:error, ConversionError.exception(value: expression, reason: :too_many_values)}
-
-      taken ->
-        {:ok, taken}
-    end
-  end
+  defp bounded(spans, expression), do: Limit.take(spans, expression)
 
   defp anchored?(%Tempo{} = expression), do: not match?({:cycle, _}, Spans.frame(expression))
 

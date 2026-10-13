@@ -89,7 +89,10 @@
             # than fully-qualified paths. `excluded_lastnames` keeps names
             # that would shadow an Elixir/Erlang built-in fully qualified
             # (e.g. `Localize.Calendar`, `Tempo.Inspect`) — aliasing those
-            # to the bare name silently captures the stdlib module.
+            # to the bare name silently captures the stdlib module. `ICal`
+            # and `JSCalendar` are the top-level modules of the two packages
+            # `Tempo.ICal` and `Tempo.JSCalendar` read with, which the alias
+            # would capture the same way.
             {Credo.Check.Design.AliasUsage,
              [
                excluded_lastnames: ~w(
@@ -97,6 +100,7 @@
                Map List Set Keyword Tuple Atom Integer Float String Process
                Task Agent Node Port System IO File Path URI Version Regex
                Module Macro Code Enum Access Base Exception Kernel
+               ICal JSCalendar
              )
              ]},
             # Disabled: TODO/FIXME work is tracked in TODO.md, the system

@@ -508,17 +508,7 @@ defmodule Tempo.Select do
     end)
   end
 
-  defp bounded_periods(periods, base) do
-    limit = Limit.values()
-
-    case Enum.take(periods, limit + 1) do
-      taken when length(taken) > limit ->
-        {:error, ConversionError.exception(value: base, reason: :too_many_values)}
-
-      taken ->
-        {:ok, taken}
-    end
-  end
+  defp bounded_periods(periods, base), do: Limit.take(periods, base)
 
   defp apply_selector(%Tempo{form: {:value, units}} = selector, period, options) do
     if Unit.anchored?(units),
@@ -553,8 +543,9 @@ defmodule Tempo.Select do
 
   defp apply_selector(%Tempo{form: {:every, _, _, _}} = recurrence, period, options) do
     with {:ok, spans} <- Spans.spans(recurrence, Keyword.put(options, :within, period)),
+         {:ok, spans} <- Limit.take(spans, recurrence),
          {:ok, extent} <- bounded_extent(period) do
-      {:ok, spans |> Enum.take(Limit.values()) |> Enum.filter(&within?(&1, extent))}
+      {:ok, Enum.filter(spans, &within?(&1, extent))}
     end
   end
 
@@ -601,7 +592,8 @@ defmodule Tempo.Select do
 
   defp days_off(except, period, options) do
     with {:ok, spans} <- Spans.spans(except, Keyword.put(options, :within, period)),
-         do: {:ok, spans |> Enum.take(Limit.values()) |> Enum.map(&Spans.extent/1)}
+         {:ok, spans} <- Limit.take(spans, except),
+         do: {:ok, Enum.map(spans, &Spans.extent/1)}
   end
 
   defp overlaps_any?(value, off) do

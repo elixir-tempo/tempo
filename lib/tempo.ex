@@ -16,6 +16,7 @@ defmodule Tempo do
 
   alias Tempo.Algebra
   alias Tempo.Allen
+  alias Tempo.Build
   alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Expand
@@ -494,6 +495,155 @@ defmodule Tempo do
     end
   end
 
+  @doc """
+  Builds a selection from its parts: what a repeat rule picks in each of its
+  periods, and what `select/3` picks in each period of a base. It is the
+  value ISO 8601-2 writes between `L` and `N`.
+
+  ### Arguments
+
+  * `parts` is a keyword list of the parts, in any order.
+
+  ### Options
+
+  * `:month`, `:week`, `:day_of_year`, `:day`, `:day_of_week`, `:hour`,
+    `:minute` and `:second` are each a whole number, a range, or a list of
+    numbers and ranges. A negative number counts from the end of the period:
+    `day: -1` is its last day. `:day_of_week` is 1, Monday, to 7.
+
+  * `:instance` picks among everything the other parts select, by position:
+    `2` the second, `-1` the last.
+
+  * `:event` is the name of a day a calendar computes, one of
+    `Tempo.Event.known/0`: `"easter"`.
+
+  * `:selection` is a selection made first, as parts or as what this
+    function returns; the other parts then select within what it gives. It
+    says "the second Monday, at nine and at ten" where a position alone
+    would count among the times as well.
+
+  * `:window` is a `t:Tempo.Duration.t/0`, the length of what the nested
+    `:selection` selects: `~o"P1D"` for the day after, `~o"-P7D"` for the
+    week before.
+
+  ### Returns
+
+  * `{:ok, selection}`, a `t:t/0` with no year.
+
+  * `{:error, exception}`: an `ArgumentError` for a part a selection does
+    not have, and a `Tempo.InvalidDateError` for an event no calendar knows.
+
+  ### Examples
+
+      iex> Tempo.selection(day_of_week: 1, instance: 2)
+      {:ok, ~o"L1K2IN"}
+
+      iex> {:ok, christmas} = Tempo.selection(month: 12, day: 25)
+      iex> Tempo.select(~o"2026/2027", christmas)
+      {:ok, ~o"{2026-12-25,2027-12-25}"}
+
+      iex> {:ok, last_weekday} = Tempo.selection(day_of_week: 1..5, instance: -1)
+      iex> Tempo.select(~o"2026-06", last_weekday)
+      {:ok, ~o"{2026-06-30}"}
+
+      iex> {:error, %ArgumentError{}} = Tempo.selection(fortnight: 1)
+
+  """
+  @spec selection(keyword()) :: {:ok, t()} | {:error, error()}
+  def selection(parts), do: Build.selection(parts)
+
+  @doc """
+  Builds a recurrence from its cadence and what it is given: where it
+  starts, how it ends, and what it selects in each repeat. It is what
+  `R/start/cadence/F…` reads to, built from parts where a program would
+  otherwise write that text to have it read.
+
+  ### Arguments
+
+  * `cadence` is the length of each repeat, a `t:Tempo.Duration.t/0` or its
+    units: `~o"P1M"`, or `[month: 1]`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:from` is where the recurrence starts, a `t:t/0` value. A set here is a
+    domain: the rule is applied in each of its members
+    (`~o"{2026Y..2030Y}"`). With none the recurrence has an open start and
+    is placed by a `:within` window.
+
+  * `:count` is how many occurrences it has.
+
+  * `:until` is a `t:t/0` value it runs to. A recurrence ends by one of
+    `:count` and `:until`, or has no end.
+
+  * `:select` is what it selects in each repeat: the parts of a selection,
+    or what `selection/1` returns. With none each repeat is an occurrence.
+
+  * `:metadata` is a map the recurrence and every occurrence carry.
+
+  ### Returns
+
+  * `{:ok, recurrence}`, a `t:t/0` of the `:every` form, in the calendar and
+    the zone of its start.
+
+  * `{:error, exception}` as for `selection/1`, and an `ArgumentError` for a
+    cadence, a start or an end of another kind.
+
+  ### Examples
+
+      iex> Tempo.every(~o"P1M", from: ~o"2026-01-01", select: [day_of_week: 1, instance: 2])
+      {:ok, ~o"R/2026-01-01/P1M/FL1K2IN"}
+
+      iex> {:ok, paydays} = Tempo.every([month: 1], from: ~o"2026-01-01", count: 3, select: [day: -1])
+      iex> Enum.map(paydays, &Tempo.Interval.from/1)
+      [~o"2026-01-31", ~o"2026-02-28", ~o"2026-03-31"]
+
+      iex> {:ok, good_friday} =
+      ...>   Tempo.every(~o"P1Y",
+      ...>     select: [selection: [event: "easter"], window: ~o"-P7D", day_of_week: 5, instance: -1]
+      ...>   )
+      iex> good_friday |> Tempo.to_interval!(within: ~o"2026") |> Tempo.IntervalSet.map(&Tempo.Interval.from/1)
+      [~o"2026-04-03"]
+
+      iex> Tempo.every(~o"P1Y", from: ~o"{2026Y..2028Y}", select: [month: 7, day: 4])
+      {:ok, ~o"R/{2026Y..2028Y}/P1Y/FL7M4DN"}
+
+      iex> {:error, %ArgumentError{}} = Tempo.every(~o"P1D", count: 3, until: ~o"2026")
+
+  """
+  @spec every(Duration.t() | keyword(), keyword()) :: {:ok, t()} | {:error, error()}
+  def every(cadence, options \\ []), do: Build.every(cadence, options)
+
+  @doc """
+  Builds a set one of whose members is meant: "in 1984, 1986 or 1988". It
+  has readings and no spans, where the set `Tempo.IntervalSet.new/2` builds
+  is all of its members.
+
+  ### Arguments
+
+  * `members` is a list of `t:t/0`, in one calendar and one zone.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:one` form.
+
+  * `{:error, %ArgumentError{}}` for no members, or members in two
+    calendars or two zones.
+
+  ### Examples
+
+      iex> Tempo.one_of([~o"1984", ~o"1986", ~o"1988"])
+      {:ok, ~o"[1984,1986,1988]"}
+
+      iex> {:ok, one_year} = Tempo.one_of([~o"1984", ~o"1986"])
+      iex> Tempo.possibly?(:before, one_year, ~o"1985")
+      true
+
+  """
+  @spec one_of([t()]) :: {:ok, t()} | {:error, error()}
+  def one_of(members), do: Build.one_of(members)
+
   # ── Spans, members and walks ──────────────────────────────────────────
 
   @doc """
@@ -590,18 +740,7 @@ defmodule Tempo do
     end
   end
 
-  # At most `Tempo.Limit.values/0` of a sequence, or the error that says there are more.
-  defp bounded(enumerable, expression) do
-    limit = Limit.values()
-
-    case Enum.take(enumerable, limit + 1) do
-      taken when length(taken) > limit ->
-        {:error, ConversionError.exception(value: expression, reason: :too_many_values)}
-
-      taken ->
-        {:ok, taken}
-    end
-  end
+  defp bounded(enumerable, expression), do: Limit.take(enumerable, expression)
 
   defp set_of(spans, expression),
     do: %__MODULE__{
@@ -1432,7 +1571,8 @@ defmodule Tempo do
   """
   @spec in_zone(t(), String.t()) :: {:ok, t()} | {:error, error()}
   def in_zone(%__MODULE__{} = expression, zone) when is_binary(zone) do
-    with :ok <- floating(expression),
+    with :ok <- Spans.whole(expression),
+         :ok <- floating(expression),
          {:ok, zone} <- Zone.named(zone) do
       Validate.run(rezoned(expression, zone))
     end
@@ -1629,7 +1769,8 @@ defmodule Tempo do
 
   def at(%__MODULE__{form: {kind, members}} = set, %__MODULE__{} = other)
       when kind in [:all, :one] do
-    with {:ok, members} <- each_at(members, other) do
+    with :ok <- Spans.whole(set),
+         {:ok, members} <- each_at(members, other) do
       Validate.run(%{set | form: {kind, members}, calendar: other.calendar})
     end
   end
@@ -3379,7 +3520,14 @@ defmodule Tempo do
          "1"},
         {:difference, [quote(do: t()), quote(do: t())], quote(do: t()),
          ~s|Tempo.difference!(~o"2026", ~o"2026-06") \|> Tempo.IntervalSet.count()|, "2"},
-        {:weekends, [quote(do: term())], quote(do: t()), ~s|Tempo.weekends!(:US)|, ~s|~o"{6,7}K"|}
+        {:weekends, [quote(do: term())], quote(do: t()), ~s|Tempo.weekends!(:US)|,
+         ~s|~o"{6,7}K"|},
+        {:selection, [quote(do: keyword())], quote(do: t()),
+         ~s|Tempo.selection!(month: 12, day: 25)|, ~s|~o"L12M25DN"|},
+        {:every, [quote(do: Duration.t() | keyword()), quote(do: keyword())], quote(do: t()),
+         ~s|Tempo.every!(~o"P1W", from: ~o"2026-06-01", count: 3)|, ~s|~o"R3/2026-06-01/P1W"|},
+        {:one_of, [quote(do: [t()])], quote(do: t()), ~s|Tempo.one_of!([~o"1984", ~o"1986"])|,
+         ~s|~o"[1984,1986]"|}
       ] do
     bang = String.to_atom("#{name}!")
     arity = length(argument_types)

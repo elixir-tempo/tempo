@@ -38,9 +38,9 @@ defmodule Tempo.Conditions do
          options
        ) do
     with {:ok, spans} <- Spans.spans(member, options),
+         {:ok, spans} <- Limit.take(spans, member),
          {:ok, falls_on} <- falls_on(conditions[:falls_on], others, options) do
       spans
-      |> Enum.take(Limit.values())
       |> Enum.flat_map(&judged(kind, &1, conditions, falls_on))
       |> Enum.map(&%{&1 | metadata: Map.merge(metadata, &1.metadata)})
       |> then(&{:ok, &1})
@@ -51,7 +51,8 @@ defmodule Tempo.Conditions do
   # metadata holds the map, or the spans of the expression given.
   defp falls_on(%Tempo{} = expression, _others, options) do
     with {:ok, spans} <- Spans.spans(expression, options),
-         do: {:ok, spans |> Enum.take(Limit.values()) |> extents()}
+         {:ok, spans} <- Limit.take(spans, expression),
+         do: {:ok, extents(spans)}
   end
 
   defp falls_on(%{} = wanted, others, _options) do

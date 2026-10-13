@@ -77,7 +77,8 @@ defmodule Tempo.Shift do
   end
 
   def shift(%Tempo{form: {kind, members}} = set, %Duration{} = by) when kind in [:all, :one] do
-    with {:ok, shifted} <- each(members, &shift(&1, by)),
+    with :ok <- Spans.whole(set),
+         {:ok, shifted} <- each(members, &shift(&1, by)),
          do: {:ok, %{set | form: {kind, shifted}}}
   end
 
@@ -902,7 +903,9 @@ defmodule Tempo.Shift do
   end
 
   defp each_part(%Tempo{form: {kind, members}} = set, fun) when kind in [:all, :one] do
-    with {:ok, members} <- each(members, fun), do: {:ok, %{set | form: {kind, members}}}
+    with :ok <- Spans.whole(set),
+         {:ok, members} <- each(members, fun),
+         do: {:ok, %{set | form: {kind, members}}}
   end
 
   defp each_part(%Tempo{} = expression, _fun), do: {:error, conversion(expression, :conditions)}

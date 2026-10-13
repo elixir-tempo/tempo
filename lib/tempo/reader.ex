@@ -37,11 +37,16 @@ defmodule Tempo.Reader do
 
   # A zone, a calendar or a tag written on an end of an interval, on a member
   # of a set or on a recurrence's start: the reader stops at it, and says
-  # where it belongs (law 5) rather than only that it could not go on.
-  defp suffix_inside({:error, %ParseError{rest: rest} = error}) when is_binary(rest) do
-    if Regex.match?(~r/\[!?(?:[A-Za-z_][^\[\]{},]*|[+-]\d\d(?::?\d\d)?)\]/, rest),
-      do: {:error, %{error | reason: @suffix_inside}},
-      else: {:error, error}
+  # where it belongs (law 5) rather than only that it could not go on. What
+  # the reader stops at where the text ends is a suffix it could not read,
+  # in its place.
+  defp suffix_inside({:error, %ParseError{text: text, rest: rest} = error})
+       when is_binary(rest) do
+    inside? =
+      not String.ends_with?(text, rest) and
+        Regex.match?(~r/\[!?(?:[A-Za-z_][^\[\]{},]*|[+-]\d\d(?::?\d\d)?)\]/, rest)
+
+    if inside?, do: {:error, %{error | reason: @suffix_inside}}, else: {:error, error}
   end
 
   defp suffix_inside(read), do: read

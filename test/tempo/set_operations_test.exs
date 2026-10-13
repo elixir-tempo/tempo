@@ -20,13 +20,11 @@ defmodule Tempo.SetOperationsTest do
 
   defp interval({from, to, id}) do
     Interval.new!(
-      from: Tempo.from_iso8601!("2026-01-#{pad(from)}"),
-      to: Tempo.from_iso8601!("2026-01-#{pad(to - 1)}"),
+      from: Tempo.new!(year: 2026, month: 1, day: from),
+      to: Tempo.new!(year: 2026, month: 1, day: to - 1),
       metadata: %{id: id}
     )
   end
-
-  defp pad(n), do: String.pad_leading(Integer.to_string(n), 2, "0")
 
   defp set(spans) do
     {:ok, set} = IntervalSet.new(Enum.map(spans, &interval/1))

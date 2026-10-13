@@ -20,7 +20,7 @@ defmodule Tempo.Text do
   defp of_profile(read, profile, text) when profile in @profiles do
     if profile?(read, profile),
       do: {:ok, read},
-      else: {:error, ParseError.exception(text: text, rest: text, reason: "not a #{profile}")}
+      else: {:error, ParseError.exception(text: text, rest: text, reason: not_a(profile))}
   end
 
   defp of_profile(_read, profile, text) do
@@ -31,6 +31,9 @@ defmodule Tempo.Text do
        reason: "#{inspect(profile)} is not a profile; one is of #{inspect(@profiles)}"
      )}
   end
+
+  defp not_a(:interval), do: "not an interval"
+  defp not_a(profile), do: "not a #{profile}"
 
   defp profile?(%Duration{}, :duration), do: true
   defp profile?(%Tempo{form: {kind, _, _}}, :interval) when kind == :span, do: true
@@ -53,10 +56,14 @@ defmodule Tempo.Text do
   def parse(text, options) do
     case read(text, Keyword.take(options, [:calendar, :profile])) do
       {:ok, read} -> {:ok, read}
-      {:error, %ParseError{} = error} -> words(text, options, error)
+      {:error, %ParseError{} = error} -> text |> words(options, error) |> held_to(options, text)
       {:error, _} = error -> error
     end
   end
+
+  # What a locale's words read to is held to the profile as what ISO 8601 reads to is.
+  defp held_to({:ok, read}, options, text), do: of_profile(read, options[:profile], text)
+  defp held_to(error, _options, _text), do: error
 
   # The locale's words, through Calendrical, as the units they name.
   defp words(text, options, error) do

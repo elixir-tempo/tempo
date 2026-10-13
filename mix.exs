@@ -30,7 +30,9 @@ defmodule Tempo.MixProject do
           ~r/Error$/,
           ~r/^Tempo\.Matrix\./,
           ~r/^Tempo\.Grammar\./,
-          Tempo.Iso
+          Tempo.Iso,
+          Tempo.Boundaries,
+          Tempo.Rfc5545Examples
         ]
       ],
       dialyzer: [

@@ -39,8 +39,18 @@ mise.toml
 # Test iCal file (has personal data in it)
 ical_apple_example_export.ics
 
-# Copyrighted ISO 8601 standard PDFs — reference only, never distributed
+# The ISO 8601 standard is copyright and is never committed or distributed,
+# wherever a copy is kept and whatever it is called: the directories it has
+# been kept in, and the files themselves by name in any directory.
 /standards/iso8601/
+/iso8601/
+/papers/iso8601_specs/
+ISO_8601*
+iso_8601*
+ISO8601*.pdf
+ISO8601*.PDF
+ISO8601*.epub
+ISO8601*.EPUB
 
 # Copyrighted reference paper — not distributed
 /papers/Levy-et-al-ChronoNetworks-JAS.pdf

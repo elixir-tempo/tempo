@@ -41,7 +41,8 @@ defmodule Tempo.Validate do
   end
 
   defp form({:span, from, to}, expression) do
-    with :ok <- end_of(from, expression),
+    with :ok <- some_length(from, to),
+         :ok <- end_of(from, expression),
          :ok <- end_of(to, expression) do
       ordered(from, to, expression)
     end
@@ -65,6 +66,20 @@ defmodule Tempo.Validate do
   end
 
   defp form({:when, member, _conditions}, _expression), do: form(member.form, member)
+
+  # No span has zero extent (law 2): an end given as a duration of nothing
+  # makes none, and a recurrence stepped by it would not move.
+  defp some_length(from, to) do
+    if nothing?(from) or nothing?(to),
+      do: {:error, IntervalEndpointsError.exception(from: from, to: to, reason: :empty)},
+      else: :ok
+  end
+
+  defp nothing?(%Duration{units: units}), do: Enum.all?(units, &(amount(&1) == 0))
+  defp nothing?(_value_or_open), do: false
+
+  defp amount({:microsecond, {microseconds, _precision}}), do: microseconds
+  defp amount({_unit, amount}), do: amount
 
   # A day or a time of day in a named zone is a reading that zone's clock
   # shows: one the clock skips whole (an hour of a spring change, the day

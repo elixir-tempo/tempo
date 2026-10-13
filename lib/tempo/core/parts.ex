@@ -25,6 +25,11 @@ defmodule Tempo.Parts do
 
   def part(%Tempo{form: {:every, first, _, _}}, unit), do: part(first, unit)
 
+  # A set read from a stream has no part its members are known to share.
+  def part(%Tempo{form: {kind, members}}, _unit)
+      when kind in [:all, :one] and not is_list(members),
+      do: nil
+
   def part(%Tempo{form: {kind, members}}, unit) when kind in [:all, :one],
     do: agreed(members, unit)
 
@@ -113,6 +118,8 @@ defmodule Tempo.Parts do
     do: [from, to] |> Enum.filter(&match?(%Tempo{}, &1)) |> Enum.map(&resolution/1) |> finest()
 
   def resolution(%Tempo{form: {:every, first, _, _}}), do: resolution(first)
+
+  def resolution(%Tempo{form: {_kind, members}}) when not is_list(members), do: nil
 
   def resolution(%Tempo{form: {_kind, members}}),
     do: members |> Enum.map(&resolution/1) |> finest()

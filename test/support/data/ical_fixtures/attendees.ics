@@ -1,0 +1,7 @@
+BEGIN:VEVENT
+UID:01
+DESCRIPTION:An event with attendees
+ATTENDEE;MEMBER="mailto:projectA@example.com","mailto:projectB@example.com";ROLE=CHAIR;DELEGATED-TO="mailto:jdoe@example.com","mailto:jqpublic@example.com":mailto:janedoe@example.com
+ATTENDEE;DELEGATED-FROM="mailto:jsmith@example.com";RSVP=TRUE:mailto:jdoe@example.com
+ATTENDEE;CUTYPE=GROUP;PARTSTAT=ACCEPTED;SENT-BY="mailto:sray@example.com";CN="John Smith";DIR="ldap://example.com:6666/o=ABC%20Industries,c=US???(cn=Jim%20Dolittle)";LANGUAGE=de-ch:mailto:ietf-calsch@example.org
+END:VEVENT

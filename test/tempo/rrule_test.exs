@@ -355,7 +355,8 @@ defmodule Tempo.RRuleTest do
             "FREQ=DAILY;BOGUS=1",
             "FREQ=WEEKLY;BYDAY=ZZ",
             "FREQ=DAILY;COUNT=2;UNTIL=20260101",
-            "FREQ=DAILY;WKST=SU",
+            "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,SU;WKST=SU",
+            "FREQ=YEARLY;BYWEEKNO=20;WKST=SU",
             "FREQ=YEARLY;RSCALE=HEBREW"
           ] do
         assert {:error, %ArgumentError{}} = RRule.parse(text), text
@@ -425,6 +426,39 @@ defmodule Tempo.RRuleTest do
       for text <- ["@reboot", "* * *", "61 * * * *", "* * * FOO *", "5L * * * *"] do
         assert {:error, %ArgumentError{}} = Cron.parse(text), text
       end
+    end
+  end
+
+  describe "a numbered weekday beside times of day (RFC 5545 section 3.3.10)" do
+    test "is the nth of its weekday, at each of the times" do
+      rule = RRule.parse!("FREQ=MONTHLY;BYDAY=2MO;BYHOUR=9,10", from: ~o"2026-01-01T00:00")
+      {:ok, set} = Tempo.to_interval(rule, within: ~o"2026-06/2026-07")
+
+      assert IntervalSet.map(set, &Interval.from/1) == [
+               ~o"2026-06-08T09:00",
+               ~o"2026-06-08T10:00",
+               ~o"2026-07-13T09:00",
+               ~o"2026-07-13T10:00"
+             ]
+
+      assert RRule.to_string(rule) == {:ok, "FREQ=MONTHLY;BYHOUR=9,10;BYDAY=2MO"}
+    end
+
+    test "a month with no such weekday is passed over" do
+      rule = RRule.parse!("FREQ=MONTHLY;BYDAY=5SU;BYHOUR=9", from: ~o"2026-01-01T00:00")
+      {:ok, set} = Tempo.to_interval(rule, within: ~o"2026")
+
+      assert IntervalSet.map(set, &Tempo.month(Interval.from(&1))) == [3, 5, 8, 11]
+    end
+
+    test "a position (BYSETPOS) counts among the times too" do
+      rule =
+        RRule.parse!("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;BYHOUR=9,10",
+          from: ~o"2026-01-01T00:00"
+        )
+
+      {:ok, set} = Tempo.to_interval(rule, within: ~o"2026-06")
+      assert IntervalSet.map(set, &Interval.from/1) == [~o"2026-06-30T10:00"]
     end
   end
 end

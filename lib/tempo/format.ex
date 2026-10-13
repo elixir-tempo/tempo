@@ -60,8 +60,8 @@ defmodule Tempo.Format do
   # Where the values are one unbroken stretch it is shown as that stretch;
   # where they are apart, as the list of them.
   defp masked(%Tempo{} = value, within, options) do
-    with {:ok, spans} <- Spans.spans(value, if(within, do: [within: within], else: [])) do
-      spans = Enum.take(spans, Limit.values())
+    with {:ok, spans} <- Spans.spans(value, if(within, do: [within: within], else: [])),
+         {:ok, spans} <- Limit.take(spans, value) do
       extents = Enum.map(spans, &Spans.extent/1)
 
       if spans != [] and unbroken?(extents),
@@ -93,8 +93,9 @@ defmodule Tempo.Format do
 
   # Each member in its own words: a value as a value, a span as a span.
   defp plural(expression, within, options) do
-    with {:ok, members} <- Spans.members(expression, if(within, do: [within: within], else: [])) do
-      case Enum.take(members, Limit.values()) do
+    with {:ok, members} <- Spans.members(expression, if(within, do: [within: within], else: [])),
+         {:ok, members} <- Limit.take(members, expression) do
+      case members do
         [one] -> __MODULE__.to_string(one, options)
         many -> listed(many, &__MODULE__.to_string(&1, options), :standard, options)
       end

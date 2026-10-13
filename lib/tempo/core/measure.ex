@@ -166,7 +166,9 @@ defmodule Tempo.Measure do
   def measure(%Tempo{form: {:every, _, :infinity, _}}), do: {:ok, :infinity}
 
   def measure(%Tempo{} = expression) do
-    if open?(expression), do: {:ok, :infinity}, else: measured(expression)
+    with :ok <- Spans.whole(expression) do
+      if open?(expression), do: {:ok, :infinity}, else: measured(expression)
+    end
   end
 
   defp measured(expression) do

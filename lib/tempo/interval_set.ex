@@ -128,12 +128,11 @@ defmodule Tempo.IntervalSet do
          {:ok, length} <- Duration.to_microseconds(duration),
          {:ok, step} <- Duration.to_microseconds(Keyword.get(options, :every, duration)),
          :ok <- positive(step, duration),
-         {:ok, spans} <- Spans.spans(expression) do
-      slots =
-        spans
-        |> Enum.take(Limit.values())
-        |> Enum.flat_map(&cut(&1, length, step, duration))
-
+         {:ok, spans} <- Spans.spans(expression),
+         {:ok, slots} <-
+           spans
+           |> Stream.flat_map(&cut(&1, length, step, duration))
+           |> Limit.take(expression) do
       {:ok, %Tempo{form: {:all, slots}, calendar: expression.calendar, zone: expression.zone}}
     end
   end
@@ -309,19 +308,52 @@ defmodule Tempo.IntervalSet do
   @doc """
   The members a function keeps.
 
+  ### Arguments
+
+  * `set` is a `t:Tempo.t/0`.
+
+  * `fun` is given each member and answers whether to keep it.
+
+  ### Returns
+
+  * A `t:Tempo.t/0` of the `:all` form. A set whose members are read as
+    they are asked for (a selection over a span with no end) is filtered as
+    they are read, and has no last member either.
+
   ### Examples
 
       iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-01", ~o"2026-03"])
       iex> Tempo.IntervalSet.filter(set, &Tempo.before?(&1, ~o"2026-02"))
       ~o"{2026-01}"
 
+      iex> {:ok, fifteenths} = Tempo.select(~o"2026-06-01/..", ~o"15D")
+      iex> fifteenths |> Tempo.IntervalSet.filter(&(Tempo.month(&1) == 12)) |> Enum.take(2)
+      [~o"2026-12-15", ~o"2027-12-15"]
+
   """
   @spec filter(Tempo.t(), (Tempo.t() -> as_boolean(term()))) :: Tempo.t()
+  def filter(%Tempo{form: {:all, members}} = set, fun)
+      when is_function(fun, 1) and not is_list(members),
+      do: %{set | form: {:all, Stream.filter(members, fun)}}
+
   def filter(%Tempo{} = set, fun) when is_function(fun, 1),
     do: %{set | form: {:all, Enum.filter(members(set), fun)}}
 
   @doc """
   A function applied to each member, giving its answers.
+
+  ### Arguments
+
+  * `set` is a `t:Tempo.t/0`.
+
+  * `fun` is given each member.
+
+  ### Returns
+
+  * The list of the function's answers, in the members' order.
+
+  * A stream of them for a set whose members are read as they are asked
+    for, which may have no last member.
 
   ### Examples
 
@@ -329,8 +361,15 @@ defmodule Tempo.IntervalSet do
       iex> Tempo.IntervalSet.map(set, &Tempo.to_iso8601!/1)
       ["2026Y1M", "2026Y3M"]
 
+      iex> {:ok, fifteenths} = Tempo.select(~o"2026-06-01/..", ~o"15D")
+      iex> fifteenths |> Tempo.IntervalSet.map(&Tempo.month/1) |> Enum.take(3)
+      [6, 7, 8]
+
   """
-  @spec map(Tempo.t(), (Tempo.t() -> term())) :: [term()]
+  @spec map(Tempo.t(), (Tempo.t() -> term())) :: [term()] | Enumerable.t()
+  def map(%Tempo{form: {:all, members}}, fun) when is_function(fun, 1) and not is_list(members),
+    do: Stream.map(members, fun)
+
   def map(%Tempo{} = set, fun) when is_function(fun, 1), do: Enum.map(members(set), fun)
 
   @doc """
@@ -401,14 +440,9 @@ defmodule Tempo.IntervalSet do
   def members(%Tempo{form: {:all, members}}) when is_list(members), do: members
 
   def members(%Tempo{form: {:all, members}} = set) do
-    limit = Limit.values()
-
-    case Enum.take(members, limit + 1) do
-      taken when length(taken) > limit ->
-        raise Tempo.ConversionError, value: set, reason: :too_many_values
-
-      taken ->
-        taken
+    case Limit.take(members, set) do
+      {:ok, taken} -> taken
+      {:error, exception} -> raise exception
     end
   end
 

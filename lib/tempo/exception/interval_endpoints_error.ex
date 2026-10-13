@@ -4,7 +4,8 @@ defmodule Tempo.IntervalEndpointsError do
 
   * `:reason` is `:order` for an end before its start, `:calendars` for two
     ends in two calendars, `:zones` for two ends in two zones, `:open` for an
-    end that is not there, `:duration` for two durations, or a description.
+    end that is not there, `:duration` for two durations, `:empty` for a
+    duration of nothing, or a description.
 
   """
 
@@ -32,6 +33,7 @@ defmodule Tempo.IntervalEndpointsError do
 
   defp describe(:open), do: "has no end to measure from"
   defp describe(:duration), do: "has a duration at both ends"
+  defp describe(:empty), do: "has no length: a span is at least one unit long"
   defp describe(reason) when is_binary(reason), do: reason
   defp describe(reason), do: inspect(reason)
 end

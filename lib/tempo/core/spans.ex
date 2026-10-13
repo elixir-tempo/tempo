@@ -153,6 +153,22 @@ defmodule Tempo.Spans do
 
   # ── One span or many ──────────────────────────────────────────────────
 
+  @doc """
+  Whether an expression is a set whose members are read as they are asked
+  for (`Tempo.IntervalSet.from_stream/2`, a selection over a span with no
+  end): it may have no last member, so nothing that needs every member is
+  answered of it without a window.
+  """
+  @spec lazy?(Tempo.t() | Duration.t()) :: boolean()
+  def lazy?(%Tempo{form: {kind, members}}) when kind in [:all, :one], do: not is_list(members)
+  def lazy?(_expression), do: false
+
+  @doc "`:ok` for an expression every member of which can be asked for, and the error for a lazy set."
+  @spec whole(Tempo.t() | Duration.t()) :: :ok | {:error, Exception.t()}
+  def whole(expression) do
+    if lazy?(expression), do: {:error, conversion(expression, :unbounded)}, else: :ok
+  end
+
   @doc "Whether an expression denotes one span: a value with one value in each unit, or a written span with such ends."
   @spec singular?(Tempo.t() | Duration.t()) :: boolean()
   def singular?(%Tempo{form: {:value, units}}), do: Expand.one_span?(units)
@@ -376,8 +392,9 @@ defmodule Tempo.Spans do
   end
 
   # A set read from a stream gives its members' spans as they are asked for.
+  # Its members are in order of start, so a window stops the reading.
   def spans(%Tempo{form: {:all, members}}, options) when not is_list(members) do
-    {:ok, Stream.flat_map(members, &member_stream(&1, options))}
+    {:ok, members |> Stream.flat_map(&member_stream(&1, options)) |> windowed(options)}
   end
 
   def spans(%Tempo{form: {:all, members}} = set, options) do
@@ -441,7 +458,7 @@ defmodule Tempo.Spans do
 
       {conditionals, members} ->
         with {:ok, streams} <- each_spans(members, options),
-             others = streams |> Stream.concat() |> Enum.take(Limit.values()),
+             {:ok, others} <- Limit.take(Stream.concat(streams), hd(conditionals)),
              {:ok, conditional} <- Conditions.resolve(conditionals, others, options) do
           {:ok, Enum.sort_by(others ++ conditional, &start_position/1)}
         end
@@ -632,11 +649,15 @@ defmodule Tempo.Spans do
 
   # Where the rule's parts next name a value from a position on, whatever
   # the cadence: looked for a year, a month or a day at a time, as far as the
-  # horizon.
+  # horizon. A nested selection is made in the period as a whole (the fifth
+  # Sunday of a month, at nine), so its parts are looked for in the next period.
   defp next_named(tick, period, walk) do
-    case Select.probe(picking(walk.parts)) do
-      nil -> nil
-      probe -> named_from(tick, tick, probe, period, walk)
+    parts = picking(walk.parts)
+
+    case {Keyword.has_key?(parts, :selection), Select.probe(parts)} do
+      {true, _probe} -> tick
+      {false, nil} -> nil
+      {false, probe} -> named_from(tick, tick, probe, period, walk)
     end
   end
 
@@ -946,8 +967,9 @@ defmodule Tempo.Spans do
   # The members' spans but those that lie within an excluded member's.
   defp excluded_spans(set, members, excluded, options) do
     with {:ok, kept} <- spans(%{set | form: {:all, members}}, options),
-         {:ok, out} <- spans(%{set | form: {:all, excluded}}, options) do
-      out = out |> Enum.take(Limit.values()) |> Enum.map(&extent/1)
+         {:ok, out} <- spans(%{set | form: {:all, excluded}}, options),
+         {:ok, out} <- Limit.take(out, set) do
+      out = Enum.map(out, &extent/1)
       {:ok, Stream.reject(kept, &excluded?(extent(&1), out))}
     end
   end
@@ -1377,8 +1399,17 @@ defmodule Tempo.Spans do
     end
   end
 
-  # Where an until value ends, read as a written end (law 9); a count or none has no position.
-  defp until_position(%Tempo{} = until), do: end_position(until)
+  # The position occurrences start before to be kept. An until value bounds a
+  # recurrence in an inclusive manner (RFC 5545 section 3.3.10): written to a
+  # date it is read through, and written to a time of day an occurrence that
+  # starts on it is the last, so the position is the tick after it. A count
+  # or none has no position.
+  defp until_position(%Tempo{} = until) do
+    with {:ok, position} <- end_position(until) do
+      if clock_resolution?(until), do: {:ok, position + 1}, else: {:ok, position}
+    end
+  end
+
   defp until_position(_count_or_infinity), do: {:ok, nil}
 
   # Forward from the start, or, when the start is a duration, back from the end in order.
@@ -1775,7 +1806,8 @@ defmodule Tempo.Spans do
   def members(%Tempo{form: {:all, members}}, _options) when is_list(members),
     do: {:ok, Enum.map(members, &member_value/1)}
 
-  def members(%Tempo{form: {:all, members}}, _options), do: {:ok, members}
+  # A set read from a stream: its members as they come, those a window holds when one is given.
+  def members(%Tempo{form: {:all, members}}, options), do: {:ok, windowed(members, options)}
 
   def members(%Tempo{form: {:one, members}}, _options), do: {:ok, members}
 
@@ -1888,7 +1920,9 @@ defmodule Tempo.Spans do
 
   # Any other span is the spans it names, each an extent: a plural end gives one for each value.
   defp spans_readings(span) do
-    with {:ok, spans} <- spans(span), do: closed_extents(Enum.take(spans, Limit.values()), span)
+    with {:ok, spans} <- spans(span),
+         {:ok, spans} <- Limit.take(spans, span),
+         do: closed_extents(spans, span)
   end
 
   # A year with a margin is each year it may be; a value with a mask or a set each value it allows.
@@ -1909,7 +1943,7 @@ defmodule Tempo.Spans do
   defp single_or_members(value, units) do
     if Expand.one_span?(units),
       do: {:ok, [value]},
-      else: with({:ok, members} <- members(value), do: {:ok, Enum.take(members, Limit.values())})
+      else: with({:ok, members} <- members(value), do: Limit.take(members, value))
   end
 
   # ── Errors ────────────────────────────────────────────────────────────

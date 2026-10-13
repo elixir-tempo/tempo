@@ -144,8 +144,8 @@ defmodule Tempo.Grammar.Generator do
     "#{year}-#{two(month)}-#{two(day)}/#{year + pick(0..2)}-#{two(pick(month..12))}-#{two(day)}"
   end
 
-  def text(:interval_start_duration), do: text(:date_extended) <> "/" <> text(:duration)
-  def text(:interval_duration_end), do: text(:duration) <> "/" <> text(:date_extended)
+  def text(:interval_start_duration), do: text(:date_extended) <> "/" <> length_of_a_span()
+  def text(:interval_duration_end), do: length_of_a_span() <> "/" <> text(:date_extended)
 
   def text(:interval_abbreviated_end) do
     year = year()
@@ -280,6 +280,13 @@ defmodule Tempo.Grammar.Generator do
   defp month, do: pick(1..12)
   # A day every month of every calendar generated here has.
   defp day, do: pick(1..28)
+  # A duration that is an end of an interval is of some length: `P0D` is a
+  # duration, and an interval of no length is none (law 2).
+  defp length_of_a_span do
+    duration = text(:duration)
+    if Regex.match?(~r/[1-9]/, duration), do: duration, else: "P1D"
+  end
+
   defp hour, do: pick(0..23)
   defp minute, do: pick(0..59)
   defp second, do: pick(0..59)

@@ -13,6 +13,8 @@ defmodule Tempo.Limit do
   #
   #     config :ex_tempo, max_values_at_once: 100_000
 
+  alias Tempo.ConversionError
+
   @default 10_000
 
   @doc """
@@ -27,4 +29,22 @@ defmodule Tempo.Limit do
   """
   @spec values() :: pos_integer()
   def values, do: Application.get_env(:ex_tempo, :max_values_at_once, @default)
+
+  @doc """
+  Every value of a sequence, when it has no more than the bound: the list,
+  or the error that says there are more. A sequence is never cut short to
+  the bound, which would answer for part of what was asked.
+  """
+  @spec take(Enumerable.t(), term()) :: {:ok, list()} | {:error, Exception.t()}
+  def take(enumerable, expression) do
+    limit = values()
+
+    case Enum.take(enumerable, limit + 1) do
+      taken when length(taken) > limit ->
+        {:error, ConversionError.exception(value: expression, reason: :too_many_values)}
+
+      taken ->
+        {:ok, taken}
+    end
+  end
 end

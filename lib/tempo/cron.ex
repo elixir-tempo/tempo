@@ -15,12 +15,25 @@ defmodule Tempo.Cron do
   month and the day of the week are restricted, POSIX fires on either, so
   the result is a set of two recurrences.
 
-  The Vixie extensions `L`, `W` and `#` are not read.
+  The extensions of Vixie cron and Quartz are read in the two day fields:
+
+  * `L` as the day of the month is its last day, and `LW` its last weekday.
+
+  * `15W` is the weekday nearest the 15th, in the same month: the Friday
+    before a Saturday, the Monday after a Sunday. `1W` to `27W` are read;
+    for a day a short month may not have, which is the nearest weekday
+    depends on the month's length, and `28W` to `31W` are refused.
+
+  * `5L` as the day of the week is the last Friday of the month, and `5#2`
+    its second Friday.
+
+  Each is one value, never a member of a list or a range.
 
   """
 
   alias Tempo.Options
   alias Tempo.RRule
+  alias Tempo.Validate
 
   @aliases %{
     "@yearly" => "0 0 1 1 *",
@@ -34,7 +47,7 @@ defmodule Tempo.Cron do
   @months ~w(JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC)
   @days ~w(SUN MON TUE WED THU FRI SAT)
   @fields [second: 0..59, minute: 0..59, hour: 0..23, day: 1..31, month: 1..12, day_of_week: 0..7]
-  @reference "2000-01-01T00:00"
+  @weekdays [1, 2, 3, 4, 5]
 
   @doc """
   Reads a cron expression into a recurrence.
@@ -140,7 +153,67 @@ defmodule Tempo.Cron do
 
   defp field(:year, text), do: listed(text, 1..9999, &named(:year, &1))
 
-  defp field(name, text) do
+  # The last day of the month, its last weekday, and the weekday nearest a day.
+  defp field(:day, "L"), do: {:ok, [-1]}
+  defp field(:day, "LW"), do: {:ok, {:either, [%{byday: weekdays(), bysetpos: [-1]}]}}
+
+  defp field(:day, text) when binary_part(text, byte_size(text), -1) == "W" do
+    case Integer.parse(text) do
+      {day, "W"} when day in 1..27 -> {:ok, {:either, nearest_weekday(day)}}
+      {day, "W"} when day in 28..31 -> {:error, argument(not_in_every_month(text))}
+      _ -> {:error, argument("#{inspect(text)} is not a cron field value")}
+    end
+  end
+
+  # The last of a weekday in the month (`5L`), and the nth (`5#2`).
+  defp field(:day_of_week, text) do
+    case Regex.run(~r/\A([0-7]|[A-Za-z]{3})(L|#([1-5]))\z/, text) do
+      [_, day, "L"] -> numbered(day, -1, text)
+      [_, day, _, nth] -> numbered(day, String.to_integer(nth), text)
+      nil -> plain_field(:day_of_week, text)
+    end
+  end
+
+  defp field(name, text), do: plain_field(name, text)
+
+  defp numbered(day, nth, text) do
+    case named(:day_of_week, day) do
+      {:ok, day} when day in 0..7 ->
+        {:ok, {:either, [%{byday: [{nth, sunday(:day_of_week, day)}]}]}}
+
+      _ ->
+        {:error, argument("#{inspect(text)} is not a cron field value")}
+    end
+  end
+
+  defp weekdays, do: Enum.map(@weekdays, &{nil, &1})
+
+  # The weekday nearest a day of the month, which is one of three days: the
+  # day itself when it is a weekday, the Friday before it when it is a
+  # Saturday, the Monday after it when it is a Sunday. From the 1st there is
+  # no Friday before in the month, so a Saturday the 1st gives Monday the 3rd.
+  defp nearest_weekday(1) do
+    [
+      %{bymonthday: [1], byday: weekdays()},
+      %{bymonthday: [2], byday: [{nil, 1}]},
+      %{bymonthday: [3], byday: [{nil, 1}]}
+    ]
+  end
+
+  defp nearest_weekday(day) do
+    [
+      %{bymonthday: [day], byday: weekdays()},
+      %{bymonthday: [day - 1], byday: [{nil, 5}]},
+      %{bymonthday: [day + 1], byday: [{nil, 1}]}
+    ]
+  end
+
+  defp not_in_every_month(text) do
+    "#{inspect(text)} is not read: the weekday nearest a day that a short month may not " <>
+      "have depends on the month's length. 1W to 27W and LW are read"
+  end
+
+  defp plain_field(name, text) do
     range = Keyword.fetch!(@fields, name)
 
     with {:ok, values} <- listed(text, range, &named(name, &1)) do
@@ -226,19 +299,46 @@ defmodule Tempo.Cron do
     {dom, fields} = Keyword.pop(fields, :day)
     {dow, fields} = Keyword.pop(fields, :day_of_week)
 
-    case {dom, dow} do
-      {dom, dow} when dom != :any and dow != :any ->
-        with {:ok, a} <- recurrence(fields ++ [day: dom], year, options),
-             {:ok, b} <- recurrence(fields ++ [day_of_week: dow], year, options) do
-          {:ok, %Tempo{form: {:all, [a, b]}, calendar: a.calendar, metadata: a.metadata}}
-        end
-
-      _ ->
-        recurrence(fields ++ [day: dom, day_of_week: dow], year, options)
+    with {:ok, built} <- each_recurrence(days(dom, dow), fields, year, options) do
+      one_or_all(built)
     end
   end
 
-  defp recurrence(fields, year, options) do
+  # The ways a firing's day is named, each a recurrence of its own: one
+  # where the two day fields agree on what they restrict, one for each field
+  # where both are restricted (POSIX fires on either), and one for each day
+  # an extension may fall on.
+  defp days({:either, by_month}, {:either, by_week}), do: by_month ++ by_week
+  defp days({:either, by_month}, :any), do: by_month
+  defp days(:any, {:either, by_week}), do: by_week
+  defp days({:either, by_month}, dow), do: by_month ++ [[day_of_week: dow]]
+  defp days(dom, {:either, by_week}), do: [[day: dom]] ++ by_week
+  defp days(dom, dow) when dom != :any and dow != :any, do: [[day: dom], [day_of_week: dow]]
+  defp days(dom, dow), do: [[day: dom, day_of_week: dow]]
+
+  defp each_recurrence(days, fields, year, options) do
+    Enum.reduce_while(days, {:ok, []}, fn day, {:ok, built} ->
+      case recurrence(fields, day, year, options) do
+        {:ok, recurrence} -> {:cont, {:ok, built ++ [recurrence]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp one_or_all([one]), do: {:ok, one}
+
+  defp one_or_all([first | _] = several),
+    do: {:ok, %Tempo{form: {:all, several}, calendar: first.calendar, metadata: first.metadata}}
+
+  # A day an extension names is a part of the rule as RFC 5545 writes it,
+  # and stands as a restricted day of the month for the cadence.
+  defp recurrence(fields, %{} = day, year, options) do
+    rule(fields ++ [day: :extension], day, year, options)
+  end
+
+  defp recurrence(fields, day, year, options), do: rule(fields ++ day, %{}, year, options)
+
+  defp rule(fields, day, year, options) do
     restricted = Enum.reject(fields, fn {_, values} -> values == :any end)
     finest = fields |> hd() |> elem(0)
     coarsest = restricted |> Enum.map(&elem(&1, 0)) |> Enum.max_by(&order/1, fn -> finest end)
@@ -246,7 +346,7 @@ defmodule Tempo.Cron do
 
     parts =
       fields
-      |> Enum.reject(&unconstrained?(&1, restricted))
+      |> Enum.reject(&(unconstrained?(&1, restricted) or match?({:day, :extension}, &1)))
       |> Enum.filter(fn {name, _} -> order(name) <= order(coarsest) end)
       |> Enum.map(fn
         {name, :any} -> {name, Enum.to_list(Keyword.fetch!(@fields, name))}
@@ -259,10 +359,38 @@ defmodule Tempo.Cron do
       |> with_years(year)
       |> then(&if(restricted == [], do: [], else: &1))
 
-    rule = Map.merge(%{freq: cadence}, parts_as_rule(parts))
+    rule = %{freq: cadence} |> Map.merge(parts_as_rule(parts)) |> Map.merge(day)
 
-    RRule.from_rule(rule, Keyword.put_new(options, :from, Tempo.from_iso8601!(@reference)))
+    rule
+    |> RRule.from_rule(Keyword.put_new_lazy(options, :from, &reference/0))
+    |> day_before_times()
   end
+
+  # The last weekday of a month is found among its days, and the times of
+  # day are times on it: where a position would count among the times too,
+  # the day is selected first.
+  defp day_before_times({:ok, %Tempo{form: {:every, first, bound, parts}} = recurrence})
+       when is_list(parts) do
+    {times, days} = Enum.split_with(parts, fn {unit, _} -> unit in [:hour, :minute, :second] end)
+
+    case {Keyword.pop(days, :instance), times} do
+      {{nil, _days}, _times} ->
+        {:ok, recurrence}
+
+      {_positioned, []} ->
+        {:ok, recurrence}
+
+      {{position, days}, times} ->
+        {before, [weekdays]} = Enum.split_with(days, fn {unit, _} -> unit != :day_of_week end)
+        nested = [selection: [weekdays, instance: position]]
+        Validate.run(%{recurrence | form: {:every, first, bound, before ++ nested ++ times}})
+    end
+  end
+
+  defp day_before_times(read), do: read
+
+  # The first minute of 2000: where firings are counted from when no start is given.
+  defp reference, do: Tempo.new!(year: 2000, month: 1, day: 1, hour: 0, minute: 0)
 
   # A `*` day of the week constrains nothing, and a `*` day of the month
   # constrains nothing beside a restricted day of the week.

@@ -205,7 +205,7 @@ iex> unread = fn rule ->
 ...>   {:error, error} = Tempo.RRule.parse(rule, from: ~o"2026-01-01")
 ...>   Exception.message(error)
 ...> end
-iex> unread.("FREQ=WEEKLY;WKST=SU")
+iex> unread.("FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,SU;WKST=SU")
 "a WKST other than MO is not supported"
 
 iex> unread.("FREQ=MONTHLY;BYDAY=2MO,2WE")
@@ -218,7 +218,7 @@ iex> unread.("FREQ=DAILY;COUNT=2;UNTIL=20260101")
 "COUNT and UNTIL exclude each other"
 ```
 
-* **`WKST` other than Monday.** A recurrence counts its weeks as its calendar does, and the Gregorian calendar's begin on Monday.
+* **`WKST` other than Monday, where it changes the weeks counted.** A recurrence counts its weeks as its calendar does, and the Gregorian calendar's begin on Monday.
 
 * **Numbered weekdays of several days** (`BYDAY=2MO,2WE`). One weekday with several numbers is read: `BYDAY=1MO,3MO` is `1K{1,3}I`.
 

@@ -50,6 +50,14 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * A whole second converts to an Elixir value with a precision of zero, where it had six digits.
 
+* A recurrence's `UNTIL` is an inclusive bound, as RFC 5545 has it: an occurrence that starts at the time it names is the last.
+
+* An RRULE's `WKST` other than `MO` is read where RFC 5545 says it is not significant, and refused where it would change the weeks counted.
+
+* A numbered weekday in an RRULE beside times of day (`BYDAY=2MO;BYHOUR=9,10`) is those times on that weekday, as RFC 5545 has it, where a position counted among the times.
+
+* A bound on work is a refusal and never a part of the answer: `Tempo.count_workdays/2` of a century counts every day, and what would hold more than 10,000 values at once is a `Tempo.ConversionError`.
+
 * A recurring interval's occurrences are consecutive, as ISO 8601-1 3.1.1.11 defines one. A rule read from an RRULE with a start is read as RFC 5545 reads it: a monthly rule from the 31st passes over the months with no 31st.
 
 * Twenty-four exception modules are eight, each with a `:reason`: `Tempo.ParseError`, `InvalidDateError`, `ZoneError`, `FrameError`, `IntervalEndpointsError`, `ConversionError`, `Iso8601EncodeError` and `InvalidCalendarError`.
@@ -74,6 +82,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.Allen`: the thirteen relations as predicates, `relation/2`, `inverse/1` and `compose/2`.
 
+* `Tempo.every/2`, `Tempo.selection/1` and `Tempo.one_of/1` build a recurrence, a selection and a one-of set from parts, so a program never writes text to have it read back.
+
 * `Tempo.members/2` and `Tempo.walk/3`: the spans of any expression, and any span walked at a unit.
 
 * `Tempo.metadata/1` and `put_metadata/2` on every expression.
@@ -86,6 +96,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.RRule.to_string/1`, `Tempo.ICal.parse/2` and `parse_file/2`, `Tempo.JSCalendar.parse/2`.
 
+* `Tempo.Cron.parse/2` reads the extensions `L`, `LW`, `15W`, `5L` and `5#2` in its day fields.
+
 * `Tempo.duration/2` with `leap_seconds: true`, `Tempo.LeapSeconds.spanned/1` and `count/1`.
 
 * `Tempo.Duration.multiply/2`, `exact?/1` and `to_microseconds/1`.
@@ -97,6 +109,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * A reading a zone's clock skips is refused wherever a value is read, built or placed, and an hour a clock shows twice is two values in a walk.
 
 * A rule that selects nothing ends, where a counted rule with no occurrence did not return.
+
+* What needs every member of a set with no last member (a selection over a span with no end) is a `Tempo.ConversionError`, where some operations did not return; a `:within` window bounds such a set.
 
 * A set has ISO 8601 text and is inspected as it, where `Tempo.to_iso8601/1` raised on one.
 

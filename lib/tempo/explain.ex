@@ -44,6 +44,14 @@ defmodule Tempo.Explain do
       "A set of #{length(members)} durations: lengths of time, with no place on the time line."
     ]
 
+  def lines(%Tempo{form: {kind, members}} = set)
+      when kind in [:all, :one] and not is_list(members),
+      do: [
+        "A set whose members are read as they are asked for: it may have no last member.",
+        "A `:within` window bounds it.",
+        frame(set)
+      ]
+
   def lines(%Tempo{} = expression) do
     [
       what(expression),
@@ -184,6 +192,11 @@ defmodule Tempo.Explain do
   # ── What it covers ────────────────────────────────────────────────────
 
   defp covers(%Tempo{form: {:one, _}}), do: nil
+  defp covers(%Tempo{form: {:span, :open, :open}}), do: nil
+
+  # A recurrence with no start is placed by a window, whatever its rule names.
+  defp covers(%Tempo{form: {:every, %Tempo{form: {:span, :open, _}}, _, _}}),
+    do: "It has no start of its own; a `:within` window places it."
 
   defp covers(%Tempo{} = expression) do
     cond do

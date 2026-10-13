@@ -226,11 +226,36 @@ if Code.ensure_loaded?(ICal) do
            do: available_in(availabilities, options[:within], options)
     end
 
-    defp available_in(availabilities, %Tempo{} = window, options),
-      do: offered(Enum.sort_by(availabilities, &rank/1), window, options)
+    defp available_in(availabilities, %Tempo{} = window, options) do
+      window = Spans.window_in(window, on_the_clock_of(availabilities, options))
+      offered(Enum.sort_by(availabilities, &rank/1), window, options)
+    end
 
     defp available_in(_availabilities, _no_window, _options),
       do: {:error, ConversionError.exception(value: :availability, reason: :unbounded)}
+
+    # A window with no zone is read on the clock the availability is written
+    # on, as `parse/2` reads one on its events': the first time any
+    # component names, its own period's or a slot's.
+    defp on_the_clock_of(availabilities, options) do
+      Enum.find_value(availabilities, fn availability ->
+        first_bound(availability) || first_slot(availability, options)
+      end)
+    end
+
+    defp first_bound(%{dtstart: dtstart, dtend: dtend}) do
+      case bound(dtstart || dtend) do
+        {:ok, %Tempo{} = value} -> value
+        _none -> nil
+      end
+    end
+
+    defp first_slot(availability, options) do
+      case available_spans(availability, options) do
+        {:ok, [%Tempo{} = slot | _]} -> slot
+        _none -> nil
+      end
+    end
 
     # 1 is the highest priority and 9 the lowest; 0 or none ranks below all.
     defp rank(%{priority: priority}) when priority in 1..9, do: priority
