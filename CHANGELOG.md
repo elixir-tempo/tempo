@@ -98,7 +98,9 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.RRule.to_string/1`, `Tempo.ICal.parse/2` and `parse_file/2`, `Tempo.JSCalendar.parse/2`.
 
-* `Tempo.Cron.parse/2` reads the extensions `L`, `LW`, `15W`, `5L` and `5#2` in its day fields.
+* `Tempo.Cron.parse/2` reads the extensions `L`, `LW`, `15W` (any day, `31W` among them), `5L` and `5#2` in its day fields.
+
+* A rule rolls the days it selects to a weekday: `roll: :modified_nearest` in `Tempo.selection/1`, written `L31D(modified-nearest)rN`. The weekdays are those of the `:locale` asked in, or of the territory in force; `Tempo.roll_to_workday/3` takes `:nearest` and `:modified_nearest` too.
 
 * `Tempo.Cron.parse/2` with no `:from` reads a rule with no start, as `Tempo.RRule.parse/2` does; its firings are asked for with `:within`.
 

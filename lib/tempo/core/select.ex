@@ -13,9 +13,21 @@ defmodule Tempo.Select do
   # candidates. A nested selection with a window opens a span of the window's
   # length from each value it picks, and the parts after it select within
   # each. An event (`(easter)e`) is asked of `Tempo.Event` for each year the
-  # period runs through.
+  # period runs through. A roll (`(modified-nearest)r`) moves each value
+  # picked to a weekday before the positions are applied.
 
-  alias Tempo.{ConversionError, Duration, Event, Expand, Limit, Shift, Spans, Unit, Zone}
+  alias Tempo.{
+    ConversionError,
+    Duration,
+    Event,
+    Expand,
+    Limit,
+    Shift,
+    Spans,
+    Unit,
+    Workdays,
+    Zone
+  }
 
   @part_units [
     :month,
@@ -64,11 +76,13 @@ defmodule Tempo.Select do
   @doc """
   What to look for, and a year, a month or a day at a time, to find where
   parts next name a value: the unit their coarsest counts in and the parts
-  less a position. Nil for parts that name no value of their own.
+  less a position and a roll. Nil for parts that name no value of their own.
   """
   @spec probe(Unit.selection()) :: {Unit.t(), Unit.selection()} | nil
   def probe(parts) do
-    search = Keyword.drop(parts, [:instance])
+    # A roll is left out with the position: the period a value is named in
+    # is looked for, and a value rolled out of it would name the next.
+    search = Keyword.drop(parts, [:instance, :roll])
     units = Enum.filter(search, fn {unit, _} -> unit in @part_units end)
 
     cond do
@@ -156,6 +170,7 @@ defmodule Tempo.Select do
     {instance, parts} = Keyword.pop(parts, :instance)
     {years, parts} = Keyword.pop(parts, :year)
     {event, parts} = Keyword.pop(parts, :event)
+    {roll, parts} = Keyword.pop(parts, :roll)
 
     case bounded_extent(period) do
       {:ok, extent} ->
@@ -164,11 +179,39 @@ defmodule Tempo.Select do
         period
         |> candidates(parts, event, extent, options)
         |> Enum.filter(&in_years?(&1, years))
+        |> rolled(roll, options)
         |> Enum.sort_by(&start_of/1)
         |> positioned(instance)
 
       {:error, _} ->
         []
+    end
+  end
+
+  # Each value picked is rolled to a weekday by a convention, where the
+  # selection names one, and two that roll to one day are that day once.
+  # The weekdays are those of the locale asked in (`:locale`), or of the
+  # territory in force. A rolled value may lie outside the period it was
+  # picked in: a first of the month kept on the Friday before it.
+  defp rolled(values, nil, _options), do: values
+
+  defp rolled(values, convention, options) do
+    workdays = workdays!(options[:locale])
+
+    values
+    |> Enum.flat_map(fn value ->
+      case Workdays.roll(value, workdays, convention) do
+        {:ok, rolled} -> [rolled]
+        {:error, _not_a_day} -> []
+      end
+    end)
+    |> Enum.uniq()
+  end
+
+  defp workdays!(locale) do
+    case Workdays.new(locale) do
+      {:ok, workdays} -> workdays
+      {:error, exception} -> raise exception
     end
   end
 

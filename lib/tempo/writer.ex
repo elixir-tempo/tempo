@@ -252,6 +252,7 @@ defmodule Tempo.Writer do
       {:window, duration} -> ["/", duration(duration)]
       {:instance, held} -> [value(held, :instance), "I"]
       {:week_start, day} -> [Integer.to_string(day), "q"]
+      {:roll, convention} -> ["(", String.replace(Atom.to_string(convention), "_", "-"), ")r"]
       {:event, {name, nil}} -> ["(", name, ")e"]
       {:event, {name, zone}} -> ["(", name, "@", zone, ")e"]
       {unit, held} -> [value(held, unit), Map.fetch!(@designators, unit)]

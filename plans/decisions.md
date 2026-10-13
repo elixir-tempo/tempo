@@ -154,7 +154,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-14).** Option 2, against the recommendation to leave it until after 2.0.
 
-* **State.** To build. How the part is written is decision 17.
+* **State.** Built: `{:roll, convention}` in a rule's parts, applied by `Tempo.Select`; cron's `nW` is `[day: n, roll: :modified_nearest]` and `LW` is `[day: -1, roll: :preceding]`. `test/tempo/roll_test.exs`, `test/tempo/cron_test.exs`.
 
 ## 17. How a roll is written
 
@@ -166,7 +166,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Put with the question, not ruled on.** What a weekday is: Monday to Friday unless the expression names a territory, and that territory's workdays when it does. It was offered as the default and not objected to; it is confirmed or changed when the part is built.
 
-* **State.** To build, with decision 16.
+* **State.** Built: `(convention)r`, the letter `r` being free; the conventions are `following`, `preceding`, `nearest` and the three `modified-` forms.
 
 ## 18. What a weekday is, for a roll
 
@@ -178,7 +178,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **What follows.** A rule with a roll has the days of the locale it is asked in, so the functions that give a rule its occurrences take `:locale`, and the same rule answers with other days under a locale whose working week differs (Sunday to Thursday, for one). Cron's `nW` read by Tempo rolls to the locale's weekdays, not to Monday to Friday always.
 
-* **State.** To build, with decisions 16 and 17.
+* **State.** Built: `:locale` on `Tempo.to_interval/2`, `Tempo.members/2` and `Tempo.select/3`, and the territory in force where none is given. See decision 23 for what "in force" is.
 
 ## 19. Seasons in the new engine
 
@@ -233,3 +233,49 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision.** Mine, in building (2026-10-14); for the user to overrule.
 
 * **State.** Built, the fifth as described.
+
+## 23. What the building of the roll settled
+
+* **Question.** None was put: these are where the building of decisions 16 to 18 chose, recorded for the release documents and for the user to overrule.
+
+* **Six conventions.** A roll is one of the four `Tempo.roll_to_workday/3` had (`following`, `preceding`, `modified-following`, `modified-preceding`) and two new to it and to that function: `nearest`, the closer weekday and the one after on a tie, and `modified-nearest`, the closer weekday of the day's own month, which is cron's `W`.
+
+* **Where no locale is given.** Decision 18 said the current locale (`Localize.get_locale/0`). What is asked is `Tempo.Territory.resolve/1`, the chain every other territory question in Tempo asks: the application's `:default_territory` where it is set, and the current locale's territory otherwise. So a configured default territory comes before the current locale.
+
+* **Which functions take `:locale`.** `Tempo.to_interval/2`, `Tempo.members/2` and `Tempo.select/3`. Enumeration (`Enum`), `Tempo.walk/3` and the set operations take no options of the kind and ask the territory in force.
+
+* **A day rolled out of its period is kept.** The first of February 2026, a Sunday, rolled by `preceding` is Friday 30 January: it is an occurrence of February's repeat, and lies in January. `modified-` conventions never leave the month.
+
+* **A day a month lacks has no weekday near it.** `31W` in June fires on no day, as `31` does not.
+
+* **Two days that roll to one are that day once**, and a position (`instance`) counts the days as they are rolled.
+
+* **A rule with a roll has no RRULE**: `Tempo.RRule.to_string/1` is an error for one, RFC 5545 having no part for it.
+
+* **`LW` changed its form.** It was "the last of Monday to Friday" and is "the last day, rolled back to a weekday", so that it keeps to the locale's working week as `nW` does.
+
+* **Found, for decisions 13 and 14.** A selection already has a week start as a part, `nq` (`1q` is Monday), which the reader reads and the validator refuses unless it is Monday. Decision 14 put the week start on the whole expression as `[u-fw=sun]`; whether `nq` stays beside it, as what a rule of its own says, is to be settled when 13 and 14 are built.
+
+* **Decision.** Mine, in building (2026-10-14); for the user to overrule.
+
+* **State.** Built.
+
+## 24. One notation for a week start
+
+* **Question.** A selection already had a week start as a part, `nq` (`1q` Monday, `7q` Sunday), read and then refused unless it was Monday. Decision 14 put the week start on the whole expression as `[u-fw=sun]`. Do both stay?
+
+* **Context.** The options: (1) keep only `[u-fw=sun]` and remove `nq`, so there is one way to say it and RFC 5545's `WKST` reads to the suffix; (2) keep both, the suffix for the expression and `nq` for one rule's own counting, where a rule could then disagree with its expression; (3) use `nq` and drop the suffix, closest to RFC 5545 and against decision 14, and a week number outside a rule could have no Sunday start.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** To build, with decisions 13 and 14.
+
+## 25. The order of two seasons of 21 to 24 in an interval
+
+* **Question.** Is an interval of two seasons of 21 to 24 held to the order of their numbers as it is read? It is the question decision 22 left open.
+
+* **Context.** Autumn (March to May) comes before spring (September to November) south of the equator, so `2026-23/2026-21` is March to November in Australia and runs backwards in Britain. The October design read such an interval "whatever the order of its seasons" and held it to its order once it had a hemisphere. EDTF's corpus, which the reader is held to, lists `2012-24/2012-21` and `2012-23/2012-22` as invalid. As built with decision 19, the reader kept the numbers' order: `Tempo.from_iso8601("2026-23/2026-21")` was a `Tempo.IntervalEndpointsError`, and so was `Tempo.in_territory(~o"2026-21/2026-23", :AU)`, rightly, spring to autumn of one year running backwards there. The options: (1) keep EDTF's order, a southern interval being written as months; (2) October's reading, any order read and the order held to only with a territory, two corpus cases becoming recorded departures; (3) any order read only where a territory is named as the text is read, the bare text staying an error.
+
+* **Decision (2026-10-14).** Option 3.
+
+* **State.** Built: with `:territory` or `:locale`, `Tempo.from_iso8601/2` and `Tempo.parse/2` give each season its months before the order of the ends is held to. `Tempo.from_iso8601("2026-23/2026-21", territory: :AU)` is `~o"2026Y3M/11M"`; the same text with no territory, and the `~o` sigil, which has none, are errors as in EDTF. `test/tempo/season_test.exs`.

@@ -41,19 +41,27 @@ defmodule Tempo.CronTest do
 
   defp day_of_month?(field, date) do
     case Integer.parse(field) do
-      {day, "W"} -> date == nearest_weekday(%{date | day: day})
-      _ -> named?(field, date.day, 1..31, [])
+      {day, "W"} ->
+        day <= Date.days_in_month(date) and date == nearest_weekday(%{date | day: day})
+
+      _ ->
+        named?(field, date.day, 1..31, [])
     end
   end
 
   defp last_weekday(date),
     do: if(Date.day_of_week(date) > 5, do: last_weekday(Date.add(date, -1)), else: date)
 
-  # The weekday nearest a day, never leaving its month.
+  # The weekday nearest a day, never leaving its month: a Saturday the 1st
+  # goes on to Monday, and a Sunday that ends the month back to Friday. A
+  # month that lacks the day has none.
   defp nearest_weekday(date) do
+    last = Date.days_in_month(date)
+
     case {Date.day_of_week(date), date.day} do
       {6, 1} -> Date.add(date, 2)
       {6, _} -> Date.add(date, -1)
+      {7, ^last} -> Date.add(date, -2)
       {7, _} -> Date.add(date, 1)
       _weekday -> date
     end
@@ -139,6 +147,11 @@ defmodule Tempo.CronTest do
     "0 9 15W * *",
     "0 9 1W * *",
     "0 9 27W * *",
+    "0 9 28W * *",
+    "0 9 29W * *",
+    "0 9 30W * *",
+    "0 9 31W * *",
+    "0,30 9 31W 1-6 *",
     "15,45 8 14W 2-3 *",
     "0 9 * * 5L",
     "0,30 9 * * 5L",
@@ -161,7 +174,7 @@ defmodule Tempo.CronTest do
             "@reboot",
             "0 9 * *",
             "61 9 * * *",
-            "0 9 31W * *",
+            "0 9 32W * *",
             "0 9 1-5W * *",
             "0 9 * * 8L",
             "0 9 * * 1#6",
@@ -171,9 +184,9 @@ defmodule Tempo.CronTest do
       end
     end
 
-    test "a day a short month may not have has no nearest weekday" do
-      assert {:error, %ArgumentError{message: message}} = Cron.parse("0 9 30W * *")
-      assert message =~ "depends on the month's length"
+    test "the weekday nearest a day is one rule, the day rolled to a weekday" do
+      assert Cron.parse("0 9 31W * *") == {:ok, ~o"R/../P1M/FL31D(modified-nearest)rT9H0MN"}
+      assert Cron.parse("0 9 LW * *") == {:ok, ~o"R/../P1M/FL-1D(preceding)rT9H0MN"}
     end
   end
 

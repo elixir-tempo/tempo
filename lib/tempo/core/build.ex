@@ -9,11 +9,12 @@ defmodule Tempo.Build do
   # back. What `Tempo.new/1`, `Tempo.Interval.new/1`, `Tempo.Duration.new/1`
   # and `Tempo.IntervalSet.new/2` build are the parts these take.
 
-  alias Tempo.{Duration, Options, Validate}
+  alias Tempo.{Duration, Options, Validate, Workdays}
 
   # The units a selection names, coarsest first, as a rule's parts are held.
   @units [:year, :month, :week, :day_of_year, :day, :day_of_week, :hour, :minute, :second]
-  @parts @units ++ [:instance, :event, :selection, :window]
+  @clock [:hour, :minute, :second]
+  @parts @units ++ [:instance, :event, :roll, :selection, :window]
 
   @every_options [:from, :count, :until, :select, :metadata]
 
@@ -71,6 +72,16 @@ defmodule Tempo.Build do
   defp part({:event, {name, _} = event}) when is_binary(name), do: {:ok, {:event, event}}
   defp part({:window, %Duration{} = length}), do: {:ok, {:window, length}}
 
+  defp part({:roll, convention}) do
+    if convention in Workdays.conventions(),
+      do: {:ok, {:roll, convention}},
+      else:
+        {:error,
+         argument(
+           ":roll of a selection is one of #{inspect(Workdays.conventions())}, not #{inspect(convention)}"
+         )}
+  end
+
   defp part({:selection, nested}) do
     with {:ok, parts} <- parts(nested), do: {:ok, {:selection, parts}}
   end
@@ -98,9 +109,12 @@ defmodule Tempo.Build do
     {nested, rest} = Keyword.split(parts, [:selection, :window])
     {last, units} = Keyword.split(rest, [:instance])
     {events, units} = Keyword.split(units, [:event])
+    {rolls, units} = Keyword.split(units, [:roll])
     {before, later} = Enum.split_with(units, fn {unit, _} -> unit in [:year, :month] end)
+    {times, days} = Enum.split_with(later, fn {unit, _} -> unit in @clock end)
 
-    by_order(before) ++ nested ++ events ++ by_order(later) ++ last
+    # A roll stands after the days it rolls and before a time of day on them.
+    by_order(before) ++ nested ++ events ++ by_order(days) ++ rolls ++ by_order(times) ++ last
   end
 
   defp by_order(units),

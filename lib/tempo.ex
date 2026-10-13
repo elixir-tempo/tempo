@@ -232,8 +232,8 @@ defmodule Tempo do
              [:calendar, :profile, :territory, :locale],
              "Tempo.from_iso8601/2"
            ),
-         {:ok, expression} <- Text.read(text, Keyword.take(options, [:calendar, :profile])) do
-      seasons_placed(expression, options)
+         {:ok, territory} <- territory_named(options) do
+      Text.read(text, [territory: territory] ++ Keyword.take(options, [:calendar, :profile]))
     end
   end
 
@@ -365,8 +365,8 @@ defmodule Tempo do
              [:locale, :territory, :calendar, :profile, :reference_date],
              "Tempo.parse/2"
            ),
-         {:ok, expression} <- Text.parse(text, Keyword.delete(options, :territory)) do
-      seasons_placed(expression, options)
+         {:ok, territory} <- territory_named(options) do
+      Text.parse(text, Keyword.put(options, :territory, territory))
     end
   end
 
@@ -536,6 +536,11 @@ defmodule Tempo do
   * `:event` is the name of a day a calendar computes, one of
     `Tempo.Event.known/0`: `"easter"`.
 
+  * `:roll` moves each day the other parts select to a weekday, by one of
+    the conventions of `roll_to_workday/3`: `:modified_nearest` is the
+    weekday nearest the day and in its month. The weekdays are those of
+    the locale the selection is asked in. It is written `(modified-nearest)r`.
+
   * `:selection` is a selection made first, as parts or as what this
     function returns; the other parts then select within what it gives. It
     says "the second Monday, at nine and at ten" where a position alone
@@ -692,7 +697,8 @@ defmodule Tempo do
     `in_territory/2` takes it. With none, and no `:locale`, such a season
     keeps its code and has its dates in the territory in force.
 
-  * `:locale` is a locale whose territory is used as `:territory` is.
+  * `:locale` is a locale whose territory is used as `:territory` is, and
+    whose working week a rule that rolls a day to a weekday keeps to.
 
   ### Returns
 
@@ -732,7 +738,7 @@ defmodule Tempo do
   def to_interval(expression, options \\ []) do
     with :ok <- Options.check(options, [:within, :territory, :locale], "Tempo.to_interval/2"),
          {:ok, expression} <- seasons_placed(expression, options) do
-      spanned(expression, Keyword.take(options, [:within]))
+      spanned(expression, Keyword.take(options, [:within, :locale]))
     end
   end
 
@@ -810,6 +816,9 @@ defmodule Tempo do
   * `:within` is a `t:t/0`, the window an expression with no end of its own (a
     recurrence with no count) or no year is placed in.
 
+  * `:locale` is the locale whose working week a rule that rolls a day to a
+    weekday keeps to; the default is the territory in force.
+
   ### Returns
 
   * `{:ok, members}`, a list of `t:t/0`.
@@ -830,7 +839,7 @@ defmodule Tempo do
   """
   @spec members(t() | Duration.t(), keyword()) :: {:ok, [t()]} | {:error, error()}
   def members(expression, options \\ []) do
-    with :ok <- Options.check(options, [:within], "Tempo.members/2"),
+    with :ok <- Options.check(options, [:within, :locale], "Tempo.members/2"),
          {:ok, members} <- Spans.members(expression, options),
          do: bounded(members, expression)
   end
@@ -1734,23 +1743,28 @@ defmodule Tempo do
     end
   end
 
-  # An expression read or asked for with a territory or a locale named has
-  # its seasons given their months there; with neither it is as it was, and
-  # a season is given its dates where they are needed by the territory in force.
-  defp seasons_placed(expression, options) do
-    case {options[:territory], options[:locale]} do
-      {nil, nil} -> {:ok, expression}
-      {nil, locale} -> seasons_in_locale(expression, locale)
-      {territory, _locale} -> in_territory(expression, territory)
+  # An expression asked for with a territory or a locale named has its
+  # seasons given their months there; with neither it is as it was, and a
+  # season is given its dates where they are needed by the territory in force.
+  defp seasons_placed(%__MODULE__{} = expression, options) do
+    case territory_named(options) do
+      {:ok, nil} -> {:ok, expression}
+      {:ok, territory} -> in_territory(expression, territory)
+      {:error, _exception} = error -> error
     end
   end
 
-  defp seasons_in_locale(%__MODULE__{} = expression, locale) do
-    with {:ok, territory} <- Localize.Territory.territory_from_locale(locale),
-         do: in_territory(expression, territory)
-  end
+  defp seasons_placed(other, _options), do: {:ok, other}
 
-  defp seasons_in_locale(other, _locale), do: {:ok, other}
+  # The territory an option names: `:territory` itself, or the territory of
+  # a `:locale`, which is read as a locale (`"ar"` is Arabic, and Egypt).
+  defp territory_named(options) do
+    case {options[:territory], options[:locale]} do
+      {nil, nil} -> {:ok, nil}
+      {nil, locale} -> Localize.Territory.territory_from_locale(locale)
+      {territory, _locale} -> Tempo.Territory.resolve(territory)
+    end
+  end
 
   defp floating(%__MODULE__{} = expression) do
     if Spans.frame(expression) == :utc,
@@ -2868,6 +2882,9 @@ defmodule Tempo do
   * `:within` is a `t:t/0`, the window a base with no end of its own or no
     year is placed in.
 
+  * `:locale` is the locale whose working week a selector that rolls a day
+    to a weekday keeps to; the default is the territory in force.
+
   ### Returns
 
   * `{:ok, set}`, a `t:t/0` of the `:all` form holding the values picked in
@@ -2906,7 +2923,7 @@ defmodule Tempo do
   """
   @spec select(t(), term(), keyword()) :: {:ok, t()} | {:error, error()}
   def select(%__MODULE__{} = base, selector, options \\ []) do
-    with :ok <- Options.check(options, [:within], "Tempo.select/3"),
+    with :ok <- Options.check(options, [:within, :locale], "Tempo.select/3"),
          {:ok, selector} <- selector(selector),
          {:ok, values} <- Select.select(base, selector, options) do
       {:ok, set_of(values, base)}
@@ -3126,9 +3143,10 @@ defmodule Tempo do
 
   ### Options
 
-  * `:roll` is `:following` (the default), `:preceding`,
-    `:modified_following` or `:modified_preceding`; the modified
-    conventions turn back when the roll would leave the month.
+  * `:roll` is `:following` (the default), `:preceding`, `:nearest` (the
+    closer of the two, the one after on a tie), or one of
+    `:modified_following`, `:modified_preceding` and `:modified_nearest`;
+    the modified conventions turn back when the roll would leave the month.
 
   ### Examples
 

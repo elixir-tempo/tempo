@@ -54,7 +54,7 @@ defmodule Tempo.Text do
   @doc "Reads a text as ISO 8601, and failing that as a locale's words for a date, a time or a range."
   @spec parse(String.t(), keyword()) :: {:ok, Tempo.t() | Duration.t()} | {:error, Exception.t()}
   def parse(text, options) do
-    case read(text, Keyword.take(options, [:calendar, :profile])) do
+    case read(text, Keyword.take(options, [:calendar, :profile, :territory])) do
       {:ok, read} -> {:ok, read}
       {:error, %ParseError{} = error} -> text |> words(options, error) |> held_to(options, text)
       {:error, _} = error -> error

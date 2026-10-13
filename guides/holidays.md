@@ -94,6 +94,22 @@ iex> Enum.map([2025, 2026, 2027], &Tempo.nearest_workday(Tempo.new!(year: &1, mo
 
 > *"The **nearest workday** to the 4th of July: itself in 2025, the Friday before in 2026, the Monday after in 2027."*
 
+The same rule is a part of a recurrence, so a holiday and the day it is observed are one expression. The part is a roll, written `(nearest)r` after the day it moves:
+
+```elixir
+iex> independence_day = Tempo.every!(~o"P1Y", from: ~o"2025-01-01", select: [month: 7, day: 4, roll: :nearest])
+iex> Tempo.to_iso8601!(independence_day)
+"R/2025Y1M1D/P1Y/FL7M4D(nearest)rN"
+
+iex> {:ok, observed} = Tempo.members(independence_day, within: ~o"2025/2027", locale: "en-US")
+iex> Enum.map(observed, &Tempo.Interval.from/1)
+[~o"2025Y7M4D", ~o"2026Y7M3D", ~o"2027Y7M5D"]
+```
+
+> *"**Every year**, the **4th of July**, **rolled to the nearest weekday** of the **American** working week."*
+
+The weekdays are those of the locale the days are asked for in, and of the territory in force where none is named: under a locale that works Sunday to Thursday the same rule keeps a Sunday and moves a Friday. The conventions are those of `Tempo.roll_to_workday/3`; `(modified-nearest)r` never leaves the month, which is cron's `15W`.
+
 `Tempo.next_workday/2` and `Tempo.previous_workday/2` move one way only, for the territories that always observe a weekend holiday on the Monday.
 
 Holidays derived from a computed one are rules too. Good Friday is the last Friday in the seven days before Easter:

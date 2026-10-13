@@ -190,6 +190,8 @@ iex> {:error, %Tempo.ConversionError{}} = Tempo.in_territory(~o"2022-21", :BR)
 
 > *"**Spring** of 2022 is **September to November** in **Australia** and **March to May** in **Britain**. The **northern astronomical spring** is **ninety-three days**. In **Brazil**, which the equator runs through, spring is **no one set of months**."*
 
+Two seasons of 21 to 24 at the ends of an interval are read in the order of their numbers, as EDTF holds them: `2026-23/2026-21` is an error. Read with a territory (`Tempo.from_iso8601("2026-23/2026-21", territory: :AU)`) they are held to the order of that hemisphere instead, where autumn comes before spring.
+
 A season is moved by whole years and by nothing finer, and is in the Gregorian calendar: a season of a year of another calendar has no dates.
 
 ### Selections and repeat rules

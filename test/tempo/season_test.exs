@@ -141,11 +141,27 @@ defmodule Tempo.SeasonTest do
                Tempo.duration(~o"5786-25[u-ca=hebrew]")
     end
 
-    test "of 21 to 24 is read in the order EDTF holds them to" do
+    test "of 21 to 24 is read in the order EDTF holds them to, where no territory is named" do
       assert {:ok, _} = Tempo.from_iso8601("2026-21/2026-23")
 
       assert {:error, %IntervalEndpointsError{reason: :order}} =
                Tempo.from_iso8601("2026-23/2026-21")
+    end
+
+    # Autumn comes before spring south of the equator: with a territory
+    # named as it is read, an interval is held to the order of that
+    # hemisphere and not to the order of the numbers.
+    test "of 21 to 24 is read in the order of the hemisphere, where a territory is named" do
+      autumn_to_spring = {:ok, ~o"2026-03/2026-11"}
+      assert Tempo.from_iso8601("2026-23/2026-21", territory: :AU) == autumn_to_spring
+      assert Tempo.from_iso8601("2026-23/2026-21", locale: "en-AU") == autumn_to_spring
+      assert Tempo.parse("2026-23/2026-21", territory: :AU) == autumn_to_spring
+
+      assert {:error, %IntervalEndpointsError{reason: :order}} =
+               Tempo.from_iso8601("2026-23/2026-21", territory: :GB)
+
+      assert {:error, %IntervalEndpointsError{reason: :order}} =
+               Tempo.from_iso8601("2026-21/2026-23", territory: :AU)
     end
   end
 end

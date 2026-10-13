@@ -15,7 +15,14 @@ defmodule Tempo.Workdays do
 
   alias Tempo.{ConversionError, Duration, Options, Shift, Spans, Territory}
 
-  @conventions [:following, :preceding, :modified_following, :modified_preceding]
+  @conventions [
+    :following,
+    :preceding,
+    :modified_following,
+    :modified_preceding,
+    :nearest,
+    :modified_nearest
+  ]
 
   @typedoc "ISO days of the week, Monday 1 to Sunday 7."
   @type day_of_week :: 1..7
@@ -164,11 +171,39 @@ defmodule Tempo.Workdays do
     end
   end
 
+  @doc false
+  @spec conventions() :: [
+          :following
+          | :preceding
+          | :modified_following
+          | :modified_preceding
+          | :nearest
+          | :modified_nearest,
+          ...
+        ]
+  def conventions, do: @conventions
+
+  # The closer workday of the value's own month: the one after on a tie.
+  defp nearest_in_month(value, workdays, distance) do
+    with {:ok, after_} <- Shift.shift(value, Duration.new!(day: distance)),
+         {:ok, before} <- Shift.shift(value, Duration.new!(day: -distance)) do
+      cond do
+        workday_of_month?(after_, value, workdays) -> {:ok, after_}
+        workday_of_month?(before, value, workdays) -> {:ok, before}
+        true -> nearest_in_month(value, workdays, distance + 1)
+      end
+    end
+  end
+
+  defp workday_of_month?(moved, value, workdays),
+    do: Tempo.month(moved) == Tempo.month(value) and workday?(moved, workdays) == true
+
   @doc """
   A value rolled to a workday by a business day convention: itself when it
-  is a workday, else the first workday after it (`:following`) or before it
-  (`:preceding`); the modified conventions turn back when the roll would
-  leave the month.
+  is a workday, else the first workday after it (`:following`), before it
+  (`:preceding`) or the closer of the two (`:nearest`, the one after on a
+  tie); the modified conventions turn back when the roll would leave the
+  month.
   """
   @spec roll(Tempo.t(), t(), atom()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def roll(%Tempo{} = value, %__MODULE__{} = workdays, convention)
@@ -189,6 +224,9 @@ defmodule Tempo.Workdays do
 
   defp rolled(value, workdays, :following), do: step(value, 1, workdays)
   defp rolled(value, workdays, :preceding), do: step(value, -1, workdays)
+
+  defp rolled(value, workdays, :nearest), do: nearest_from(value, workdays, 1)
+  defp rolled(value, workdays, :modified_nearest), do: nearest_in_month(value, workdays, 1)
 
   defp rolled(value, workdays, :modified_following) do
     with {:ok, moved} <- step(value, 1, workdays),

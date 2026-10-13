@@ -20,9 +20,14 @@ defmodule Tempo.Cron do
   * `L` as the day of the month is its last day, and `LW` its last weekday.
 
   * `15W` is the weekday nearest the 15th, in the same month: the Friday
-    before a Saturday, the Monday after a Sunday. `1W` to `27W` are read;
-    for a day a short month may not have, which is the nearest weekday
-    depends on the month's length, and `28W` to `31W` are refused.
+    before a Saturday, the Monday after a Sunday, where the week is worked
+    Monday to Friday. In a month that lacks the day (`31W` in June) there
+    is none.
+
+  A weekday is a day of the working week of the locale the firings are
+  asked for in (the `:locale` option of `Tempo.to_interval/2` and
+  `Tempo.members/2`, or the territory in force), so `15W` under a locale
+  that works Sunday to Thursday keeps a Sunday and moves a Friday.
 
   * `5L` as the day of the week is the last Friday of the month, and `5#2`
     its second Friday.
@@ -47,7 +52,6 @@ defmodule Tempo.Cron do
   @months ~w(JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC)
   @days ~w(SUN MON TUE WED THU FRI SAT)
   @fields [second: 0..59, minute: 0..59, hour: 0..23, day: 1..31, month: 1..12, day_of_week: 0..7]
-  @weekdays [1, 2, 3, 4, 5]
 
   @doc """
   Reads a cron expression into a recurrence.
@@ -160,13 +164,15 @@ defmodule Tempo.Cron do
 
   # The last day of the month, its last weekday, and the weekday nearest a day.
   defp field(:day, "L"), do: {:ok, [-1]}
-  defp field(:day, "LW"), do: {:ok, {:either, [%{byday: weekdays(), bysetpos: [-1]}]}}
+  defp field(:day, "LW"), do: {:ok, {:either, [%{bymonthday: [-1], roll: :preceding}]}}
 
   defp field(:day, text) when binary_part(text, byte_size(text), -1) == "W" do
     case Integer.parse(text) do
-      {day, "W"} when day in 1..27 -> {:ok, {:either, nearest_weekday(day)}}
-      {day, "W"} when day in 28..31 -> {:error, argument(not_in_every_month(text))}
-      _ -> {:error, argument("#{inspect(text)} is not a cron field value")}
+      {day, "W"} when day in 1..31 ->
+        {:ok, {:either, [%{bymonthday: [day], roll: :modified_nearest}]}}
+
+      _ ->
+        {:error, argument("#{inspect(text)} is not a cron field value")}
     end
   end
 
@@ -189,33 +195,6 @@ defmodule Tempo.Cron do
       _ ->
         {:error, argument("#{inspect(text)} is not a cron field value")}
     end
-  end
-
-  defp weekdays, do: Enum.map(@weekdays, &{nil, &1})
-
-  # The weekday nearest a day of the month, which is one of three days: the
-  # day itself when it is a weekday, the Friday before it when it is a
-  # Saturday, the Monday after it when it is a Sunday. From the 1st there is
-  # no Friday before in the month, so a Saturday the 1st gives Monday the 3rd.
-  defp nearest_weekday(1) do
-    [
-      %{bymonthday: [1], byday: weekdays()},
-      %{bymonthday: [2], byday: [{nil, 1}]},
-      %{bymonthday: [3], byday: [{nil, 1}]}
-    ]
-  end
-
-  defp nearest_weekday(day) do
-    [
-      %{bymonthday: [day], byday: weekdays()},
-      %{bymonthday: [day - 1], byday: [{nil, 5}]},
-      %{bymonthday: [day + 1], byday: [{nil, 1}]}
-    ]
-  end
-
-  defp not_in_every_month(text) do
-    "#{inspect(text)} is not read: the weekday nearest a day that a short month may not " <>
-      "have depends on the month's length. 1W to 27W and LW are read"
   end
 
   defp plain_field(name, text) do
@@ -364,12 +343,31 @@ defmodule Tempo.Cron do
       |> with_years(year)
       |> then(&if(restricted == [], do: [], else: &1))
 
+    {roll, day} = Map.pop(day, :roll)
     rule = %{freq: cadence} |> Map.merge(parts_as_rule(parts)) |> Map.merge(day)
 
     rule
     |> RRule.from_rule(options)
     |> day_before_times()
+    |> rolled(roll)
   end
+
+  # The weekday nearest a day, and the last weekday of a month, are that day
+  # rolled to a weekday: the roll stands after the day and before the times
+  # of day on it.
+  defp rolled(read, nil), do: read
+
+  defp rolled({:ok, %Tempo{form: {:every, first, bound, parts}} = recurrence}, convention) do
+    {days, times} =
+      Enum.split_while(parts, fn {unit, _} -> unit not in [:hour, :minute, :second] end)
+
+    Validate.run(%{
+      recurrence
+      | form: {:every, first, bound, days ++ [roll: convention] ++ times}
+    })
+  end
+
+  defp rolled({:error, _exception} = error, _convention), do: error
 
   # The last weekday of a month is found among its days, and the times of
   # day are times on it: where a position would count among the times too,

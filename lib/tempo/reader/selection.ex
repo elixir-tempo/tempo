@@ -4,12 +4,14 @@ defmodule Tempo.Reader.Selection do
   # A selection (ISO 8601-2 clause 12): `L`, rules, `N`. A rule is a number
   # and a designator (a month, week, day, weekday, day of the year; after
   # `T` an hour, minute or second), a position `nI`, a week start `nq`, an
-  # event `(name[@zone])e`, or a nested selection, which `/duration` may
+  # event `(name[@zone])e`, a roll to a weekday `(convention)r` (Tempo's own,
+  # as the event is), or a nested selection, which `/duration` may
   # follow to open a window from each date it selects (§12.10). The result
   # is the parts in the order written.
 
   alias Tempo.Reader.Duration
   alias Tempo.Reader.Number
+  alias Tempo.Workdays
 
   @date_designators %{
     "Y" => :year,
@@ -46,6 +48,7 @@ defmodule Tempo.Reader.Selection do
   defp parts(<<"(", rest::binary>>, context, acc) do
     case Number.split_while(rest, &(&1 != ?))) do
       {name, <<")e", rest::binary>>} -> event_part(event(name), rest, context, acc)
+      {name, <<")r", rest::binary>>} -> roll_part(roll(name), rest, context, acc)
       _ -> :error
     end
   end
@@ -61,6 +64,20 @@ defmodule Tempo.Reader.Selection do
     do: parts(rest, context, [{:event, event} | acc])
 
   defp event_part(:error, _rest, _context, _acc), do: :error
+
+  defp roll_part({:ok, convention}, rest, context, acc),
+    do: parts(rest, context, [{:roll, convention} | acc])
+
+  defp roll_part(:error, _rest, _context, _acc), do: :error
+
+  # `modified-nearest`: one of the conventions a day is rolled to a weekday by.
+  defp roll(name) do
+    Enum.find_value(Workdays.conventions(), :error, fn convention ->
+      if written(convention) == name, do: {:ok, convention}
+    end)
+  end
+
+  defp written(convention), do: convention |> Atom.to_string() |> String.replace("_", "-")
 
   defp part_read({:ok, part, rest}, context, acc), do: parts(rest, context, [part | acc])
   defp part_read(:error, _context, _acc), do: :error

@@ -119,6 +119,10 @@ defmodule Tempo.Explain do
   defp part_words({:day_of_week, held}), do: held_words(held, &weekday/1)
   defp part_words({:instance, held}), do: "the #{held_words(held, &nth/1)} of them"
   defp part_words({:event, {name, _}}), do: "the day of #{name}"
+
+  defp part_words({:roll, convention}),
+    do: "each rolled to a weekday (#{String.replace(Atom.to_string(convention), "_", " ")})"
+
   defp part_words({:selection, parts}), do: "(#{parts_words(parts)})"
   defp part_words({:window, %Duration{} = length}), do: "a window of #{Tempo.to_iso8601!(length)}"
   defp part_words({:day_of_year, held}), do: "day #{held_words(held, &counted/1)} of the year"

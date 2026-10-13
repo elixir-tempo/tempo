@@ -16,6 +16,7 @@ defmodule Tempo.Reader do
   alias Tempo.Reader.Selection
   alias Tempo.Reader.Suffix
   alias Tempo.Reader.Value
+  alias Tempo.Season
   alias Tempo.Unit
   alias Tempo.Validate
 
@@ -31,9 +32,25 @@ defmodule Tempo.Reader do
     with {:ok, body, suffix} <- split_suffix(text),
          {:ok, calendar} <- calendar(suffix, options, text),
          {:ok, expression} <- body |> normalised() |> expression(text) |> suffix_inside() do
-      Validate.run(in_frame(expression, calendar, suffix))
+      expression
+      |> in_frame(calendar, suffix)
+      |> seasons_placed(options[:territory])
+      |> validated()
     end
   end
+
+  # With a territory named, a season of 21 to 24 is given its months there
+  # as it is read, before the order of an interval's ends is held to: the
+  # autumn of a year comes before its spring south of the equator.
+  defp seasons_placed(expression, nil), do: {:ok, expression}
+
+  defp seasons_placed(%Tempo{} = expression, territory),
+    do: Season.in_territory(expression, territory)
+
+  defp seasons_placed(duration, _territory), do: {:ok, duration}
+
+  defp validated({:ok, expression}), do: Validate.run(expression)
+  defp validated({:error, _exception} = error), do: error
 
   # A zone, a calendar or a tag written on an end of an interval, on a member
   # of a set or on a recurrence's start: the reader stops at it, and says
