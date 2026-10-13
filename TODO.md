@@ -8,7 +8,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ### Before the release
 
-* [ ] **Test coverage has little headroom.** CI's coverage run (`mix test --cover --include guides --include total`: the suite, the guides and the totality check, 1,227 tests) is at 90.19% against the 90% it requires, and the suite on its own (`mix test`, 1,194 tests in 38 files) is near 83%. The suite it replaced was 217 files. Each was run against the new library on 2026-10-13 (`git show a43b944:test`): 52 still compile, and 775 of their 1,478 tests pass, so the old tests are not carried over as they stand, and what is worth carrying is their cases, each rewritten for the new API and checked against the standard it cites rather than the old answer. Every file ported so far found a defect.
+* [ ] **Test coverage has little headroom.** CI's coverage run (`mix test --cover --include guides --include total`: the suite, the guides and the totality check, 1,340 tests on 2026-10-14) is at 90.12% against the 90% it requires. The Gregorian calendars of other week starts are left out of the measure, being Calendrical's code. The suite it replaced was 217 files. Each was run against the new library on 2026-10-13 (`git show a43b944:test`): 52 still compile, and 775 of their 1,478 tests pass, so the old tests are not carried over as they stand, and what is worth carrying is their cases, each rewritten for the new API and checked against the standard it cites rather than the old answer. Every file ported so far found a defect.
     * [x] Cron, held to a matcher written apart from the library (`test/tempo/cron_test.exs`).
     * [x] RFC 5545's own examples, read from the text of the standard (`test/tempo/rfc5545_examples_test.exs`).
     * [x] iCalendar and JSCalendar import, with the fixtures (`ical_test.exs`, `ical_availability_test.exs`, `jscalendar_test.exs`).
@@ -33,11 +33,9 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ### Defects and gaps
 
-* [ ] **A value that names a leap month its year lacks is read**: `~o"5775Y5+m8D[u-ca=hebrew]"` has no day (`Tempo.to_date/1` is an error) and is not refused as it is read, as the 30th of February is. The validator does not ask the calendar for a month by its name.
-
 * [ ] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused.
 
-* [ ] **An exclusion that cannot be read is passed over** in a recurrence's domain (`Tempo.Spans.without/3` answers the stream unchanged on an error). It should be the error.
+* [ ] **An interval with an open end is misread as a member of a set**: `~o"{2026-06-03/..}"` is read as `2026Y6M3D/../..`, the `..` taken twice, and what asks it for its spans raises (`Tempo.Spans.value_at/4` has no clause). EDTF writes "and later" in a set as `{2026-06-03..}`; the reader should read one or refuse the other, and nothing should raise.
 
 * [ ] **A solar term of a year before 0 is a day late**: `Tempo.Event.date("qingming", -3000, Calendrical.Chinese)` is 7 April and the moment is on the 6th. Calendrical's `solar_term/3` takes `trunc/1` of the moment where it wants `floor/1`. Upstream.
 
@@ -56,6 +54,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ## Done since the rewrite
 
+* [x] Two defects (2026-10-14): a month by its name that its year lacks is refused as it is read, and an exclusion that cannot be given its spans is the error where a rule's occurrences are made (no test reaches the second: every exclusion the reader gives has spans in a window).
 * [x] Decision 13 built (2026-10-14): RFC 7529's `RSCALE` and `SKIP` are read and written, with a leap month as `5L`; every decision of `plans/decisions.md` is built.
 * [x] Decisions 14 and 24 built (2026-10-14), and the `WKST` of decision 13: the day a week begins on is written `[u-fw=sun]` for the whole expression, and `nq` is gone.
 * [x] Decisions 16 to 18 built (2026-10-14): a rule rolls a day to a weekday of the locale's working week, written `(modified-nearest)r`; cron's `28W` to `31W` are read.

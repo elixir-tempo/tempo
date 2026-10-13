@@ -38,6 +38,12 @@ defmodule Tempo.InvalidDateError do
   defp describe({:no_such_date, day}),
     do: "#{day}, a day the calendar does not have in that month"
 
+  defp describe({:no_such_month, {month, :leap}, year}),
+    do: "the leap month after month #{month}, which the year #{year} does not have"
+
+  defp describe({:no_such_month, month, year}),
+    do: "#{month}, a month the year #{year} does not have"
+
   defp describe({:unknown_event, name}),
     do: "#{inspect(name)}, a name no event Tempo knows has (see Tempo.Event.known/0)"
 

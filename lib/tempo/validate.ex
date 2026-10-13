@@ -169,6 +169,7 @@ defmodule Tempo.Validate do
   defp unit(unit, held, units, calendar) do
     case bounds(unit, held, units, calendar) do
       nil -> :ok
+      {:named, year} -> named_in(calendar, year, held)
       {:dates, year, month} -> within(held, {:dates, year, month}, calendar)
       {low, high} -> within(held, low, high)
     end
@@ -183,8 +184,14 @@ defmodule Tempo.Validate do
     end
   end
 
-  defp bounds(:traditional_month, _held, units, calendar),
-    do: bounds(:month, nil, units, calendar)
+  # A month by its name in a known year is a month the year has or has
+  # not: a leap month is of a leap year.
+  defp bounds(:traditional_month, held, units, calendar) do
+    case {whole(units, :year), month_name?(held)} do
+      {year, true} when is_integer(year) -> {:named, year}
+      _no_year_or_several -> bounds(:month, nil, units, calendar)
+    end
+  end
 
   # A day of a known month is a date the calendar has or has not: a reform
   # calendar's September 1752 has the 2nd and the 14th and none between.
@@ -231,6 +238,16 @@ defmodule Tempo.Validate do
 
   defp bounds(:group, _held, _units, _calendar), do: nil
   defp bounds(:selection, _held, _units, _calendar), do: nil
+
+  defp month_name?({month, :leap}) when is_integer(month), do: true
+  defp month_name?(month), do: is_integer(month) and month > 0
+
+  defp named_in(calendar, year, named) do
+    case Calendar.month_from_traditional(calendar, year, named) do
+      month when is_integer(month) -> :ok
+      _the_year_lacks_it -> {:error, {:no_such_month, named, year}}
+    end
+  end
 
   defp month_day_bounds(calendar, month) do
     case Calendar.days_in_month_bounds(calendar, month) do

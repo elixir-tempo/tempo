@@ -28,6 +28,9 @@ defmodule Tempo.MixProject do
       test_coverage: [
         ignore_modules: [
           ~r/Error$/,
+          # The Gregorian calendar with its weeks begun on another day: each
+          # is Calendrical's code, built from the day.
+          ~r/^Tempo\.Calendar\.WeeksFrom\./,
           ~r/^Tempo\.Matrix\./,
           ~r/^Tempo\.Grammar\./,
           Tempo.Iso,

@@ -543,7 +543,8 @@ defmodule Tempo.Spans do
          options
        ) do
     with {:ok, periods} <- rule_periods(aligned(first), from, recurrence, options),
-         {:ok, until} <- until_position(bound) do
+         {:ok, until} <- until_position(bound),
+         {:ok, excluded} <- exclusions(from, options) do
       parts = with_inherited(rule, inherited_units(from, rule, first))
       stepped = stepped_first(first, range_start(from))
       walk = %{first: stepped, parts: parts, begins: start_of_rule(from), options: options}
@@ -551,7 +552,7 @@ defmodule Tempo.Spans do
       stream =
         periods
         |> selected_in(walk, first_step(periods, bound, options))
-        |> left_out(from, options)
+        |> left_out(excluded)
         |> to_range_end(from)
         |> in_range_years(from, first.calendar)
         |> Stream.dedup_by(&landing/1)
@@ -878,24 +879,25 @@ defmodule Tempo.Spans do
 
   defp only_exclusions?(_domain), do: false
 
-  defp left_out(stream, domain, options) do
-    if only_exclusions?(domain),
-      do: without(stream, domain, options),
-      else: stream
-  end
+  defp left_out(stream, []), do: stream
+  defp left_out(stream, excluded), do: Stream.reject(stream, &excluded?(extent(&1), excluded))
 
-  defp without(stream, %Tempo{form: {:all, members}} = domain, options) do
-    excluded = %{domain | form: {:all, Enum.map(members, &elem(&1, 1))}}
+  # The extents a domain of exclusions alone leaves out. One that cannot be
+  # given its spans is the error, and no occurrence is answered as if
+  # nothing were left out.
+  defp exclusions(%Tempo{form: {:all, members}} = domain, options) do
+    if only_exclusions?(domain) do
+      excluded = %{domain | form: {:all, Enum.map(members, &elem(&1, 1))}}
 
-    case spans(excluded, options) do
-      {:ok, out} ->
-        out = out |> Enum.take(Limit.values()) |> Enum.map(&extent/1)
-        Stream.reject(stream, &excluded?(extent(&1), out))
-
-      {:error, _} ->
-        stream
+      with {:ok, spans} <- spans(excluded, options),
+           {:ok, spans} <- Limit.take(spans, excluded),
+           do: {:ok, Enum.map(spans, &extent/1)}
+    else
+      {:ok, []}
     end
   end
+
+  defp exclusions(_domain, _options), do: {:ok, []}
 
   # The cadence's periods by number: the first, and each a cadence on.
   defp steps(%Tempo{form: {:span, from, to}} = first, recurrence) do

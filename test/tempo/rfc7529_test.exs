@@ -157,12 +157,75 @@ defmodule Tempo.Rfc7529Test do
     end
   end
 
+  describe "a skip in another calendar" do
+    defp yearly(start, parts) do
+      ~o"P1Y"
+      |> Tempo.every!(from: start, select: parts)
+      |> Enum.take(3)
+      |> Enum.map(&Tempo.to_iso8601!(Interval.from(&1)))
+    end
+
+    # 5774 and 5776 are leap years of the Hebrew calendar, of thirteen
+    # months, and 5775 has twelve.
+    test "takes the month before or the month after a leap month the year lacks" do
+      adar_i = Tempo.to_calendar!(~o"2014-02-08", Calendrical.Hebrew)
+
+      assert yearly(adar_i, traditional_month: {5, :leap}, day: 8, skip: :backward) ==
+               ["5774Y5+m8D[u-ca=hebrew]", "5775Y5M8D[u-ca=hebrew]", "5776Y5+m8D[u-ca=hebrew]"]
+
+      assert yearly(adar_i, traditional_month: {5, :leap}, day: 8, skip: :forward) ==
+               ["5774Y5+m8D[u-ca=hebrew]", "5775Y6M8D[u-ca=hebrew]", "5776Y5+m8D[u-ca=hebrew]"]
+
+      assert yearly(adar_i, traditional_month: {5, :leap}, day: 8) ==
+               ["5774Y5+m8D[u-ca=hebrew]", "5776Y5+m8D[u-ca=hebrew]", "5779Y5+m8D[u-ca=hebrew]"]
+    end
+
+    test "takes the last month, or the first of the next year, for a month past the year's last" do
+      adar_i = Tempo.to_calendar!(~o"2014-02-08", Calendrical.Hebrew)
+
+      assert yearly(adar_i, month: 13, day: 1, skip: :backward) ==
+               ["5774Y13M1D[u-ca=hebrew]", "5775Y12M1D[u-ca=hebrew]", "5776Y13M1D[u-ca=hebrew]"]
+
+      assert yearly(adar_i, month: 13, day: 1, skip: :forward) ==
+               ["5774Y13M1D[u-ca=hebrew]", "5776Y1M1D[u-ca=hebrew]", "5776Y13M1D[u-ca=hebrew]"]
+    end
+
+    # The thirteenth month of the Ethiopic calendar has five days, and six
+    # in a leap year, which 2007 is.
+    test "takes the last day of a short month, or the first of the year after its last" do
+      pagume = Tempo.to_calendar!(~o"2013-09-06", Calendrical.Ethiopic)
+
+      assert yearly(pagume, month: 13, day: 6, skip: :backward) == [
+               "2005Y13M5D[u-ca=ethiopic]",
+               "2006Y13M5D[u-ca=ethiopic]",
+               "2007Y13M6D[u-ca=ethiopic]"
+             ]
+
+      assert yearly(pagume, month: 13, day: 6, skip: :forward) == [
+               "2006Y1M1D[u-ca=ethiopic]",
+               "2007Y1M1D[u-ca=ethiopic]",
+               "2007Y13M6D[u-ca=ethiopic]"
+             ]
+    end
+  end
+
   describe "a leap month" do
     # Adar I, the leap month of the Hebrew calendar, is the sixth month of
     # 5774 and is not in 5775. The eighth of it is 8 February 2014.
     test "is the month it is, where it is asked for its day" do
       assert Tempo.to_calendar(~o"5774Y5+m8D[u-ca=hebrew]", Calendar.ISO) == {:ok, ~o"2014-02-08"}
       assert Tempo.to_calendar(~o"5774Y5m8D[u-ca=hebrew]", Calendar.ISO) == {:ok, ~o"2014-01-09"}
+    end
+
+    test "is refused as it is read in a year that has none" do
+      assert {:error, %Tempo.InvalidDateError{unit: :traditional_month} = error} =
+               Tempo.from_iso8601("5775Y5+m8D[u-ca=hebrew]")
+
+      assert Exception.message(error) =~ "the leap month after month 5"
+
+      assert {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("5775Y14m[u-ca=hebrew]")
+      assert {:ok, _} = Tempo.from_iso8601("5774Y5+m8D[u-ca=hebrew]")
+      assert {:ok, _} = Tempo.from_iso8601("{5774,5775}Y5+m[u-ca=hebrew]")
     end
   end
 end

@@ -42,7 +42,9 @@ defmodule Tempo.CalendarSurfaceTest do
   end
 
   defp atoms(module) do
-    {:ok, {^module, [atoms: atoms]}} = :beam_lib.chunks(:code.which(module), [:atoms])
+    # The module's own compiled code, which a coverage run leaves on the path.
+    {^module, compiled, _file} = :code.get_object_code(module)
+    {:ok, {^module, [atoms: atoms]}} = :beam_lib.chunks(compiled, [:atoms])
     for {_index, atom} <- atoms, do: Atom.to_string(atom)
   end
 
