@@ -313,7 +313,7 @@ defmodule Tempo.Shift do
   defp placing(year, _coarsest), do: [year: year]
 
   defp sample_years(calendar) do
-    {year, _, _} = Calendar.date(calendar, Calendar.iso_days(Elixir.Calendar.ISO, 2000, 1, 1))
+    {year, _, _} = Calendar.date(calendar, Calendar.iso_days(Calendar.default(), 2000, 1, 1))
     half = div(@sample_years, 2)
     Enum.to_list((year - half)..(year + half))
   end

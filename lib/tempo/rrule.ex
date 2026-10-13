@@ -338,7 +338,7 @@ defmodule Tempo.RRule do
   def from_rule(_rule, _options), do: {:error, argument("a rule needs a frequency")}
 
   defp first_span(nil, cadence),
-    do: {:ok, %Tempo{form: {:span, :open, cadence}, calendar: Calendar.ISO}}
+    do: {:ok, %Tempo{form: {:span, :open, cadence}}}
 
   defp first_span(%Tempo{form: {:value, _}} = from, cadence),
     do: {:ok, %Tempo{form: {:span, from, cadence}, calendar: from.calendar, zone: from.zone}}
@@ -353,10 +353,10 @@ defmodule Tempo.RRule do
   # What RFC 5545 §3.3.10 takes from DTSTART where the rule says nothing: the
   # weekday of a weekly rule, the day of a monthly one, the month and day of
   # a yearly one. A day of the month a month lacks is then passed over.
-  defp with_start(rule, %Tempo{form: {:value, units}}) do
+  defp with_start(rule, %Tempo{form: {:value, units}, calendar: calendar}) do
     case Enum.map([:year, :month, :day], &Keyword.get(units, &1)) do
       [y, m, d] when is_integer(y) and is_integer(m) and is_integer(d) ->
-        with_date_of_start(rule.freq, rule, m, d, units)
+        with_date_of_start(rule.freq, rule, m, d, {units, calendar})
 
       _ ->
         with_clock_of_start(rule, units)
@@ -365,23 +365,24 @@ defmodule Tempo.RRule do
 
   defp with_start(rule, _from), do: rule
 
-  defp with_date_of_start(:week, rule, _month, _day, units) do
+  defp with_date_of_start(:week, rule, _month, _day, {units, calendar}) do
     if Map.has_key?(rule, :byday),
       do: rule,
-      else: Map.put(rule, :byday, [{nil, weekday_of(units)}])
+      else: Map.put(rule, :byday, [{nil, weekday_of(units, calendar)}])
   end
 
-  defp with_date_of_start(:month, rule, _month, day, _units) do
+  defp with_date_of_start(:month, rule, _month, day, _start) do
     if names_a_day?(rule), do: rule, else: Map.put(rule, :bymonthday, [day])
   end
 
-  defp with_date_of_start(:year, rule, month, day, _units) do
+  defp with_date_of_start(:year, rule, month, day, _start) do
     if names_a_day?(rule) or Map.has_key?(rule, :byweekno),
       do: rule,
       else: rule |> Map.put_new(:bymonth, [month]) |> Map.put(:bymonthday, [day])
   end
 
-  defp with_date_of_start(_finer, rule, _month, _day, units), do: with_clock_of_start(rule, units)
+  defp with_date_of_start(_finer, rule, _month, _day, {units, _calendar}),
+    do: with_clock_of_start(rule, units)
 
   # A rule finer than a week fires at the start's own reading of the unit
   # below its frequency: a daily rule at the start's hour, an hourly one at
@@ -402,8 +403,8 @@ defmodule Tempo.RRule do
   defp names_a_day?(rule),
     do: Enum.any?([:bymonthday, :byday, :byyearday], &Map.has_key?(rule, &1))
 
-  defp weekday_of(units) do
-    Tempo.day_of_week(%Tempo{form: {:value, units}, calendar: Calendar.ISO})
+  defp weekday_of(units, calendar) do
+    Tempo.day_of_week(%Tempo{form: {:value, units}, calendar: calendar})
   end
 
   # The selection's parts, and the cadence: a yearly rule with a numbered
@@ -593,11 +594,12 @@ defmodule Tempo.RRule do
   # so a recurrence of another calendar is an RRULE only where it reads there
   # as itself: stepping by weeks, days or the clock, selecting by weekday and
   # time of day. (RFC 7529's RSCALE, which names another calendar, is not written.)
-  defp gregorian(%Tempo{calendar: calendar}, _cadence, _parts)
-       when calendar in [Calendrical.Gregorian, Calendar.ISO],
-       do: :ok
+  defp gregorian(%Tempo{calendar: calendar} = recurrence, cadence, parts),
+    do: gregorian(Tempo.Calendar.gregorian?(calendar), recurrence, cadence, parts)
 
-  defp gregorian(r, %Duration{units: units}, parts) do
+  defp gregorian(true, _recurrence, _cadence, _parts), do: :ok
+
+  defp gregorian(false, r, %Duration{units: units}, parts) do
     if Enum.any?(Keyword.keys(units), &(&1 in @calendar_cadences)) or
          Enum.any?(Keyword.keys(picked(parts)), &(&1 in @calendar_parts)),
        do: {:error, no_rrule(r, {:calendar, r.calendar})},

@@ -48,7 +48,7 @@ defmodule Tempo do
 
   @enforce_keys [:form]
   defstruct form: nil,
-            calendar: Calendar.ISO,
+            calendar: Tempo.Calendar.default(),
             zone: nil,
             shift: nil,
             qualifications: nil,
@@ -459,7 +459,7 @@ defmodule Tempo do
     {frame, units} = Keyword.split(components, [:calendar, :zone, :shift, :metadata])
 
     with {:ok, units} <- Unit.ordered(units),
-         {:ok, calendar} <- calendar_of(Keyword.get(frame, :calendar, Calendar.ISO)),
+         {:ok, calendar} <- calendar_of(Keyword.get(frame, :calendar, Tempo.Calendar.default())),
          {:ok, zone} <- zone_of(Keyword.get(frame, :zone)) do
       Validate.run(%__MODULE__{
         form: {:value, units},
@@ -3463,7 +3463,7 @@ defmodule Tempo do
     |> mapped()
   end
 
-  defp mapped({:ok, []}), do: {:ok, %__MODULE__{form: {:all, []}, calendar: Calendar.ISO}}
+  defp mapped({:ok, []}), do: {:ok, %__MODULE__{form: {:all, []}}}
 
   defp mapped({:ok, reversed}) do
     [first | _] = results = Enum.reverse(reversed)

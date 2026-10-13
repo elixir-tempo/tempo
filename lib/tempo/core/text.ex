@@ -70,7 +70,7 @@ defmodule Tempo.Text do
     as_fields =
       options |> Keyword.take([:locale, :calendar, :reference_date]) |> Keyword.put(:as, :map)
 
-    case Calendrical.parse(text, Keyword.put_new(as_fields, :calendar, Calendar.ISO)) do
+    case Tempo.Calendar.words(text, as_fields) do
       {:ok, {%{} = from, %{} = to}} -> between(from, to)
       {:ok, %{} = fields} -> Tempo.new(named(fields))
       _not_words -> {:error, error}

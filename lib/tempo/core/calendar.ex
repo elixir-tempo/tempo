@@ -21,6 +21,7 @@ defmodule Tempo.Calendar do
   # calendar it is talking to, and nothing holds a number a calendar would
   # answer.
 
+  alias Calendrical.{Ecclesiastical, Lunisolar}
   alias Tempo.InvalidCalendarError
 
   @implementations Application.compile_env(
@@ -53,6 +54,54 @@ defmodule Tempo.Calendar do
 
   defp impl(calendar), do: Map.get(@implementations, calendar, calendar)
 
+  @doc "The calendar of a value that names none."
+  @spec default() :: Calendar.ISO
+  def default, do: Calendar.ISO
+
+  @doc "Whether a calendar is the Gregorian: the default, or the one CLDR's `gregorian` names."
+  @spec gregorian?(module()) :: boolean()
+  def gregorian?(calendar),
+    do: calendar == default() or from_type(:gregorian) == {:ok, calendar}
+
+  @doc "The fields a locale's words for a date name, read through Calendrical in the default calendar unless one is given."
+  @spec words(String.t(), keyword()) ::
+          {:ok, map() | {map(), map()}} | {:error, Exception.t()}
+  def words(text, options),
+    do: Calendrical.parse(text, Keyword.put_new(options, :calendar, default()))
+
+  # ── Days a calendar or the sky fixes ──────────────────────────────────
+
+  @doc "The names of the solar terms, each with the number it is counted by, from `lichun`."
+  @spec solar_term_names() :: %{String.t() => pos_integer()}
+  def solar_term_names do
+    1
+    |> Stream.iterate(&(&1 + 1))
+    |> Stream.map(&{Lunisolar.solar_term_name(&1), &1})
+    |> Enum.take_while(&match?({{:ok, _name}, _number}, &1))
+    |> Map.new(fn {{:ok, name}, number} -> {name, number} end)
+  end
+
+  @doc """
+  The day of a solar term of a Gregorian year, as the calendar reckons it:
+  a lunisolar calendar at its own meridian. `{:error, :undefined}` for a
+  calendar that reckons none.
+  """
+  @spec solar_term(module(), pos_integer(), Calendar.year()) ::
+          {:ok, Date.t()} | {:error, term()}
+  # TODO: `Localize.Calendar.ISO` answers no solar term (Localize has no
+  # astronomy), so the default calendar is asked as the Gregorian until the
+  # user rules on who answers for it. See TODO.md.
+  def solar_term(Calendar.ISO, number, year), do: solar_term(Calendrical.Gregorian, number, year)
+  def solar_term(calendar, number, year), do: impl(calendar).solar_term(number, year)
+
+  @doc "Easter Sunday of a Gregorian year, as the Western churches reckon it."
+  @spec easter(Calendar.year()) :: Date.t()
+  def easter(year), do: Ecclesiastical.easter_sunday(year)
+
+  @doc "Easter Sunday of a Gregorian year, as the Orthodox churches reckon it."
+  @spec orthodox_easter(Calendar.year()) :: Date.t()
+  def orthodox_easter(year), do: Ecclesiastical.orthodox_easter_sunday(year)
+
   # ── The day scale ─────────────────────────────────────────────────────
 
   @doc """
@@ -61,15 +110,7 @@ defmodule Tempo.Calendar do
   cycle.
   """
   @spec years_in_cycle(module()) :: pos_integer() | nil
-  def years_in_cycle(calendar) do
-    implementation = impl(calendar)
-
-    with true <- function_exported?(implementation, :years_in_cycle, 0),
-         years when is_integer(years) <- implementation.years_in_cycle() do
-      years
-    end
-    |> cycle_or_none()
-  end
+  def years_in_cycle(calendar), do: cycle_or_none(impl(calendar).years_in_cycle())
 
   defp cycle_or_none(years) when is_integer(years), do: years
   defp cycle_or_none(_none), do: nil

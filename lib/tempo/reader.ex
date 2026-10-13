@@ -71,7 +71,7 @@ defmodule Tempo.Reader do
   end
 
   defp calendar(%{calendar: nil}, options, _text) do
-    calendar = Keyword.get(options, :calendar, Calendar.ISO)
+    calendar = Keyword.get(options, :calendar, Tempo.Calendar.default())
 
     if Tempo.Calendar.calendar?(calendar),
       do: {:ok, calendar},

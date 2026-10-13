@@ -214,7 +214,7 @@ defmodule Tempo.Algebra do
     {:ok,
      %Tempo{
        form: {:all, []},
-       calendar: options[:calendar] || Calendar.ISO,
+       calendar: options[:calendar] || Tempo.Calendar.default(),
        zone: options[:zone],
        metadata: options[:metadata] || %{}
      }}

@@ -19,7 +19,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
     * [ ] Words: `to_string/2` and `to_relative_string/2` (`format_test.exs`, `to_relative_string_test.exs`).
     * [ ] Calendars other than `Calendar.ISO`: weeks, composites, a year that starts in March (`week_calendar_test.exs`, `composite_calendar_test.exs`, `year_start_test.exs`).
 
-* [ ] **Calendrical 1.4 and Localize on hex.** `mix.exs` takes both from GitHub `main`; a release needs published versions. Calendrical 1.4's changelog makes several callbacks required that Tempo no longer calls (the week-date trio, `month_numbers/1`, `day_numbers/2`, `named_month/2`, `date_from_day_of_year/2`, `quadrimester/2`, `semester/2`, `solar_term/2`): whether they stay required is Calendrical's to decide, and Tempo is no longer the reason.
+* [ ] **Calendrical 1.4 and Localize on hex.** `mix.exs` takes both from GitHub `main`; a release needs published versions. Calendrical has one behaviour that every calendar answers, `Localize.Calendar.ISO` among them by shape (Calendrical's `localize_calendar_iso_test.exs` and its laws test hold it there); `leap_month/1`, `weeks_in_month/2` and `month_week/3` left the behaviour on 2026-10-14, as nothing called them and another callback answers each.
 
 * [ ] **`tempo_network` 0.1.0.** The companion package (`~/Development/tempo/tempo_network`) is built and its gates pass against a path dependency on this repository; it needs its own repository, and `{:ex_tempo, "~> 2.0"}` once 2.0 is on hex. It reaches the engine in one file (`Tempo.Network.Calendar` calls `Tempo.Calendar`): either that stays an agreed private seam, or Tempo gives a public way to ask a calendar the same six questions.
 
@@ -29,7 +29,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ### Decisions for the user
 
-* [ ] **A solar term on a value with no calendar** is reckoned by the Gregorian calendar (section 19).
+* [ ] **A solar term on a value with no calendar.** `Localize.Calendar.ISO` answers `{:error, :undefined}` to `solar_term/2`, as Localize has no astronomy, so `Tempo.Calendar.solar_term/3` asks `Calendrical.Gregorian` for `Calendar.ISO`: the one calendar the adapter still names for a question (marked TODO there). To decide: keep that, make such a term an error unless a calendar is written, or have another module answer for `Calendar.ISO` (section 19).
 
 * [ ] **A selection by a list of selectors** answers in the list's order, not time's (section 19).
 

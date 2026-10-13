@@ -238,8 +238,9 @@ defmodule Tempo.Explain do
 
   # ── Frame ─────────────────────────────────────────────────────────────
 
-  defp calendar(%Tempo{calendar: Calendar.ISO}), do: nil
-  defp calendar(%Tempo{calendar: calendar}), do: "It is in the #{inspect(calendar)} calendar."
+  defp calendar(%Tempo{calendar: calendar}) do
+    if calendar != Tempo.Calendar.default(), do: "It is in the #{inspect(calendar)} calendar."
+  end
 
   defp frame(%Tempo{} = expression) do
     case Spans.frame_of(expression) do

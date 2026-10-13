@@ -16,17 +16,11 @@ defmodule Tempo.Event do
 
   """
 
-  alias Calendrical.Ecclesiastical
-  alias Calendrical.Lunisolar
+  alias Tempo.Calendar, as: Calendars
 
   # The solar terms by name, each with the number Calendrical counts it by,
-  # from `lichun`; Tempo holds the names to select by and asks Calendrical
-  # for every one until it has no more.
-  @solar_terms 1
-               |> Stream.iterate(&(&1 + 1))
-               |> Stream.map(&{Lunisolar.solar_term_name(&1), &1})
-               |> Enum.take_while(&match?({{:ok, _name}, _number}, &1))
-               |> Map.new(fn {{:ok, name}, number} -> {name, number} end)
+  # from `lichun`; Tempo holds the names to select by.
+  @solar_terms Calendars.solar_term_names()
 
   @events Map.merge(
             %{
@@ -121,7 +115,8 @@ defmodule Tempo.Event do
 
   """
   @spec date(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, term()}
-  def date(name, year, calendar \\ Calendar.ISO) when is_binary(name) and is_integer(year) do
+  def date(name, year, calendar \\ Calendars.default())
+      when is_binary(name) and is_integer(year) do
     case String.split(name, "@", parts: 2) do
       [event, zone] -> zoned_date(event, zone, year)
       [event] -> event_date(event, year, calendar)
@@ -178,10 +173,10 @@ defmodule Tempo.Event do
   end
 
   defp resolve(:easter, year, _calendar),
-    do: iso_date(Ecclesiastical.easter_sunday(year), :easter)
+    do: iso_date(Calendars.easter(year), :easter)
 
   defp resolve(:orthodox_easter, year, _calendar),
-    do: iso_date(Ecclesiastical.orthodox_easter_sunday(year), :orthodox_easter)
+    do: iso_date(Calendars.orthodox_easter(year), :orthodox_easter)
 
   defp resolve({:equinox, event}, year, _calendar), do: dated(Astro.equinox(year, event))
   defp resolve({:solstice, event}, year, _calendar), do: dated(Astro.solstice(year, event))
@@ -199,26 +194,26 @@ defmodule Tempo.Event do
   end
 
   defp iso_date(%Date{} = date, event) do
-    case Date.convert(date, Calendar.ISO) do
+    case Date.convert(date, Calendars.default()) do
       {:ok, %Date{} = converted} -> {:ok, converted}
       _error -> {:error, {:uncomputable_event, event}}
     end
   end
 
-  # `Calendar.ISO` is the Gregorian calendar, which Calendrical reckons the terms for.
-  defp solar_term(number, year, Calendar.ISO), do: solar_term(number, year, Calendrical.Gregorian)
-
   defp solar_term(number, year, calendar) do
-    if Code.ensure_loaded?(calendar) and function_exported?(calendar, :solar_term, 2) do
-      case calendar.solar_term(number, year) do
-        {:ok, %Date{} = date} -> iso_date(date, {:solar_term, number})
-        {:error, :undefined} -> {:error, {:no_solar_terms, calendar}}
-        _other -> {:error, {:uncomputable_event, {:solar_term, number}}}
-      end
-    else
-      {:error, {:no_solar_terms, calendar}}
-    end
+    if Calendars.calendar?(calendar),
+      do: a_solar_term(Calendars.solar_term(calendar, number, year), number, calendar),
+      else: {:error, {:no_solar_terms, calendar}}
   end
+
+  defp a_solar_term({:ok, %Date{} = date}, number, _calendar),
+    do: iso_date(date, {:solar_term, number})
+
+  defp a_solar_term({:error, :undefined}, _number, calendar),
+    do: {:error, {:no_solar_terms, calendar}}
+
+  defp a_solar_term(_other, number, _calendar),
+    do: {:error, {:uncomputable_event, {:solar_term, number}}}
 
   defp resolve_registered(name, year, calendar) do
     Enum.find_value(resolvers(), {:error, {:unknown_event, name}}, fn resolver ->

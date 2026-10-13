@@ -481,7 +481,7 @@ if Code.ensure_loaded?(ICal) do
     defp named(other), do: inspect(other)
 
     defp set([], metadata),
-      do: %Tempo{form: {:all, []}, calendar: Calendar.ISO, metadata: metadata}
+      do: %Tempo{form: {:all, []}, metadata: metadata}
 
     defp set([first | _] = spans, metadata),
       do: %Tempo{

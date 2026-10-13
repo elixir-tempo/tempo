@@ -25,7 +25,7 @@ defmodule Tempo.Interop do
     do: {:ok, %Tempo{form: {:value, [year: y, month: m, day: d]}, calendar: calendar}}
 
   defp converted(%Time{} = time),
-    do: {:ok, %Tempo{form: {:value, clock(time)}, calendar: Calendar.ISO}}
+    do: {:ok, %Tempo{form: {:value, clock(time)}}}
 
   defp converted(%NaiveDateTime{year: y, month: m, day: d, calendar: calendar} = naive),
     do:

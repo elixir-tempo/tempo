@@ -192,7 +192,7 @@ defmodule Tempo.LeapSeconds do
   end
 
   defp midnight_after({year, month, day}),
-    do: (Calendars.iso_days(Calendrical.Gregorian, year, month, day) + 1) * @day
+    do: (Calendars.iso_days(Calendars.default(), year, month, day) + 1) * @day
 
   @doc """
   The seconds an expression's leap seconds add to its length: one for each

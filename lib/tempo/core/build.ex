@@ -133,7 +133,7 @@ defmodule Tempo.Build do
 
   # The first repeat: from a value, from each member of a set (a domain), or with no start.
   defp first(nil, cadence),
-    do: {:ok, %Tempo{form: {:span, :open, cadence}, calendar: Calendar.ISO}}
+    do: {:ok, %Tempo{form: {:span, :open, cadence}}}
 
   defp first(%Tempo{form: {kind, _}} = from, cadence) when kind in [:value, :all, :one],
     do: {:ok, %Tempo{form: {:span, from, cadence}, calendar: from.calendar, zone: from.zone}}
