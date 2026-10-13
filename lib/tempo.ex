@@ -80,10 +80,9 @@ defmodule Tempo do
 
   @typedoc """
   The parts of a selection (`L…N`): the units selected, each with what it
-  holds; `instance`, `week_start`, `event`, `window`, and a nested
-  `selection`.
+  holds; `instance`, `event`, `roll`, `window`, and a nested `selection`.
   """
-  @type selection :: [{unit() | :instance | :week_start | :event | :window | :selection, term()}]
+  @type selection :: [{unit() | :instance | :event | :roll | :window | :selection, term()}]
 
   @typedoc """
   What a unit holds in a written value: a whole number; a list of whole
@@ -535,6 +534,15 @@ defmodule Tempo do
 
   * `:event` is the name of a day a calendar computes, one of
     `Tempo.Event.known/0`: `"easter"`.
+
+  * `:traditional_month` is a month as a lunisolar calendar names it: its
+    number, or `{5, :leap}` for the leap month after the fifth. It is
+    written `5m` and `5+m`.
+
+  * `:skip` is `:forward` or `:backward`: what is taken for a day or a
+    month the selection names and a year lacks, the next there is (the
+    first of March for a 29th of February) or the last before it (the
+    28th). With none such a day is passed over. It is written `(forward)s`.
 
   * `:roll` moves each day the other parts select to a weekday, by one of
     the conventions of `roll_to_workday/3`: `:modified_nearest` is the
@@ -1619,6 +1627,74 @@ defmodule Tempo do
         {{:span, _, _}, [one]} -> {:ok, one}
         _ -> {:ok, set_of(converted, %{expression | calendar: calendar})}
       end
+    end
+  end
+
+  @doc """
+  An expression with its weeks begun on another day: the same days, in the
+  Gregorian calendar whose weeks begin on the day given. It is written with
+  the suffix `[u-fw=sun]`, BCP 47's first day of the week, and is what an
+  RRULE's `WKST` reads to.
+
+  Week 1 of a year is its first week with four days in it, as in ISO 8601,
+  whatever day begins it; a day of a numbered week (`2026-W25-1`) is counted
+  from that day, and a weekday on its own (`1K`, Monday) is not moved. A
+  week is of one start, so a week converted is the span of its days.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` in the Gregorian calendar.
+
+  * `day` is the day a week begins on, 1 (Monday) to 7 (Sunday).
+
+  ### Returns
+
+  * `{:ok, expression}`.
+
+  * `{:error, %ArgumentError{}}` for a day that is none, or an expression of
+    a calendar that is not the Gregorian, which has its own weeks.
+
+  ### Examples
+
+      iex> Tempo.to_week_start(~o"2026-06-21", 7)
+      {:ok, ~o"2026-06-21[u-fw=sun]"}
+
+      iex> {:ok, saturday} = Tempo.to_week_start(~o"2026-06-20", 7)
+      iex> Tempo.week(saturday)
+      24
+      iex> Tempo.week(~o"2026-06-20")
+      25
+
+      iex> ~o"2026-W25[u-fw=sun]" |> Tempo.to_interval!() |> Tempo.to_calendar!(Calendar.ISO)
+      ~o"2026-06-21/2026-06-27"
+
+  """
+  @spec to_week_start(t(), 1..7) :: {:ok, t()} | {:error, error()}
+  def to_week_start(%__MODULE__{calendar: calendar} = expression, day) do
+    with {:ok, calendar} <- Tempo.Calendar.with_week_start(calendar, day),
+         do: to_calendar(expression, calendar)
+  end
+
+  @doc """
+  The day an expression's weeks begin on, 1 (Monday) to 7 (Sunday): Monday
+  unless it was written or built with another. Nil for an expression of a
+  calendar that is not the Gregorian, whose weeks are its own.
+
+  ### Examples
+
+      iex> Tempo.week_start(~o"2026-W25")
+      1
+
+      iex> Tempo.week_start(~o"2026-W25[u-fw=sun]")
+      7
+
+  """
+  @spec week_start(t()) :: 1..7 | nil
+  def week_start(%__MODULE__{calendar: calendar}) do
+    cond do
+      day = Tempo.Calendar.week_start(calendar) -> day
+      Tempo.Calendar.gregorian?(calendar) -> 1
+      true -> nil
     end
   end
 

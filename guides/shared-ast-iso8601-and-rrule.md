@@ -175,9 +175,6 @@ iex> reason.(~o"R/2026-01-01/P1Y6M")
 iex> reason.(~o"R/2026-01-01/P1Y/FL(easter)eN")
 {:part, :event}
 
-iex> reason.(~o"R/5786-01-01/P1Y[u-ca=hebrew]")
-{:calendar, Calendrical.Hebrew}
-
 iex> reason.(~o"R/2026-01-31/P1M")
 :month_end
 ```
@@ -187,8 +184,6 @@ iex> reason.(~o"R/2026-01-31/P1M")
 * **A cadence of several units.** `FREQ` is one unit and `INTERVAL` a count of it.
 
 * **A part with no `BY…`.** An event the calendar computes (Easter, an equinox), a traditional month, a selection within a window of another.
-
-* **A recurrence of another calendar** that counts in months, years or their days. RFC 5545 counts those in the Gregorian calendar, and RFC 7529's `RSCALE`, which names another, is not written. A recurrence that steps by weeks, days or the clock and selects by weekday and time of day reads the same in any calendar, and is written.
 
 * **A recurrence with no rule that would land on a month's last day.** `R/2026-01-31/P1M` goes to the 28th of February; `FREQ=MONTHLY` from the 31st of January passes February over. No one rule says the first.
 
@@ -205,24 +200,14 @@ iex> unread = fn rule ->
 ...>   {:error, error} = Tempo.RRule.parse(rule, from: ~o"2026-01-01")
 ...>   Exception.message(error)
 ...> end
-iex> unread.("FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,SU;WKST=SU")
-"a WKST other than MO is not supported"
-
 iex> unread.("FREQ=MONTHLY;BYDAY=2MO,2WE")
 "BYDAY with numbered weekdays of several days is not supported"
-
-iex> unread.("FREQ=YEARLY;RSCALE=HEBREW")
-"RSCALE (RFC 7529) is not supported"
 
 iex> unread.("FREQ=DAILY;COUNT=2;UNTIL=20260101")
 "COUNT and UNTIL exclude each other"
 ```
 
-* **`WKST` other than Monday, where it changes the weeks counted.** A recurrence counts its weeks as its calendar does, and the Gregorian calendar's begin on Monday.
-
 * **Numbered weekdays of several days** (`BYDAY=2MO,2WE`). One weekday with several numbers is read: `BYDAY=1MO,3MO` is `1K{1,3}I`.
-
-* **RFC 7529's `RSCALE` and `SKIP`.** A recurrence in another calendar is written in ISO 8601 with its suffix: `~o"R/5786-07-15/P1Y[u-ca=hebrew]"`.
 
 The [RRULE conformance guide](rfc5545_rrule_conformance.md) goes through RFC 5545 part by part.
 

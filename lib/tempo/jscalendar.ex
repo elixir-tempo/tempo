@@ -220,7 +220,7 @@ if Code.ensure_loaded?(JSCalendar) do
 
     defp rule(%RecurrenceRule{} = rule) do
       with {:ok, freq} <- fetch(@frequencies, rule.frequency, :unsupported_frequency),
-           :ok <- supported(rule),
+           {:ok, skip} <- skip(rule.skip),
            {:ok, months} <- months(rule.by_month),
            {:ok, days} <- byday(rule.by_day),
            {:ok, until} <- until(rule.until) do
@@ -238,28 +238,22 @@ if Code.ensure_loaded?(JSCalendar) do
            byhour: rule.by_hour,
            byminute: rule.by_minute,
            bysecond: rule.by_second,
-           bysetpos: rule.by_set_position
+           bysetpos: rule.by_set_position,
+           wkst: Map.get(@weekdays, rule.first_day_of_week),
+           rscale: rule.rscale,
+           skip: skip
          }
          |> Enum.reject(fn {_, value} -> value in [nil, []] end)
          |> Map.new()}
       end
     end
 
-    defp supported(%RecurrenceRule{} = rule) do
-      cond do
-        rule.rscale not in [nil, "gregorian"] ->
-          {:error, unsupported(:rscale, rule.rscale)}
-
-        rule.skip not in [nil, "omit"] ->
-          {:error, unsupported(:skip, rule.skip)}
-
-        rule.first_day_of_week not in [nil, "mo"] ->
-          {:error, unsupported(:first_day_of_week, rule.first_day_of_week)}
-
-        true ->
-          :ok
-      end
-    end
+    # What is taken for a day or a month a year lacks (RFC 7529, as RFC 8984
+    # takes it up); `omit`, the default, is no part of a rule.
+    defp skip(skip) when skip in [nil, "omit"], do: {:ok, nil}
+    defp skip("forward"), do: {:ok, :forward}
+    defp skip("backward"), do: {:ok, :backward}
+    defp skip(other), do: {:error, unsupported(:skip, other)}
 
     defp unsupported(what, value),
       do: ConversionError.exception(value: value, reason: {:unsupported, what})
@@ -277,6 +271,7 @@ if Code.ensure_loaded?(JSCalendar) do
       each(values, fn text ->
         case Integer.parse(text) do
           {month, ""} -> {:ok, month}
+          {month, "L"} -> {:ok, {month, :leap}}
           _ -> {:error, unsupported(:month, text)}
         end
       end)

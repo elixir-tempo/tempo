@@ -278,7 +278,7 @@ defmodule Tempo.Unit do
 
       {:selection, parts} ->
         parts
-        |> Enum.reject(&(elem(&1, 0) in [:instance, :week_start, :event, :roll, :window]))
+        |> Enum.reject(&(elem(&1, 0) in [:instance, :event, :roll, :skip, :window]))
         |> resolution_of_parts(units)
 
       {unit, _} ->

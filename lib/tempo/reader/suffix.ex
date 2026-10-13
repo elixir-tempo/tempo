@@ -12,7 +12,8 @@ defmodule Tempo.Reader.Suffix do
 
   @type suffix :: %{
           zone: Tempo.Zone.t() | nil,
-          calendar: atom() | nil,
+          calendar: String.t() | nil,
+          week_start: String.t() | nil,
           tags: %{optional(String.t()) => [String.t()]}
         }
 
@@ -65,24 +66,28 @@ defmodule Tempo.Reader.Suffix do
     do: String.match?(content, ~r/\A[a-z_][a-z0-9_-]*=[A-Za-z0-9]+(-[A-Za-z0-9]+)*\z/)
 
   defp interpret(brackets) do
-    Enum.reduce_while(brackets, {:ok, %{zone: nil, calendar: nil, tags: %{}}}, fn content,
-                                                                                  {:ok, suffix} ->
-      {critical, content} =
-        case content do
-          "!" <> rest -> {true, rest}
-          rest -> {false, rest}
-        end
+    Enum.reduce_while(
+      brackets,
+      {:ok, %{zone: nil, calendar: nil, week_start: nil, tags: %{}}},
+      fn content, {:ok, suffix} ->
+        {critical, content} =
+          case content do
+            "!" <> rest -> {true, rest}
+            rest -> {false, rest}
+          end
 
-      case tag(content, critical, suffix) do
-        {:ok, suffix} -> {:cont, {:ok, suffix}}
-        {:error, _} = error -> {:halt, error}
+        case tag(content, critical, suffix) do
+          {:ok, suffix} -> {:cont, {:ok, suffix}}
+          {:error, _} = error -> {:halt, error}
+        end
       end
-    end)
+    )
   end
 
-  # The zone comes first and at most once; `u-ca` names the calendar; other tags are kept.
+  # The zone comes first and at most once; `u-ca` names the calendar and
+  # `u-fw` the day its weeks begin on; other tags are kept.
   defp tag(content, critical, %{zone: nil, tags: tags} = suffix)
-       when map_size(tags) == 0 and suffix.calendar == nil do
+       when map_size(tags) == 0 and suffix.calendar == nil and suffix.week_start == nil do
     cond do
       offset?(content) ->
         {:ok, %{suffix | zone: %Tempo.Zone{offset: offset_minutes(content), critical: critical}}}
@@ -123,6 +128,11 @@ defmodule Tempo.Reader.Suffix do
         # (`Tempo.Calendar.from_type/1`), which knows CLDR's names and
         # Calendrical's own.
         {:ok, %{suffix | calendar: Enum.join(values, "-")}}
+
+      "u-fw" ->
+        # The day a week begins on is of the expression's calendar, which
+        # the reader gives it (`Tempo.Calendar.with_week_start/2`).
+        {:ok, %{suffix | week_start: Enum.join(values, "-")}}
 
       _ ->
         if critical,

@@ -38,9 +38,6 @@ defmodule Tempo.InvalidDateError do
   defp describe({:no_such_date, day}),
     do: "#{day}, a day the calendar does not have in that month"
 
-  defp describe({:week_start_not_monday, day}),
-    do: "#{day}, where a week of a selection begins on Monday (1)"
-
   defp describe({:unknown_event, name}),
     do: "#{inspect(name)}, a name no event Tempo knows has (see Tempo.Event.known/0)"
 

@@ -655,7 +655,11 @@ defmodule Tempo.Spans do
   defp next_named(tick, period, walk) do
     parts = picking(walk.parts)
 
-    case {Keyword.has_key?(parts, :selection), Select.probe(parts)} do
+    # A skip gives a period that names nothing a day of its own, so no
+    # period is passed over to the next that names one.
+    every_period? = Keyword.has_key?(parts, :selection) or Keyword.has_key?(parts, :skip)
+
+    case {every_period?, Select.probe(parts)} do
       {true, _probe} -> tick
       {false, nil} -> nil
       {false, probe} -> named_from(tick, tick, probe, period, walk)

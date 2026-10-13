@@ -12,9 +12,20 @@ defmodule Tempo.Build do
   alias Tempo.{Duration, Options, Validate, Workdays}
 
   # The units a selection names, coarsest first, as a rule's parts are held.
-  @units [:year, :month, :week, :day_of_year, :day, :day_of_week, :hour, :minute, :second]
+  @units [
+    :year,
+    :month,
+    :traditional_month,
+    :week,
+    :day_of_year,
+    :day,
+    :day_of_week,
+    :hour,
+    :minute,
+    :second
+  ]
   @clock [:hour, :minute, :second]
-  @parts @units ++ [:instance, :event, :roll, :selection, :window]
+  @parts @units ++ [:instance, :event, :roll, :skip, :selection, :window]
 
   @every_options [:from, :count, :until, :select, :metadata]
 
@@ -72,6 +83,16 @@ defmodule Tempo.Build do
   defp part({:event, {name, _} = event}) when is_binary(name), do: {:ok, {:event, event}}
   defp part({:window, %Duration{} = length}), do: {:ok, {:window, length}}
 
+  defp part({:skip, direction}) when direction in [:forward, :backward],
+    do: {:ok, {:skip, direction}}
+
+  defp part({:skip, other}),
+    do: {:error, argument(":skip of a selection is :forward or :backward, not #{inspect(other)}")}
+
+  # A lunisolar calendar's month as it is named: its number, or its leap month.
+  defp part({:traditional_month, {month, :leap}}) when is_integer(month),
+    do: {:ok, {:traditional_month, {month, :leap}}}
+
   defp part({:roll, convention}) do
     if convention in Workdays.conventions(),
       do: {:ok, {:roll, convention}},
@@ -109,11 +130,14 @@ defmodule Tempo.Build do
     {nested, rest} = Keyword.split(parts, [:selection, :window])
     {last, units} = Keyword.split(rest, [:instance])
     {events, units} = Keyword.split(units, [:event])
-    {rolls, units} = Keyword.split(units, [:roll])
-    {before, later} = Enum.split_with(units, fn {unit, _} -> unit in [:year, :month] end)
+    {rolls, units} = Keyword.split(units, [:skip, :roll])
+
+    {before, later} =
+      Enum.split_with(units, fn {unit, _} -> unit in [:year, :month, :traditional_month] end)
+
     {times, days} = Enum.split_with(later, fn {unit, _} -> unit in @clock end)
 
-    # A roll stands after the days it rolls and before a time of day on them.
+    # A skip and a roll stand after the days they move and before a time of day on them.
     by_order(before) ++ nested ++ events ++ by_order(days) ++ rolls ++ by_order(times) ++ last
   end
 

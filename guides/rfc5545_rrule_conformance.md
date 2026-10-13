@@ -51,7 +51,7 @@ iex> Tempo.to_iso8601(rule)
 | `BYWEEKNO` | ✓ | ISO 8601 weeks; from -1 back from the year's last. |
 | `BYMONTH` | ✓ | |
 | `BYSETPOS` | ✓ | Applied last, to what the other parts select in each period. |
-| `WKST` | `MO`, or any day where it changes nothing | A week begins on Monday, as ISO 8601's do. Another day is read where the standard says it is not significant, and is an error where it is: a weekly rule of every second week or more that names weekdays, and a yearly rule that names weeks of the year. |
+| `WKST` | any day | A week begins on Monday unless the rule says otherwise. Where the day is significant (a weekly rule of every second week or more that names weekdays, and a yearly rule that names weeks of the year) the recurrence is of the weeks that begin on it, written `[u-fw=sun]`; where it is not, it is read and not kept. |
 
 ### Parts coarser and finer than the frequency
 
@@ -201,12 +201,29 @@ iex> passover = Tempo.RRule.parse!("FREQ=YEARLY;COUNT=3", from: ~o"5786-07-15[u-
 iex> Enum.map(passover, fn occurrence ->
 ...>   Tempo.to_calendar!(Tempo.Interval.from(occurrence), Calendrical.Gregorian)
 ...> end)
-[~o"2026Y4M2D[u-ca=gregorian]", ~o"2027Y3M24D[u-ca=gregorian]", ~o"2028Y4M11D[u-ca=gregorian]"]
+[~o"2026Y4M2D[u-ca=gregorian]", ~o"2027Y4M22D[u-ca=gregorian]", ~o"2028Y4M11D[u-ca=gregorian]"]
 ```
 
-> *"**Every year** from the 15th of the seventh Hebrew month: the 2nd of April 2026, the 24th of March 2027, the 11th of April 2028."*
+> *"**Every year** on the 15th of **Nisan**: the 2nd of April 2026, the 22nd of April 2027, the 11th of April 2028."*
 
-Writing is narrower than reading. `Tempo.RRule.to_string/1` writes for a reader of RFC 5545, who counts months and years in the Gregorian calendar, so a recurrence of another calendar that counts in them is a `Tempo.ConversionError` (`{:no_rrule, {:calendar, module}}`), and one that steps by weeks, days or the clock and selects by weekday and time of day is written. Its ISO 8601 text, with its suffix, always reads back: `~o"R/5786-07-15/P1Y[u-ca=hebrew]"`.
+A yearly rule takes the month of its start as the calendar names it, so it keeps to Nisan in a year that has a leap month before it, as 5787 has.
+
+RFC 7529 names the calendar in the rule itself, with `RSCALE`, and says with `SKIP` what is taken for a day or a month a year lacks. The start is then given in any calendar and the occurrences are in the one named:
+
+```elixir
+iex> anniversary = Tempo.RRule.parse!("RSCALE=HEBREW;FREQ=YEARLY;BYMONTH=5L;BYMONTHDAY=8;SKIP=FORWARD;COUNT=3", from: ~o"2014-02-08")
+iex> Tempo.to_iso8601!(anniversary)
+"R3/5774Y6M8D/P1Y/FL5+m8D(forward)sN[u-ca=hebrew]"
+
+iex> Enum.map(anniversary, fn occurrence ->
+...>   Tempo.to_calendar!(Tempo.Interval.from(occurrence), Calendar.ISO)
+...> end)
+[~o"2014Y2M8D", ~o"2015Y2M27D", ~o"2016Y2M17D"]
+```
+
+> *"**Every year** on the **8th of Adar I**, the leap month, and in a year that has none on the **8th of Adar**, the month after: the 8th of February 2014, the 27th of February 2015, the 17th of February 2016."*
+
+`Tempo.RRule.to_string/1` writes a recurrence of another calendar that counts in its months, its years or their days with `RSCALE`, by the name CLDR gives the calendar, and one that steps by weeks, days or the clock and selects by weekday and time of day as the plain rule it reads as in any calendar. A calendar with no such name (a fiscal calendar) is a `Tempo.ConversionError` (`{:no_rrule, {:calendar, module}}`).
 
 ## What is written, and what is refused
 
@@ -244,11 +261,7 @@ An occurrence's length is no part of an RRULE and is not written; iCalendar carr
 
 `Tempo.RRule.parse/2` returns `{:error, %ArgumentError{}}` that names what it does not read, rather than a rule that is nearly it:
 
-* **`WKST` other than `MO` where it changes the weeks counted.**
-
 * **Numbered weekdays of several days in one `BYDAY`** (`BYDAY=2MO,2WE`).
-
-* **RFC 7529's `RSCALE` and `SKIP`.** A rule in another calendar is read by giving it a start in that calendar, as above.
 
 * **`EXRULE`**, which RFC 5545 deprecated in favour of `EXDATE`.
 

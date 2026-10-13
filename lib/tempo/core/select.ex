@@ -23,6 +23,7 @@ defmodule Tempo.Select do
     Expand,
     Limit,
     Shift,
+    Skip,
     Spans,
     Unit,
     Workdays,
@@ -40,6 +41,9 @@ defmodule Tempo.Select do
     :minute,
     :second
   ]
+
+  # The parts a skip moves: a month and a day of it.
+  @skipped_units [:month, :traditional_month, :day]
 
   @type parts :: Unit.selection()
 
@@ -82,7 +86,7 @@ defmodule Tempo.Select do
   def probe(parts) do
     # A roll is left out with the position: the period a value is named in
     # is looked for, and a value rolled out of it would name the next.
-    search = Keyword.drop(parts, [:instance, :roll])
+    search = Keyword.drop(parts, [:instance, :roll, :skip])
     units = Enum.filter(search, fn {unit, _} -> unit in @part_units end)
 
     cond do
@@ -171,6 +175,7 @@ defmodule Tempo.Select do
     {years, parts} = Keyword.pop(parts, :year)
     {event, parts} = Keyword.pop(parts, :event)
     {roll, parts} = Keyword.pop(parts, :roll)
+    {skip, parts} = Keyword.pop(parts, :skip)
 
     case bounded_extent(period) do
       {:ok, extent} ->
@@ -178,6 +183,8 @@ defmodule Tempo.Select do
 
         period
         |> candidates(parts, event, extent, options)
+        |> Kernel.++(skipped(period, parts, skip, extent))
+        |> Enum.uniq()
         |> Enum.filter(&in_years?(&1, years))
         |> rolled(roll, options)
         |> Enum.sort_by(&start_of/1)
@@ -185,6 +192,35 @@ defmodule Tempo.Select do
 
       {:error, _} ->
         []
+    end
+  end
+
+  # What a selection with a skip is given for the days and months it names
+  # that a year lacks (`Tempo.Skip`): the day after or the day before, with
+  # the times of day the selection names. Such a day may lie outside the
+  # period it was looked for in, the first of March for a 29th of February.
+  defp skipped(_period, _parts, nil, _extent), do: []
+
+  defp skipped(period, parts, direction, extent) do
+    unit_parts = Enum.filter(parts, fn {unit, _} -> unit in @part_units end)
+    {times, dates} = Enum.split_with(unit_parts, fn {unit, _} -> Unit.clock?(unit) end)
+
+    if dates == [] or not Enum.all?(Keyword.keys(dates), &(&1 in @skipped_units)) do
+      []
+    else
+      period
+      |> containers(container_of(coarsest(dates)), extent)
+      |> Enum.flat_map(fn %Tempo{form: {:value, container}} ->
+        Skip.replacements(period.calendar, container, dates, direction)
+      end)
+      |> Enum.flat_map(&each_value(period, &1 ++ times))
+    end
+  end
+
+  defp each_value(period, units) do
+    case Expand.expand(units, Spans.frame_of(period)) do
+      {:ok, values} -> values |> Enum.take(Limit.values()) |> Enum.map(&as_value(period, &1))
+      {:error, _} -> []
     end
   end
 

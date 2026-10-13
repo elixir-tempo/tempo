@@ -124,7 +124,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-14).** Option 3: build all three.
 
-* **State.** To build. How a week start sits beside the one-calendar rule is decision 14.
+* **State.** Built: `WKST` by decision 27, `RSCALE` and `SKIP` by decisions 28 and 29. RFC 5545's three examples that name a week start, and the four of RFC 7529, are read and held to the standards' lists.
 
 ## 14. Where a week start lives
 
@@ -134,7 +134,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-14).** Option 1. The week start is of the whole expression: its weekly cadence, its week numbers and its days of the week. `WKST` reads to it and is written from it. It follows that `2026-W25[u-fw=sun]` is a week that begins on Sunday with its days counted from Sunday, where the text was read as the Monday week with a tag.
 
-* **State.** To build, with decision 13.
+* **State.** Built, as decision 27 records: `Tempo.to_week_start/2`, `Tempo.week_start/1`, `test/tempo/week_start_test.exs`.
 
 ## 15. How `tempo_network` asks a calendar
 
@@ -268,7 +268,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-14).** Option 1.
 
-* **State.** To build, with decisions 13 and 14.
+* **State.** Built: `nq` is no longer read or written.
 
 ## 25. The order of two seasons of 21 to 24 in an interval
 
@@ -289,3 +289,59 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 1.
 
 * **State.** Built: `Tempo.Algebra.decided/4`, `test/tempo/endless_operands_test.exs`. Two operands with no end raise a `Tempo.ConversionError` (`:unbounded`) without a window.
+
+## 27. How a week start is held, and what building it settled
+
+* **Question.** None was put: this is how decisions 14 and 24 were built, recorded for the release documents and for the user to overrule.
+
+* **A week start is held as the expression's calendar.** An expression written `[u-fw=sun]` is in the Gregorian calendar whose weeks begin on Sunday: a calendar of the same dates that Calendrical builds from the day (`use Calendrical.Base.Month, day_of_week: 7, min_days_in_first_week: 4`), one for each day but Monday, under `Tempo.Calendar.WeeksFrom`. The struct has no new field, the engine asks its calendar as it always does, and law 5 (one expression, one calendar) is what makes the week start the whole expression's. Decision 14 turned down "a calendar of Sunday weeks" as a way to write it, having no name; with `[u-fw=sun]` as its name it is how it is held. The module shows where a value's calendar is inspected as a struct, and nowhere in its text.
+
+* **The Gregorian calendar only.** `[u-fw=sun]` beside `[u-ca=hebrew]` is an error that says so, as is `Tempo.to_week_start/2` of a Hebrew value: another calendar has its own weeks. `[u-fw=mon]` is the calendar as it is, and is not written back.
+
+* **Week 1 is the first week with four days of the year in it**, ISO 8601's rule from another first day, and the weeks RFC 5545 counts for a `WKST`: where weeks begin on Sunday, week 1 of 2026 is 4 to 10 January and week 25 is 21 to 27 June.
+
+* **A day of a numbered week is counted from the day the week begins on**, as decision 14 said: `2026-W25-1[u-fw=sun]` is Sunday 21 June. A weekday on its own is not moved: `1K` in a rule is Monday, and `Tempo.day_of_week/1` is 1 for a Monday, whatever the week start. Building this found that the engine wrote the weekday where it meant the day of the week counted from its first day (the two agree where weeks begin on Monday); it now writes the latter, and `Tempo.day_of_week/1` asks the day itself.
+
+* **Two expressions of different week starts** relate and combine by their days, the second brought to the calendar of the first as two calendars are: a week of one start is the span of its days in the other.
+
+* **`WKST` is kept only where it counts.** RFC 5545 says the day is significant in a weekly rule of every second week or more that names weekdays and a yearly rule that names weeks of the year; there the recurrence is in the weeks of that day, and `Tempo.RRule.to_string/1` writes `WKST` back. Elsewhere it is read and not kept, as before. Under `BYWEEKNO`, `BYDAY=MO` with `WKST=SU` is read as the second day of the week, and written back as `MO`.
+
+* **JSCalendar's `firstDayOfWeek`** is read the same way.
+
+* **Decision.** Mine, in building (2026-10-14); for the user to overrule.
+
+* **State.** Built.
+
+## 28. How `SKIP` is written, and what `RSCALE` gives back
+
+* **Question.** Two things the building of decision 13 has to settle: how RFC 7529's `SKIP` is written in ISO 8601 form, which has no notation for it, and what a rule with `RSCALE` gives as its occurrences.
+
+* **Context.** Put before building, with what was intended. By analogy with the roll of decision 17, `SKIP` is a named part inside the selection with a letter of its own: `(backward)s` and `(forward)s`, beside the day or the month it applies to; `SKIP=OMIT`, the default and RFC 5545's rule, is no part. A recurrence with `RSCALE` is in the calendar named, so its occurrences are values of that calendar (`[u-ca=hebrew]`) and not Gregorian dates, and a caller converts them with `Tempo.to_calendar/2`.
+
+* **Decision (2026-10-14).** "Agreed."
+
+* **State.** Built, as decision 29 records.
+
+## 29. What the building of `RSCALE` and `SKIP` settled
+
+* **Question.** None was put: these are where the building of decisions 13 and 28 chose, and what it found, recorded for the release documents and for the user to overrule.
+
+* **The four examples of RFC 7529 section 4.3 are the test.** Chinese New Year, the Ethiopic thirteenth month, a Hebrew anniversary that starts in a leap month, and a Gregorian leap day with a skip: each is read from the standard's rule and start and held to the Gregorian dates of its table (`test/tempo/rfc7529_test.exs`).
+
+* **A month is named as its calendar names it.** With an `RSCALE` that is not the Gregorian, `BYMONTH` is the month by its name (`traditional_month`, written `5m`), and `5L` its leap month (`5+m`): CLDR's numbering, which Calendrical gives, is RFC 7529's (Adar I is `5L`). A yearly rule takes the month of its start the same way, in any rule from a start of another calendar, with `RSCALE` or without.
+
+* **`RSCALE=GREGORIAN` is the calendar a rule is in with none.** It is written back only where the rule has a `SKIP`, which RFC 7529 gives with an `RSCALE` and not without; a `SKIP` with no `RSCALE`, and a leap month with none, are errors as they are read. A rule of another calendar that steps by weeks, days or the clock and selects by weekday and time of day is written with no `RSCALE`, reading in the Gregorian as itself, as before.
+
+* **A skip is a part of a selection**, `skip: :forward` or `:backward`, written `(forward)s` after the days it moves. A month the year lacks (a leap month in a year with none, a month past the year's last) is changed first, to the month after or the month before, and then a day the month lacks, to the first of the month after or the month's last day. It moves a month and a day of a month, and nothing else a selection names. Two days moved to one are that day once, and a day moved out of its period is kept, as a rolled day is.
+
+* **JSCalendar's `rscale`, `skip` and a `byMonth` of `"5L"`** are read the same way.
+
+* **Found and fixed: a leap month was read as the month before it.** `~o"5774Y5+m8D[u-ca=hebrew]"`, the eighth of Adar I, was given the day of the eighth of Shevat, the note of a leap month being taken off where a number's annotation is. It is 8 February 2014 now, and was 9 January.
+
+* **Found and fixed: a guide gave a wrong date.** `guides/rfc5545_rrule_conformance.md` showed a yearly rule from 15 Nisan 5786 falling on 24 March 2027. The rule had taken the start's month by its place in the year, which is another month in a year with a leap month before it; Passover in 2027 is 22 April, which it gives now. The example had been run, and was wrong.
+
+* **Not done.** A value that names a leap month in a year that has none (`5775Y5+m8D[u-ca=hebrew]`) is read and has no day, where it should be refused as it is read. It is in `TODO.md`.
+
+* **Decision.** Mine, in building (2026-10-14); for the user to overrule.
+
+* **State.** Built.

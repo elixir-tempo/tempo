@@ -54,7 +54,7 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * A recurrence's `UNTIL` is an inclusive bound, as RFC 5545 has it: an occurrence that starts at the time it names is the last.
 
-* An RRULE's `WKST` other than `MO` is read where RFC 5545 says it is not significant, and refused where it would change the weeks counted.
+* An RRULE's `WKST` other than `MO` is kept only where RFC 5545 says it is significant, as the recurrence's week start, and is read and dropped elsewhere.
 
 * A numbered weekday in an RRULE beside times of day (`BYDAY=2MO;BYHOUR=9,10`) is those times on that weekday, as RFC 5545 has it, where a position counted among the times.
 
@@ -102,6 +102,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * A rule rolls the days it selects to a weekday: `roll: :modified_nearest` in `Tempo.selection/1`, written `L31D(modified-nearest)rN`. The weekdays are those of the `:locale` asked in, or of the territory in force; `Tempo.roll_to_workday/3` takes `:nearest` and `:modified_nearest` too.
 
+* The day an expression's weeks begin on is written `[u-fw=sun]`, BCP 47's first day of the week, and set with `Tempo.to_week_start/2`; `Tempo.week_start/1` reads it. An RRULE's `WKST` and JSCalendar's `firstDayOfWeek` read to it where they change the weeks counted.
+
+* RFC 7529 is read and written in an RRULE and a JSCalendar rule: `RSCALE` is the calendar of the recurrence and its occurrences, `BYMONTH=5L` a leap month, and `SKIP` what is taken for a day or a month a year lacks. A selection takes `skip: :forward`, written `(forward)s`.
+
 * `Tempo.Cron.parse/2` with no `:from` reads a rule with no start, as `Tempo.RRule.parse/2` does; its firings are asked for with `:within`.
 
 * `Tempo.to_elixir/1` of an interval of two dates is their `Date.Range`, so `Tempo.from_elixir/2` of a range comes back as it went.
@@ -117,6 +121,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * ISO 8601-1's alternative duration format (`P0002-01-10T22:33:55`) is read.
 
 ### Fixed
+
+* A leap month (`5+m`, Adar I) is the month it is where a value is given its day; it was read as the month before it. A yearly rule from a start in a lunisolar calendar keeps to the month as it is named, so Passover stays in Nisan in a leap year.
 
 * A reading a zone's clock skips is refused wherever a value is read, built or placed, and an hour a clock shows twice is two values in a walk.
 

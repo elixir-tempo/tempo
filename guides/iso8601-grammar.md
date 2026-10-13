@@ -364,9 +364,10 @@ These are not in ISO 8601 or any RFC. Each is marked `; Tempo`, each is written 
 ```abnf
 range-step      = negint ".." negint "//" integer            ; Tempo: {1..-1//2}W, every second week
 week-of-month   = monthE negint "W"                          ; Tempo: a week of a month, 2026Y6M2W; ISO 8601 has weeks of a year only
-week-start      = integer "q"                                ; Tempo, in a selection: the weekday a week begins on, RFC 5545's WKST; read, and valid only as 1q, Monday
+week-start      = "[u-fw=" ("mon" / "tue" / "wed" / "thu" / "fri" / "sat" / "sun") "]"   ; BCP 47's first day of the week, a suffix of the whole expression: its weeks begin on that day, RFC 5545's WKST. The Gregorian calendar only
 event           = "(" event-name ["@" (time-zone-name / time-numoffset)] ")" "e"   ; Tempo, in a selection: (easter)e, (march-equinox@+09:00)e
 event-name      = lcalpha *(lcalpha / DIGIT / "-")
+skip            = "(" ("forward" / "backward") ")" "s"       ; Tempo, in a selection, after the day it moves: what is taken for a day or a month the year lacks, RFC 7529's SKIP: 2M29D(forward)s
 roll            = "(" convention ")" "r"                     ; Tempo, in a selection, after the day it rolls to a weekday: 31D(modified-nearest)r
 convention      = "following" / "preceding" / "nearest" / "modified-following" / "modified-preceding" / "modified-nearest"
 traditional-month = (negint / int-set / masked-valueE) ["+"] "m"   ; Tempo: a lunisolar calendar's named month, 8m; its leap month, 6+m

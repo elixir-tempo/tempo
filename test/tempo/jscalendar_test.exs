@@ -12,6 +12,16 @@ defmodule Tempo.JSCalendarTest do
     ~s({"@type":"Event","uid":"e","updated":"2026-06-01T09:00:00Z",#{properties}})
   end
 
+  # The Gregorian day each member begins on.
+  defp gregorian_dates(set) do
+    set
+    |> IntervalSet.members()
+    |> Enum.map(fn member ->
+      {:ok, date} = member |> Interval.from() |> Tempo.to_date()
+      Date.convert!(date, Calendar.ISO)
+    end)
+  end
+
   defp spans(set) do
     set
     |> IntervalSet.members()
@@ -179,17 +189,35 @@ defmodule Tempo.JSCalendarTest do
       assert {:ok, set} = monthly.(~s(,"skip":"omit"))
       assert spans(set) == omitted
 
-      # RFC 7529's other ways with a day a month lacks are not read.
-      for skip <- ["backward", "forward"] do
-        assert {:error, %Tempo.ConversionError{value: ^skip, reason: {:unsupported, :skip}}} =
-                 monthly.(~s(,"skip":"#{skip}"))
-      end
+      # RFC 7529's other ways with a day a month lacks: the month's last
+      # day, or the first of the month after.
+      assert {:ok, set} = monthly.(~s(,"skip":"backward"))
+
+      assert spans(set) == [
+               "2026Y1M31DT9H0M0S/T10H0M0S",
+               "2026Y2M28DT9H0M0S/T10H0M0S",
+               "2026Y3M31DT9H0M0S/T10H0M0S",
+               "2026Y4M30DT9H0M0S/T10H0M0S"
+             ]
+
+      assert {:ok, set} = monthly.(~s(,"skip":"forward"))
+
+      assert spans(set) == [
+               "2026Y1M31DT9H0M0S/T10H0M0S",
+               "2026Y3M1DT9H0M0S/T10H0M0S",
+               "2026Y3M31DT9H0M0S/T10H0M0S",
+               "2026Y5M1DT9H0M0S/T10H0M0S"
+             ]
+
+      assert {:error, %Tempo.ConversionError{value: "sideways", reason: {:unsupported, :skip}}} =
+               monthly.(~s(,"skip":"sideways"))
     end
 
     # RFC 8984 §4.3.3: `rscale` names the calendar a rule counts its months
     # and its days in. A rule is counted in the Gregorian calendar, which is
-    # what it is where it does not say; another is refused.
-    test "a rule counted in another calendar is refused" do
+    # what it is where it does not say; another is the calendar of the
+    # occurrences.
+    test "a rule counted in another calendar has its occurrences in it" do
       yearly = fn rule ->
         Tempo.JSCalendar.parse(event(~s(
           "start":"2026-04-05T09:00:00","duration":"PT1H",
@@ -202,10 +230,12 @@ defmodule Tempo.JSCalendarTest do
       assert spans(gregorian) == spans(unsaid)
       assert spans(unsaid) == ["2026Y4M5DT9H0M0S/T10H0M0S", "2027Y4M5DT9H0M0S/T10H0M0S"]
 
-      for rscale <- ["hebrew", "klingon"] do
-        assert {:error, %Tempo.ConversionError{value: ^rscale, reason: {:unsupported, :rscale}}} =
-                 yearly.(~s(,"rscale":"#{rscale}"))
-      end
+      # 5 April 2026 is 18 Nisan 5786, and 18 Nisan 5787 is 25 April 2027.
+      assert {:ok, hebrew} = yearly.(~s(,"rscale":"hebrew"))
+
+      assert gregorian_dates(hebrew) == [~D[2026-04-05], ~D[2027-04-25]]
+
+      assert {:error, %ArgumentError{}} = yearly.(~s(,"rscale":"klingon"))
     end
 
     test "byDay carries its ordinal" do
@@ -246,7 +276,7 @@ defmodule Tempo.JSCalendarTest do
                  )))
     end
 
-    test "a leap month is a month of a calendar that has one, and is not read" do
+    test "a leap month is a month of a calendar that has one" do
       # RFC 8984 writes byMonth as strings so that `"5L"` can name a leap
       # month of the calendar `rscale` names.
       yearly = fn rule ->
@@ -256,8 +286,16 @@ defmodule Tempo.JSCalendarTest do
         )))
       end
 
-      assert {:error, %Tempo.ConversionError{value: "3L", reason: {:unsupported, :month}}} =
-               yearly.(~s(,"byMonth":["3L"]))
+      assert {:error, %ArgumentError{message: message}} = yearly.(~s(,"byMonth":["3L"]))
+      assert message =~ "a leap month"
+
+      # RFC 7529 section 4.3.3: the eighth of Adar I, taken as the eighth of
+      # Adar in a year with no leap month.
+      assert {:ok, anniversary} =
+               yearly.(~s(,"rscale":"hebrew","byMonth":["5L"],"byMonthDay":[8],"skip":"forward"))
+
+      assert gregorian_dates(anniversary) ==
+               [~D[2014-02-08], ~D[2015-02-27], ~D[2016-02-17], ~D[2017-03-06], ~D[2018-02-23]]
 
       assert {:ok, set} = yearly.(~s(,"byMonth":["3"]))
       assert set |> IntervalSet.members() |> hd() |> Interval.from() |> Tempo.month() == 3
@@ -497,15 +535,13 @@ defmodule Tempo.JSCalendarTest do
                  {day, Tempo.JSCalendar.parse(rule_event(rule))}
       end
 
-      # A rule's weeks start on Monday where it does not say; another day is
-      # not read.
-      for first <- ["su", "xx"] do
-        assert {:error,
-                %Tempo.ConversionError{value: ^first, reason: {:unsupported, :first_day_of_week}}} =
-                 Tempo.JSCalendar.parse(
-                   rule_event(~s("frequency":"weekly","count":3,"firstDayOfWeek":"#{first}"))
-                 )
-      end
+      # A rule's weeks start on Monday where it does not say. Another day is
+      # read: where it changes the weeks counted the occurrences are of the
+      # weeks that begin on it, and where it does not it changes nothing.
+      assert {:ok, _events} =
+               Tempo.JSCalendar.parse(
+                 rule_event(~s("frequency":"weekly","count":3,"firstDayOfWeek":"su"))
+               )
 
       assert {:ok, %Tempo{}} =
                Tempo.JSCalendar.parse(rule_event(~s("frequency":"weekly","count":3)))

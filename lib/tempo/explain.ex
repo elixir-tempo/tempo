@@ -120,6 +120,12 @@ defmodule Tempo.Explain do
   defp part_words({:instance, held}), do: "the #{held_words(held, &nth/1)} of them"
   defp part_words({:event, {name, _}}), do: "the day of #{name}"
 
+  defp part_words({:skip, :forward}),
+    do: "a day or a month the year lacks taken as the next there is"
+
+  defp part_words({:skip, :backward}),
+    do: "a day or a month the year lacks taken as the last before it"
+
   defp part_words({:roll, convention}),
     do: "each rolled to a weekday (#{String.replace(Atom.to_string(convention), "_", " ")})"
 
@@ -243,7 +249,11 @@ defmodule Tempo.Explain do
   # ── Frame ─────────────────────────────────────────────────────────────
 
   defp calendar(%Tempo{calendar: calendar}) do
-    if calendar != Tempo.Calendar.default(), do: "It is in the #{inspect(calendar)} calendar."
+    case {Tempo.Calendar.week_start(calendar), calendar == Tempo.Calendar.default()} do
+      {nil, true} -> nil
+      {nil, false} -> "It is in the #{inspect(calendar)} calendar."
+      {day, _} -> "Its weeks begin on #{weekday(day)}."
+    end
   end
 
   defp frame(%Tempo{} = expression) do

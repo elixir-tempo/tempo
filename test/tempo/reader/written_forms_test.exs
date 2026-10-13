@@ -20,7 +20,7 @@ defmodule Tempo.Reader.WrittenFormsTest do
     {"R/{2020Y..2030Y}c/P1Y/FL7M4DN", "R/{2020Y..2030Y}c/P1Y/FL7M4DN"},
     # Rules: an event in a zone, a week start.
     {"R/../P1Y/FL(march-equinox@+09:00)eN", "R/../P1Y/FL(march-equinox@+09:00)eN"},
-    {"R/2026-01-01/P1W/FL1q1KN", "R/2026Y1M1D/P1W/FL1q1KN"},
+    {"R/2026-01-01/P1W/FL1KN[u-fw=sun]", "R/2026Y1M1D/P1W/FL1KN[u-fw=sun]"},
     # IXDTF suffixes: an offset, a critical zone, tags, a zone before a calendar.
     {"2026-06-15T10:00[+02:00]", "2026Y6M15DT10H0M[+02:00]"},
     {"2026-06-15T10:00[-05:30]", "2026Y6M15DT10H0M[-05:30]"},

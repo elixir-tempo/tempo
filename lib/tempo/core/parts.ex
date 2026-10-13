@@ -11,14 +11,16 @@ defmodule Tempo.Parts do
 
   @doc "The number a unit holds in an expression, nil when it holds none or several."
   @spec part(Tempo.t(), Unit.t()) :: integer() | nil
-  def part(%Tempo{form: {:value, units}} = value, unit) do
-    case Keyword.get(units, unit) do
-      n when is_integer(n) and n >= 0 -> n
-      {n, _annotation} when is_integer(n) -> n
-      n when is_integer(n) or is_nil(n) -> computed(value, units, unit)
-      _several -> nil
-    end
+  # A day of the week is the weekday, Monday 1: a value with a year is asked
+  # its day, since the day of a numbered week is counted from the day the
+  # week begins on, which is the weekday only where weeks begin on Monday.
+  def part(%Tempo{form: {:value, units}} = value, :day_of_week) do
+    if Unit.anchored?(units) and Unit.concrete?(units),
+      do: weekday_on(value, units),
+      else: held(value, units, :day_of_week)
   end
+
+  def part(%Tempo{form: {:value, units}} = value, unit), do: held(value, units, unit)
 
   def part(%Tempo{form: {:span, from, to}}, unit),
     do: [from, to] |> Enum.filter(&match?(%Tempo{}, &1)) |> agreed(unit)
@@ -34,6 +36,30 @@ defmodule Tempo.Parts do
     do: agreed(members, unit)
 
   def part(_expression, _unit), do: nil
+
+  defp weekday_on(value, units) do
+    frame = Spans.frame_of(value)
+
+    case Expand.extent(plain(units), frame) do
+      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) and stop - start <= @day ->
+        {year, month, day} =
+          Calendar.date(frame.calendar, Integer.floor_div(Walk.wall(start, frame), @day))
+
+        Calendar.day_of_week(frame.calendar, year, month, day)
+
+      _several_days_or_none ->
+        nil
+    end
+  end
+
+  defp held(value, units, unit) do
+    case Keyword.get(units, unit) do
+      n when is_integer(n) and n >= 0 -> n
+      {n, _annotation} when is_integer(n) -> n
+      n when is_integer(n) or is_nil(n) -> computed(value, units, unit)
+      _several -> nil
+    end
+  end
 
   defp agreed([], _unit), do: nil
 
@@ -90,6 +116,7 @@ defmodule Tempo.Parts do
 
   defp plain(units) do
     Enum.map(units, fn
+      {unit, {n, :leap}} when is_integer(n) -> {unit, {n, :leap}}
       {unit, {n, _annotation}} when is_integer(n) -> {unit, n}
       other -> other
     end)

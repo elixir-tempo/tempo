@@ -31,6 +31,7 @@ defmodule Tempo.Reader do
   def read(text, options \\ []) when is_binary(text) do
     with {:ok, body, suffix} <- split_suffix(text),
          {:ok, calendar} <- calendar(suffix, options, text),
+         {:ok, calendar} <- week_start(suffix, calendar, text),
          {:ok, expression} <- body |> normalised() |> expression(text) |> suffix_inside() do
       expression
       |> in_frame(calendar, suffix)
@@ -101,6 +102,36 @@ defmodule Tempo.Reader do
       {:error, _} -> {:error, ParseError.exception(text: text, reason: {:calendar, type})}
     end
   end
+
+  # `[u-fw=sun]`: the calendar's weeks begin on the day named.
+  defp week_start(%{week_start: nil}, calendar, _text), do: {:ok, calendar}
+
+  defp week_start(%{week_start: name}, calendar, text) do
+    case Tempo.Calendar.week_start_named(name) do
+      {:ok, day} -> calendar |> Tempo.Calendar.with_week_start(day) |> week_start_read(name, text)
+      :error -> week_start_read(:error, name, text)
+    end
+  end
+
+  defp week_start_read({:ok, calendar}, _name, _text), do: {:ok, calendar}
+
+  defp week_start_read(:error, name, text),
+    do:
+      {:error,
+       ParseError.exception(
+         text: text,
+         reason:
+           "[u-fw=#{name}] names no day a week begins on: it is one of mon, tue, wed, thu, fri, sat and sun"
+       )}
+
+  defp week_start_read({:error, %ArgumentError{}}, name, text),
+    do:
+      {:error,
+       ParseError.exception(
+         text: text,
+         reason:
+           "[u-fw=#{name}] is written for the Gregorian calendar only: another calendar has its own weeks"
+       )}
 
   # The expression's calendar, zone and tags are every part's (law 5).
   defp in_frame(%Duration{} = duration, _calendar, _suffix), do: duration

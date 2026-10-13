@@ -289,11 +289,10 @@ defmodule Tempo.SelectTest do
                RRule.to_string(~o"R/{2025Y..2027Y}/P1Y/FL12M25DN")
     end
 
-    test "a week of a selection begins on Monday" do
-      assert {:ok, _} = Tempo.from_iso8601("R/2026-01-01/P1W/FL2K1qN")
-
-      assert {:error, %Tempo.InvalidDateError{unit: :week_start}} =
-               Tempo.from_iso8601("R/2026-01-01/P1W/FL2K7qN")
+    # The day a week begins on is of the whole expression, written
+    # `[u-fw=sun]` (`week_start_test.exs`); a rule has no part for it.
+    test "a selection has no week start of its own" do
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("R/2026-01-01/P1W/FL2K7qN")
     end
 
     test "an event no resolver knows is no value" do

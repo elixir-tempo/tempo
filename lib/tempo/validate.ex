@@ -35,8 +35,7 @@ defmodule Tempo.Validate do
   defp form({:value, units}, expression) do
     with :ok <- value(units, expression),
          :ok <- shift(expression.shift, expression),
-         :ok <- events(units, expression),
-         :ok <- week_start(units, expression) do
+         :ok <- events(units, expression) do
       shown(units, expression)
     end
   end
@@ -51,8 +50,7 @@ defmodule Tempo.Validate do
 
   defp form({:every, first, bound, rule}, expression) do
     with :ok <- form(first.form, first),
-         :ok <- events(rule || [], expression),
-         :ok <- week_start(rule || [], expression) do
+         :ok <- events(rule || [], expression) do
       end_of(bound, expression)
     end
   end
@@ -117,23 +115,6 @@ defmodule Tempo.Validate do
       nil -> :ok
       name -> invalid(expression, :event, {:unknown_event, name})
     end
-  end
-
-  # A week of a selection begins on Monday, as ISO 8601's does: another
-  # start would be read and not kept to.
-  defp week_start(parts, expression) do
-    case other_week_start(parts) do
-      nil -> :ok
-      day -> invalid(expression, :week_start, {:week_start_not_monday, day})
-    end
-  end
-
-  defp other_week_start(parts) do
-    Enum.find_value(parts, fn
-      {:selection, inner} -> other_week_start(inner)
-      {:week_start, day} when day != 1 -> day
-      _other -> nil
-    end)
   end
 
   defp unknown_event(parts) do

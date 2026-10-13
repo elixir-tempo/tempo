@@ -289,7 +289,9 @@ Tempo marks the designators it adds with a lowercase letter, so that they are se
 | A recurrence's domain | `R/{2020Y..2024Y}/P1Y/F…` | the periods a rule recurs in |
 | A domain filter | `{2020Y..2026Y}e`, `o`, `l`, `c` | even, odd, leap or common years |
 | A year in a rule | `FL{2026,2028}Y1M1DN` | the years an occurrence may fall in |
-| A week start, `q` | `1q` | the day a week begins on: Monday, the one start kept to |
+| A week start, `[u-fw=sun]` | `2026-W25[u-fw=sun]` | the day the expression's weeks begin on, a suffix of the whole expression (BCP 47's `fw`) |
+| A roll to a weekday, `(…)r` | `FL31D(modified-nearest)rN` | each day selected moved to a weekday of the locale's working week, by a convention |
+| A skip, `(…)s` | `FL2M29D(forward)sN` | what is taken for a day or a month the year lacks: the next there is, or the last before it (RFC 7529's `SKIP`) |
 
 ### Computed events
 

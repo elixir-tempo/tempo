@@ -22,6 +22,7 @@ defmodule Tempo.Calendar do
   # answer.
 
   alias Calendrical.{Ecclesiastical, Lunisolar}
+  alias Tempo.Calendar.WeeksFrom
   alias Tempo.InvalidCalendarError
 
   @implementations Application.compile_env(
@@ -29,6 +30,20 @@ defmodule Tempo.Calendar do
                      :calendar_implementations,
                      %{Calendar.ISO => Localize.Calendar.ISO}
                    )
+
+  # BCP 47's names for the day a week begins on (the `fw` key), Monday first.
+  @week_day_names ~w(mon tue wed thu fri sat sun)
+
+  # The Gregorian calendar with its weeks begun on each day but Monday.
+  @weeks_from %{
+    2 => WeeksFrom.Tuesday,
+    3 => WeeksFrom.Wednesday,
+    4 => WeeksFrom.Thursday,
+    5 => WeeksFrom.Friday,
+    6 => WeeksFrom.Saturday,
+    7 => WeeksFrom.Sunday
+  }
+  @week_starts Map.new(@weeks_from, fn {day, calendar} -> {calendar, day} end)
 
   @typedoc "A half-open span of days: the first day and the day after the last, as ISO day numbers."
   @type span :: {first :: integer(), after_last :: integer()}
@@ -58,10 +73,63 @@ defmodule Tempo.Calendar do
   @spec default() :: Calendar.ISO
   def default, do: Calendar.ISO
 
-  @doc "Whether a calendar is the Gregorian: the default, or the one CLDR's `gregorian` names."
+  @doc """
+  Whether a calendar is the Gregorian: the default, the one CLDR's
+  `gregorian` names, or either with its weeks begun on another day.
+  """
   @spec gregorian?(module()) :: boolean()
-  def gregorian?(calendar),
-    do: calendar == default() or from_type(:gregorian) == {:ok, calendar}
+  def gregorian?(calendar) do
+    calendar == default() or from_type(:gregorian) == {:ok, calendar} or
+      is_map_key(@week_starts, calendar)
+  end
+
+  # ── The day a week begins on ──────────────────────────────────────────
+
+  @doc """
+  The calendar of an expression whose weeks begin on a day, 1 (Monday) to 7
+  (Sunday): for Monday the Gregorian calendar as it is, and for another day
+  the one of the same dates whose weeks begin there. A calendar that is not
+  the Gregorian has its own weeks and no other, and is an error.
+  """
+  @spec with_week_start(module(), 1..7) :: {:ok, module()} | {:error, Exception.t()}
+  def with_week_start(calendar, day) when day in 1..7 do
+    cond do
+      not gregorian?(calendar) -> {:error, no_other_weeks(calendar)}
+      day == 1 and is_map_key(@week_starts, calendar) -> {:ok, default()}
+      day == 1 -> {:ok, calendar}
+      true -> {:ok, Map.fetch!(@weeks_from, day)}
+    end
+  end
+
+  def with_week_start(_calendar, day),
+    do:
+      {:error,
+       ArgumentError.exception(
+         "a week begins on a day 1 (Monday) to 7 (Sunday), not #{inspect(day)}"
+       )}
+
+  defp no_other_weeks(calendar) do
+    ArgumentError.exception(
+      "#{inspect(calendar)} has its own weeks: the day a week begins on is named for the Gregorian calendar only"
+    )
+  end
+
+  @doc "The day an expression's weeks are written to begin on, 2 to 7, or nil for a calendar's own weeks."
+  @spec week_start(module()) :: 2..7 | nil
+  def week_start(calendar), do: Map.get(@week_starts, calendar)
+
+  @doc "The day BCP 47's `fw` names: `sun` is 7."
+  @spec week_start_named(String.t()) :: {:ok, 1..7} | :error
+  def week_start_named(name) do
+    case Enum.find_index(@week_day_names, &(&1 == name)) do
+      nil -> :error
+      index -> {:ok, index + 1}
+    end
+  end
+
+  @doc "BCP 47's name for a day a week begins on: 7 is `sun`."
+  @spec week_start_name(1..7) :: String.t()
+  def week_start_name(day) when day in 1..7, do: Enum.at(@week_day_names, day - 1)
 
   @doc "The fields a locale's words for a date name, read through Calendrical in the default calendar unless one is given."
   @spec words(String.t(), keyword()) ::
@@ -260,6 +328,10 @@ defmodule Tempo.Calendar do
   """
   @spec identifier(module()) :: {:ok, String.t() | nil} | {:error, Exception.t()}
   def identifier(Calendar.ISO), do: {:ok, nil}
+
+  # The Gregorian calendar with its weeks begun on another day is named by
+  # that day (`[u-fw=sun]`), and needs no name as a calendar.
+  def identifier(calendar) when is_map_key(@week_starts, calendar), do: {:ok, nil}
 
   def identifier(calendar) do
     additional =

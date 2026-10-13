@@ -146,11 +146,11 @@ defmodule Tempo.CalendarsTest do
 
       json = ~s({
         "@type": "Event", "uid": "e", "updated": "2026-06-01T09:00:00Z", "start": "2026-06-01T09:00:00",
-        "recurrenceRules": [{"@type": "RecurrenceRule", "frequency": "yearly", "rscale": "hebrew"}]
+        "recurrenceRules": [{"@type": "RecurrenceRule", "frequency": "yearly", "rscale": "klingon"}]
       })
 
-      assert {:error, %Tempo.ConversionError{reason: {:unsupported, :rscale}}} =
-               JSCalendar.parse(json)
+      assert {:error, %ArgumentError{message: message}} = JSCalendar.parse(json)
+      assert message =~ "RSCALE=KLINGON names no calendar"
     end
   end
 

@@ -18,13 +18,19 @@ defmodule Tempo.CalendarSurfaceTest do
 
     named =
       for module <- modules,
-          module != @adapter,
+          not adapter?(module),
           library_module?(module),
           atom <- atoms(module),
           calendar_module?(atom),
           do: {module, atom}
 
     assert named == []
+  end
+
+  # The adapter, and the Gregorian calendars of other week starts it names,
+  # which Calendrical builds.
+  defp adapter?(module) do
+    module == @adapter or String.starts_with?(Atom.to_string(module), "#{@adapter}.")
   end
 
   # A module compiled from `lib/`, not from the tests' support.

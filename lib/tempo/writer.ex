@@ -251,7 +251,7 @@ defmodule Tempo.Writer do
       {:selection, inner} -> ["L", selection(inner), "N"]
       {:window, duration} -> ["/", duration(duration)]
       {:instance, held} -> [value(held, :instance), "I"]
-      {:week_start, day} -> [Integer.to_string(day), "q"]
+      {:skip, direction} -> ["(", Atom.to_string(direction), ")s"]
       {:roll, convention} -> ["(", String.replace(Atom.to_string(convention), "_", "-"), ")r"]
       {:event, {name, nil}} -> ["(", name, ")e"]
       {:event, {name, zone}} -> ["(", name, "@", zone, ")e"]
@@ -291,6 +291,7 @@ defmodule Tempo.Writer do
     [
       zone_suffix(expression.zone),
       calendar_suffix(identifier),
+      week_start_suffix(Tempo.Calendar.week_start(expression.calendar)),
       tags_suffix(expression.metadata)
     ]
   end
@@ -309,6 +310,9 @@ defmodule Tempo.Writer do
   defp flag(false), do: ""
 
   defp two(number), do: String.pad_leading(Integer.to_string(number), 2, "0")
+
+  defp week_start_suffix(nil), do: ""
+  defp week_start_suffix(day), do: ["[u-fw=", Tempo.Calendar.week_start_name(day), "]"]
 
   defp calendar_suffix(nil), do: ""
   defp calendar_suffix(identifier), do: ["[u-ca=", identifier, "]"]

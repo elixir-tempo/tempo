@@ -794,6 +794,8 @@ defmodule Tempo.Expand do
   defp literal_values({n, [margin: m]}) when is_integer(n),
     do: {:ok, Enum.to_list((n - m)..(n + m))}
 
+  # A leap month is the month it is, and no month with a note on it.
+  defp literal_values({n, :leap}) when is_integer(n), do: {:ok, [{n, :leap}]}
   defp literal_values({n, _annotation}) when is_integer(n), do: {:ok, [n]}
 
   defp literal_values(members) when is_list(members) do

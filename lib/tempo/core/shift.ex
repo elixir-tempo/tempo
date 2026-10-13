@@ -154,6 +154,7 @@ defmodule Tempo.Shift do
   # Annotated units as their stated values: `2018±2Y` is shifted as 2018.
   defp plain(units) do
     Enum.map(units, fn
+      {unit, {n, :leap}} when is_integer(n) -> {unit, {n, :leap}}
       {unit, {n, _annotation}} when is_integer(n) -> {unit, n}
       other -> other
     end)
@@ -232,9 +233,11 @@ defmodule Tempo.Shift do
       Keyword.has_key?(model, :week) ->
         {:ok, {week_year, week}} = Calendar.week_of_year(calendar, y, m, d)
 
+        # A day of a numbered week is counted from the day the week
+        # begins on, whichever day of the week that is.
         weekday =
           if Keyword.has_key?(model, :day_of_week),
-            do: [day_of_week: Calendar.day_of_week(calendar, y, m, d)],
+            do: [day_of_week: day_of(calendar, week_year, week, day)],
             else: []
 
         [year: week_year, week: week] ++ weekday
@@ -246,6 +249,11 @@ defmodule Tempo.Shift do
       true ->
         Walk.at_day(day, day_unit(Unit.resolution(model)), calendar)
     end
+  end
+
+  defp day_of(calendar, week_year, week, day) do
+    {:ok, {first, _after_last}} = Calendar.period(calendar, :week, week_year, week)
+    day - first + 1
   end
 
   defp day_unit(unit) when unit in [:day, :day_of_week, :day_of_year], do: :day

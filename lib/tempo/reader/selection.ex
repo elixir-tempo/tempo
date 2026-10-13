@@ -3,9 +3,10 @@ defmodule Tempo.Reader.Selection do
 
   # A selection (ISO 8601-2 clause 12): `L`, rules, `N`. A rule is a number
   # and a designator (a month, week, day, weekday, day of the year; after
-  # `T` an hour, minute or second), a position `nI`, a week start `nq`, an
+  # `T` an hour, minute or second), a position `nI`, an
   # event `(name[@zone])e`, a roll to a weekday `(convention)r` (Tempo's own,
-  # as the event is), or a nested selection, which `/duration` may
+  # as the event is), a skip to the next or the last day there is
+  # `(forward)s`, or a nested selection, which `/duration` may
   # follow to open a window from each date it selects (§12.10). The result
   # is the parts in the order written.
 
@@ -49,6 +50,8 @@ defmodule Tempo.Reader.Selection do
     case Number.split_while(rest, &(&1 != ?))) do
       {name, <<")e", rest::binary>>} -> event_part(event(name), rest, context, acc)
       {name, <<")r", rest::binary>>} -> roll_part(roll(name), rest, context, acc)
+      {"forward", <<")s", rest::binary>>} -> parts(rest, context, [{:skip, :forward} | acc])
+      {"backward", <<")s", rest::binary>>} -> parts(rest, context, [{:skip, :backward} | acc])
       _ -> :error
     end
   end
@@ -89,9 +92,6 @@ defmodule Tempo.Reader.Selection do
   defp window(rest), do: {:ok, [], rest}
 
   defp part(held, <<"I", rest::binary>>, _context), do: {:ok, {:instance, held}, rest}
-
-  defp part(held, <<"q", rest::binary>>, _context) when is_integer(held),
-    do: {:ok, {:week_start, held}, rest}
 
   defp part(held, <<"+m", rest::binary>>, :date),
     do: {:ok, {:traditional_month, {held, :leap}}, rest}

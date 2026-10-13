@@ -13,15 +13,21 @@ defmodule Tempo.RRule do
   as RFC 5545 §3.3.10 has it. The same lowering serves `Tempo.Cron` and
   `Tempo.JSCalendar`, which build the rule from their own vocabularies.
 
-  Not read: RFC 7529's `RSCALE` and `SKIP`, and a `WKST` other than Monday where it changes the weeks counted,
-  each an error naming what is unsupported.
+  RFC 7529 is read with it. `RSCALE` names the calendar a rule counts in,
+  which is then the calendar of the recurrence and of its occurrences;
+  `BYMONTH` may name a leap month of it (`5L`); and `SKIP` says what is
+  taken for a day or a month a year lacks, the next there is (`FORWARD`) or
+  the last before it (`BACKWARD`). A `WKST` other than Monday is the day
+  the recurrence's weeks begin on where it changes the weeks counted.
 
   """
 
   import Kernel, except: [to_string: 1]
 
+  alias Tempo.Calendar, as: Calendars
   alias Tempo.{ConversionError, Duration, Options, Validate}
 
+  @skips %{"OMIT" => :omit, "BACKWARD" => :backward, "FORWARD" => :forward}
   @weekdays %{"MO" => 1, "TU" => 2, "WE" => 3, "TH" => 4, "FR" => 5, "SA" => 6, "SU" => 7}
   @weekday_codes Map.new(@weekdays, fn {code, n} -> {n, code} end)
   @frequencies %{
@@ -67,7 +73,7 @@ defmodule Tempo.RRule do
           optional(:interval) => pos_integer(),
           optional(:count) => pos_integer(),
           optional(:until) => Tempo.t(),
-          optional(:bymonth) => [integer()],
+          optional(:bymonth) => [integer() | {integer(), :leap}],
           optional(:bymonthday) => [integer()],
           optional(:byyearday) => [integer()],
           optional(:byweekno) => [integer()],
@@ -76,7 +82,9 @@ defmodule Tempo.RRule do
           optional(:byminute) => [integer()],
           optional(:bysecond) => [integer()],
           optional(:bysetpos) => [integer()],
-          optional(:wkst) => 1..7
+          optional(:wkst) => 1..7,
+          optional(:rscale) => String.t(),
+          optional(:skip) => :omit | :forward | :backward
         }
 
   @doc """
@@ -106,7 +114,8 @@ defmodule Tempo.RRule do
 
   * `{:error, %ArgumentError{}}` for text that is not a rule: no `FREQ`, an
     unknown frequency or part, a malformed value, both `COUNT` and `UNTIL`,
-    an `RSCALE` or `SKIP`, or a `WKST` other than `MO`.
+    an `RSCALE` that names no calendar, a `SKIP` or a leap month with no
+    `RSCALE`.
 
   ### Examples
 
@@ -209,8 +218,27 @@ defmodule Tempo.RRule do
     end
   end
 
-  defp part(key, _value) when key in ["RSCALE", "SKIP"],
-    do: {:error, argument("#{key} (RFC 7529) is not supported")}
+  # RFC 7529: the calendar a rule counts in, what is taken for a day or a
+  # month a year lacks, and a month number that may name a leap month (`5L`).
+  defp part("RSCALE", value), do: {:ok, :rscale, String.downcase(value)}
+
+  defp part("SKIP", value) do
+    case Map.fetch(@skips, String.upcase(value)) do
+      {:ok, skip} ->
+        {:ok, :skip, skip}
+
+      :error ->
+        {:error, argument("#{inspect(value)} is not a SKIP: it is OMIT, BACKWARD or FORWARD")}
+    end
+  end
+
+  defp part("BYMONTH", value) do
+    months = value |> String.split(",") |> Enum.map(&month_number/1)
+
+    if :error in months,
+      do: {:error, argument("#{inspect(value)} is not a list of months")},
+      else: {:ok, :bymonth, months}
+  end
 
   defp part(key, value) do
     case Map.fetch(@by_parts, key) do
@@ -229,6 +257,14 @@ defmodule Tempo.RRule do
          argument(
            "#{name |> Atom.to_string() |> String.upcase()} wants a positive integer, not #{inspect(value)}"
          )}
+    end
+  end
+
+  defp month_number(text) do
+    case Integer.parse(String.trim(text)) do
+      {month, ""} -> month
+      {month, leap} when leap in ["L", "l"] -> {month, :leap}
+      _ -> :error
     end
   end
 
@@ -267,20 +303,32 @@ defmodule Tempo.RRule do
       Map.has_key?(rule, :count) and Map.has_key?(rule, :until) ->
         {:error, argument("COUNT and UNTIL exclude each other")}
 
-      week_start_counts?(rule) ->
-        {:error, argument("a WKST other than MO is not supported")}
+      Map.has_key?(rule, :skip) and not Map.has_key?(rule, :rscale) ->
+        {:error, argument("SKIP is given with RSCALE (RFC 7529), and this rule has none")}
 
       true ->
-        {:ok, Map.delete(rule, :wkst)}
+        {:ok, rule}
     end
   end
 
   defp checked(error), do: error
 
+  # A leap month is of a calendar that has one, which a rule names.
+  defp leap_months_named(rule) do
+    leap? = Enum.any?(Map.get(rule, :bymonth, []), &match?({_month, :leap}, &1))
+
+    if leap? and Map.get(rule, :rscale, "gregorian") in ["gregorian", "gregory"],
+      do:
+        {:error,
+         argument("a leap month (5L) is of a calendar that has one, named with RSCALE (RFC 7529)")},
+      else: :ok
+  end
+
   # RFC 5545 section 3.3.10: the day a week starts on is significant in a
   # weekly rule of every second week or more that names weekdays, and in a
-  # yearly rule that names weeks of the year. Tempo's weeks start on Monday;
-  # another start is read where it changes nothing and refused where it would.
+  # yearly rule that names weeks of the year. There the recurrence is of the
+  # calendar whose weeks begin on that day (`[u-fw=sun]`); where the day
+  # changes nothing it is read and not kept.
   defp week_start_counts?(%{wkst: day} = rule) when day != 1 do
     (rule.freq == :week and Map.get(rule, :interval, 1) > 1 and Map.has_key?(rule, :byday)) or
       (rule.freq == :year and Map.has_key?(rule, :byweekno))
@@ -315,8 +363,61 @@ defmodule Tempo.RRule do
 
   """
   @spec from_rule(rule(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-  def from_rule(%{freq: freq} = rule, options) do
-    from = Keyword.get(options, :from)
+  def from_rule(%{freq: _freq} = rule, options) do
+    with :ok <- leap_months_named(rule),
+         {:ok, from} <- in_scale(rule, Keyword.get(options, :from)),
+         {:ok, from} <- in_weeks_of(rule, from) do
+      from_rule(Map.drop(rule, [:wkst, :rscale]), from, options)
+    end
+  end
+
+  def from_rule(_rule, _options), do: {:error, argument("a rule needs a frequency")}
+
+  # The start a rule counts from, in the calendar its `RSCALE` names: its
+  # months, its years and their days are that calendar's, and so are its
+  # occurrences. `GREGORIAN` is the calendar a rule is in with none.
+  defp in_scale(%{rscale: name}, from) when name not in ["gregorian", "gregory"] do
+    case Calendars.from_type(name) do
+      {:ok, calendar} ->
+        scaled(from, calendar)
+
+      {:error, _} ->
+        {:error, argument("RSCALE=#{String.upcase(name)} names no calendar Tempo has")}
+    end
+  end
+
+  defp in_scale(_rule, from), do: {:ok, from}
+
+  defp scaled(nil, calendar), do: {:ok, {:calendar, calendar}}
+  defp scaled(%Tempo{} = from, calendar), do: Tempo.to_calendar(from, calendar)
+  defp scaled(other, _calendar), do: {:ok, other}
+
+  # The start a rule counts from, in the calendar whose weeks begin on the
+  # rule's `WKST` where that day counts; with no start, the calendar alone.
+  defp in_weeks_of(rule, from) do
+    if week_start_counts?(rule),
+      do: weeks_from(rule.wkst, from),
+      else: {:ok, from}
+  end
+
+  defp weeks_from(day, nil) do
+    with {:ok, calendar} <- Calendars.with_week_start(Calendars.default(), day),
+         do: {:ok, {:calendar, calendar}}
+  end
+
+  defp weeks_from(day, {:calendar, calendar}) do
+    with {:ok, calendar} <- Calendars.with_week_start(calendar, day),
+         do: {:ok, {:calendar, calendar}}
+  end
+
+  defp weeks_from(day, %Tempo{calendar: calendar} = from) do
+    with {:ok, calendar} <- Calendars.with_week_start(calendar, day),
+         do: Tempo.to_calendar(from, calendar)
+  end
+
+  defp weeks_from(_day, other), do: {:ok, other}
+
+  defp from_rule(%{freq: freq} = rule, from, options) do
     rule = with_start(rule, from)
     cadence = %Duration{units: [{freq, Map.get(rule, :interval, 1)}]}
     {cadence, parts} = lowered(rule, cadence, Keyword.get(options, :duration))
@@ -325,7 +426,7 @@ defmodule Tempo.RRule do
     with {:ok, parts} <- parts,
          {:ok, first} <- first_span(from, cadence) do
       recurrence = %Tempo{
-        form: {:every, first, bound, parts},
+        form: {:every, first, bound, in_calendar(parts, first.calendar, rule)},
         calendar: first.calendar,
         zone: first.zone,
         metadata: Keyword.get(options, :metadata, %{})
@@ -335,10 +436,73 @@ defmodule Tempo.RRule do
     end
   end
 
-  def from_rule(_rule, _options), do: {:error, argument("a rule needs a frequency")}
+  # A rule's parts as its calendar counts them: a month by its name where
+  # the calendar is not the Gregorian (a lunisolar year's months are named,
+  # and its leap month is `5L`), a day of a numbered week counted from the
+  # day the week begins on, and what is taken for a day the year lacks.
+  # Where each occurrence has a length the days are selected first and a
+  # window opened from each, and it is the days that are so counted.
+  defp in_calendar([selection: selected, window: %Duration{} = length], calendar, rule),
+    do: [selection: in_calendar(selected, calendar, rule), window: length]
+
+  defp in_calendar(parts, calendar, rule) do
+    parts
+    |> months_named(Calendars.gregorian?(calendar))
+    |> days_of_week(calendar, &counted_from/2)
+    |> with_skip(Map.get(rule, :skip))
+  end
+
+  defp months_named(nil, _gregorian?), do: nil
+  defp months_named(parts, true), do: parts
+
+  defp months_named(parts, false) do
+    Enum.map(parts, fn
+      {:month, held} -> {:traditional_month, held}
+      part -> part
+    end)
+  end
+
+  # A skip stands after the days it moves and before a time of day on them
+  # and a position among them.
+  defp with_skip(parts, skip) when skip in [:forward, :backward] and is_list(parts) do
+    {days, later} =
+      Enum.split_while(parts, fn {unit, _} -> unit not in [:hour, :minute, :second, :instance] end)
+
+    days ++ [skip: skip] ++ later
+  end
+
+  defp with_skip(parts, _omit_or_none), do: parts
+
+  # Under a numbered week a day of the week is the day of that week it is,
+  # counted from the day the week begins on: `BYWEEKNO=20;BYDAY=MO` is the
+  # first day of week 20 where weeks begin on Monday, and its second where
+  # they begin on Sunday. A weekday with no week is the weekday itself.
+  defp days_of_week(parts, calendar, counted) do
+    case {Calendars.week_start(calendar), Keyword.has_key?(parts || [], :week)} do
+      {start, true} when is_integer(start) ->
+        Enum.map(parts, fn
+          {:day_of_week, held} -> {:day_of_week, each_day(held, &counted.(&1, start))}
+          part -> part
+        end)
+
+      _a_week_from_monday_or_no_week ->
+        parts
+    end
+  end
+
+  defp each_day(held, counted) when is_list(held), do: Enum.map(held, counted)
+  defp each_day(held, counted) when is_integer(held), do: counted.(held)
+  defp each_day(held, _counted), do: held
+
+  # A weekday as the day of a week that begins on `start`, and back.
+  defp counted_from(weekday, start), do: Integer.mod(weekday - start, 7) + 1
+  defp weekday_of_count(count, start), do: Integer.mod(count + start - 2, 7) + 1
 
   defp first_span(nil, cadence),
     do: {:ok, %Tempo{form: {:span, :open, cadence}}}
+
+  defp first_span({:calendar, calendar}, cadence),
+    do: {:ok, %Tempo{form: {:span, :open, cadence}, calendar: calendar}}
 
   defp first_span(%Tempo{form: {:value, _}} = from, cadence),
     do: {:ok, %Tempo{form: {:span, from, cadence}, calendar: from.calendar, zone: from.zone}}
@@ -375,14 +539,28 @@ defmodule Tempo.RRule do
     if names_a_day?(rule), do: rule, else: Map.put(rule, :bymonthday, [day])
   end
 
-  defp with_date_of_start(:year, rule, month, day, _start) do
+  defp with_date_of_start(:year, rule, month, day, {units, calendar}) do
     if names_a_day?(rule) or Map.has_key?(rule, :byweekno),
       do: rule,
-      else: rule |> Map.put_new(:bymonth, [month]) |> Map.put(:bymonthday, [day])
+      else:
+        rule
+        |> Map.put_new(:bymonth, [month_of_start(calendar, units[:year], month)])
+        |> Map.put(:bymonthday, [day])
   end
 
   defp with_date_of_start(_finer, rule, _month, _day, {units, _calendar}),
     do: with_clock_of_start(rule, units)
+
+  # The month of a start as a rule names it: its number, and in a calendar
+  # that is not the Gregorian the month as it is named, a leap month as one.
+  defp month_of_start(calendar, year, month) do
+    if Calendars.gregorian?(calendar),
+      do: month,
+      else: named_month(Calendars.traditional_month(calendar, year, month), month)
+  end
+
+  defp named_month({:error, _}, month), do: month
+  defp named_month(named, _month), do: named
 
   # A rule finer than a week fires at the start's own reading of the unit
   # below its frequency: a daily rule at the start's hour, an hourly one at
@@ -561,17 +739,30 @@ defmodule Tempo.RRule do
   """
   @spec to_string(Tempo.t()) :: {:ok, String.t()} | {:error, Exception.t()}
   def to_string(%Tempo{form: {:every, %Tempo{form: {:span, from, cadence}}, bound, parts}} = r) do
+    {skip, selected} = skip_and_parts(parts || [])
+
     with :ok <- no_domain(from, r),
-         :ok <- gregorian(r, cadence, parts || []),
+         {:ok, scale} <- scale_part(counted_in(r.calendar, cadence, selected), skip, r),
          :ok <- in_every_period(from, cadence, parts, r),
          {:ok, frequency} <- frequency_part(cadence, r),
-         {:ok, by_parts} <- by_parts(parts || [], r) do
-      {:ok,
-       Enum.join([frequency | Enum.reject([bound_part(bound) | by_parts], &(&1 == ""))], ";")}
+         {:ok, by_parts} <- by_parts(selected, r) do
+      parts =
+        [scale, frequency, bound_part(bound)] ++
+          by_parts ++ [skip_part(skip), week_start_part(r.calendar)]
+
+      {:ok, parts |> Enum.reject(&(&1 == "")) |> Enum.join(";")}
     end
   end
 
   def to_string(other), do: {:error, no_rrule(other, :not_a_recurrence)}
+
+  # A recurrence whose weeks begin on another day than Monday says so.
+  defp week_start_part(calendar) do
+    case Calendars.week_start(calendar) do
+      nil -> ""
+      day -> "WKST=" <> Map.fetch!(@weekday_codes, day)
+    end
+  end
 
   @doc """
   `to_string/1`, returning the text or raising.
@@ -590,21 +781,53 @@ defmodule Tempo.RRule do
     end
   end
 
-  # RFC 5545 counts months, years and their days in the Gregorian calendar,
-  # so a recurrence of another calendar is an RRULE only where it reads there
-  # as itself: stepping by weeks, days or the clock, selecting by weekday and
-  # time of day. (RFC 7529's RSCALE, which names another calendar, is not written.)
-  defp gregorian(%Tempo{calendar: calendar} = recurrence, cadence, parts),
-    do: gregorian(Tempo.Calendar.gregorian?(calendar), recurrence, cadence, parts)
+  # RFC 5545 counts months, years and their days in the Gregorian calendar.
+  # A recurrence of another calendar names it with RFC 7529's `RSCALE`, by
+  # the name CLDR gives it; one of the Gregorian calendar names it only
+  # where it has a `SKIP`, which is given with an `RSCALE` and not without.
+  defp scale_part(:gregorian, nil, _r), do: {:ok, ""}
+  defp scale_part(:gregorian, _skip, _r), do: {:ok, "RSCALE=GREGORIAN"}
 
-  defp gregorian(true, _recurrence, _cadence, _parts), do: :ok
-
-  defp gregorian(false, r, %Duration{units: units}, parts) do
-    if Enum.any?(Keyword.keys(units), &(&1 in @calendar_cadences)) or
-         Enum.any?(Keyword.keys(picked(parts)), &(&1 in @calendar_parts)),
-       do: {:error, no_rrule(r, {:calendar, r.calendar})},
-       else: :ok
+  defp scale_part(calendar, _skip, r) do
+    case Calendars.identifier(calendar) do
+      {:ok, name} when is_binary(name) -> {:ok, "RSCALE=" <> String.upcase(name)}
+      _no_name -> {:error, no_rrule(r, {:calendar, calendar})}
+    end
   end
+
+  # The calendar a rule counts in. A recurrence of another calendar than
+  # the Gregorian that steps by weeks, days or the clock and selects by
+  # weekday and time of day reads in the Gregorian as itself, and is
+  # written as a rule of it.
+  defp counted_in(calendar, %Duration{units: units}, parts) do
+    calendar_counts? =
+      Enum.any?(Keyword.keys(units), &(&1 in @calendar_cadences)) or
+        Enum.any?(Keyword.keys(picked(parts)), &(&1 in @calendar_parts))
+
+    if Calendars.gregorian?(calendar) or not calendar_counts?, do: :gregorian, else: calendar
+  end
+
+  defp skip_and_parts(selection: selected, window: %Duration{} = length) do
+    {skip, selected} = Keyword.pop(selected, :skip)
+    {skip, [selection: selected, window: length]}
+  end
+
+  defp skip_and_parts(parts), do: Keyword.pop(parts, :skip)
+
+  defp skip_part(nil), do: ""
+  defp skip_part(skip), do: "SKIP=" <> String.upcase(Atom.to_string(skip))
+
+  # A month by its name is `BYMONTH`'s number, a leap month with its `L`.
+  defp months_numbered(parts) do
+    Enum.map(parts, fn
+      {:traditional_month, held} -> {:month, month_numbers(held)}
+      part -> part
+    end)
+  end
+
+  defp month_numbers(held) when is_list(held), do: Enum.map(held, &month_numbers/1)
+  defp month_numbers({month, :leap}), do: "#{month}L"
+  defp month_numbers(month), do: month
 
   # A domain says which periods a rule recurs in, and RFC 5545 has no part for it.
   defp no_domain(%Tempo{form: form}, r) when elem(form, 0) in [:all, :one, :when],
@@ -656,6 +879,7 @@ defmodule Tempo.RRule do
 
   defp by_parts(parts, r) do
     frequency = frequency_of(r)
+    parts = parts |> months_numbered() |> days_of_week(r.calendar, &weekday_of_count/2)
     {weekday, instance, parts} = weekday_and_position(parts)
 
     with :ok <- expressible(parts, r),

@@ -341,9 +341,9 @@ defmodule Tempo.RRuleTest do
 
       assert RRule.to_string(~o"R/2026-01-15/P1M") == {:ok, "FREQ=MONTHLY"}
 
-      assert {:error,
-              %Tempo.ConversionError{reason: {:no_rrule, {:calendar, Calendrical.Hebrew}}}} =
-               RRule.to_string(~o"R/5786-01-01/P1Y[u-ca=hebrew]")
+      # A recurrence of another calendar names it (RFC 7529's RSCALE).
+      assert RRule.to_string(~o"R/5786-01-01/P1Y[u-ca=hebrew]") ==
+               {:ok, "RSCALE=HEBREW;FREQ=YEARLY"}
 
       assert RRule.to_string(~o"R/5786-01-01/P1W[u-ca=hebrew]") == {:ok, "FREQ=WEEKLY"}
     end
@@ -355,9 +355,8 @@ defmodule Tempo.RRuleTest do
             "FREQ=DAILY;BOGUS=1",
             "FREQ=WEEKLY;BYDAY=ZZ",
             "FREQ=DAILY;COUNT=2;UNTIL=20260101",
-            "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,SU;WKST=SU",
-            "FREQ=YEARLY;BYWEEKNO=20;WKST=SU",
-            "FREQ=YEARLY;RSCALE=HEBREW"
+            "FREQ=YEARLY;RSCALE=KLINGON",
+            "FREQ=MONTHLY;BYMONTHDAY=31;SKIP=BACKWARD"
           ] do
         assert {:error, %ArgumentError{}} = RRule.parse(text), text
       end

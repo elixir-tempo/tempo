@@ -33,7 +33,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ### Defects and gaps
 
-* [ ] **RFC 7529's `RSCALE` and `SKIP`, and a significant `WKST`, are read: decided 2026-10-14, to build.** In an RRULE and a JSCalendar rule: `RSCALE` is the recurrence's calendar, `SKIP` a new part of a rule, and the week start as decision 14 rules. With them RFC 5545's three unread examples are read, and RFC 7529's leap-month notation (`BYMONTH=5L`). See `plans/decisions.md`, 13.
+* [ ] **A value that names a leap month its year lacks is read**: `~o"5775Y5+m8D[u-ca=hebrew]"` has no day (`Tempo.to_date/1` is an error) and is not refused as it is read, as the 30th of February is. The validator does not ask the calendar for a month by its name.
 
 * [ ] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused.
 
@@ -56,6 +56,8 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ## Done since the rewrite
 
+* [x] Decision 13 built (2026-10-14): RFC 7529's `RSCALE` and `SKIP` are read and written, with a leap month as `5L`; every decision of `plans/decisions.md` is built.
+* [x] Decisions 14 and 24 built (2026-10-14), and the `WKST` of decision 13: the day a week begins on is written `[u-fw=sun]` for the whole expression, and `nq` is gone.
 * [x] Decisions 16 to 18 built (2026-10-14): a rule rolls a day to a weekday of the locale's working week, written `(modified-nearest)r`; cron's `28W` to `31W` are read.
 * [x] Decisions 19 and 20 built (2026-10-14): seasons have their dates, by territory for 21 to 24 and from Astro for 25 to 32.
 * [x] Decision 9 built (2026-10-14): a set operation with an operand that has no end is as bounded as it makes its answer, with the corrections of decision 21.

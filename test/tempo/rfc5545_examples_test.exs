@@ -11,15 +11,9 @@ defmodule Tempo.Rfc5545ExamplesTest do
   # elision are held.
 
   # RFC 5545 lets a rule name the day its weeks start on, which is
-  # significant in a rule of every second week or more that names weekdays.
-  # Tempo's weeks start on Monday: another start is read where it changes
-  # nothing, and these three rules, where it would, are refused
-  # (`guides/rfc5545_rrule_conformance.md`).
-  @week_start_counts [
-    "FREQ=WEEKLY;INTERVAL=2;UNTIL=19971224T000000Z;WKST=SU;BYDAY=MO,WE,FR",
-    "FREQ=WEEKLY;INTERVAL=2;COUNT=8;WKST=SU;BYDAY=TU,TH",
-    "FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU;WKST=SU"
-  ]
+  # significant in a rule of every second week or more that names weekdays:
+  # such a rule is read into the weeks that begin on that day
+  # (`[u-fw=sun]`), and is held to the standard's list as any other is.
 
   # One example's rule does not give what the standard lists for it: "Every 3
   # hours from 9:00 AM to 5:00 PM" has UNTIL at 17:00 UTC, which is 1 PM in
@@ -64,26 +58,17 @@ defmodule Tempo.Rfc5545ExamplesTest do
   defp example(index), do: Enum.at(Rfc5545Examples.all(), index)
 
   for {example, index} <- Enum.with_index(Rfc5545Examples.all()), rule <- example.rules do
-    if rule in @week_start_counts do
-      test "#{example.title}: #{rule} names a week start Tempo does not read" do
-        example = example(unquote(index))
+    test "#{example.title}: #{rule}" do
+      example = example(unquote(index))
+      rule = Map.get(@misprinted, unquote(rule), unquote(rule))
+      assert {:ok, recurrence} = RRule.parse(rule, from: start(example.start))
 
-        assert {:error, %ArgumentError{message: "a WKST other than MO is not supported"}} =
-                 RRule.parse(unquote(rule), from: start(example.start))
-      end
-    else
-      test "#{example.title}: #{rule}" do
-        example = example(unquote(index))
-        rule = Map.get(@misprinted, unquote(rule), unquote(rule))
-        assert {:ok, recurrence} = RRule.parse(rule, from: start(example.start))
+      given = occurrences(recurrence, example)
+      listed = example.occurrences
 
-        given = occurrences(recurrence, example)
-        listed = example.occurrences
-
-        if example.complete? and Tempo.bounded?(recurrence),
-          do: assert(given == listed),
-          else: assert(Enum.take(given, length(listed)) == listed)
-      end
+      if example.complete? and Tempo.bounded?(recurrence),
+        do: assert(given == listed),
+        else: assert(Enum.take(given, length(listed)) == listed)
     end
   end
 
