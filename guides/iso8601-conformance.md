@@ -167,7 +167,7 @@ A set of whole numbers with no designator is a set of years where each has four 
 
 ### Seasons and divisions of a year
 
-A quarter, a quadrimester and a half are divisions of the year in every calendar, and have dates. A season does not yet: codes 21 to 32 are read, held and written, and listing one is a `Tempo.ConversionError` whose reason is `:season`, since Tempo asks its calendars for every date and none yet answers a season's.
+A quarter, a quadrimester and a half are divisions of the year in every calendar, and have dates. A season is read, held and written as its code, and has its dates by its kind. The seasons of a hemisphere, 25 to 28 in the north and 29 to 32 in the south, are astronomical: each runs from an equinox or a solstice to the next. The seasons 21 to 24 are "independent of location" in the standard, and Tempo reads them as meteorological, three whole months that the hemisphere chooses: one has its months in a territory (`Tempo.in_territory/2`, or the `:territory` and `:locale` options of `Tempo.from_iso8601/2` and `Tempo.to_interval/2`), and where none is named, in the application's `:default_territory` or the current locale's.
 
 ```elixir
 iex> Tempo.duration(~o"2022-33")
@@ -176,8 +176,21 @@ iex> Tempo.duration(~o"2022-33")
 iex> ~o"2022-21"
 ~o"2022Y21M"
 
-iex> {:error, %Tempo.ConversionError{reason: :season}} = Tempo.to_interval(~o"2022-21")
+iex> Tempo.in_territory(~o"2022-21", :AU)
+{:ok, ~o"2022Y9M/11M"}
+
+iex> Tempo.in_territory(~o"2022-21", :GB)
+{:ok, ~o"2022Y3M/5M"}
+
+iex> Tempo.duration(~o"2022-25")
+~o"P93D"
+
+iex> {:error, %Tempo.ConversionError{}} = Tempo.in_territory(~o"2022-21", :BR)
 ```
+
+> *"**Spring** of 2022 is **September to November** in **Australia** and **March to May** in **Britain**. The **northern astronomical spring** is **ninety-three days**. In **Brazil**, which the equator runs through, spring is **no one set of months**."*
+
+A season is moved by whole years and by nothing finer, and is in the Gregorian calendar: a season of a year of another calendar has no dates.
 
 ### Selections and repeat rules
 

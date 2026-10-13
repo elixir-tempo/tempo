@@ -16,6 +16,7 @@ defmodule Tempo.Measure do
     ConversionError,
     Duration,
     IntervalEndpointsError,
+    Season,
     Shift,
     Spans,
     Unit,
@@ -34,6 +35,7 @@ defmodule Tempo.Measure do
   def duration(%Tempo{form: {:value, units}} = value) do
     cond do
       Keyword.has_key?(units, :selection) -> {:error, conversion(value, :selection)}
+      Keyword.has_key?(units, :season) -> covered_duration(value)
       Unit.concrete?(units) -> unit_duration(List.last(units))
       true -> covered_duration(value)
     end
@@ -127,9 +129,15 @@ defmodule Tempo.Measure do
   defp finest_unit(units) do
     case List.last(units) do
       {:microsecond, {_, precision}} -> {:microsecond, precision}
+      {:season, season} -> season_unit(season)
       _ -> Unit.resolution(units)
     end
   end
+
+  # There is no unit of one season. A meteorological season is whole months
+  # and is counted in them; an astronomical one begins and ends within a
+  # month and is counted in days.
+  defp season_unit(season), do: if(Season.abstract?(season), do: :month, else: :day)
 
   defp finest(units), do: Enum.max_by(units, &index/1)
   defp index({:microsecond, precision}), do: 100 + precision

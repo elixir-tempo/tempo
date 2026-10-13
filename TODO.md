@@ -43,7 +43,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 * [ ] **An exclusion that cannot be read is passed over** in a recurrence's domain (`Tempo.Spans.without/3` answers the stream unchanged on an error). It should be the error.
 
-* [ ] **Seasons as decided in October are rebuilt: decided 2026-10-14, to build.** Codes 25 to 32 from Astro; codes 21 to 24 with a locale or a territory, the hemisphere from Localize (`plans/seasons-by-locale.md`). The rewrite left a season read and written only. See `plans/decisions.md`, 19.
+* [ ] **Two seasons of 21 to 24 are read in EDTF's order**, so `2026-23/2026-21` (March to November in Australia) is refused, where the October design read them in any order. To decide: `plans/decisions.md`, 22.
 
 * [ ] **A solar term of a year before 0 is a day late**: `Tempo.Event.date("qingming", -3000, Calendrical.Chinese)` is 7 April and the moment is on the 6th. Calendrical's `solar_term/3` takes `trunc/1` of the moment where it wants `floor/1`. Upstream.
 
@@ -62,6 +62,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ## Done since the rewrite
 
+* [x] Decisions 19 and 20 built (2026-10-14): seasons have their dates, by territory for 21 to 24 and from Astro for 25 to 32.
 * [x] Decision 9 built (2026-10-14): a set operation with an operand that has no end is as bounded as it makes its answer, with the corrections of decision 21.
 * [x] Decisions 10 to 12 built (2026-10-14): a list selection in time order, a cron rule with no start, a `Date.Range` from `to_elixir/1`.
 * [x] **A solar term on a value with no calendar** is the Gregorian calendar's, asked for by the adapter (`Tempo.Calendar.solar_term/3`), since `Localize.Calendar.ISO` has no astronomy. Decided 2026-10-14.

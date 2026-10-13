@@ -13,7 +13,8 @@ defmodule Tempo.OptionsTest do
       assert {:error, %ArgumentError{message: message}} =
                Tempo.to_interval(~o"6M15D", withn: ~o"2026")
 
-      assert message == ":withn is not an option of Tempo.to_interval/2: it takes :within"
+      assert message ==
+               ":withn is not an option of Tempo.to_interval/2: it takes :within, :territory, :locale"
     end
 
     test "names the option a Tempo 1 name became" do

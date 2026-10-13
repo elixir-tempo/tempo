@@ -565,7 +565,7 @@ iex> Tempo.from_iso8601("2026-21")
 {:ok, ~o"2026Y21M"}
 ```
 
-A season has no dates of its own: spring is March to May in one hemisphere and September to November in the other, and 1.6 read the northern months everywhere. `Tempo.to_interval/2` of one is a `Tempo.ConversionError` whose reason is `:season`.
+A season of 21 to 24 has no dates of its own: spring is March to May in one hemisphere and September to November in the other, and 1.6 read the northern months everywhere. It has its months in a territory, named with `Tempo.in_territory/2` or the `:territory` and `:locale` options, and otherwise taken from the application's `:default_territory` or the current locale. A season of a hemisphere (25 to 32) runs from an equinox or a solstice to the next, and is kept as it is written where 1.6 read it into its dates.
 
 Three texts 1.6 read are read otherwise:
 

@@ -190,7 +190,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Put with the question, not ruled on.** The months of a meteorological season (March to May in the north) are a convention and not a computation, so they are held in Tempo with the hemisphere asked of Localize, as in October, and are not Calendrical's to answer.
 
-* **State.** To build.
+* **State.** Built, with what decision 22 records: `Tempo.Season`, `Tempo.in_territory/2`, `test/tempo/season_test.exs` and `season_in_force_test.exs`.
 
 ## 20. Where the months of a meteorological season are held
 
@@ -200,7 +200,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-14).** "meteorological season months in Tempo is ok for now". Held in Tempo, and open to being moved later.
 
-* **State.** To build, with decision 19.
+* **State.** Built: the months are in `Tempo.Season`.
 
 ## 21. Two corrections to decision 9, found in building it
 
@@ -215,3 +215,21 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision.** Mine, in building (2026-10-14); for the user to overrule.
 
 * **State.** Built.
+
+## 22. What the building of seasons settled, and one question it leaves
+
+* **Question.** None was put for the first four: they are where the new engine answers otherwise than the October design, recorded for the release documents. The fifth is open.
+
+* **A season of a hemisphere is kept as it is written.** In October a season of 25 to 32 was read into its dates (`2026-25` was `2026Y3M20D/6M21D`). Law 3 keeps what is written, so `~o"2026-25"` is `2026Y25M` and has its days where they are asked for: 20 March to 20 June 2026, the day of the March equinox to the day before the June solstice, in UTC.
+
+* **A season is walked.** In October a walk of a season was an error. The engine walks any span it has an extent for, so a season yields its days, and an interval of meteorological seasons its months.
+
+* **A season has a length.** A meteorological season is counted in months (`P3M`) and an astronomical one in days (`P93D`), there being no unit of one season.
+
+* **Errors are `Tempo.ConversionError`.** October's `Tempo.AbstractSeasonError` is not rebuilt: a territory on no one side of the equator is the reason `{:no_hemisphere, territory}`, a move by other than whole years `{:season_moved, duration}`, and a season in a calendar that is not the Gregorian `:season`.
+
+* **Open: the order of two seasons of 21 to 24 as they are read.** October said an interval of seasons "is read whatever the order of its seasons", since autumn comes before spring south of the equator, and is held to its order where it is given a hemisphere. EDTF's corpus, which the reader is held to, refuses `2012-24/2012-21`. The reader keeps EDTF's order (spring, summer, autumn, winter), so `2026-23/2026-21`, March to November in Australia, is not read; `Tempo.Interval.new/1` of the two months is the way to it. To decide: conformance with the corpus, or October's reading.
+
+* **Decision.** Mine, in building (2026-10-14); for the user to overrule.
+
+* **State.** Built, the fifth as described.

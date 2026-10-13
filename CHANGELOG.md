@@ -104,6 +104,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.to_elixir/1` of an interval of two dates is their `Date.Range`, so `Tempo.from_elixir/2` of a range comes back as it went.
 
+* `Tempo.in_territory/2`, and the `:territory` and `:locale` options of `Tempo.from_iso8601/2`, `Tempo.parse/2` and `Tempo.to_interval/2`, give a season of 21 to 24 its three months in a hemisphere. With none named it has them in the application's `:default_territory` or the current locale's.
+
+* A season of a hemisphere (25 to 32) is kept as it is written and runs from its equinox or solstice to the next, where 1.6 read it into dates. A season is moved by whole years only.
+
 * `Tempo.duration/2` with `leap_seconds: true`, `Tempo.LeapSeconds.spanned/1` and `count/1`.
 
 * `Tempo.Duration.multiply/2`, `exact?/1` and `to_microseconds/1`.

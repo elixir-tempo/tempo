@@ -20,6 +20,7 @@ defmodule Tempo.Spans do
   alias Tempo.Expand
   alias Tempo.Limit
   alias Tempo.Scale
+  alias Tempo.Season
   alias Tempo.Select
   alias Tempo.Shift
   alias Tempo.Unit
@@ -1355,18 +1356,24 @@ defmodule Tempo.Spans do
   The value at a position, written to a model value's resolution in a
   calendar and a zone: how a set operation writes a result's end from the
   operand end that stands there. A model of another calendar is written at
-  day resolution, a month of one calendar being no month of another; a
-  clock resolution is kept.
+  day resolution, a month of one calendar being no month of another, as is
+  a season, which begins and ends on a day; a clock resolution is kept.
   """
   @spec at_position(Scale.position(), Tempo.t(), :start | :end, module(), Zone.t() | nil) ::
           Tempo.t()
   def at_position(position, %Tempo{} = model, kind, calendar, zone) do
-    model = if model.calendar == calendar, do: model, else: day_model(model)
+    model =
+      if model.calendar == calendar and not season?(model), do: model, else: day_model(model)
+
     # In a named zone the ends are its wall readings, with no shift of their own.
     model = if zone == nil, do: model, else: %{model | shift: nil}
     context = %Tempo{form: {:span, model, model}, calendar: calendar, zone: zone}
     %{value_at(position, model, kind, context) | calendar: calendar, zone: zone}
   end
+
+  # A season is no unit a position is written at: its ends are days.
+  defp season?(%Tempo{form: {:value, units}}), do: Keyword.has_key?(units, :season)
+  defp season?(_model), do: false
 
   defp day_model(%Tempo{form: {:value, units}} = model) do
     if Unit.clock?(Unit.resolution(units)),
@@ -1635,7 +1642,13 @@ defmodule Tempo.Spans do
     do: {:microsecond, units |> Keyword.fetch!(:microsecond) |> elem(1)}
 
   defp own(unit, _units) when unit in [:day_of_week, :day_of_year], do: :day
-  defp own(unit, _units) when unit in [:traditional_month, :season], do: :month
+  defp own(:traditional_month, _units), do: :month
+
+  # A meteorological season is whole months; an astronomical one is not.
+  defp own(:season, units) do
+    if Season.abstract?(Keyword.fetch!(units, :season)), do: :month, else: :day
+  end
+
   defp own(:group, units), do: units |> Keyword.fetch!(:group) |> elem(1) |> hd() |> elem(0)
   defp own(unit, _units), do: unit
 

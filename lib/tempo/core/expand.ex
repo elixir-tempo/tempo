@@ -18,6 +18,7 @@ defmodule Tempo.Expand do
   alias Tempo.Calendar
   alias Tempo.ConversionError
   alias Tempo.Scale
+  alias Tempo.Season
   alias Tempo.Unit
   alias Tempo.Zone
 
@@ -163,7 +164,7 @@ defmodule Tempo.Expand do
   The span of days a concrete prefix of date units names, on the day scale.
   A plain form is the calendar's period; a century or a decade is its years;
   a quarter, a traditional month and a group are what the calendar's periods
-  make of them; a season has no dates until a calendar gives them.
+  make of them; a season is the days `Tempo.Season` gives it.
   """
   @spec day_span(module(), Unit.units()) ::
           {:ok, Calendar.span()} | {:error, ConversionError.reason()}
@@ -184,6 +185,9 @@ defmodule Tempo.Expand do
 
   def day_span(calendar, year: y, quarter: q) when is_integer(y) and is_integer(q),
     do: calendar_answer(Calendar.period(calendar, :quarter, y, q))
+
+  def day_span(calendar, year: y, season: s) when is_integer(y) and is_integer(s),
+    do: Season.day_span(calendar, y, s)
 
   def day_span(_calendar, year: _y, season: _s), do: {:error, :season}
 

@@ -37,6 +37,19 @@ defmodule Tempo.Shift do
 
   @doc "An expression moved by a duration: a value, a span end by end, a set member by member."
   @spec shift(expression(), Duration.t()) :: {:ok, expression()} | {:error, Exception.t()}
+  # A season moved by whole years is the season of another year. It has no
+  # other move that is a season: a month on from a season is no season.
+  def shift(
+        %Tempo{form: {:value, [year: year, season: season]}} = value,
+        %Duration{units: units} = by
+      )
+      when is_integer(year) and is_integer(season) do
+    case units do
+      [year: years] -> {:ok, %{value | form: {:value, [year: year + years, season: season]}}}
+      _finer -> {:error, conversion(%{value | metadata: %{}}, {:season_moved, by})}
+    end
+  end
+
   def shift(%Tempo{form: {:value, units}} = value, %Duration{} = by) do
     cond do
       Keyword.has_key?(units, :selection) ->

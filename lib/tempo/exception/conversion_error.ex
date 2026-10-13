@@ -18,6 +18,8 @@ defmodule Tempo.ConversionError do
           | :open
           | :too_many_values
           | :season
+          | {:no_hemisphere, atom()}
+          | {:season_moved, Tempo.Duration.t()}
           | :selection
           | :exclusion
           | :repeat_rule
@@ -51,7 +53,17 @@ defmodule Tempo.ConversionError do
   defp describe(:too_many_values),
     do: "names more values than :max_values_at_once allows at once"
 
-  defp describe(:season), do: "is a season, whose dates no calendar Tempo asks yet gives"
+  defp describe(:season),
+    do:
+      "is a season with no dates here: a season of 21 to 24 has them in a territory on one side of the equator (Tempo.in_territory/2), and none is walked or has dates in a calendar that is not the Gregorian"
+
+  defp describe({:season_moved, by}),
+    do:
+      "is a season, which is moved by whole years and not by #{inspect(by)}: give it its months first (Tempo.in_territory/2), or move its interval (Tempo.to_interval/2)"
+
+  defp describe({:no_hemisphere, territory}),
+    do:
+      "is a season, and #{inspect(territory)} is on no one side of the equator: give a territory that is, or write the season of a hemisphere (25 to 32)"
 
   defp describe(:selection),
     do:

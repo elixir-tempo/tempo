@@ -15,6 +15,7 @@ defmodule Tempo.Validate do
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
   alias Tempo.Scale
+  alias Tempo.Season
   alias Tempo.Unit
   alias Tempo.Zone
   alias Tempo.ZoneError
@@ -360,30 +361,35 @@ defmodule Tempo.Validate do
 
   defp ordered(_from, _to, _expression), do: :ok
 
-  defp order_result({:error, %IntervalEndpointsError{}} = error), do: error
-  defp order_result(_other), do: :ok
+  # A season of 21 to 24 has its dates in a hemisphere, which a text does
+  # not name, so its place is not asked for as it is read. A season of a
+  # hemisphere has its dates, and is held to them.
+  defp abstract_season?(units), do: Season.abstract?(Keyword.get(units, :season))
 
-  # A value with one value in each unit has a place, a count from the end or a group included.
-  defp position(units, %Tempo{calendar: calendar, zone: zone, shift: shift}) do
-    if Unit.concrete?(units) and not Keyword.has_key?(units, :season) and
-         not Keyword.has_key?(units, :selection),
-       do: Expand.extent(units, %{calendar: calendar, zone: zone, shift: shift}),
-       else: :skip
-  end
-
-  # Two seasons of one numbering (the four of 21 to 24, the northern 25 to 28,
-  # the southern 29 to 32) are in order by year, then by number.
+  # Two seasons of 21 to 24 are in order by year, then by number, as EDTF
+  # holds them (its corpus refuses `2012-24/2012-21`): spring, summer,
+  # autumn, winter.
   defp seasons_ordered(
          :ok,
          %Tempo{form: {:value, [year: y1, season: s1]}} = a,
          %Tempo{form: {:value, [year: y2, season: s2]}} = b
        )
-       when is_integer(y1) and is_integer(s1) and is_integer(y2) and is_integer(s2) and
-              div(s1 - 21, 4) == div(s2 - 21, 4) do
+       when is_integer(y1) and s1 in 21..24 and is_integer(y2) and s2 in 21..24 do
     if {y1, s1} > {y2, s2},
       do: {:error, IntervalEndpointsError.exception(from: a, to: b, reason: :order)},
       else: :ok
   end
 
   defp seasons_ordered(result, _a, _b), do: result
+
+  defp order_result({:error, %IntervalEndpointsError{}} = error), do: error
+  defp order_result(_other), do: :ok
+
+  # A value with one value in each unit has a place, a count from the end or a group included.
+  defp position(units, %Tempo{calendar: calendar, zone: zone, shift: shift}) do
+    if Unit.concrete?(units) and not abstract_season?(units) and
+         not Keyword.has_key?(units, :selection),
+       do: Expand.extent(units, %{calendar: calendar, zone: zone, shift: shift}),
+       else: :skip
+  end
 end

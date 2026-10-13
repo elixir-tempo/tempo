@@ -32,6 +32,7 @@ defmodule Tempo do
   alias Tempo.Parts
   alias Tempo.Reader
   alias Tempo.Scale
+  alias Tempo.Season
   alias Tempo.Select
   alias Tempo.Shift
   alias Tempo.Spans
@@ -180,6 +181,12 @@ defmodule Tempo do
     kind is an error, where without a profile it would be read as the kind
     it is.
 
+  * `:territory` is the territory a season of 21 to 24 is given its months
+    in as it is read, as `in_territory/2` takes it; with none, and no
+    `:locale`, a season is read as its code.
+
+  * `:locale` is a locale whose territory is used as `:territory` is.
+
   ### Returns
 
   * `{:ok, expression}`, a `t:t/0`, or a `t:Tempo.Duration.t/0` for a
@@ -219,8 +226,15 @@ defmodule Tempo do
     do: Reader.read(text, calendar: calendar)
 
   def from_iso8601(text, options) when is_binary(text) and is_list(options) do
-    with :ok <- Options.check(options, [:calendar, :profile], "Tempo.from_iso8601/2"),
-         do: Text.read(text, options)
+    with :ok <-
+           Options.check(
+             options,
+             [:calendar, :profile, :territory, :locale],
+             "Tempo.from_iso8601/2"
+           ),
+         {:ok, expression} <- Text.read(text, Keyword.take(options, [:calendar, :profile])) do
+      seasons_placed(expression, options)
+    end
   end
 
   @doc """
@@ -308,7 +322,10 @@ defmodule Tempo do
   ### Options
 
   * `:locale` is the locale whose words are read; the default is
-    Localize's.
+    Localize's. One named is also where a season of 21 to 24 is given its
+    months, as for `from_iso8601/2`.
+
+  * `:territory` is as for `from_iso8601/2`.
 
   * `:calendar` is the calendar the text is read in.
 
@@ -345,10 +362,12 @@ defmodule Tempo do
     with :ok <-
            Options.check(
              options,
-             [:locale, :calendar, :profile, :reference_date],
+             [:locale, :territory, :calendar, :profile, :reference_date],
              "Tempo.parse/2"
            ),
-         do: Text.parse(text, options)
+         {:ok, expression} <- Text.parse(text, Keyword.delete(options, :territory)) do
+      seasons_placed(expression, options)
+    end
   end
 
   @doc """
@@ -669,6 +688,12 @@ defmodule Tempo do
     end of its own (a recurrence with no count) and places a value with no
     year on each of its periods.
 
+  * `:territory` is the territory a season of 21 to 24 has its months in, as
+    `in_territory/2` takes it. With none, and no `:locale`, such a season
+    keeps its code and has its dates in the territory in force.
+
+  * `:locale` is a locale whose territory is used as `:territory` is.
+
   ### Returns
 
   * `{:ok, interval}`, a `t:t/0` of the `:span` form, or of the `:all` form
@@ -705,8 +730,10 @@ defmodule Tempo do
   """
   @spec to_interval(t() | Duration.t(), keyword()) :: {:ok, t()} | {:error, error()}
   def to_interval(expression, options \\ []) do
-    with :ok <- Options.check(options, [:within], "Tempo.to_interval/2"),
-         do: spanned(expression, options)
+    with :ok <- Options.check(options, [:within, :territory, :locale], "Tempo.to_interval/2"),
+         {:ok, expression} <- seasons_placed(expression, options) do
+      spanned(expression, Keyword.take(options, [:within]))
+    end
   end
 
   defp spanned(%Tempo.Duration{} = duration, _options),
@@ -1638,6 +1665,92 @@ defmodule Tempo do
       Validate.run(rezoned(expression, zone))
     end
   end
+
+  @doc """
+  An expression with its seasons given their months in a territory. A
+  season of 21 to 24 (spring, summer, autumn, winter) is three whole months,
+  and which three is the hemisphere's to say: spring is March to May north
+  of the equator and September to November south of it.
+
+  A season of a hemisphere (25 to 32) names its own and is as it was, as is
+  an expression with no season in it.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`: a season, an interval with a season at an end,
+    or a set of them.
+
+  * `territory` is a territory (`:AU`, `"GB"`) or a locale whose territory
+    is taken (`"en-AU"`), as `Tempo.Territory.resolve/1` reads it.
+
+  ### Returns
+
+  * `{:ok, expression}`, each season the interval of its months.
+
+  * `{:error, %Tempo.ConversionError{}}` for a territory on no one side of
+    the equator (Brazil, Kenya, the world).
+
+  * `{:error, %Tempo.IntervalEndpointsError{}}` for an interval of seasons
+    that ends before it begins in that hemisphere.
+
+  * `{:error, %ArgumentError{}}` for what names no territory.
+
+  ### Examples
+
+      iex> Tempo.in_territory(~o"2026-21", :GB)
+      {:ok, ~o"2026-03/2026-05"}
+
+      iex> Tempo.in_territory(~o"2026-21", :AU)
+      {:ok, ~o"2026-09/2026-11"}
+
+      iex> Tempo.in_territory(~o"2026-22", :NZ)
+      {:ok, ~o"2026-12/2027-02"}
+
+      iex> {:error, %Tempo.ConversionError{}} = Tempo.in_territory(~o"2026-21", :BR)
+
+  """
+  @spec in_territory(t(), atom() | String.t()) :: {:ok, t()} | {:error, error()}
+  def in_territory(%__MODULE__{} = expression, territory) do
+    with {:ok, territory} <- Tempo.Territory.resolve(territory),
+         {:ok, placed} <- Season.in_territory(expression, territory) do
+      Validate.run(placed)
+    end
+  end
+
+  @doc """
+  `in_territory/2`, returning the expression or raising.
+
+  ### Examples
+
+      iex> Tempo.in_territory!(~o"2026-23", :AU)
+      ~o"2026-03/2026-05"
+
+  """
+  @spec in_territory!(t(), atom() | String.t()) :: t()
+  def in_territory!(expression, territory) do
+    case in_territory(expression, territory) do
+      {:ok, placed} -> placed
+      {:error, exception} -> raise exception
+    end
+  end
+
+  # An expression read or asked for with a territory or a locale named has
+  # its seasons given their months there; with neither it is as it was, and
+  # a season is given its dates where they are needed by the territory in force.
+  defp seasons_placed(expression, options) do
+    case {options[:territory], options[:locale]} do
+      {nil, nil} -> {:ok, expression}
+      {nil, locale} -> seasons_in_locale(expression, locale)
+      {territory, _locale} -> in_territory(expression, territory)
+    end
+  end
+
+  defp seasons_in_locale(%__MODULE__{} = expression, locale) do
+    with {:ok, territory} <- Localize.Territory.territory_from_locale(locale),
+         do: in_territory(expression, territory)
+  end
+
+  defp seasons_in_locale(other, _locale), do: {:ok, other}
 
   defp floating(%__MODULE__{} = expression) do
     if Spans.frame(expression) == :utc,
