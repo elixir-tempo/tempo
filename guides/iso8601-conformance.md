@@ -1,6 +1,6 @@
 # ISO 8601 Conformance Guide
 
-Tempo implements a substantial subset of [ISO 8601:2019](https://www.iso.org/standard/70907.html) Part 1 and [ISO 8601-2:2019](https://www.iso.org/standard/70908.html) Part 2, plus the [IETF IXDTF draft (draft-ietf-sedate-datetime-extended-09)](https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html). This guide catalogues what is supported, what isn't, and where Tempo diverges from the strict standard.
+Tempo implements a substantial subset of [ISO 8601:2019](https://www.iso.org/standard/70907.html) Part 1 and [ISO 8601-2:2019](https://www.iso.org/standard/70908.html) Part 2, plus the [IETF IXDTF draft (draft-ietf-sedate-datetime-extended-09)](https://www.rfc-editor.org/rfc/rfc9557). This guide catalogues what is supported, what isn't, and where Tempo diverges from the strict standard.
 
 The canonical authority is the PDF of the ISO standard (held locally in `~/Documents/Development/iso_standards/`). When this document and the standard disagree, the standard wins — please file an issue.
 
@@ -188,7 +188,7 @@ true
 
 ## 4. IXDTF — Internet Extended Date/Time Format
 
-Tempo implements the [IXDTF draft](https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html) suffix syntax. After any ISO 8601 date-time, an optional suffix may carry:
+Tempo implements the [RFC 9557 (IXDTF)](https://www.rfc-editor.org/rfc/rfc9557) suffix syntax. After any ISO 8601 date-time, an optional suffix may carry:
 
 | Suffix | Example | Stored on `%Tempo{}` |
 |---|---|---|

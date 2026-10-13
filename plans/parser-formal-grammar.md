@@ -65,7 +65,7 @@ Neither part of ISO 8601:2019 contains a grammar. A search of both documents fin
 
 Two neighbouring specifications do publish ABNF and are copied rather than transcribed: RFC 3339, a profile of Part 1, and RFC 9557 (IXDTF), whose suffix `Tempo.Iso8601.Tokenizer.Extended` reads.
 
-The standard's PDFs are copyrighted and kept out of the repository (`papers/iso8601_specs/` is in `.gitignore`), so CI cannot read them. Whatever is taken from them is extracted once, locally, and committed as data. The grammar is our own statement of the syntax, not a copy of the standard's text.
+The standard's PDFs are copyrighted and kept out of the repository (`standards/iso8601/` is in `.gitignore`), so CI cannot read them. Whatever is taken from them is extracted once, locally, and committed as data. The grammar is our own statement of the syntax, not a copy of the standard's text.
 
 ## What validated means here
 

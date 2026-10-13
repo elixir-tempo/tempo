@@ -176,8 +176,8 @@ The only standing config deviations are disables with concrete, documented reaso
 
 The following documents are **critical** when working on this project. Consult them whenever behaviour, syntax, or semantics need to be verified — do not guess.
 
-* **ISO 8601 standards** — the canonical PDFs live in this repository at `papers/iso8601_specs/` (`ISO_8601-1_2019(en).PDF` and `ISO_8601-2_2019(en).PDF`; read them with `pdftotext`). These are the source of truth for ISO 8601 Part 1 (date/time representations) and Part 2 (extensions), which Tempo implements.
+* **ISO 8601 standards** — the canonical PDFs live in this repository at `standards/iso8601/` (`ISO_8601-1_2019(en).PDF` and `ISO_8601-2_2019(en).PDF`; read them with `pdftotext -layout`). They are git-ignored, never committed or packaged. These are the source of truth for ISO 8601 Part 1 (date/time representations) and Part 2 (extensions), which Tempo implements.
 
-* **IETF draft-ietf-sedate-datetime-extended-09 (IXDTF)** — <https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html#name-format-of-extended-informat>. Defines the extended information suffix syntax (`[zone]`, `[u-ca=calendar]`, `[key=value]`, critical `!` flag) parsed by `Tempo.Iso8601.Tokenizer.Extended`.
+* **RFC 9557 (IXDTF)** — vendored at `standards/rfc/rfc9557.txt` (<https://www.rfc-editor.org/rfc/rfc9557>), the published form of draft-ietf-sedate-datetime-extended. The other RFCs Tempo implements (3339, 5234, 5545, 7529, 8984) are beside it; `standards/README.md` lists them. Defines the extended information suffix syntax (`[zone]`, `[u-ca=calendar]`, `[key=value]`, critical `!` flag) parsed by `Tempo.Iso8601.Tokenizer.Extended`.
 
 * **Allen's Interval Algebra** — <https://ics.uci.edu/~alspaugh/cls/shr/allen.html>. The 13 base relations (`precedes`, `meets`, `overlaps`, `finished_by`, `contains`, `starts`, `equals`, and their inverses, plus `preceded_by`) used by `Tempo.relation/2` (delegating to `Tempo.Interval.relation/2`) when comparing intervals. For ordering rather than relating, `Tempo.compare/3` returns `:lt | :eq | :gt` and makes `Tempo` usable as an `Enum` sorter module.

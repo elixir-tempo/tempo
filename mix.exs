@@ -115,9 +115,11 @@ defmodule Tempo.MixProject do
       formatters: ["html", "markdown"],
       groups_for_modules: groups_for_modules(),
       groups_for_extras: groups_for_extras(),
+      # The README's references resolve again as the redesign's phases land.
       skip_undefined_reference_warnings_on:
         [
-          "CHANGELOG.md"
+          "CHANGELOG.md",
+          "README.md"
         ] ++ Path.wildcard("guides/*.md") ++ livebooks()
     ]
   end
@@ -190,6 +192,7 @@ defmodule Tempo.MixProject do
         "guides/glossary.md",
         "guides/operation-matrix.md",
         "guides/iso8601-conformance.md",
+        "guides/iso8601-grammar.md",
         "guides/rfc5545_rrule_conformance.md",
         "guides/shared-ast-iso8601-and-rrule.md"
       ],
@@ -209,8 +212,14 @@ defmodule Tempo.MixProject do
   defp deps do
     [
       {:nimble_parsec, "~> 1.0"},
-      {:localize, github: "elixir-localize/localize", branch: "main", override: true},
-      {:calendrical, github: "elixir-localize/calendrical", branch: "main", override: true},
+      # As for calendrical below: `Localize.Calendar.ISO` gains the five
+      # callbacks of the redesign's calendar contract in the local checkout
+      # until they are pushed.
+      {:localize, path: "../../localize/localize", override: true},
+      # Phase 0 of the redesign added callbacks to Calendrical that are not yet
+      # committed upstream; the branch reads the local checkout until they are
+      # pushed, when this returns to the github dependency pinned by mix.lock.
+      {:calendrical, path: "../../localize/calendrical", override: true},
       {:astro, "~> 2.7"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},
@@ -241,7 +250,7 @@ defmodule Tempo.MixProject do
   end
 
   defp elixirc_paths(:dev) do
-    ["lib", "mix", "bench"]
+    ["lib", "mix"]
   end
 
   defp elixirc_paths(_) do

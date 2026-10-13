@@ -7,7 +7,7 @@ defmodule Tempo.Iso8601.Tokenizer do
   #
   # `tokenize/1` returns a 2-tuple `{tokens, extended_info}` where
   # `extended_info` is either `nil` or a map of parsed
-  # [IXDTF](https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html)
+  # [RFC 9557 (IXDTF)](https://www.rfc-editor.org/rfc/rfc9557)
   # suffix information.  See `Tempo.Iso8601.Tokenizer.Extended` for
   # the shape of the extended map.
 
@@ -78,7 +78,7 @@ defmodule Tempo.Iso8601.Tokenizer do
   ### Arguments
 
   * `string` is any ISO 8601 formatted string, optionally with an
-    [IXDTF](https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html)
+    [RFC 9557 (IXDTF)](https://www.rfc-editor.org/rfc/rfc9557)
     suffix (such as `[Europe/Paris][u-ca=hebrew]`).
 
   ### Returns

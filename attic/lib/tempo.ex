@@ -1,0 +1,17778 @@
+defmodule Tempo do
+  @moduledoc """
+  Documentation for `Tempo`.
+
+  ### Terminology
+
+  The following terms, defined by ISO 8601, are used throughout
+  Tempo. For further information consult:
+
+  * [ISO Online browsing platform](https://www.iso.org/obp)
+  * [IEC Electropedia](http://www.electropedia.org/)
+
+  #### Date
+
+  A [time](#time) on the the calendar time scale. Common forms of date include calendar date,
+  ordinal date or week date.
+
+  #### Time
+
+  A mark attributed to an [instant](#instant) or a [time interval](#time_interval) on a specified
+  [time scale](#time_scale).
+
+  The term “time” is often used in common language. However, it should only be used if the
+  meaning is clearly visible from the context.
+
+  On a time scale consisting of successive time intervals, such as a clock or calendar,
+  distinct instants may be expressed by the same time.
+
+  This definition corresponds with the definition of the term “date” in
+  IEC 60050-113:2011, 113-01-12.
+
+  #### Instant
+
+  A point on the [time axis](#time_axis). An instantaneous event occurs at a specific instant.
+
+  #### Time axis
+
+  A mathematical representation of the succession in time according to the space-time model
+  of instantaneous events along a unique axis/
+
+  According to the theory of special relativity, the time axis depends on the choice of a
+  spatial reference frame.
+
+  In IEC 60050-113:2011, 113-01-03, time according to the space-time model is defined to be
+  the one-dimensional subspace of space-time, locally orthogonal to space.
+
+  #### Time scale
+
+  A system of ordered marks which can be attributed to [instants](#instant) on the
+  [time axis](#time_axis), one instant being chosen as the origin.
+
+  A time scale may amongst others be chosen as:
+
+  * continuous, e.g. international atomic time (TAI) (see IEC 60050-713:1998, 713-05-18);
+
+  * continuous with discontinuities, e.g. UTC due to leap seconds, standard time due
+    to summer time and winter time;
+
+  * successive steps, e.g. [calendars](#calendar), where the [time axis](#time_axis) is split
+    up into a succession of consecutive time intervals and the same mark is attributed to all
+    instants of each time interval;
+
+  * discrete, e.g. in digital techniques.
+
+  #### Time interval
+
+  A part of the [time axis](#time_axis) limited by two [instants](#instant) *including, unless
+  otherwise stated, the limiting instants themselves*.
+
+  #### Time scale unit
+
+  A unit of measurement of a [duration](#duration)
+
+  For example:
+
+  * Calendar year, calendar month and calendar day are time scale units
+    of the Gregorian calendar.
+
+  * Clock hour, clock minutes and clock seconds are time scale units of the 24-hour clock.
+
+  In Tempo, time scale units are referred to by the shortened term "unit".  When a "unit" is
+  combined with a value, the combination is referred to as a "component".
+
+  #### Duration
+
+  A non-negative quantity of time equal to the difference between the final and initial
+  [instants](#instant) of a [time interval](#interval)
+
+  The duration is one of the base quantities in the International System of Quantities (ISQ)
+  on which the International System of Units (SI) is based. The term “time” instead of
+  “duration” is often used in this context and also for an infinitesimal duration.
+
+  For the term “duration”, expressions such as “time” or “time interval” are often used,
+  but the term “time” is not recommended in this sense and the term “time interval” is
+  deprecated in this sense to avoid confusion with the concept of “time interval”.
+
+  The exact duration of a [time scale unit](#time_scale_unit) depends on the
+  [time scale](#time_scale) used. For example, the durations of a year, month, week,
+  day, hour or minute, may depend on when they occur (in a Gregorian calendar, a
+  calendar month can have a duration of 28, 29, 30, or 31 days; in a 24-hour clock, a
+  clock minute can have a duration of 59, 60, or 61 seconds, etc.). Therefore,
+  the exact duration can only be evaluated if the exact duration of each is known.
+
+  """
+
+  alias Calendrical.Kday
+  alias Localize.Territory.Hemisphere
+  alias Tempo.AbstractSeasonError
+  alias Tempo.Calendars
+  alias Tempo.Clock
+  alias Tempo.Compare
+  alias Tempo.ConversionError
+  alias Tempo.Duration
+  alias Tempo.Enumeration
+  alias Tempo.Enumeration.Zone
+  alias Tempo.EventError
+  alias Tempo.Explain
+  alias Tempo.FloatingTempoError
+  alias Tempo.Format
+  alias Tempo.Interval
+  alias Tempo.Interval.Steps
+  alias Tempo.IntervalEndpointsError
+  alias Tempo.IntervalSet
+  alias Tempo.InvalidCalendarError
+  alias Tempo.InvalidDateError
+  alias Tempo.InvalidUnitError
+  alias Tempo.Iso8601.AST
+  alias Tempo.Iso8601.Group
+  alias Tempo.Iso8601.Parser
+  alias Tempo.Iso8601.Tokenizer
+  alias Tempo.Iso8601.Unit
+  alias Tempo.Iso8601EncodeError
+  alias Tempo.Mask
+  alias Tempo.Math
+  alias Tempo.NotBuilt
+  alias Tempo.Operations
+  alias Tempo.ParseError
+  alias Tempo.Qualification
+  alias Tempo.RecurrenceSet.Conditional
+  alias Tempo.ResolutionError
+  alias Tempo.Rounding
+  alias Tempo.RoundingError
+  alias Tempo.RRule.Selection
+  alias Tempo.Select
+  alias Tempo.Split
+  alias Tempo.Territory
+  alias Tempo.TimeZoneDatabase
+  alias Tempo.UnanchoredError
+  alias Tempo.UnboundedRecurrenceError
+  alias Tempo.UnboundedSetError
+  alias Tempo.UnitValues
+  alias Tempo.UnknownZoneError
+  alias Tempo.Validation
+  alias Tempo.ZonedTempoError
+
+  import Tempo.Calendars, only: [is_notation: 1, is_notation_weeks: 1, is_outside: 1]
+
+  # A value is in a calendar, and one built with none is in the default: a
+  # struct written by hand (`%Tempo{time: [year: 2026]}`) had `nil` there,
+  # which some operations read as the default calendar and others called as
+  # a module.
+  defstruct [
+    :time,
+    :shift,
+    :extended,
+    :qualifications,
+    calendar: Calendars.outside(Calendars.default()),
+    metadata: %{}
+  ]
+
+  @typedoc """
+  What a unit of a value holds.
+
+  * A whole number: the 15 of `~o"2026-06-15"`.
+
+  * A list of whole numbers and ranges, for a set (`{1,15}D`, `{1..-1}M`).
+
+  * A tuple, for a group (`{:group, 4..6}`, the second quarter), unspecified digits (`{:mask, [1, 9, :X, :X]}`), a number with a margin of error or significant digits (`{2018, [margin_of_error: 2]}`) and a leap month of a lunisolar calendar (`{5, :leap}`).
+
+  * `:any`, for a unit that is wholly unspecified (`X*`).
+
+  * A number with a fraction, in a value as the parser reads it and before it is validated: a validated value holds none.
+
+  """
+  @type token :: integer() | float() | :any | list() | tuple()
+
+  @typedoc """
+  A part of a second: `{microseconds, precision}`, where `microseconds` is `0..999_999` and `precision`, `0..6`, is the number of decimal places it was written to.
+
+  """
+  @type microsecond :: {0..999_999, 0..6}
+
+  @type time_unit ::
+          :year | :month | :week | :day | :hour | :minute | :second | :microsecond
+
+  @typedoc """
+  The units of a value, coarsest first, each with what it holds.
+
+  A month is counted from the year's first (`:month`) or named as a lunisolar calendar names it (`:traditional_month`); a week is ISO 8601's (`:week`) or the calendar's own (`:calendar_week`); a day is of its month (`:day`), of its year (`:day_of_year`) or of its week (`:day_of_week`). A century, a decade, a half and a quarter are groups of years or of months. A `:selection` holds the parts of a rule (`L1K1IN`, the first Monday), a keyword list of its own.
+
+  A `:season` is one of ISO 8601-2's four seasons "independent of location", 21 to 24, written where a month is and kept as it is written: it has no dates until `in_territory/2` or `to_interval/2` gives it a hemisphere. A season of a hemisphere (25 to 32) is read as the interval of dates it is.
+
+  """
+  @type token_list :: [
+          {:year, token}
+          | {:season, 21..24}
+          | {:month, token}
+          | {:traditional_month, token}
+          | {:week, token}
+          | {:calendar_week, token}
+          | {:day, token}
+          | {:day_of_year, token}
+          | {:day_of_week, token | [integer()]}
+          | {:hour, token}
+          | {:minute, token}
+          | {:second, token}
+          | {:microsecond, microsecond() | [microsecond()]}
+          | {:selection, keyword()}
+        ]
+
+  @type time_shift :: [{:hour, integer()} | {:minute, integer()} | {:second, integer()}] | nil
+
+  @typedoc """
+  A value's zone and tags, as an IXDTF suffix writes them. `nil` for a value with no zone, offset or tag.
+
+  A `[u-ca=NAME]` suffix names the value's calendar, which is its `:calendar` module: the name is not kept here.
+
+  * `:zone_id` — IANA time zone name such as `"Europe/Paris"`.
+
+  * `:zone_offset` — numeric offset in minutes from `[+HH:MM]`.
+
+  * `:zone_critical` — whether the zone was written as critical (`[!Europe/Paris]`).
+
+  * `:tags` — map of non-`u-ca` elective tagged suffixes.
+
+  """
+  @type extended_info :: %{
+          zone_id: String.t() | nil,
+          zone_offset: integer() | nil,
+          zone_critical: boolean(),
+          tags: %{optional(String.t()) => [String.t()]}
+        }
+
+  @typedoc """
+  An ISO 8601-2 / EDTF qualifier of a component.
+
+  * `:uncertain` — the component is uncertain (`?`).
+
+  * `:approximate` — the component is approximate (`~`), e.g. "circa".
+
+  * `:uncertain_and_approximate` — both (`%`).
+
+  * `nil` when the component is not qualified.
+
+  """
+  @type qualification ::
+          :uncertain | :approximate | :uncertain_and_approximate | nil
+
+  @typedoc """
+  A value's qualifications (ISO 8601-2 §8), held per component.
+
+  A map from a component's unit (`:year`, `:month`, `:day`, …) to its
+  qualifier, naming only units the value holds. A qualifier written
+  after a whole value (`2026-06?`) qualifies each of its components,
+  and is recorded for each. `nil` when no component is qualified. Read
+  it with `qualification/1` and `qualification/2`.
+
+  """
+  @type qualifications :: %{optional(atom()) => qualification()} | nil
+
+  @type t :: %__MODULE__{
+          time: token_list(),
+          shift: time_shift(),
+          calendar: Calendar.calendar() | nil,
+          extended: extended_info() | nil,
+          qualifications: qualifications(),
+          metadata: map()
+        }
+  @typedoc """
+  The error payload returned inside `{:error, reason}` tuples.
+
+  As of v0.21, every originating error site in Tempo returns an
+  `Exception`-conforming struct (one of the types under
+  `lib/tempo/exception/`), mirroring the convention in Localize
+  and Calendrical. The `atom() | binary()` members are retained
+  transiently for backward compatibility during the migration
+  and will be removed once all callers are updated.
+  """
+  @type error_reason :: Exception.t()
+
+  # Canonical coarse-to-fine order of time-scale units. Used by
+  # `new/1` to reorder components before building, so callers can
+  # pass them in any convenient order.
+  @canonical_unit_order [
+    :year,
+    :quarter,
+    :month,
+    :week,
+    :day,
+    :day_of_year,
+    :day_of_week,
+    :hour,
+    :minute,
+    :second,
+    :microsecond
+  ]
+
+  @week_axis_units [:week, :day_of_week]
+  @gregorian_axis_units [:month, :day]
+
+  @known_options [:calendar, :zone, :shift, :qualification, :metadata, :tags]
+  @qualification_values [
+    :uncertain,
+    :approximate,
+    :uncertain_and_approximate
+  ]
+
+  @doc """
+  Construct a `t:Tempo.t/0` from a keyword list of time-scale
+  components and options.
+
+  The companion to `~o` sigils and `Tempo.from_iso8601/1`: where the
+  sigil is ideal for literal values and `from_iso8601/1` for already-
+  formatted strings, `new/1` is the right constructor when you have
+  structured data at runtime — form inputs, database rows, API
+  payloads, test fixtures.
+
+  Components can be passed in any order; `new/1` reorders them
+  coarse-to-fine (year → month → day → hour → minute → second)
+  before building the struct.
+
+  Axis coherence is enforced: the Gregorian axis (`:month`, `:day`),
+  the week axis (`:week`, `:day_of_week`), the ordinal axis
+  (`:day_of_year`) and `:quarter` are mutually exclusive.
+
+  ### Arguments
+
+  * `components` is a keyword list — or a map with the same atom
+    keys — mixing time-scale components and options. At least one
+    time-scale component must be present.
+
+    Maps are convenient for interop with Elixir's standard date
+    and time types: the fields of a `t:Date.t/0`, a `t:Time.t/0` or a
+    `t:NaiveDateTime.t/0` (as `Map.from_struct/1` gives them), or a
+    bare `Calendrical.parse/2` `:map` result, can be passed
+    directly, and `from_elixir/2` takes the struct itself.
+    `Calendar.ISO` (Elixir's default) is silently
+    normalised to `Calendrical.Gregorian` so calendar-aware
+    validation works.
+
+  ### Time-scale components
+
+  Every component value must be an integer, but for `:microsecond`.
+
+  * `:year` is the calendar year.
+
+  * `:quarter` is the quarter of the year, spanning the months the
+    calendar's `quarter/2` gives it — the value `2026-34` parses to. It
+    requires `:year`.
+
+  * `:month` is the calendar month (Gregorian axis).
+
+  * `:week` is the ISO 8601 week of the year (week axis): weeks start
+    on a Monday and week 1 is the one holding the year's fourth day,
+    counted in the calendar's own year. A calendar's own weeks are
+    written `w` in an ISO 8601 string (`~o"2026Y10w"`).
+
+  * `:day` is the day of month (Gregorian axis).
+
+  * `:day_of_year` is the ordinal day within the year (ordinal axis).
+    The value is the calendar date it names, as the ordinal date
+    `2026-166` parses to.
+
+  * `:day_of_week` is the day of the week, `1..7` (week axis).
+
+  * `:hour` is the clock hour `0..23`. A time of day given under a
+    year, a month or a week with no day is on the first day of it, as
+    `2026-06T17` is read, and one given with a minute or a second and
+    no hour is in hour zero.
+
+  * `:minute` is the clock minute `0..59`.
+
+  * `:second` is the clock second `0..59` (or `60` on a leap-second date).
+
+  * `:microsecond` is a decimal fraction of the second as Elixir's
+    date and time types hold one: `{microseconds, digits}`, so that
+    `{500_000, 1}` is `.5` and `{250_000, 3}` is `.250`. It requires
+    `:second`. No digits (`{0, 0}`) is no fraction.
+
+  ### Options
+
+  * `:calendar` is the `Calendrical` calendar module used to
+    interpret and validate the components. Defaults to
+    `Calendar.ISO`. A calendar of weeks, such as
+    `Calendrical.ISOWeek`, takes a `:month` and a `:day` of its own, a
+    month being four or five of its weeks, and a `:week` and a
+    `:day_of_week` are the date they name in it. A calendar is a module
+    and never the name of one: `:hebrew` is an error.
+
+  * `:zone` is an IANA time-zone name as a binary (e.g.
+    `"Australia/Sydney"`). Sets `extended.zone_id`. A date with a
+    zone and no time of day is that day in the zone. A name the
+    time zone database does not have is an error.
+
+  * `:shift` is a manual UTC offset expressed as `[hour: n]` or
+    `[hour: n, minute: m]`, with a `:second` too if the offset has
+    one. Each is a whole number, and an offset behind UTC carries its
+    sign on its first unit that is not zero: `[hour: -5, minute: 30]`
+    is five and a half hours behind. Given beside a `:zone` it is the
+    offset the zone is at on that date and time, either of the two
+    where the zone's clocks go back through it, and the pair is
+    refused where it is not. A value with no year names no date to
+    ask the zone of, and is built as it is given.
+
+  * `:qualification` marks the whole value with an EDTF qualifier,
+    which qualifies each of its components. One of `:uncertain`,
+    `:approximate`, or `:uncertain_and_approximate`.
+
+  * `:metadata` is a map of the caller's own data carried with the
+    value (a holiday name, a source), read with `metadata/1`. It is
+    not part of the value's ISO 8601 form: `to_iso8601/1` leaves it
+    out, and converting the value (`to_interval/2`) moves it to
+    the interval or intervals it becomes.
+
+  * `:tags` is a map of IXDTF (RFC 9557) elective suffix tags,
+    written after the value as `[key=value]`. A key is a string of
+    lowercase letters, digits, `_` and `-` starting with a letter or
+    `_`; a value is letters and digits, several joined by `-` (or
+    given as a list). The calendar is the `:calendar` option, not a
+    `u-ca` tag.
+
+  ### Returns
+
+  * `{:ok, t()}` on success.
+
+  * `{:error, reason}` when components are missing, have
+    non-integer values or mix axes; when the calendar is not a
+    calendar module (a `Tempo.InvalidCalendarError`) or the zone is
+    not one the time zone database has (a `Tempo.UnknownZoneError`);
+    and when the shift is not whole hours, minutes and seconds, or is
+    not the offset the zone is at on that date and time (a
+    `Tempo.ZoneOffsetMismatchError`).
+
+  ### Examples
+
+      iex> {:ok, tempo} = Tempo.new(year: 2026, month: 6, day: 15)
+      iex> tempo.time
+      [year: 2026, month: 6, day: 15]
+
+      iex> {:ok, tempo} = Tempo.new(day: 15, month: 6, year: 2026)
+      iex> tempo.time
+      [year: 2026, month: 6, day: 15]
+
+      iex> {:ok, meeting} = Tempo.new(year: 2026, month: 6, day: 15, hour: 14, minute: 30)
+      iex> meeting.time
+      [year: 2026, month: 6, day: 15, hour: 14, minute: 30]
+
+      iex> {:ok, week} = Tempo.new(year: 2026, week: 24)
+      iex> week.time
+      [year: 2026, week: 24]
+
+      iex> Tempo.new(year: 2026, week: 24, day_of_week: 3)
+      {:ok, ~o"2026-W24-3"}
+
+      iex> Tempo.new(year: 2026, month: 6, day: 15, zone: "Europe/Paris")
+      {:ok, ~o"2026-06-15[Europe/Paris]"}
+
+      iex> Tempo.new(year: 2026, month: 6, day: 15, hour: 9, shift: [hour: 2], zone: "Europe/Paris")
+      {:ok, ~o"2026Y6M15DT9HZ2H[Europe/Paris]"}
+
+      iex> {:error, %Tempo.ZoneOffsetMismatchError{}} =
+      ...>   Tempo.new(year: 2026, month: 6, day: 15, hour: 9, shift: [hour: 5], zone: "Europe/Paris")
+
+      iex> Tempo.new(hour: 10, minute: 30, second: 45, microsecond: {500_000, 1})
+      {:ok, ~o"T10:30:45.5"}
+
+      iex> {:ok, second_quarter} = Tempo.new(year: 2026, quarter: 2)
+      iex> Tempo.to_interval(second_quarter)
+      {:ok, ~o"2026Y4M/7M"}
+
+      iex> {:error, _} = Tempo.new(year: 2026, month: 13)
+
+      iex> {:error, _} = Tempo.new(year: 2026, month: 6, week: 24)
+
+      iex> {:error, %Tempo.InvalidCalendarError{}} = Tempo.new(year: 5787, calendar: :hebrew)
+
+      iex> {:error, %Tempo.UnknownZoneError{}} = Tempo.new(year: 2026, zone: "Mars/Olympus")
+
+      iex> {:ok, tempo} = Tempo.new(%{year: 2026, month: 6, day: 15})
+      iex> tempo.time
+      [year: 2026, month: 6, day: 15]
+
+      iex> {:ok, tempo} = Tempo.new(Map.from_struct(~D[2026-06-15]))
+      iex> tempo.time
+      [year: 2026, month: 6, day: 15]
+
+  """
+  @spec new(keyword() | map()) :: {:ok, t()} | {:error, error_reason()}
+  def new(components) when is_list(components) do
+    calendar = Keyword.get(components, :calendar)
+
+    if is_nil(calendar) or Calendars.outside?(calendar) do
+      components
+      |> Calendars.inside()
+      |> do_new()
+      |> Calendars.outside()
+    else
+      do_new(components)
+    end
+  end
+
+  def new(components) when is_map(components) and not is_struct(components) do
+    components
+    |> Map.to_list()
+    |> new()
+  end
+
+  def new(other) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.new/1 expects a keyword list of time-scale components " <>
+         "and options. Got: #{Calendars.inspect(other)}"
+     )}
+  end
+
+  # A value is built in the calendar it is given, and in `Calendar.ISO` when
+  # it is given none: that one is built as Tempo works with it and answered
+  # as the caller holds it.
+  defp do_new(components) do
+    with :ok <- ensure_keyword(components),
+         {components, options} <- split_components_and_options(components),
+         :ok <- validate_options(options),
+         :ok <- validate_components(components),
+         :ok <- validate_axis_coherence(components),
+         {:ok, components} <- fraction_of_second(components),
+         {:ok, components} <- quarter_to_group(components, options),
+         {:ok, components} <- day_of_year_to_date(components, options),
+         {:ok, tempo} <- build_tempo(components, options) do
+      validate_against_calendar(tempo)
+    end
+  end
+
+  @doc """
+  Bang variant of `new/1` — raises on invalid input.
+
+  ### Examples
+
+      iex> Tempo.new!(year: 2026, month: 6, day: 15).time
+      [year: 2026, month: 6, day: 15]
+
+  """
+  @spec new!(keyword() | map()) :: t()
+  def new!(components) when is_list(components) or is_map(components) do
+    case new(components) do
+      {:ok, tempo} -> tempo
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, "Tempo.new!/1 failed: #{Calendars.inspect(reason)}"
+    end
+  end
+
+  defp ensure_keyword(components) do
+    if Keyword.keyword?(components) do
+      :ok
+    else
+      {:error,
+       ArgumentError.exception(
+         "Tempo.new/1 expects a keyword list of time-scale components " <>
+           "and options. Got: #{Calendars.inspect(components)}"
+       )}
+    end
+  end
+
+  defp split_components_and_options(kw) do
+    {options, components} =
+      Enum.split_with(kw, fn {key, _value} -> key in @known_options end)
+
+    {components, in_a_calendar(options)}
+  end
+
+  # A value built with no calendar, or with `nil` for one, is in the
+  # calendar a value that names none is in.
+  defp in_a_calendar(options) do
+    if is_nil(Keyword.get(options, :calendar)) do
+      Keyword.put(options, :calendar, Calendars.default())
+    else
+      options
+    end
+  end
+
+  defp validate_options(options) do
+    with :ok <- validate_calendar(Keyword.get(options, :calendar)),
+         :ok <- validate_zone(Keyword.get(options, :zone)),
+         :ok <- validate_qualification(Keyword.get(options, :qualification)),
+         :ok <- validate_metadata(Keyword.get(options, :metadata, %{})) do
+      validate_tags(Keyword.get(options, :tags, %{}))
+    end
+  end
+
+  # A calendar is a module (`Calendrical.Hebrew`), never the name of one
+  # (`:hebrew`, "hebrew"). What was given was held as the value's calendar
+  # and called as a module where the value was first checked or used, which
+  # raised.
+  defp validate_calendar(nil) do
+    :ok
+  end
+
+  defp validate_calendar(calendar) do
+    case Calendars.validated(calendar) do
+      {:ok, _calendar} -> :ok
+      :error -> {:error, InvalidCalendarError.exception(calendar: calendar)}
+    end
+  end
+
+  # A zone is the name of one the time zone database has. What was given
+  # was held as the value's zone: an unknown one is read as UTC, and what
+  # is no name was not written with the value.
+  defp validate_zone(nil) do
+    :ok
+  end
+
+  defp validate_zone(zone) when is_binary(zone) do
+    if TimeZoneDatabase.zone_exists?(zone) do
+      :ok
+    else
+      {:error, UnknownZoneError.exception(zone_id: zone)}
+    end
+  end
+
+  defp validate_zone(zone) do
+    {:error, UnknownZoneError.exception(zone_id: zone)}
+  end
+
+  defp validate_qualification(nil) do
+    :ok
+  end
+
+  defp validate_qualification(value) when value in @qualification_values do
+    :ok
+  end
+
+  defp validate_qualification(other) do
+    {:error,
+     ArgumentError.exception(
+       ":qualification must be one of #{Calendars.inspect(@qualification_values)}, got #{Calendars.inspect(other)}"
+     )}
+  end
+
+  defp validate_metadata(metadata) when is_map(metadata) do
+    :ok
+  end
+
+  defp validate_metadata(other) do
+    {:error, ArgumentError.exception(":metadata must be a map, got #{Calendars.inspect(other)}")}
+  end
+
+  # IXDTF (RFC 9557) elective suffix tags, written `[key=value]`: a key of
+  # lowercase letters, digits, `_` and `-` that starts with a letter or `_`, and
+  # a value of letters and digits, several joined by `-`. The calendar has its
+  # own option, so `u-ca` is not a tag here.
+  defp validate_tags(tags) when is_map(tags) do
+    Enum.find_value(tags, :ok, fn {key, value} ->
+      if valid_tag?(key, value) do
+        nil
+      else
+        invalid_tag(key, value)
+      end
+    end)
+  end
+
+  defp validate_tags(other) do
+    {:error, ArgumentError.exception(":tags must be a map, got #{Calendars.inspect(other)}")}
+  end
+
+  defp valid_tag?(key, value) when is_binary(key) and key != "u-ca" do
+    Regex.match?(~r/\A[a-z_][a-z0-9_-]*\z/, key) and valid_tag_value?(tag_segments(value))
+  end
+
+  defp valid_tag?(_key, _value) do
+    false
+  end
+
+  defp valid_tag_value?([_ | _] = segments) do
+    Enum.all?(segments, &(is_binary(&1) and Regex.match?(~r/\A[A-Za-z0-9]+\z/, &1)))
+  end
+
+  defp valid_tag_value?(_segments) do
+    false
+  end
+
+  defp tag_segments(value) when is_binary(value) do
+    String.split(value, "-")
+  end
+
+  defp tag_segments(value) do
+    value
+  end
+
+  defp invalid_tag(key, value) do
+    {:error,
+     ArgumentError.exception(
+       "Invalid IXDTF tag #{Calendars.inspect(key)} => #{Calendars.inspect(value)}: a tag key is a string of " <>
+         "lowercase letters, digits, `_` and `-` starting with a letter or `_` (and not " <>
+         "`u-ca`, which is the :calendar option), and its value letters and digits, " <>
+         "several joined by `-`"
+     )}
+  end
+
+  defp validate_components([]) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.new/1 requires at least one time-scale component — e.g. " <>
+         "[year: 2026] or [hour: 14, minute: 30]. None were given."
+     )}
+  end
+
+  defp validate_components(components) do
+    Enum.reduce_while(components, :ok, fn {unit, value}, :ok ->
+      cond do
+        unit not in @canonical_unit_order ->
+          {:halt,
+           {:error,
+            ArgumentError.exception(
+              "Tempo.new/1 does not recognise the component #{Calendars.inspect(unit)}. " <>
+                "Valid components are #{Calendars.inspect(@canonical_unit_order)}."
+            )}}
+
+        not component_value?(unit, value) ->
+          {:halt, {:error, component_value_error(unit, value)}}
+
+        true ->
+          {:cont, :ok}
+      end
+    end)
+  end
+
+  # A fraction of a second is the pair Elixir's types hold: its microseconds
+  # and the digits it is written to.
+  defp component_value?(:microsecond, {value, precision}) do
+    value in 0..999_999 and precision in 0..6
+  end
+
+  defp component_value?(:microsecond, _value) do
+    false
+  end
+
+  defp component_value?(_unit, value) do
+    is_integer(value)
+  end
+
+  defp component_value_error(:microsecond, value) do
+    InvalidDateError.exception(
+      unit: :microsecond,
+      value: value,
+      reason: "must be {microseconds, digits}, such as {500_000, 1}"
+    )
+  end
+
+  defp component_value_error(unit, value) do
+    InvalidDateError.exception(unit: unit, value: value, reason: "must be an integer")
+  end
+
+  # A fraction is of the second it follows, and one written to no digits is
+  # none.
+  defp fraction_of_second(components) do
+    case Keyword.pop(components, :microsecond) do
+      {nil, components} ->
+        {:ok, components}
+
+      {{_value, 0}, components} ->
+        {:ok, components}
+
+      {fraction, without_fraction} ->
+        if Keyword.has_key?(without_fraction, :second) do
+          {:ok, without_fraction ++ [microsecond: fraction]}
+        else
+          {:error, ArgumentError.exception("Tempo.new/1 needs a :second for a :microsecond.")}
+        end
+    end
+  end
+
+  defp validate_axis_coherence(components) do
+    keys = Keyword.keys(components)
+
+    week_axis? = Enum.any?(keys, &(&1 in @week_axis_units))
+    gregorian_axis? = Enum.any?(keys, &(&1 in @gregorian_axis_units))
+    ordinal_axis? = :day_of_year in keys
+    quarter_axis? = :quarter in keys
+
+    mixed = Enum.count([week_axis?, gregorian_axis?, ordinal_axis?, quarter_axis?], & &1)
+
+    if mixed > 1 do
+      {:error,
+       ArgumentError.exception(
+         "Tempo.new/1 cannot mix calendar axes — choose one of: " <>
+           ":month/:day (Gregorian), :week/:day_of_week (week), " <>
+           ":day_of_year (ordinal), or :quarter. Got: #{Calendars.inspect(keys)}"
+       )}
+    else
+      :ok
+    end
+  end
+
+  # A quarter is the span the calendar's `quarter/2` returns, held as the
+  # group of months it covers, as the ISO 8601-2 quarter `2026-34` is.
+  defp quarter_to_group(components, options) do
+    case Keyword.pop(components, :quarter) do
+      {nil, components} ->
+        {:ok, components}
+
+      {quarter, components} ->
+        quarter_group(
+          components,
+          quarter,
+          Keyword.get(options, :calendar)
+        )
+    end
+  end
+
+  defp quarter_group(components, quarter, calendar) do
+    case Keyword.fetch(components, :year) do
+      {:ok, year} ->
+        put_quarter_group(components, year, quarter, calendar)
+
+      :error ->
+        {:error,
+         ArgumentError.exception("Tempo.new/1 needs a :year to place quarter #{quarter} in.")}
+    end
+  end
+
+  # An ordinal day is the calendar date it names, as the ISO 8601 ordinal
+  # date `2026-166` parses to, from Calendrical.
+  defp day_of_year_to_date(components, options) do
+    calendar = Keyword.get(options, :calendar)
+
+    case Keyword.pop(components, :day_of_year) do
+      {nil, _unchanged} ->
+        {:ok, components}
+
+      {day_of_year, without_day_of_year} ->
+        ordinal_date(without_day_of_year, day_of_year, calendar)
+    end
+  end
+
+  defp ordinal_date(components, day_of_year, calendar) do
+    with {:ok, year} <- Keyword.fetch(components, :year),
+         %{month: month, day: day} <- calendar.date_from_day_of_year(year, day_of_year) do
+      {:ok, components ++ [month: month, day: day]}
+    else
+      :error ->
+        {:error,
+         ArgumentError.exception("Tempo.new/1 needs a :year to place day #{day_of_year} in.")}
+
+      {:error, _reason} ->
+        {:error,
+         InvalidDateError.exception(
+           unit: :day_of_year,
+           value: day_of_year,
+           year: Keyword.get(components, :year),
+           calendar: calendar
+         )}
+    end
+  end
+
+  defp put_quarter_group(components, year, quarter, calendar) do
+    case Group.year_division_group(calendar, year, :quarter, quarter) do
+      {:ok, {unit, group}} ->
+        {:ok, Keyword.put(components, unit, group)}
+
+      {:error, reason} ->
+        {:error, Group.year_division_error(reason, year, :quarter, quarter, calendar)}
+    end
+  end
+
+  defp build_tempo(components, options) do
+    # The calendar is always named by now (`in_a_calendar/1`).
+    calendar = Keyword.get(options, :calendar)
+    zone = Keyword.get(options, :zone)
+    shift = Keyword.get(options, :shift)
+    qualification = Keyword.get(options, :qualification)
+
+    tags =
+      Map.new(Keyword.get(options, :tags, %{}), fn {key, value} -> {key, tag_segments(value)} end)
+
+    ordered_time =
+      components
+      |> Enum.sort_by(fn {unit, _value} ->
+        Enum.find_index(@canonical_unit_order, &(&1 == unit))
+      end)
+
+    {:ok,
+     %__MODULE__{
+       time: ordered_time,
+       shift: shift,
+       calendar: calendar,
+       extended: new_extended(zone, tags),
+       qualifications: Qualification.complete(ordered_time, qualification),
+       metadata: Keyword.get(options, :metadata, %{})
+     }}
+  end
+
+  # A value with neither a zone nor a tag carries no extended information.
+  defp new_extended(nil, tags) when map_size(tags) == 0 do
+    nil
+  end
+
+  defp new_extended(zone, tags) do
+    %{zone_id: zone, zone_offset: nil, zone_critical: false, tags: tags}
+  end
+
+  # Defer to `Tempo.Validation.validate/2` for calendar-aware range
+  # checks (month ≤ months_in_year, day ≤ days_in_month, leap-aware
+  # Feb 29, etc.). Validation may return an `InvalidDateError` with
+  # rich context. The value is the one the same components parse to, so a
+  # value built and a value read are one value: a week and a day of it are
+  # the calendar date they name (`2026-W25-3` is 17 June), in every calendar.
+  # A shift and a zone given together say twice how far the value's clock is
+  # from UTC, and where they disagree no one value is meant: it is refused
+  # (decided 2026-10-08), where it was held at an offset its zone is not at.
+  defp validate_against_calendar(%__MODULE__{calendar: calendar} = tempo) do
+    with {:ok, validated} <- Validation.validate(tempo, calendar),
+         :ok <- Validation.validate_zone_existence(validated),
+         :ok <- Compare.do_validate_zone_offset(validated) do
+      {:ok, validated}
+    end
+  end
+
+  @doc """
+  Creates a `t:Tempo.t/0` struct from an ISO 8601 or IXDTF
+  string.
+
+  The parser supports the vast majority of [ISO 8601](https://www.iso.org/iso-8601-date-and-time-format.html)
+  parts 1 and 2 as well as the Internet Extended Date/Time Format
+  (IXDTF) defined in
+  [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557).
+
+  An IXDTF suffix follows the ISO 8601 production and consists of
+  an optional time zone (`[Europe/Paris]` or `[+08:45]`) followed
+  by zero or more tagged suffixes (`[u-ca=hebrew]`, `[_key=value]`).
+  Any bracket may be prefixed with `!` to mark it critical —
+  unrecognised critical suffixes cause the parse to fail; elective
+  suffixes are retained verbatim under `extended.tags`.
+
+  A time shift and a zone on one value may disagree (RFC 9557 §3.4).
+  `Z` states the time in UTC and says nothing of local time, so it
+  agrees with any zone: `2022-07-08T00:14:07Z[Europe/Paris]` is
+  00:14:07 UTC as Paris's clock shows it, 02:14:07. A numeric offset
+  says what local time is. One that disagrees with a critical zone
+  (`[!Europe/Paris]`, `[!+08:45]`) is a
+  `Tempo.ZoneOffsetMismatchError`. One that disagrees with an elective
+  zone gives the moment, and the value is that moment as the zone's
+  clock shows it; pass `strict: true` to refuse an elective
+  disagreement too. An offset the zone is at is kept, and tells apart
+  the two readings of a repeated hour.
+
+  A value names a time in its zone. One whose every reading the
+  clock there skips is a `Tempo.ZoneGapError`: 02:30 on the night
+  clocks go forward, the hour from 02:00 that night, or a day the
+  zone left out, as Samoa left out 30 December 2011. A value that
+  holds a set in a unit names each value the set does, and is the
+  same error where one of them is such a reading:
+  `2026Y3M{28,29}DT2H30M[Europe/Paris]` names 02:30 on the 29th.
+
+  `parse/2` reads everything this function reads, and a locale's own
+  words besides.
+
+  ### Arguments
+
+  * `string` is any ISO 8601 formatted string, optionally
+    followed by an IXDTF suffix (`[Europe/Paris]`, `[u-ca=hebrew]`,
+    `[key=value]`). A suffix is written once, after the whole
+    expression, and applies to all of it: one written inside an
+    interval, a set or a recurrence is a `Tempo.ParseError`.
+
+  * `calendar_or_options` (optional) is a calendar module or a
+    keyword list of options. A calendar module always wins over any
+    `[u-ca=NAME]` tag in the IXDTF suffix. When omitted, the
+    `[u-ca=NAME]` tag names the calendar, and with no tag
+    `Calendar.ISO` is used. A calendar of weeks, such as
+    `Calendrical.ISOWeek`, has months of its own, each four or five
+    of its weeks: a date written with a month (`2026-06-15`) is that
+    calendar's own, and a week date (`2026-W25-1`) is the same day,
+    the date it names in the calendar's weeks. A date of another
+    calendar is brought to it with `to_calendar/2`.
+    Every part of an expression is in the calendar: both ends of an
+    interval, every member of a set, and the start, the domain and
+    the rule of a recurrence.
+
+  ### Options
+
+  * `:calendar` is the calendar module, as above.
+
+  * `:strict` when `true` rejects a value whose numeric offset
+    disagrees with an elective IXDTF zone (RFC 9557 §3.4), whether
+    the value stands alone, is an end of an interval or is a member
+    of a set. Defaults to `false`.
+
+  * `:territory` is the territory a season of 21 to 24 is read in, as `in_territory/2` takes it: `"2026-21"` is September to November with `territory: :AU`. With neither this nor `:locale` such a season is read as it is written, a season with no dates yet.
+
+  * `:locale` is a locale whose territory a season of 21 to 24 is read in. A `:territory` wins over it.
+
+  ### Returns
+
+  * `{:ok, value}` — a `t:t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.Duration.t/0` or `t:Tempo.Set.t/0` — whose `:extended`
+    field holds the zone and tags of an IXDTF suffix. The calendar a
+    suffix names is the value's `:calendar`, so a value read from
+    text is equal to the same value made with a calendar module.
+
+  * `{:error, reason}` when the string cannot be parsed or a
+    critical IXDTF suffix is unrecognised. A string is refused before
+    it is read where it is past one of four bounds, each far beyond
+    what a value is written with, so that the time taken to read or
+    to refuse a string is in proportion to its length: 8,192 bytes,
+    sets or groups six deep, selections sixteen deep, and a number of
+    128 digits. A value that is no string (a `nil`, a number, a map)
+    is a `Tempo.ParseError` too, where it was a `FunctionClauseError`:
+    a reader returns an error for whatever it is handed.
+
+  ### Examples
+
+      iex> Tempo.from_iso8601("2022-11-20")
+      {:ok, ~o"2022Y11M20D"}
+
+      iex> Tempo.from_iso8601("2022Y")
+      {:ok, ~o"2022Y"}
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("invalid")
+
+      iex> {:ok, tempo} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
+      iex> tempo.calendar
+      Calendrical.Hebrew
+
+      iex> {:ok, tempo} = Tempo.from_iso8601("2022-11-20T10:30:00Z[Europe/Paris][u-ca=hebrew]")
+      iex> {tempo.extended.zone_id, tempo.calendar}
+      {"Europe/Paris", Calendrical.Hebrew}
+
+      iex> Tempo.from_iso8601("5786-09-30[u-ca=hebrew]") == Tempo.from_iso8601("5786-09-30", Calendrical.Hebrew)
+      true
+
+      iex> {:error, %Tempo.UnknownZoneError{zone_id: "Continent/Imaginary"}} =
+      ...>   Tempo.from_iso8601("2022-11-20T10:30:00Z[!Continent/Imaginary]")
+
+      iex> Tempo.from_iso8601("2026-W25-1", Calendrical.ISOWeek)
+      {:ok, ~o"2026Y6M15D"W}
+
+      iex> Tempo.from_iso8601("2026-06-15", Calendrical.ISOWeek)
+      {:ok, ~o"2026Y6M15D"W}
+
+      iex> Tempo.from_iso8601("2026-21", territory: :AU)
+      {:ok, ~o"2026Y9M/12M"}
+
+  """
+  @spec from_iso8601(String.t(), Calendar.calendar() | keyword()) ::
+          {:ok,
+           t()
+           | Tempo.Interval.t()
+           | Tempo.Duration.t()
+           | Tempo.Set.t()}
+          | {:error, error_reason()}
+  def from_iso8601(string, calendar_or_options \\ []) do
+    string
+    |> read(Calendars.inside(calendar_or_options))
+    |> Calendars.outside()
+  end
+
+  @doc false
+  # Text read as `from_iso8601/2` reads it, for the library's own use. Text
+  # shows no value by which a caller's call can be told from one of the
+  # library's, so `from_iso8601/2` is the caller's, and where the library
+  # reads text itself it reads through this: what it reads is as Tempo works
+  # with it.
+  @spec read(String.t(), Calendar.calendar() | keyword()) ::
+          {:ok,
+           t()
+           | Tempo.Interval.t()
+           | Tempo.IntervalSet.t()
+           | Tempo.Duration.t()
+           | Tempo.Set.t()}
+          | {:error, error_reason()}
+  def read(string, calendar_or_options \\ [])
+
+  def read(string, options) when is_binary(string) and is_list(options) do
+    # Options form, and the default. `:calendar` selects the calendar
+    # (default: the IXDTF `[u-ca=NAME]` suffix, else Gregorian);
+    # `strict: true` rejects an IXDTF value whose numeric offset disagrees
+    # with its zone (RFC 9557 §3.4), where the value is read
+    # (`on_the_clock_of_its_zone/2`): a value alone, each end of an
+    # interval and each member of a set.
+    calendar = Keyword.get(options, :calendar, :from_ixdtf_or_default)
+
+    with {:ok, value} <- do_from_iso8601(string, calendar, strict?(options)) do
+      in_territory_given(value, options)
+    end
+  end
+
+  def read(string, calendar) when is_binary(string) do
+    # Explicit user calendar always wins — an IXDTF `[u-ca=NAME]` does
+    # not override the user's choice. This keeps the existing
+    # `Tempo.from_iso8601(string, Calendrical.Hebrew)` idiom
+    # working unchanged.
+    do_from_iso8601(string, calendar, false)
+  end
+
+  def read(not_a_string, _calendar_or_options) do
+    {:error, not_a_string(not_a_string)}
+  end
+
+  # What is read is a string. A value that is none (the `nil` of a field left
+  # empty, a number, a map) is an error and no raise, as a string that is no
+  # date is: a reader sits where what a caller was sent arrives.
+  defp not_a_string(value) do
+    written = Calendars.inspect(value, limit: 5, printable_limit: 60)
+    ParseError.exception(reason: "Could not parse #{written}: it is not a string")
+  end
+
+  defp strict?(options) do
+    Keyword.get(options, :strict, false) == true
+  end
+
+  # A season of 21 to 24 is given a hemisphere where it is read with a
+  # territory or a locale, and is left as it is written where it is read
+  # with neither: the current locale is not asked here, since the sigil
+  # reads when it is compiled. A territory wins over a locale.
+  defp in_territory_given(value, options) do
+    if Group.abstract_season?(value) do
+      options
+      |> Territory.named()
+      |> season_in_territory_given(value)
+    else
+      {:ok, value}
+    end
+  end
+
+  defp season_in_territory_given({:ok, nil}, value) do
+    {:ok, value}
+  end
+
+  defp season_in_territory_given({:ok, territory}, value) do
+    in_territory(value, territory)
+  end
+
+  defp season_in_territory_given({:error, _reason} = error, _value) do
+    error
+  end
+
+  defp do_from_iso8601(string, requested_calendar, strict?) do
+    with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string) do
+      tokens
+      |> from_tokens(extended, requested_calendar, strict?)
+      |> named_as_written(string)
+    end
+  end
+
+  # An interval's end may leave out the components it shares with its start
+  # "provided that the resulting expression is unambiguous" (ISO 8601-1
+  # §5.5.1), and in the basic format digits alone are a date: four are a year
+  # and six a year and a month (§5.3.5). So `20260615/0720` ends in the year
+  # 720 and `20260615T1030/1130` in the year 1130, each before its start
+  # (decided 2026-10-05). The error for such an end says how it was read and
+  # how the end is written without the ambiguity, where it said only that the
+  # start was not earlier than the end.
+  defp named_as_written({:error, %error{} = exception}, string)
+       when error in [IntervalEndpointsError, InvalidDateError] do
+    basic_end = ~r/\A(?<date>\d{8})(?<time>T\d{2,6})?\/(?<end>\d{4}|\d{6})\z/
+
+    case Regex.named_captures(basic_end, string) do
+      %{"date" => date, "time" => time, "end" => digits} ->
+        {:error, with_reason(exception, basic_end_reason(string, date, time, digits))}
+
+      nil ->
+        {:error, exception}
+    end
+  end
+
+  defp named_as_written(result, _string) do
+    result
+  end
+
+  defp with_reason(%IntervalEndpointsError{} = exception, reason) do
+    %{exception | reason: reason}
+  end
+
+  defp with_reason(%InvalidDateError{} = exception, reason) do
+    %{exception | reason: reason, unit: nil, value: nil, valid_range: nil}
+  end
+
+  defp basic_end_reason(string, date, time, digits) do
+    "The end #{Calendars.inspect(digits)} of #{Calendars.inspect(string)} is read as #{basic_end_reading(digits)}: " <>
+      "in the basic format digits alone are a date (ISO 8601-1 §5.3.5), and an interval's end " <>
+      "may leave out its higher components only where the result is unambiguous (§5.5.1). " <>
+      basic_end_advice(date, time, digits)
+  end
+
+  defp basic_end_reading(<<year::binary-4>>) do
+    "the year #{String.to_integer(year)}"
+  end
+
+  defp basic_end_reading(<<year::binary-4, month::binary-2>>) do
+    "the year #{String.to_integer(year)} and the month #{month}"
+  end
+
+  # An end of four digits after a date may be meant for its month and day,
+  # which the extended format writes without the ambiguity, or for a time of
+  # day, which keeps its `T` in the basic format as an end after a time does.
+  defp basic_end_advice(<<year::binary-4, month::binary-2, day::binary-2>>, "", digits) do
+    month_day = month_and_day(digits)
+
+    if is_nil(month_day) do
+      "Write a time of day with its `T` (`#{year}#{month}#{day}/T#{digits}`), or the end in full."
+    else
+      "Write a month and a day in the extended format (`#{year}-#{month}-#{day}/#{month_day}`), " <>
+        "a time of day with its `T` (`#{year}#{month}#{day}/T#{digits}`), or the end in full."
+    end
+  end
+
+  defp basic_end_advice(date, time, digits) do
+    "Write a time of day with its `T` (`#{date}#{time}/T#{digits}`), or the end in full."
+  end
+
+  defp month_and_day(<<month::binary-2, day::binary-2>>) do
+    if String.to_integer(month) in 1..12 and String.to_integer(day) in 1..31 do
+      "#{month}-#{day}"
+    end
+  end
+
+  defp month_and_day(_six_digits) do
+    nil
+  end
+
+  # Everything after tokenization. Shared by `from_iso8601/1,2` and by
+  # the profile parsers (`parse_date/1` and friends), which differ only
+  # in which tokenizer entry point produced the tokens — the calendar,
+  # group, validation and IXDTF stages are identical whatever shape the
+  # value turned out to be.
+  defp from_tokens(tokens, extended, requested_calendar, strict?) do
+    with {:ok, effective_calendar} <- resolve_calendar(requested_calendar, extended),
+         {:ok, parsed} <- Parser.parse(tokens, effective_calendar),
+         {:ok, expanded} <- Group.expand_groups(parsed, effective_calendar),
+         # An interval's suffix is both its ends', and they hold it before
+         # anything is asked of them: `2024-03-09T12/2024-03-10T12-04:00[America/New_York]`
+         # is two ends in New York, of which the end alone is written with an
+         # offset, and no end with an offset beside a floating start that
+         # would take it. Then a time shift written on one end is carried to
+         # a floating other, as ISO 8601-1 has it (`T10:00+05:00/T12:00`), so
+         # that the pair reaches `validate_endpoint_order/2` on one time line.
+         expanded =
+           expanded
+           |> with_its_suffix(extended)
+           |> propagate_endpoint_frame(),
+         {:ok, validated} <- Validation.validate(expanded, effective_calendar),
+         attached = attach_extended(validated, extended),
+         propagated = propagate_endpoint_frame(attached),
+         # Before the zone is asked whether it shows the reading: a time in
+         # UTC beside a zone is no reading of the zone's clock until it is
+         # shown on it.
+         {:ok, placed} <- on_the_clock_of_its_zone(propagated, strict?),
+         :ok <- Validation.validate_zone_existence(placed) do
+      {:ok, without_calendar_names(placed)}
+    end
+  end
+
+  # A `[u-ca=NAME]` suffix names a calendar, and by here it has: the
+  # `:calendar` of the value, and of each part of an expression that has
+  # parts, is the module the name resolves to.
+  # The name is dropped, so a value's calendar is recorded once, as its
+  # module, and a value read from text is equal to the same value made with a
+  # calendar module. What is left of a suffix is its zone and its tags, or
+  # `nil` when it had neither.
+  defp without_calendar_names(%__MODULE__{extended: %{} = extended} = tempo) do
+    %{tempo | extended: zone_and_tags(extended)}
+  end
+
+  defp without_calendar_names(%Tempo.Interval{} = interval) do
+    %{
+      interval
+      | from: without_calendar_names(interval.from),
+        to: without_calendar_names(interval.to),
+        repeat_rule: without_calendar_names(interval.repeat_rule)
+    }
+  end
+
+  defp without_calendar_names(%Tempo.Set{} = set) do
+    map_members(set, &without_calendar_names/1)
+  end
+
+  defp without_calendar_names(%Tempo.Range{first: first, last: last} = range) do
+    %{range | first: without_calendar_names(first), last: without_calendar_names(last)}
+  end
+
+  defp without_calendar_names(other) do
+    other
+  end
+
+  defp zone_and_tags(extended) do
+    case Map.delete(extended, :calendar) do
+      %{zone_id: nil, zone_offset: nil, tags: tags} when map_size(tags) == 0 -> nil
+      kept -> kept
+    end
+  end
+
+  # A zone or offset on either endpoint applies to a floating other: forward
+  # as ISO 8601-1 §5.5.1 says, and backward from a `[zone]` suffix IXDTF writes
+  # at the end. The pair-level rule (never overwriting) lives on
+  # `Tempo.Interval` so the parser and `Interval.new/1` cannot disagree about
+  # what the same endpoints mean.
+  defp propagate_endpoint_frame(%Interval{from: from, to: to} = interval) do
+    {from, to} = Interval.propagate_endpoint_frame(from, to)
+    %{interval | from: from, to: to}
+  end
+
+  # A set's member that is an interval is read as an interval is.
+  defp propagate_endpoint_frame(%Tempo.Set{} = set) do
+    map_members(set, &propagate_endpoint_frame/1)
+  end
+
+  defp propagate_endpoint_frame(other) do
+    other
+  end
+
+  defp map_members(%Tempo.Set{set: members, except: except} = set, fun) do
+    %{set | set: Enum.map(members, fun), except: Enum.map(except, fun)}
+  end
+
+  # Resolve the effective calendar for a parse.
+  #
+  # * Explicit user calendar always wins.
+  # * Otherwise, if the IXDTF `[u-ca=NAME]` suffix is present, its
+  #   atom is resolved to a calendar module (`Tempo.Calendars.named/1`).
+  # * Otherwise, the calendar of a value that names none.
+  defp resolve_calendar(:from_ixdtf_or_default, nil) do
+    {:ok, Calendars.default()}
+  end
+
+  defp resolve_calendar(:from_ixdtf_or_default, %{calendar: nil}) do
+    {:ok, Calendars.default()}
+  end
+
+  defp resolve_calendar(:from_ixdtf_or_default, %{calendar: name}) when is_atom(name) do
+    Calendars.named(name)
+  end
+
+  defp resolve_calendar(:from_ixdtf_or_default, _extended) do
+    {:ok, Calendars.default()}
+  end
+
+  # An explicit calendar always wins — but validate it is a usable
+  # calendar module first. Passing a namespace like `Calendrical.Islamic`
+  # (whose concrete forms are `.Civil`, `.UmmAlQura`, …) must return a
+  # clean error, not crash deep in validation with `UndefinedFunctionError`.
+  # What is no module at all (a string, a number) is refused the same way:
+  # it raised a `FunctionClauseError`.
+  defp resolve_calendar(calendar, _extended) do
+    with :error <- Calendars.validated(calendar),
+         do: {:error, InvalidCalendarError.exception(calendar: calendar)}
+  end
+
+  # The suffix of an interval, on both its ends, before they are compared.
+  defp with_its_suffix(%Tempo.Interval{} = interval, extended) do
+    attach_extended(interval, extended)
+  end
+
+  defp with_its_suffix(other, _extended) do
+    other
+  end
+
+  defp attach_extended(result, nil) do
+    result
+  end
+
+  # A suffix is written once, after the whole expression, and is each
+  # part's. An interval's ends hold it already (`with_its_suffix/2`), and
+  # keep what has been settled in it since.
+  defp attach_extended(%__MODULE__{extended: nil} = tempo, extended) do
+    %{tempo | extended: extended}
+  end
+
+  defp attach_extended(%__MODULE__{} = tempo, _extended) do
+    tempo
+  end
+
+  defp attach_extended(%Tempo.Range{} = range, extended) do
+    %{
+      range
+      | first: attach_extended(range.first, extended),
+        last: attach_extended(range.last, extended)
+    }
+  end
+
+  defp attach_extended(%Tempo.Interval{} = interval, extended) do
+    # The suffix of an interval is the suffix of both its ends.
+    %{
+      interval
+      | from: attach_extended(interval.from, extended),
+        to: attach_extended(interval.to, extended),
+        repeat_rule: rule_extended(interval, extended)
+    }
+  end
+
+  # A set's suffix is each member's, as an interval's is each endpoint's:
+  # `{2026-06-15T10:00,2026-06-16T10:00}[Europe/Paris]` is two times in
+  # Paris. Its calendar is already the members' calendar.
+  defp attach_extended(%Tempo.Set{} = set, extended) do
+    map_members(set, &attach_extended(&1, %{extended | calendar: nil}))
+  end
+
+  defp attach_extended(other, _extended) do
+    other
+  end
+
+  # A recurrence with no start of its own (`R/../P1Y/FL3M20DN[+09:00]`) keeps
+  # the suffix on its rule, which gives it to the start a window supplies, so
+  # its occurrences are in the zone the suffix names.
+  defp rule_extended(%Tempo.Interval{from: %__MODULE__{}, repeat_rule: rule}, _extended) do
+    rule
+  end
+
+  # The calendar a suffix names is already the rule's calendar, so only the
+  # zone and the tags are kept on it.
+  defp rule_extended(%Tempo.Interval{from: from, repeat_rule: %__MODULE__{} = rule}, extended)
+       when from in [nil, :undefined] do
+    attach_extended(rule, %{extended | calendar: nil})
+  end
+
+  defp rule_extended(%Tempo.Interval{repeat_rule: rule}, _extended) do
+    rule
+  end
+
+  @doc """
+  Bang variant of `from_iso8601/2`: the parsed value, or a raised
+  exception.
+
+  ### Arguments
+
+  * `string` is any ISO 8601 formatted string, optionally followed by
+    an IXDTF suffix.
+
+  * `calendar_or_options` (optional) is a calendar module or a
+    keyword list of options, as for `from_iso8601/2`.
+
+  ### Returns
+
+  * The parsed value: a `t:t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.Duration.t/0` or `t:Tempo.Set.t/0`.
+
+  ### Examples
+
+      iex> Tempo.from_iso8601!("2022-11-20")
+      ~o"2022Y11M20D"
+
+      iex> Tempo.from_iso8601!("2022Y")
+      ~o"2022Y"
+
+      iex> Tempo.from_iso8601!("2026-06-15T14:30[Australia/Sydney]")
+      ~o"2026Y6M15DT14H30M[Australia/Sydney]"
+
+  """
+  @spec from_iso8601!(String.t(), Calendar.calendar() | keyword()) ::
+          t() | Tempo.Interval.t() | Tempo.Duration.t() | Tempo.Set.t() | no_return()
+  def from_iso8601!(string, calendar_or_options \\ []) do
+    case from_iso8601(string, calendar_or_options) do
+      {:ok, value} -> value
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Parse a duration, written in ISO 8601.
+
+  `parse/2` reads every shape and returns whichever type the string
+  turned out to be. When the caller already knows the profile its value
+  belongs to — an iCalendar `DURATION` property, a duration-form
+  `TRIGGER` (RFC 5545 §3.3.6) — that is one guarantee short: a property
+  holding a date-time parses *successfully as the wrong type*, and the
+  mistake surfaces later, somewhere else. A duration is read in ISO 8601
+  only; unlike a date, it has no locale text form to read.
+
+  This function takes the profile as the caller's declaration. Only a
+  duration is admitted, and the whole string must be one, so a
+  duration carrying a qualifier (`P1D~`), a set of durations
+  (`{P1D,P2D}`), and a value that merely begins with a duration
+  (`P1D/2026-06-15`) are all rejected rather than silently truncated
+  or stripped.
+
+  Being a narrower grammar it is also a shorter path — the interval
+  and set alternatives are never tried — though correctness, not
+  speed, is the reason to prefer it.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 duration.
+
+  ### Returns
+
+  * `{:ok, duration}` where `duration` is a `t:Tempo.Duration.t/0`.
+
+  * `{:error, %Tempo.ParseError{}}` when the string is not a duration,
+    or is not *only* a duration.
+
+  ### Examples
+
+      iex> Tempo.parse_duration("PT1H")
+      {:ok, ~o"PT1H"}
+
+      iex> Tempo.parse_duration("P1Y2M3DT4H5M6S")
+      {:ok, ~o"P1Y2M3DT4H5M6S"}
+
+      iex> Tempo.parse_duration("-PT30M")
+      {:ok, ~o"PT-30M"}
+
+  A date-time is not a duration, and says so rather than succeeding as
+  the wrong type:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_duration("2026-06-15")
+
+  """
+  @spec parse_duration(String.t()) :: {:ok, Duration.t()} | {:error, error_reason()}
+  def parse_duration(string) when is_binary(string) do
+    with {:ok, tokens} <- Tokenizer.tokenize_duration(string) do
+      {:ok, Parser.parse(tokens)}
+    end
+  end
+
+  def parse_duration(not_a_string) do
+    {:error, not_a_string(not_a_string)}
+  end
+
+  @doc """
+  Raising version of `parse_duration/1`.
+
+  ### Arguments
+
+  * `string` is the candidate ISO 8601 duration.
+
+  ### Returns
+
+  * The `t:Tempo.Duration.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_duration!("PT1H30M")
+      ~o"PT1H30M"
+
+  """
+  @spec parse_duration!(String.t()) :: Duration.t() | no_return()
+  def parse_duration!(string) do
+    case parse_duration(string) do
+      {:ok, duration} -> duration
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
+    end
+  end
+
+  @doc """
+  Parse a date, written in ISO 8601 or in a locale's own words.
+
+  `parse_date/2` reads what `parse/2` reads and requires the value to
+  be a date, saying so when it is not. A date at any resolution is
+  accepted — a year (`"2026"`), a month (`"2026-06"`, `"June 2026"`), a
+  week (`"2026-W12"`) or a day (`"2026-06-15"`, `"2026-166"`,
+  `"15 June 2026"`). A date carrying a time of day is not.
+
+  Prefer this over `parse/2` wherever the field is known to hold a
+  date. A date, a datetime and a time all come back from `parse/2` as a
+  `t:Tempo.t/0`, so a time of day arriving in a date field is not
+  detected at the point of parsing — it is detected much later, or not
+  at all.
+
+  ### Arguments
+
+  * `string` is the date to parse.
+
+  ### Options
+
+  * `:locale` is the locale whose words text is read in. Defaults to
+    `Localize.get_locale/0`.
+
+  * `:calendar` is the calendar module to parse against. Defaults to
+    the calendar named by an IXDTF `[u-ca=NAME]` suffix, or
+    `Calendrical.Gregorian`.
+
+  * `:reference_date` is the "today" that two-digit years pivot on and
+    partial dates inherit from, when the input is text.
+
+  * `:strict` when `true` rejects a value whose numeric offset
+    disagrees with its IXDTF zone (RFC 9557 §3.4). Defaults to `false`.
+
+  ### Returns
+
+  * `{:ok, t:Tempo.t/0}` when the string is a date.
+
+  * `{:error, exception}` when it is not a date, or is a date followed
+    by anything else.
+
+  ### Examples
+
+      iex> Tempo.parse_date("2026-06-15")
+      {:ok, ~o"2026Y6M15D"}
+
+      iex> Tempo.parse_date("2026-06")
+      {:ok, ~o"2026Y6M"}
+
+      iex> Tempo.parse_date("15 June 2026", locale: :en)
+      {:ok, ~o"2026Y6M15D"}
+
+  A datetime is not a date, and says so rather than succeeding as the
+  wrong shape:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_date("2026-06-15T10:30")
+
+  """
+  @spec parse_date(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
+  def parse_date(string, options \\ [])
+
+  def parse_date(string, options) when is_binary(string) and is_list(options) do
+    string
+    |> parse_kind(:date, Calendars.inside(options))
+    |> Calendars.outside()
+  end
+
+  def parse_date(not_a_string, options) when not is_binary(not_a_string) and is_list(options) do
+    {:error, not_a_string(not_a_string)}
+  end
+
+  @doc """
+  Raising version of `parse_date/2`.
+
+  ### Arguments
+
+  * `string` is the date to parse.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * The `t:Tempo.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_date!("2026-06-15")
+      ~o"2026Y6M15D"
+
+  """
+  @spec parse_date!(String.t(), keyword()) :: t() | no_return()
+  def parse_date!(string, options \\ []) when is_list(options) do
+    raise_on_error(parse_date(string, options))
+  end
+
+  @doc """
+  Parse a datetime, written in ISO 8601 or in a locale's own words.
+
+  `parse_datetime/2` reads what `parse/2` reads and requires the value
+  to carry both a date and a time of day. A date alone is not a
+  datetime — use `parse_date/2` for that — and neither is a time
+  alone.
+
+  ### Arguments
+
+  * `string` is the datetime to parse.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * `{:ok, t:Tempo.t/0}` when the string is a datetime.
+
+  * `{:error, exception}` when it is not.
+
+  ### Examples
+
+      iex> Tempo.parse_datetime("2026-06-15T10:30")
+      {:ok, ~o"2026Y6M15DT10H30M"}
+
+      iex> Tempo.parse_datetime("2026-06-15T10:30Z")
+      {:ok, ~o"2026Y6M15DT10H30MZ"}
+
+      iex> Tempo.parse_datetime("15 June 2026 14:30", locale: :en)
+      {:ok, ~o"2026Y6M15DT14H30M"}
+
+  A date with no time of day is not a datetime:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_datetime("2026-06-15")
+
+  """
+  @spec parse_datetime(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
+  def parse_datetime(string, options \\ [])
+
+  def parse_datetime(string, options) when is_binary(string) and is_list(options) do
+    string
+    |> parse_kind(:datetime, Calendars.inside(options))
+    |> Calendars.outside()
+  end
+
+  def parse_datetime(not_a_string, options)
+      when not is_binary(not_a_string) and is_list(options) do
+    {:error, not_a_string(not_a_string)}
+  end
+
+  @doc """
+  Raising version of `parse_datetime/2`.
+
+  ### Arguments
+
+  * `string` is the datetime to parse.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * The `t:Tempo.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_datetime!("2026-06-15T10:30")
+      ~o"2026Y6M15DT10H30M"
+
+  """
+  @spec parse_datetime!(String.t(), keyword()) :: t() | no_return()
+  def parse_datetime!(string, options \\ []) when is_list(options) do
+    raise_on_error(parse_datetime(string, options))
+  end
+
+  @doc """
+  Parse a time of day, written in ISO 8601 or in a locale's own words.
+
+  `parse_time/2` reads what `parse/2` reads and requires the value to
+  be a time of day, with no date.
+
+  ### Ambiguity is resolved in favour of the profile
+
+  ISO 8601 basic format makes some strings both a valid year and a
+  valid time of day: `"2026"` is the year 2026 and also 20:26. The
+  general grammar resolves the ambiguity structurally, preferring the
+  date reading, so `from_iso8601("2026")` is a year. A caller of
+  `parse_time/2` has declared the field holds a time, and that
+  declaration is what resolves the ambiguity here — the same string
+  reads as 20:26.
+
+      iex> Tempo.from_iso8601("2026")
+      {:ok, ~o"2026Y"}
+
+      iex> Tempo.parse_time("2026")
+      {:ok, ~o"T20H26M"}
+
+  This is the only profile whose *result* can differ from
+  `from_iso8601/1` rather than only its acceptance. Reach for
+  `parse_time/2` when the field genuinely holds a time; the ambiguity
+  it resolves is in the format, not in the parser.
+
+  ### Arguments
+
+  * `string` is the time of day to parse.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * `{:ok, t:Tempo.t/0}` when the string is a time of day.
+
+  * `{:error, exception}` when it is not.
+
+  ### Examples
+
+      iex> Tempo.parse_time("10:30")
+      {:ok, ~o"T10H30M"}
+
+      iex> Tempo.parse_time("T10:30")
+      {:ok, ~o"T10H30M"}
+
+      iex> Tempo.parse_time("2:30 PM", locale: :en)
+      {:ok, ~o"T14H30M"}
+
+  A datetime is not a time of day:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_time("2026-06-15T10:30")
+
+  """
+  @spec parse_time(String.t(), keyword()) :: {:ok, t()} | {:error, error_reason()}
+  def parse_time(string, options \\ [])
+
+  def parse_time(string, options) when is_binary(string) and is_list(options) do
+    string
+    |> parse_kind(:time, Calendars.inside(options))
+    |> Calendars.outside()
+  end
+
+  def parse_time(not_a_string, options) when not is_binary(not_a_string) and is_list(options) do
+    {:error, not_a_string(not_a_string)}
+  end
+
+  @doc """
+  Raising version of `parse_time/2`.
+
+  ### Arguments
+
+  * `string` is the time of day to parse.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * The `t:Tempo.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_time!("10:30")
+      ~o"T10H30M"
+
+  """
+  @spec parse_time!(String.t(), keyword()) :: t() | no_return()
+  def parse_time!(string, options \\ []) when is_list(options) do
+    raise_on_error(parse_time(string, options))
+  end
+
+  @doc """
+  Parse an interval, written in ISO 8601 or in a locale's own words.
+
+  Every form ISO 8601 gives an interval is accepted — a pair of
+  datetimes, a datetime and a duration in either order, an open-ended
+  pair, and any of those carrying a repeat rule — and so is a range in
+  the locale's words (`"May 5 – May 10, 2026"`).
+
+  A `t:Tempo.Interval.t/0` is already distinguishable from the other
+  shapes `parse/2` returns, so this adds a named error where a
+  match would otherwise raise `MatchError`, rather than a type
+  guarantee unavailable by other means.
+
+  ### Arguments
+
+  * `string` is the interval to parse.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * `{:ok, t:Tempo.Interval.t/0}` when the string is an interval.
+
+  * `{:error, exception}` when it is not.
+
+  ### Examples
+
+      iex> Tempo.parse_interval("2026-06-15/2026-06-20")
+      {:ok, ~o"2026Y6M15D/20D"}
+
+      iex> Tempo.parse_interval("R5/2026-06-15/P1D")
+      {:ok, ~o"R5/2026Y6M15D/P1D"}
+
+      iex> Tempo.parse_interval("May 5 – May 10, 2026", locale: :en)
+      {:ok, ~o"2026Y5M5D/10D"}
+
+  A single date is not an interval, even though every Tempo value spans
+  one — an implicit span is not written with a range operator:
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_interval("2026-06-15")
+
+  """
+  @spec parse_interval(String.t(), keyword()) ::
+          {:ok, Tempo.Interval.t()} | {:error, error_reason()}
+  def parse_interval(string, options \\ [])
+
+  def parse_interval(string, options) when is_binary(string) and is_list(options) do
+    string
+    |> parse_kind(:interval, Calendars.inside(options))
+    |> Calendars.outside()
+  end
+
+  def parse_interval(not_a_string, options)
+      when not is_binary(not_a_string) and is_list(options) do
+    {:error, not_a_string(not_a_string)}
+  end
+
+  @doc """
+  Raising version of `parse_interval/2`.
+
+  ### Arguments
+
+  * `string` is the interval to parse.
+
+  ### Options
+
+  See `parse_date/2`.
+
+  ### Returns
+
+  * The `t:Tempo.Interval.t/0`.
+
+  ### Examples
+
+      iex> Tempo.parse_interval!("2026-06-15/2026-06-20")
+      ~o"2026Y6M15D/20D"
+
+  """
+  @spec parse_interval!(String.t(), keyword()) :: Tempo.Interval.t() | no_return()
+  def parse_interval!(string, options \\ []) when is_list(options) do
+    raise_on_error(parse_interval(string, options))
+  end
+
+  # The shared profile pipeline. Only the tokenizer entry point differs
+  # from `from_iso8601/2` — everything downstream of tokenization is the
+  # same, so a profile parse resolves calendars, expands groups and
+  # validates exactly as the general one does.
+  defp parse_profile(string, profile, options) do
+    calendar = Keyword.get(options, :calendar, :from_ixdtf_or_default)
+
+    with {:ok, {tokens, extended}} <- Tokenizer.tokenize(string, profile),
+         do: from_tokens(tokens, extended, calendar, strict?(options))
+  end
+
+  # A typed parser reads its ISO 8601 profile first. A string the
+  # profile does not describe is then read as the locale's text, as
+  # `parse/2` reads it, and kept only when it is of the kind asked for.
+  # ISO 8601 that names no real date (`2026-02-30`) stays that error
+  # rather than being read again as text, and a string neither reads
+  # keeps the profile's error.
+  defp parse_kind(string, kind, options) do
+    case parse_profile(string, kind, options) do
+      {:error, %ParseError{} = iso_error} -> text_of_kind(string, kind, options, iso_error)
+      result -> result
+    end
+  end
+
+  defp text_of_kind(string, kind, options, iso_error) do
+    case parse_text(string, options) do
+      {:ok, value} -> of_kind(value, kind, string)
+      {:error, _text_error} -> {:error, iso_error}
+    end
+  end
+
+  defp of_kind(value, kind, string) do
+    case value_kind(value) do
+      ^kind ->
+        {:ok, value}
+
+      other ->
+        {:error,
+         ParseError.exception(
+           input: string,
+           reason: "it reads as #{kind_phrase(other)}, not #{kind_phrase(kind)}"
+         )}
+    end
+  end
+
+  defp value_kind(%Interval{}) do
+    :interval
+  end
+
+  defp value_kind(%__MODULE__{} = tempo) do
+    case split(tempo) do
+      {%__MODULE__{}, nil} -> :date
+      {nil, %__MODULE__{}} -> :time
+      {%__MODULE__{}, %__MODULE__{}} -> :datetime
+    end
+  end
+
+  defp kind_phrase(:date) do
+    "a date"
+  end
+
+  defp kind_phrase(:datetime) do
+    "a datetime"
+  end
+
+  defp kind_phrase(:time) do
+    "a time of day"
+  end
+
+  defp kind_phrase(:interval) do
+    "an interval"
+  end
+
+  defp raise_on_error({:ok, value}) do
+    value
+  end
+
+  defp raise_on_error({:error, exception}) when is_exception(exception) do
+    raise(exception)
+  end
+
+  defp raise_on_error({:error, reason}) do
+    raise(ArgumentError, Calendars.inspect(reason))
+  end
+
+  # Apply the `strict: true` IXDTF offset/zone consistency check when
+  # requested; otherwise the value passes through unchanged.
+  # Intervals and sets carry no top-level zone/offset pair to check, so
+  # `strict:` is a no-op for them.
+  defp enforce_strict(%Tempo{} = tempo, options) do
+    if Keyword.get(options, :strict, false) do
+      case Compare.do_validate_zone_offset(tempo) do
+        :ok -> {:ok, tempo}
+        {:error, _exception} = error -> error
+      end
+    else
+      {:ok, tempo}
+    end
+  end
+
+  defp enforce_strict(other, _options) do
+    {:ok, other}
+  end
+
+  ## ---------------------------------------------------------
+  ## A time shift and a zone on one value (RFC 9557 §3.4)
+  ## ---------------------------------------------------------
+
+  # A value read with a time shift and a zone beside it says two things of
+  # its offset from UTC, and they may disagree.
+  #
+  # `Z` says nothing of local time: RFC 9557 §2.2 has it mean that "the time
+  # in UTC is known, but the offset to local time is unknown", as `-00:00`
+  # meant in RFC 3339. So `2022-07-08T00:14:07Z[Europe/Paris]` never
+  # disagrees with its zone, critical or not, and is 00:14:07 UTC as
+  # Paris's clock shows it, 02:14:07 two hours ahead. It was read as
+  # 00:14:07 on that clock, two hours earlier, and refused where the zone
+  # was critical.
+  #
+  # A shift that is written as one says what local time is, and where the
+  # zone is at another offset on that reading the two disagree. A critical
+  # zone makes a reader act on that (`[!Europe/London]`, and `[!+08:45]`,
+  # whose flag was dropped), as `strict: true` does for an elective one, and
+  # the value is a `Tempo.ZoneOffsetMismatchError`. Otherwise the shift
+  # gives the moment (decided 2026-10-07): the value is that moment as the
+  # zone's clock shows it, so `…T00:14:07+01:00[Europe/Paris]` is 23:14:07
+  # UTC and is held as 01:14:07 in Paris. It was read as 00:14:07 on
+  # Paris's clock, an hour earlier.
+  #
+  # Held so, a value in a zone is always at its zone's offset, `Z` and
+  # `+00:00` beside an elective zone are the one value ISO 8601-1 §4.3.13
+  # has them be, and the zone's rules go on applying to whatever is made
+  # from the value. A value coarser than a second is shown on the zone's
+  # clock as `shift_zone/2` shows one: the value there where the two clocks
+  # differ by whole units of it, and otherwise the span it is.
+  #
+  # A value with no year names no moment to show, and is left as written.
+  defp on_the_clock_of_its_zone(
+         %__MODULE__{shift: [_ | _], extended: %{} = extended} = value,
+         strict?
+       ) do
+    zone = zone_beside(extended)
+
+    if is_nil(zone) do
+      {:ok, value}
+    else
+      on_the_clock_of(value, zone, strict?)
+    end
+  end
+
+  defp on_the_clock_of_its_zone(%Interval{from: from, to: to} = interval, strict?) do
+    with {:ok, from} <- endpoint_on_the_clock(from, strict?),
+         {:ok, to} <- endpoint_on_the_clock(to, strict?) do
+      {:ok, %{interval | from: from, to: to}}
+    end
+  end
+
+  defp on_the_clock_of_its_zone(%Tempo.Set{set: members, except: except} = set, strict?) do
+    with {:ok, members} <- each_on_the_clock(members, strict?),
+         {:ok, except} <- each_on_the_clock(except, strict?) do
+      {:ok, %{set | set: members, except: except}}
+    end
+  end
+
+  defp on_the_clock_of_its_zone(%Tempo.Range{first: first, last: last} = range, strict?) do
+    with {:ok, first} <- endpoint_on_the_clock(first, strict?),
+         {:ok, last} <- endpoint_on_the_clock(last, strict?) do
+      {:ok, %{range | first: first, last: last}}
+    end
+  end
+
+  defp on_the_clock_of_its_zone(other, _strict?) do
+    {:ok, other}
+  end
+
+  # An end is where its value starts, so one that is a span on the zone's
+  # clock is the start of it.
+  defp endpoint_on_the_clock(endpoint, strict?) do
+    case on_the_clock_of_its_zone(endpoint, strict?) do
+      {:ok, %Interval{from: start}} when is_struct(endpoint, __MODULE__) -> {:ok, start}
+      resolved -> resolved
+    end
+  end
+
+  defp each_on_the_clock(members, strict?) when is_list(members) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, placed} ->
+      case on_the_clock_of_its_zone(member, strict?) do
+        {:ok, value} -> {:cont, {:ok, [value | placed]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> reversed_members()
+  end
+
+  defp each_on_the_clock(members, _strict?) do
+    {:ok, members}
+  end
+
+  defp reversed_members({:ok, placed}) do
+    {:ok, Enum.reverse(placed)}
+  end
+
+  defp reversed_members({:error, _reason} = error) do
+    error
+  end
+
+  # The zone a suffix names: a zone of the database, or an offset.
+  defp zone_beside(%{zone_id: zone}) when is_binary(zone) and zone != "" do
+    zone
+  end
+
+  defp zone_beside(%{zone_offset: minutes}) when is_integer(minutes) do
+    {:offset, minutes}
+  end
+
+  defp zone_beside(_no_zone) do
+    nil
+  end
+
+  defp on_the_clock_of(%__MODULE__{shift: shift, time: time} = value, zone, strict?) do
+    cond do
+      not anchored?(value) ->
+        {:ok, value}
+
+      not Compare.point?(time) ->
+        several_moments_beside_a_zone(value, strict?)
+
+      Compare.no_local_offset?(shift) ->
+        shown_on(value, zone)
+
+      Compare.do_validate_zone_offset(value) == :ok ->
+        {:ok, value}
+
+      zone_critical?(value) or strict? ->
+        refused_beside_its_zone(value)
+
+      true ->
+        shown_on(value, zone)
+    end
+  end
+
+  # The reading is refused as one its zone's clock skips where it is one,
+  # which says more than that no offset of the zone's is the one stated.
+  defp refused_beside_its_zone(value) do
+    with :ok <- Validation.validate_zone_existence(value),
+         do: Compare.do_validate_zone_offset(value)
+  end
+
+  # A value that names several moments (a set or unspecified digits in a
+  # unit) agrees with its zone where each of them does. One that does not,
+  # or that is written in UTC, has a reading on the zone's clock for each
+  # moment and no one value there, which is not built.
+  defp several_moments_beside_a_zone(%__MODULE__{shift: shift} = value, strict?) do
+    cond do
+      Compare.no_local_offset?(shift) -> {:error, several_moments_error(value)}
+      Compare.do_validate_zone_offset(value) == :ok -> {:ok, value}
+      zone_critical?(value) or strict? -> Compare.do_validate_zone_offset(value)
+      true -> {:error, several_moments_error(value)}
+    end
+  end
+
+  # The moment a value is at its own shift, on the clock of the zone beside
+  # it, with the shift written in the shape it was and the zone as critical
+  # as it was.
+  defp shown_on(%__MODULE__{shift: written, extended: extended} = value, zone) do
+    at_its_shift = %{value | extended: %{extended | zone_id: nil, zone_offset: nil}}
+
+    with {:ok, shown} <- do_shift_zone(at_its_shift, zone) do
+      {:ok, written_as(shown, written, Map.get(extended, :zone_critical, false))}
+    end
+  end
+
+  defp written_as(%Interval{from: from, to: to} = span, written, critical?) do
+    %{span | from: written_as(from, written, critical?), to: written_as(to, written, critical?)}
+  end
+
+  defp written_as(%__MODULE__{shift: shift, extended: extended} = shown, written, critical?) do
+    %{
+      shown
+      | shift: shift && Zone.offset_as_written(Compare.offset_seconds(shift), written),
+        extended: %{extended | zone_critical: critical?}
+    }
+  end
+
+  defp zone_critical?(%__MODULE__{extended: extended}) when is_map(extended) do
+    Map.get(extended, :zone_critical, false)
+  end
+
+  @doc """
+  Parse a date, time, datetime, interval, duration or recurrence,
+  written in ISO 8601 or in a locale's own words.
+
+  ISO 8601 is read first, with the whole grammar `from_iso8601/2`
+  reads — IXDTF suffixes, EDTF qualifiers, intervals, recurrences and
+  durations included. A string ISO 8601 does not describe is then read
+  as the locale's text by `Calendrical.parse/2` — `"May 16, 2026"`,
+  `"2:30 PM"`, `"May 5 – May 10, 2026"` — so one text field can take
+  either form.
+
+  The typed parsers — `parse_date/2`, `parse_datetime/2`,
+  `parse_time/2`, `parse_interval/2` and `parse_duration/1` — read the
+  same input and return an error for a value of any other kind.
+
+  ### Arguments
+
+  * `input` is the string to parse.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:locale` is the locale whose month names, AM/PM markers and other
+    words text is read in. Defaults to `Localize.get_locale/0`.
+
+  * `:calendar` is the calendar module the input is read in, such as
+    `Calendrical.Hebrew`. Defaults to the calendar an IXDTF
+    `[u-ca=NAME]` suffix names, or `Calendrical.Gregorian`. A CLDR
+    calendar name such as `:hebrew` is not a calendar and returns an
+    error.
+
+  * `:reference_date` is the "today" that two-digit years pivot on and
+    partial dates inherit from, when the input is text.
+
+  * `:strict` when `true` rejects a value whose numeric offset
+    disagrees with its IXDTF zone (RFC 9557 §3.4). Defaults to `false`.
+
+  In text, a UTC offset such as `"+05:00"` becomes the value's shift,
+  as `from_iso8601/1` reads it, and a week of the year
+  (`"week 1 of 2026"`) is the week `from_iso8601/1` reads in
+  `2026-W01`.
+
+  ### Returns
+
+  * `{:ok, value}` — a `t:t/0` for a date, time or datetime, a
+    `t:Tempo.Interval.t/0` for an interval or recurrence, a
+    `t:Tempo.Duration.t/0` for a duration, or a `t:Tempo.Set.t/0` for
+    a set.
+
+  * `{:error, exception}` when the string is neither ISO 8601 nor text
+    the locale reads, or is ISO 8601 that names no real date
+    (`"2026-02-30"`). Text in a locale's words is read to 1,024 bytes,
+    which is Localize's bound, and refused past it.
+
+  ### Examples
+
+      iex> Tempo.parse("2026-06-15T10:30", locale: :en)
+      {:ok, ~o"2026Y6M15DT10H30M"}
+
+      iex> Tempo.parse("15 June 2026", locale: :en)
+      {:ok, ~o"2026Y6M15D"}
+
+      iex> Tempo.parse("2:30 PM", locale: :en)
+      {:ok, ~o"T14H30M"}
+
+      iex> Tempo.parse("May 5 – May 10, 2026", locale: :en)
+      {:ok, ~o"2026Y5M5D/10D"}
+
+      iex> Tempo.parse("P1DT12H")
+      {:ok, ~o"P1DT12H"}
+
+  """
+  @spec parse(String.t(), Keyword.t()) ::
+          {:ok, t() | Tempo.Interval.t() | Duration.t() | Tempo.Set.t()}
+          | {:error, error_reason()}
+  def parse(input, options \\ [])
+
+  def parse(input, options) when is_binary(input) do
+    input
+    |> do_parse(Calendars.inside(options))
+    |> Calendars.outside()
+  end
+
+  def parse(not_a_string, _options) do
+    {:error, not_a_string(not_a_string)}
+  end
+
+  defp do_parse(input, options) do
+    case read(input, options) do
+      {:error, %ParseError{}} -> parse_text(input, options)
+      result -> result
+    end
+  end
+
+  @doc """
+  Bang variant of `parse/2`: the parsed value, or a raised exception.
+
+  ### Arguments
+
+  * `input` is the string to parse.
+
+  * `options` is a keyword list of options; see `parse/2`.
+
+  ### Returns
+
+  * The parsed value, as `parse/2` returns it.
+
+  ### Examples
+
+      iex> Tempo.parse!("15 June 2026", locale: :en)
+      ~o"2026Y6M15D"
+
+  """
+  @spec parse!(String.t(), Keyword.t()) ::
+          t() | Tempo.Interval.t() | Duration.t() | Tempo.Set.t()
+  def parse!(input, options \\ []) do
+    case parse(input, options) do
+      {:ok, value} ->
+        value
+
+      {:error, exception} when is_exception(exception) ->
+        raise exception
+
+      {:error, reason} ->
+        raise ArgumentError, "Tempo.parse!/2 failed: #{Calendars.inspect(reason)}"
+    end
+  end
+
+  # Read a string as the locale's text: Calendrical parses it to a field
+  # map (or a pair of them for a range), which `Tempo.new/1` rebuilds.
+  #
+  # A text longer than the tokenizer reads is not read as words either: it
+  # was refused as ISO 8601 for its length and then handed here, where ten
+  # thousand bytes took seconds to refuse.
+  #
+  # Text that names no calendar is read in the calendar a value that names
+  # none is in, which the parser is told: it reads into Elixir's own where
+  # it is told nothing.
+  defp parse_text(input, options) do
+    as_fields =
+      options
+      |> Keyword.put_new(:calendar, Calendars.default())
+      |> Keyword.put(:as, :map)
+
+    with :ok <- Tokenizer.within_length(input),
+         {:ok, value} <- Calendrical.parse(input, as_fields),
+         {:ok, parsed} <- parsed_to_tempo(value) do
+      enforce_strict(parsed, options)
+    end
+  end
+
+  defp parsed_to_tempo(%{} = map) do
+    new(sanitise_parsed_map(map))
+  end
+
+  defp parsed_to_tempo({%{} = from_map, %{} = to_map}) do
+    with {:ok, from} <- new(sanitise_parsed_map(from_map)),
+         {:ok, to} <- new(sanitise_parsed_map(to_map)) do
+      Interval.new(from: from, to: to)
+    end
+  end
+
+  # Map Calendrical's parsed fields onto `Tempo.new/1`'s components and
+  # options. `:microsecond` is dropped because Tempo is second-resolution.
+  # An IANA zone becomes the `:zone` option, its offsets derivable from
+  # it; a fixed offset, whose time zone Calendrical names by the offset
+  # itself (`fixed_offset_zone?/2`), becomes the `:shift` `from_iso8601/1`
+  # gives it. A week of a week-based year becomes Tempo's `:week` of that
+  # year, and a weekday beside a full date is dropped, the date fixing it
+  # (Calendrical drops one that disagrees with the date).
+  defp sanitise_parsed_map(map) do
+    {offset, map} = pop_offset(map)
+
+    map
+    |> Map.drop([:microsecond, :zone_abbr])
+    |> put_zone_or_shift(offset)
+    |> put_iso_week()
+    |> drop_implied_weekday()
+  end
+
+  defp pop_offset(map) do
+    {utc_offset, map} = Map.pop(map, :utc_offset, 0)
+    {std_offset, map} = Map.pop(map, :std_offset, 0)
+    {utc_offset + std_offset, map}
+  end
+
+  defp put_zone_or_shift(%{time_zone: time_zone} = map, offset) do
+    if fixed_offset_zone?(time_zone, offset) do
+      map
+      |> Map.delete(:time_zone)
+      |> Map.put(:shift, iso_shift(offset))
+    else
+      rename_key(map, :time_zone, :zone)
+    end
+  end
+
+  defp put_zone_or_shift(map, _offset) do
+    map
+  end
+
+  # Whether a time zone is a fixed offset's and no zone of the time zone
+  # database. From its 1.4 Localize names the time zone of a date and time
+  # written with an offset by the offset itself, `"-05:00"`, as RFC 9557 and
+  # Temporal do; before it the name was `"Etc/UTC"` beside an offset that is
+  # not zero, which a caller may still give. A fixed offset is a `:shift` in
+  # Tempo, as `from_iso8601/1` reads one: read as a zone it is one no
+  # database has, and was taken for UTC.
+  defp fixed_offset_zone?("Etc/UTC", offset) do
+    offset != 0
+  end
+
+  defp fixed_offset_zone?(time_zone, _offset) do
+    match?({:ok, _seconds}, Localize.TimeZoneDatabase.fixed_offset(time_zone))
+  end
+
+  # The shift `from_iso8601/1` gives an offset written with minutes:
+  # "+05:00" is `[hour: 5, minute: 0]`, "-03:30" `[hour: -3, minute: 30]`.
+  defp iso_shift(offset) do
+    case Zone.offset_to_shift(offset) do
+      [hour: hour] -> [hour: hour, minute: 0]
+      shift -> shift
+    end
+  end
+
+  defp put_iso_week(%{week_of_year: week} = map) do
+    {week_based_year, map} = Map.pop(map, :week_based_year)
+
+    map
+    |> Map.delete(:week_of_year)
+    |> Map.put(:week, week)
+    |> put_week_based_year(week_based_year)
+  end
+
+  defp put_iso_week(map) do
+    map
+  end
+
+  defp put_week_based_year(map, nil) do
+    map
+  end
+
+  defp put_week_based_year(map, year) do
+    Map.put(map, :year, year)
+  end
+
+  defp drop_implied_weekday(%{year: _, month: _, day: _, day_of_week: _} = map) do
+    Map.delete(map, :day_of_week)
+  end
+
+  defp drop_implied_weekday(map) do
+    map
+  end
+
+  defp rename_key(map, from, to) do
+    case Map.pop(map, from) do
+      {nil, map} -> map
+      {value, map} -> Map.put(map, to, value)
+    end
+  end
+
+  @doc """
+  Encode a Tempo value back into an ISO 8601-2 string.
+
+  The output uses the explicit-suffix form (`2022Y11M20D`), which
+  is a valid ISO 8601-2 / EDTF representation that round-trips
+  cleanly through `from_iso8601/1`. Constructs that exist only
+  in ISO 8601-2 Part 2 (seasons, groups, selections,
+  uncertainty qualifiers, unspecified digits) are preserved in
+  their explicit form.
+
+  IXDTF suffixes follow the value they belong to: a zone
+  (`2026Y6M15DT10H0M[Europe/Paris]`), a calendar
+  (`2026Y6M15D[u-ca=hebrew]`) and tags (`2026Y6M15D[name=x]`), so
+  a zoned or calendar-tagged value round-trips too. An interval's
+  `:unit` and `:metadata` have no ISO 8601 form and are not written.
+
+  A value in a calendar other than the Gregorian is written with the identifier that reads back as its calendar, however the value was made: parsed with one, converted with `to_calendar/2`, or built from an Elixir date.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.Duration.t/0`, or `t:Tempo.Set.t/0`.
+
+  ### Returns
+
+  * `{:ok, iso8601}` — an ISO 8601-2 binary that parses back to the
+    same AST.
+
+  * `{:error, %Tempo.Iso8601EncodeError{}}` for a value with no ISO 8601
+    form: an interval set, a recurrence set, a conditional member, anything
+    that is not a Tempo value, a value holding a cron nearest-weekday, a cron
+    day-of-month OR day-of-week union or an ordinal BYDAY across distinct
+    weekdays, a recurrence with an end (RFC 5545 `UNTIL`), a value in a calendar IXDTF
+    cannot name (a fiscal year, say) whose dates the Gregorian calendar
+    numbers differently, or an interval or a set given parts in two zones or
+    two calendars, which are written once, after the whole expression.
+
+  ### Examples
+
+      iex> Tempo.from_iso8601!("2022-11-20")
+      ...> |> Tempo.to_iso8601()
+      {:ok, "2022Y11M20D"}
+
+      iex> Tempo.from_iso8601!("R5/2022-01-01/P1M")
+      ...> |> Tempo.to_iso8601()
+      {:ok, "R5/2022Y1M1D/P1M"}
+
+      iex> {:ok, i} = Tempo.from_iso8601("1984?/2004~")
+      iex> Tempo.to_iso8601(i)
+      {:ok, "1984Y?/2004Y~"}
+
+      iex> Tempo.to_calendar!(~o"2026-06-15", Calendrical.Hebrew)
+      ...> |> Tempo.to_iso8601()
+      {:ok, "5786Y9M30D[u-ca=hebrew]"}
+
+      iex> holidays = Tempo.RecurrenceSet.new!([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
+      iex> {:error, error} = Tempo.to_iso8601(holidays)
+      iex> Exception.message(error) =~ "no form for a set of recurrences"
+      true
+
+  """
+  @spec to_iso8601(term()) :: {:ok, String.t()} | {:error, Iso8601EncodeError.t()}
+  def to_iso8601(%struct{} = value) when struct in [Tempo, Interval, Duration, Tempo.Set] do
+    value = Calendars.inside(value)
+
+    with nil <- Tempo.Inspect.unencodable(value),
+         nil <- Tempo.Inspect.unnamed_calendar(value) do
+      {:ok,
+       value
+       |> Tempo.Inspect.to_iodata()
+       |> IO.iodata_to_binary()}
+    else
+      construct
+      when construct in [:byday, :nearest_weekday, :or_day, :skip, :until, :zones, :calendars] ->
+        {:error, Iso8601EncodeError.exception(construct: construct, value: value)}
+
+      calendar ->
+        {:error,
+         Iso8601EncodeError.exception(construct: :calendar, value: value, calendar: calendar)}
+    end
+  end
+
+  def to_iso8601(value) do
+    {:error, Iso8601EncodeError.exception(construct: unencodable_type(value), value: value)}
+  end
+
+  @doc """
+  Encode a Tempo value back into an ISO 8601-2 string, raising for a value
+  with no ISO 8601 form.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.Duration.t/0`, or `t:Tempo.Set.t/0`.
+
+  ### Returns
+
+  * An ISO 8601-2 binary that parses back to the same AST.
+
+  ### Raises
+
+  * `Tempo.Iso8601EncodeError` for a value `to_iso8601/1` returns it for.
+
+  ### Examples
+
+      iex> Tempo.to_iso8601!(~o"2022-11-20")
+      "2022Y11M20D"
+
+  """
+  @spec to_iso8601!(Tempo.t() | Tempo.Interval.t() | Tempo.Duration.t() | Tempo.Set.t()) ::
+          String.t()
+  def to_iso8601!(value) do
+    case to_iso8601(value) do
+      {:ok, iso8601} -> iso8601
+      {:error, exception} -> raise exception
+    end
+  end
+
+  defp unencodable_type(%Tempo.RecurrenceSet{}) do
+    :recurrence_set
+  end
+
+  defp unencodable_type(%IntervalSet{}) do
+    :interval_set
+  end
+
+  defp unencodable_type(%Conditional{}) do
+    :conditional
+  end
+
+  defp unencodable_type(_value) do
+    :value
+  end
+
+  @doc """
+  Creates a `t:Tempo.t/0` struct from a `t:Date.t/0`.
+
+  ### Arguments
+
+  * `date` is any `t:Date.t/0`.
+
+  ### Returns
+
+  * `t:t/0` or
+
+  * `{:error, reason}`
+
+  ### Examples
+
+      iex> Tempo.from_date ~D[2022-11-20]
+      ~o"2022Y11M20D"
+
+  """
+  # `new/2` is multi-clause internally; dialyzer unions all return
+  # types across clauses even though `from_date/1` always hits the
+  # keyword-list clause. Suppress the resulting wide-return warning
+  # rather than widen the spec, which would mislead human readers.
+  @dialyzer {:nowarn_function, from_date: 1, from_time: 1, from_naive_datetime: 1}
+
+  @spec from_date(date :: Date.t()) :: t()
+  def from_date(date) when is_outside(date) do
+    date
+    |> Calendars.inside()
+    |> from_date()
+    |> Calendars.outside()
+  end
+
+  def from_date(%{year: year, month: month, day: day, calendar: calendar}) do
+    AST.build([year: year, month: month, day: day], calendar)
+  end
+
+  @doc """
+  Create a `t:Tempo.Interval.t/0` from an Elixir `Date.Range`,
+  converting the range's inclusive bounds to Tempo's half-open
+  convention.
+
+  A `Date.Range` enumerates its `last` day; a Tempo interval excludes
+  its `to` endpoint. The conversion sets `to` to the day *after*
+  `range.last`, so the interval covers exactly the days the range
+  enumerates — doing the inclusive-to-half-open bridge once, here,
+  instead of leaving an off-by-one for every caller. The range's
+  calendar is preserved: a range of fiscal-calendar dates yields an
+  interval in that calendar, which composes with Gregorian values
+  through Tempo's cross-calendar comparison.
+
+  A stepped range (`Date.range(a, b, 2)`) enumerates a set of days
+  rather than a contiguous span, and a descending or empty range is
+  not a calendar period — both are refused rather than guessed.
+
+  ### Arguments
+
+  * `range` is a `t:Date.Range.t/0` with step `1` and
+    `first <= last`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:resolution` is a time unit atom applied to both endpoints via
+    `at_resolution/2`. The default is `:day`.
+
+  ### Returns
+
+  * `{:ok, interval}` where `interval` is a `t:Tempo.Interval.t/0`
+    covering exactly the range's days, or
+
+  * `{:error, %Tempo.ConversionError{}}` for a stepped, descending,
+    or empty range.
+
+  ### Examples
+
+      iex> {:ok, q3} = Tempo.from_date_range(Date.range(~D[2026-07-01], ~D[2026-09-30]))
+      iex> q3
+      ~o"2026Y7M1D/10M1D"
+
+      iex> {:error, %Tempo.ConversionError{}} =
+      ...>   Tempo.from_date_range(Date.range(~D[2026-07-01], ~D[2026-07-31], 2))
+
+  """
+  @spec from_date_range(Date.Range.t(), Keyword.t()) ::
+          {:ok, Tempo.Interval.t()} | {:error, error_reason()}
+  def from_date_range(range, options \\ [])
+
+  def from_date_range(%Date.Range{first: first} = range, options) when is_outside(first) do
+    range
+    |> Calendars.inside()
+    |> from_date_range(options)
+    |> Calendars.outside()
+  end
+
+  def from_date_range(%Date.Range{step: 1, first: first, last: last} = range, options) do
+    if Compare.compare_days(first, last) == :gt do
+      {:error,
+       ConversionError.exception(
+         value: range,
+         target: Tempo.Interval,
+         reason:
+           "An empty Date.Range spans no days, so it cannot become an interval " <>
+             "(Tempo intervals have positive extent)."
+       )}
+    else
+      resolution = Keyword.get(options, :resolution, :day)
+
+      with %Tempo{} = from <- at_resolution(from_date(first), resolution),
+           %Tempo{} = to <- at_resolution(from_date(UnitValues.day_after(last)), resolution) do
+        Interval.new(from: from, to: to)
+      end
+    end
+  end
+
+  def from_date_range(%Date.Range{step: step} = range, _options) do
+    {:error,
+     ConversionError.exception(
+       value: range,
+       target: Tempo.Interval,
+       reason:
+         "A stepped or descending Date.Range (step #{step}) enumerates a set of days, " <>
+           "not a contiguous span, so it cannot become a single interval. " <>
+           "Express the selection with `Tempo.select/2` instead."
+     )}
+  end
+
+  @doc """
+  Raising version of `from_date_range/2`.
+
+  ### Arguments
+
+  * `range` is a `t:Date.Range.t/0` with step `1` and
+    `first <= last`.
+
+  * `options` is a keyword list of options — see
+    `from_date_range/2`.
+
+  ### Returns
+
+  * The `t:Tempo.Interval.t/0` covering exactly the range's days.
+
+  ### Examples
+
+      iex> Tempo.from_date_range!(Date.range(~D[2026-07-01], ~D[2026-07-31]))
+      ~o"2026Y7M1D/8M1D"
+
+  """
+  @spec from_date_range!(Date.Range.t(), Keyword.t()) :: Tempo.Interval.t()
+  def from_date_range!(range, options \\ []) do
+    case from_date_range(range, options) do
+      {:ok, interval} -> interval
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
+    end
+  end
+
+  @doc """
+  Creates a `t:Tempo.t/0` struct from a `t:Time.t/0`.
+
+  ### Arguments
+
+  * `time` is any `t:Time.t/0`.
+
+  ### Returns
+
+  * `t:t/0` or
+
+  * `{:error, reason}`
+
+  ### Examples
+
+      iex> Tempo.from_time ~T[10:09:00]
+      ~o"T10H9M0S"
+
+  """
+  @spec from_time(time :: Time.t()) :: t()
+  def from_time(time) when is_outside(time) do
+    time
+    |> Calendars.inside()
+    |> from_time()
+    |> Calendars.outside()
+  end
+
+  def from_time(%{hour: hour, minute: minute, second: second} = time) do
+    AST.build([hour: hour, minute: minute, second: second] ++ microsecond_component(time))
+  end
+
+  @doc """
+  Creates a `t:Tempo.t/0` struct from a `t:NaiveDateTime.t/0`.
+
+  ### Arguments
+
+  * `naive_datetime` is any `t:NaiveDateTime.t/0`.
+
+  ### Returns
+
+  * `t:t/0` or
+
+  * `{:error, reason}`
+
+  ### Examples
+
+      iex> Tempo.from_naive_datetime ~N[2022-11-20 10:37:00]
+      ~o"2022Y11M20DT10H37M0S"
+
+  """
+  @spec from_naive_datetime(naive_datetime :: NaiveDateTime.t()) :: t()
+  def from_naive_datetime(naive) when is_outside(naive) do
+    naive
+    |> Calendars.inside()
+    |> from_naive_datetime()
+    |> Calendars.outside()
+  end
+
+  def from_naive_datetime(
+        %{
+          year: year,
+          month: month,
+          day: day,
+          hour: hour,
+          minute: minute,
+          second: second,
+          calendar: calendar
+        } = naive
+      ) do
+    AST.build(
+      [year: year, month: month, day: day, hour: hour, minute: minute, second: second] ++
+        microsecond_component(naive),
+      calendar
+    )
+  end
+
+  @doc """
+  Creates a `t:Tempo.t/0` struct from a `t:DateTime.t/0`.
+
+  The DateTime's time zone information is preserved on the Tempo:
+  the total offset (`utc_offset + std_offset`) populates the
+  `:shift` field, and the IANA zone identifier is stored on the
+  `:extended` map under `:zone_id`. Iteration on the returned
+  Tempo carries both pieces of metadata through.
+
+  A `DateTime` at a fixed offset has no zone of the time zone database:
+  its time zone is the offset itself (`"-05:00"`, as Localize reads a
+  date and time written with an offset), and it is the `:shift` alone,
+  the value `from_iso8601/1` reads from the same text.
+
+  ### Arguments
+
+  * `datetime` is any `t:DateTime.t/0`.
+
+  ### Returns
+
+  * `t:t/0`.
+
+  ### Examples
+
+      iex> Tempo.from_datetime(~U[2022-11-20 10:37:00Z]).time
+      [year: 2022, month: 11, day: 20, hour: 10, minute: 37, second: 0]
+
+      iex> Tempo.from_datetime(~U[2022-11-20 10:37:00Z]).shift
+      [hour: 0]
+
+      iex> Tempo.from_datetime(~U[2022-11-20 10:37:00Z]).extended.zone_id
+      "Etc/UTC"
+
+      iex> {:ok, at_an_offset} =
+      ...>   DateTime.new(~D[2026-05-23], ~T[14:30:00], "-05:00", Localize.TimeZoneDatabase)
+      iex> Tempo.from_datetime(at_an_offset)
+      ~o"2026Y5M23DT14H30M0SZ-5H"
+
+  """
+  @spec from_datetime(DateTime.t()) :: t()
+  def from_datetime(datetime) when is_outside(datetime) do
+    datetime
+    |> Calendars.inside()
+    |> from_datetime()
+    |> Calendars.outside()
+  end
+
+  def from_datetime(
+        %DateTime{
+          year: year,
+          month: month,
+          day: day,
+          hour: hour,
+          minute: minute,
+          second: second,
+          time_zone: time_zone,
+          utc_offset: utc_offset,
+          std_offset: std_offset,
+          calendar: calendar
+        } = dt
+      ) do
+    tempo_calendar = calendar
+
+    time =
+      [year: year, month: month, day: day, hour: hour, minute: minute, second: second] ++
+        microsecond_component(dt)
+
+    total_offset = utc_offset + std_offset
+
+    %__MODULE__{
+      time: time,
+      shift: Zone.offset_to_shift(total_offset),
+      calendar: tempo_calendar,
+      extended: zone_of(time_zone, total_offset)
+    }
+  end
+
+  # The zone a `DateTime` is in, which is none where its time zone is a
+  # fixed offset's: the shift says all of it.
+  defp zone_of(time_zone, total_offset) do
+    if fixed_offset_zone?(time_zone, total_offset) do
+      nil
+    else
+      %{zone_id: time_zone, zone_offset: nil, zone_critical: false, tags: %{}}
+    end
+  end
+
+  # Elixir's `Time`/`NaiveDateTime`/`DateTime` carry sub-second data in
+  # a `microsecond: {value, precision}` field with the same shape as
+  # Tempo's `:microsecond` component. Thread it through verbatim when
+  # `precision > 0`; `{0, 0}` (no sub-second) adds nothing, keeping the
+  # value at second resolution.
+  defp microsecond_component(%{microsecond: {_value, 0}}) do
+    []
+  end
+
+  defp microsecond_component(%{microsecond: {value, precision}}) do
+    [microsecond: {value, precision}]
+  end
+
+  defp microsecond_component(_) do
+    []
+  end
+
+  @doc """
+  Returns the resolution of a `t:Tempo.t/0` struct.
+
+  The resolution is the smallest time unit of the
+  struct and an appropriate scale.
+
+  ### Arguments
+
+  * `tempo` is any `t:#{__MODULE__}.t/0`.
+
+  ### Returns
+
+  * `{time_unit, scale}`
+
+  ### Examples
+
+      iex> Tempo.resolution ~o"2022"
+      {:year, 1}
+
+      iex> Tempo.resolution ~o"2022-11"
+      {:month, 1}
+
+      iex> Tempo.resolution ~o"2022-11-20"
+      {:day, 1}
+
+      iex> Tempo.resolution ~o"2022Y1M2G3DU"
+      {:day, 3}
+
+  """
+  @spec resolution(tempo :: t()) :: {atom(), atom() | non_neg_integer()}
+  def resolution(%__MODULE__{time: []}) do
+    {:none, 0}
+  end
+
+  def resolution(%__MODULE__{time: units}) when is_list(units) do
+    units
+    |> Enum.reverse()
+    |> hd
+    |> unit_resolution()
+  end
+
+  def resolution(value) do
+    raise(not_one_value("resolution/1", value))
+  end
+
+  # The finest and coarsest units of a value, as `{finest, coarsest}`:
+  # `2022Y1M2G3DU` is `{:day, :year}`. The ISO 8601 parser calls it.
+  @doc false
+  @spec unit_min_max(tempo :: t | token_list()) :: {time_unit(), time_unit()}
+  def unit_min_max(%__MODULE__{time: units}) do
+    unit_min_max(units)
+  end
+
+  def unit_min_max(units) when is_list(units) do
+    {max, _} = unit_resolution(hd(units))
+    {min, _} = unit_resolution(hd(Enum.reverse(units)))
+    {min, max}
+  end
+
+  defp unit_resolution({:selection, selection}) do
+    unit_min_max(selection)
+  end
+
+  # A computed event names a day, the week start (`q`) is context at the
+  # scale of the day of the week, as `Tempo.Iso8601.Unit.ordered?/1` reads
+  # them, and a §12.10 window runs from a day.
+  defp unit_resolution({:event, _name}) do
+    {:day, 1}
+  end
+
+  defp unit_resolution({:interval, _window}) do
+    {:day, 1}
+  end
+
+  defp unit_resolution({:wkst, _day}) do
+    {:day_of_week, 1}
+  end
+
+  defp unit_resolution({:skip, _skip}) do
+    {:day, 1}
+  end
+
+  defp unit_resolution({unit, {:group, first..last//_}}) do
+    {unit, last - first + 1}
+  end
+
+  # A materialised group is `{unit, {:group, members}, size}` — the
+  # third element is the group's own size, which is its resolution.
+  defp unit_resolution({unit, {:group, _members}, size}) when is_integer(size) do
+    {unit, size}
+  end
+
+  defp unit_resolution({unit, %Range{last: last}}) do
+    {unit, last}
+  end
+
+  # A microsecond component is `{value, precision}`; the precision
+  # (digit count) is its resolution scale — `{:microsecond, 3}` is
+  # millisecond resolution.
+  defp unit_resolution({:microsecond, {_value, precision}}) when is_integer(precision) do
+    {:microsecond, precision}
+  end
+
+  defp unit_resolution({unit, {_value, meta}}) when is_list(meta) do
+    {unit, Keyword.get(meta, :margin_of_error, 1)}
+  end
+
+  defp unit_resolution({unit, {_value, continuation}}) when is_function(continuation) do
+    {unit, 1}
+  end
+
+  defp unit_resolution({unit, _value}) do
+    {unit, 1}
+  end
+
+  # Order of units from coarsest to finest. Used by the component
+  # accessors (`year/1`, `month/1`, `day/1`, `hour/1`, `minute/1`,
+  # `second/1`) to decide whether a unit is unambiguous for a given
+  # interval span — a unit U is unambiguous iff the interval's span
+  # resolution is equal to or finer than U.
+  @unit_order [:year, :month, :day, :hour, :minute, :second]
+
+  for {unit, _idx} <- Enum.with_index(@unit_order) do
+    @doc """
+    Return the `#{unit}` component of a Tempo value, or `nil` if
+    the value doesn't specify one.
+
+    The accessors (`year/1`, `month/1`, `day/1`, `hour/1`,
+    `minute/1`, `second/1`) are commodity component extractors so
+    callers never have to reach into struct fields in user-facing
+    code.
+
+    ### Arguments
+
+    * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`.
+
+    ### Returns
+
+    * The component value as an integer when unambiguous.
+
+    * `nil` when the value doesn't specify that unit (e.g.
+      `Tempo.day(~o"2026")` returns `nil` — the year value has no
+      day).
+
+    * Raises `ArgumentError` when called on an interval whose span
+      covers multiple values of that unit (e.g. `Tempo.day/1` on a
+      month-spanning interval is ambiguous).
+
+    ### Examples
+
+        iex> Tempo.#{unit}(~o"2026-06-15T10:30:45")
+        #{case unit do
+      :year -> 2026
+      :month -> 6
+      :day -> 15
+      :hour -> 10
+      :minute -> 30
+      :second -> 45
+    end}
+
+        iex> Tempo.#{unit}(~o"2026")
+        #{if unit == :year do
+      2026
+    else
+      "nil"
+    end}
+
+    """
+    @spec unquote(unit)(t() | Tempo.Interval.t()) :: integer() | nil
+    def unquote(unit)(value) when is_outside(value) do
+      component(Calendars.inside(value), unquote(unit))
+    end
+
+    def unquote(unit)(value) do
+      component(value, unquote(unit))
+    end
+  end
+
+  @doc """
+  Return the season a Tempo value holds, or `nil` if it holds none.
+
+  Completes the component accessors for a season with no hemisphere:
+  ISO 8601-2's 21 (spring), 22 (summer), 23 (autumn) and 24 (winter),
+  which a value keeps as it is written until `in_territory/2` gives it
+  its dates. Callers never reach into struct fields to ask which.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`.
+
+  ### Returns
+
+  * The season's number, `21`, `22`, `23` or `24`.
+
+  * `nil` when the value holds no such season: a date, an interval,
+    a season that has been given its dates, and a season of a
+    hemisphere (25 to 32), which is its dates as it is read.
+
+  * Raises `ArgumentError` for what is neither a date or time value
+    nor an interval.
+
+  ### Examples
+
+      iex> Tempo.season(~o"2026-21")
+      21
+
+      iex> Tempo.season(~o"2026-06")
+      nil
+
+      iex> {:ok, spring} = Tempo.in_territory(~o"2026-21", :AU)
+      iex> Tempo.season(spring)
+      nil
+
+  """
+  @spec season(t() | Tempo.Interval.t()) :: 21..24 | nil
+  def season(%__MODULE__{time: time}) when is_list(time) do
+    case List.keyfind(time, :season, 0) do
+      {:season, season} -> season
+      nil -> nil
+    end
+  end
+
+  def season(%Tempo.Interval{}) do
+    nil
+  end
+
+  def season(value) do
+    raise(no_component_error(:season, value))
+  end
+
+  @doc """
+  Return the `week` component of a Tempo value, or `nil` if the
+  value doesn't specify one.
+
+  Completes the component-accessor family (`year/1` … `second/1`) for
+  week-axis values — `~o"2026Y32W"`, a Hebrew or Islamic calendar
+  week, or a retail-calendar week — so callers never reach into
+  struct fields. `:week` lives on its own axis rather than in the
+  linear year-to-second order, so its interval ambiguity rule is
+  axis-aware instead of generated with the others: an interval
+  answers when it spans exactly one week, or sits inside one.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`.
+
+  ### Returns
+
+  * The week number as an integer when unambiguous.
+
+  * `nil` when the value doesn't specify a week (e.g.
+    `Tempo.week(~o"2026-06-15")` — a month-axis date has no week
+    component).
+
+  * Raises `ArgumentError` when called on an interval spanning more
+    than one week.
+
+  ### Examples
+
+      iex> Tempo.week(~o"2026Y32W")
+      32
+
+      iex> Tempo.week(~o"2026-06-15")
+      nil
+
+      iex> {:ok, hebrew_week} = Tempo.from_iso8601("5786-W03", Calendrical.Hebrew)
+      iex> Tempo.week(hebrew_week)
+      3
+
+      iex> {:ok, interval} = Tempo.to_interval(~o"2026Y32W")
+      iex> Tempo.week(interval)
+      32
+
+  """
+  @spec week(t() | Tempo.Interval.t()) :: integer() | nil
+  def week(value) when is_outside(value) do
+    week(Calendars.inside(value))
+  end
+
+  def week(%__MODULE__{time: time}) when is_list(time) do
+    case List.keyfind(time, :week, 0) do
+      {:week, value} when is_integer(value) -> value
+      _absent_or_several -> nil
+    end
+  end
+
+  def week(%Tempo.Interval{} = interval) do
+    case read_span(interval) do
+      %Tempo.Interval{from: %__MODULE__{}} = span -> span_week(span)
+      _no_start -> raise no_component_error(:week, interval)
+    end
+  end
+
+  def week(value) do
+    raise(no_component_error(:week, value))
+  end
+
+  defp span_week(%Tempo.Interval{from: %__MODULE__{} = from, to: to}) do
+    from_week = week(from)
+
+    cond do
+      from_week == nil ->
+        nil
+
+      not match?(%__MODULE__{}, to) ->
+        from_week
+
+      single_granule_unit(from, to) == :week ->
+        from_week
+
+      week(to) == from_week ->
+        from_week
+
+      true ->
+        raise ArgumentError,
+              "Tempo.week/1 is ambiguous for an interval spanning more than one week. " <>
+                "Use `Tempo.Interval.endpoints/1` and extract the component from each " <>
+                "endpoint explicitly."
+    end
+  end
+
+  # Polymorphic component extraction. A Tempo value reads straight
+  # from its time keyword list — nil if absent. An Interval checks
+  # unambiguity via the span resolution and raises otherwise.
+  defp component(%__MODULE__{time: time}, unit) when is_list(time) do
+    # A group of a set is a three-element entry, which `Keyword.get/2` cannot
+    # read: it is no one number, as a set is none.
+    case List.keyfind(time, unit, 0) do
+      {^unit, value} when is_integer(value) -> value
+      _absent_or_several -> nil
+    end
+  end
+
+  defp component(%Tempo.Interval{} = interval, unit) do
+    case read_span(interval) do
+      %Tempo.Interval{from: %__MODULE__{}} = span -> span_component(span, unit)
+      _no_start -> raise no_component_error(unit, interval)
+    end
+  end
+
+  defp component(value, unit) do
+    raise(no_component_error(unit, value))
+  end
+
+  defp span_component(
+         %Tempo.Interval{from: %__MODULE__{} = from, to: to} = interval,
+         unit
+       ) do
+    span_res = interval_component_resolution(from, to, interval)
+
+    cond do
+      span_res == :undefined ->
+        component(from, unit)
+
+      unit_finer_or_equal?(span_res, unit) ->
+        component(from, unit)
+
+      true ->
+        raise ArgumentError,
+              "Tempo.#{unit}/1 is ambiguous for an interval spanning at #{Calendars.inspect(span_res)} resolution. " <>
+                "Use `Tempo.Interval.endpoints/1` and extract the component from each endpoint explicitly."
+    end
+  end
+
+  # The span an accessor reads an interval as: one written with a duration as
+  # its two ends, and each end as the point it names (`20C/21C` is
+  # `2000Y/2100Y`). A recurrence is many spans, and an end that names several
+  # is none; each raises its error.
+  defp read_span(%Tempo.Interval{recurrence: recurrence} = interval) when recurrence != 1 do
+    raise(ConversionError.exception(value: interval, reason: :recurring_interval))
+  end
+
+  defp read_span(%Tempo.Interval{} = interval) do
+    as_points =
+      interval
+      |> Interval.resolve_duration_form()
+      |> Interval.endpoints_as_points()
+
+    case as_points do
+      {:ok, %Tempo.Interval{to: nil, duration: %Duration{}}} -> raise uncounted_duration(interval)
+      {:ok, span} -> span
+      {:error, exception} -> raise exception
+    end
+  end
+
+  # A start with a duration that cannot be counted from it (a month added to
+  # a week date, `2026Y25WXK/P1M`) has no end to read a span to, and
+  # `to_interval/1` says why.
+  defp uncounted_duration(interval) do
+    case to_interval(interval) do
+      {:error, exception} -> exception
+      {:ok, _span} -> ConversionError.exception(value: interval, target: Tempo.Interval)
+    end
+  end
+
+  # A component is read from a date or time value, or from the start of an
+  # interval that has one. Anything else has none to read.
+  defp no_component_error(unit, %Tempo.Interval{} = interval) do
+    ArgumentError.exception(
+      "Tempo.#{unit}/1 reads an interval from its start, and #{Calendars.inspect(interval)} has none."
+    )
+  end
+
+  defp no_component_error(unit, value) do
+    ArgumentError.exception(
+      "Tempo.#{unit}/1 takes a date or time value or an interval, and #{Calendars.inspect(value)} " <>
+        "is neither."
+    )
+  end
+
+  # An interval one granule wide at `from`'s own resolution — e.g.
+  # `[2026Y12M, 2027Y1M)`, which is December 2026, exactly one month — is
+  # unambiguous at that resolution. Its half-open upper bound rolls into
+  # the next coarser unit (here the year), which `Interval.resolution/1`
+  # reports as the span resolution and so masks the real one. Report
+  # `from`'s resolution for such single-granule spans; a wider span keeps
+  # the coarsest unit at which the endpoints genuinely differ.
+  defp interval_component_resolution(from, to, interval) do
+    unit = single_granule_unit(from, to)
+
+    if is_nil(unit) do
+      Interval.resolution(interval)
+    else
+      unit
+    end
+  end
+
+  defp single_granule_unit(%__MODULE__{} = from, %__MODULE__{} = to) do
+    {unit, _value} = resolution(from)
+    stepped = Math.add(from, %Tempo.Duration{time: [{unit, 1}]})
+
+    if Compare.compare_endpoints(stepped, to) == :same do
+      unit
+    end
+  end
+
+  defp single_granule_unit(_from, _to) do
+    nil
+  end
+
+  # `u_res` is finer-or-equal to `u_target` iff u_res's index in
+  # @unit_order is >= u_target's index. (:year is coarsest at 0;
+  # :second is finest at 5.)
+  defp unit_finer_or_equal?(u_res, u_target) do
+    Enum.find_index(@unit_order, &(&1 == u_res)) >=
+      Enum.find_index(@unit_order, &(&1 == u_target))
+  end
+
+  @doc """
+  Returns a boolean indicating if a `t:Tempo.t/0` struct
+  is anchored to the timeline.
+
+  Anchored means that the time representation contains
+  enough information for it to be located in a single
+  location on the timeline.  In practise this means the
+  if the tempo struct has a `:year` value then
+  it is anchored. An unspecified year (`X*Y`) is any year
+  and so no place on the timeline: a value written with one
+  is as unanchored as the same value with no year.
+
+  ### Arguments
+
+  * `tempo` is any `t:#{__MODULE__}.t/0`.
+
+  ### Returns
+
+  * `true` or `false`
+
+  ### Examples
+
+      iex> Tempo.anchored? ~o"2022"
+      true
+
+      iex> Tempo.anchored? ~o"2M"
+      false
+
+      iex> Tempo.anchored? ~o"X*Y2M"
+      false
+
+  """
+  @spec anchored?(tempo :: t) :: boolean()
+  def anchored?(%__MODULE__{time: [{:year, :any} | _rest]}) do
+    false
+  end
+
+  def anchored?(%__MODULE__{time: [{:year, _year} | _rest]}) do
+    true
+  end
+
+  def anchored?(%__MODULE__{}) do
+    false
+  end
+
+  def anchored?(value) do
+    raise(not_one_value("anchored?/1", value))
+  end
+
+  @doc """
+  Truncates a tempo struct to the specified resolution.
+
+  Truncation removes the time units that have a
+  higher resolution than the specified `truncate_to`
+  option.
+
+  ### Arguments
+
+  * `tempo` is any `t:#{__MODULE__}.t/0`.
+
+  * `truncate_to` is any time unit. The default
+    is `:day`.
+
+  ### Returns
+
+  * `truncated` is a tempo struct that is truncated or
+
+  * `{:error, reason}`
+
+  ### Examples
+
+      iex> Tempo.trunc ~o"2022-11-21T09:30:00"
+      ~o"2022Y11M21D"
+
+      iex> Tempo.trunc ~o"2022-11-21T09:30:00", :minute
+      ~o"2022Y11M21DT9H30M"
+
+      iex> Tempo.trunc ~o"2022-11-21T09:30:00", :year
+      ~o"2022Y"
+
+  ## Truncating to a week
+
+  A Gregorian value has no week component, so `:week` does not coarsen
+  it the way `:month` does — it names **the day that value's week
+  begins on**, at day resolution:
+
+      iex> Tempo.trunc(~o"2026-08-16T10:00:00", :week)
+      ~o"2026Y8M10D"
+
+  Which day that is comes from the value's own calendar, so a Sunday
+  belongs to the preceding week under `Calendrical.Gregorian` and
+  begins one of its own under a Sunday-start calendar. A value already
+  on the week axis holds `:week` as a component and coarsens normally.
+
+  Units belonging to another axis and naming nothing expressible —
+  `:day_of_week`, `:day_of_year` against a Gregorian value — return a
+  `t:Tempo.ResolutionError.t/0` rather than an unrelated coarser unit.
+
+  A week date is the date it names, in every calendar, so `:day`
+  truncates, extends and rounds a value to a date. A week is extended
+  to the date of its first day.
+
+  ## Truncating an interval
+
+  An interval truncated is the whole units it touches: its start is
+  taken down to the start of its unit, and its end up to the end of the
+  unit it is in, or left where it stands on the start of one. One
+  written with a duration is counted to its ends first, an open end
+  stays open, and a recurrence is no one interval.
+
+      iex> Tempo.trunc(~o"2026-06-15T10:30/2026-06-15T12:45", :hour)
+      ~o"2026Y6M15DT10H/T13H"
+
+  """
+  @spec trunc(tempo :: t | Tempo.Interval.t(), truncate_to :: time_unit()) ::
+          t | Tempo.Interval.t() | {:error, error_reason()}
+  def trunc(tempo, truncate_to \\ :day)
+
+  def trunc(tempo, truncate_to) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> trunc(truncate_to)
+    |> Calendars.outside()
+  end
+
+  def trunc(%__MODULE__{} = tempo, truncate_to) do
+    with {:ok, truncate_to} <- validate_unit(truncate_to),
+         :ok <- one_value(tempo) do
+      tempo
+      |> truncate(day_unit(truncate_to, tempo))
+      |> qualified_as_it_stands()
+      |> at_its_offset()
+    end
+  end
+
+  # An interval truncated is the whole units it touches (decided 2026-10-07):
+  # its start is taken down to the start of the unit it is in, and its end
+  # up to the end of the unit it is in, or left where it stands on the start
+  # of one. Half past ten to a quarter to one, truncated to the hour, is ten
+  # to one.
+  def trunc(%Interval{} = interval, truncate_to) do
+    with {:ok, %Interval{} = span} <- with_its_ends(interval, "trunc/2"),
+         {:ok, from} <- end_moved(span.from, &trunc(&1, truncate_to)),
+         {:ok, to} <- end_moved(span.to, &taken_up(&1, truncate_to)) do
+      %{span | from: from, to: to}
+    end
+  end
+
+  def trunc(value, _truncate_to) do
+    {:error, not_one_value("trunc/2", value)}
+  end
+
+  # An end taken up to the start of the next unit, or left on the start of
+  # the unit it is on. One written to a coarser unit is on the start of one
+  # already, and `trunc/2` gives it back.
+  defp taken_up(%__MODULE__{} = to, unit) do
+    with %__MODULE__{} = down <- trunc(to, unit) do
+      if Compare.compare_endpoints(down, to) == :same do
+        down
+      else
+        shift(down, [{unit, 1}])
+      end
+    end
+  end
+
+  # An interval as its two ends: one written with a duration is counted to
+  # them, and an end that is open stays open. A recurrence is not one
+  # interval, and nor is one whose start or end holds a set.
+  #
+  # An end that is a season of 21 to 24 has no dates to be moved from until
+  # it has a hemisphere, and the interval is refused as the season alone is.
+  defp with_its_ends(%Interval{recurrence: 1, duration: nil} = interval, _function) do
+    with :ok <- has_its_dates(interval.from, "truncate or round"),
+         :ok <- has_its_dates(interval.to, "truncate or round") do
+      {:ok, interval}
+    end
+  end
+
+  defp with_its_ends(%Interval{recurrence: 1} = interval, function) do
+    case to_interval(interval) do
+      {:ok, %Interval{} = span} -> {:ok, span}
+      {:ok, _several_spans} -> {:error, not_one_interval(function, interval)}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp with_its_ends(%Interval{} = recurrence, function) do
+    {:error, not_one_interval(function, recurrence)}
+  end
+
+  defp not_one_interval(function, value) do
+    ArgumentError.exception(
+      "Tempo.#{function} takes one date or time value or one interval, and " <>
+        "#{Calendars.inspect(value)} is not one: it is a recurrence, or it names several spans."
+    )
+  end
+
+  # An end of an interval moved by what moves a value, an open end staying
+  # open. What gives several values for one end gives no one end.
+  defp end_moved(%__MODULE__{} = endpoint, move) do
+    case move.(endpoint) do
+      %__MODULE__{} = moved -> {:ok, moved}
+      {:error, _reason} = error -> error
+      _several -> {:error, ConversionError.exception(value: endpoint, reason: :grouped_component)}
+    end
+  end
+
+  defp end_moved(open_or_absent, _move) do
+    {:ok, open_or_absent}
+  end
+
+  # A value written with an offset, cut or rounded to a coarser unit or
+  # placed at another time, is at the offset its zone is at on the reading
+  # it then has (`Tempo.Enumeration.Zone.at_its_offset/1`): 03:00 at −04:00
+  # on the day New York's clocks go forward is cut to a day that begins at
+  # −05:00, and was given the day at the offset of the hour.
+  defp at_its_offset(%__MODULE__{} = value) do
+    Zone.at_its_offset(value)
+  end
+
+  defp at_its_offset(other) do
+    other
+  end
+
+  # The same for what `extend/2` writes, which is `{:ok, value}`.
+  defp written_at_its_offset({:ok, %__MODULE__{} = value}) do
+    {:ok, Zone.at_its_offset(value)}
+  end
+
+  defp written_at_its_offset(not_written) do
+    not_written
+  end
+
+  # A group of a set (`{1,2}G3MU`) is kept as a three-element entry that names
+  # a span in each of its groups, so a value that holds one is no one value to
+  # truncate, to place or to read a day from.
+  defp one_value(%__MODULE__{time: time} = tempo) when is_list(time) do
+    if Enum.any?(time, &match?({_unit, {:group, _members}, _size}, &1)) do
+      {:error, materialisation_error(tempo, :grouped_component)}
+    else
+      :ok
+    end
+  end
+
+  defp one_value(_value) do
+    :ok
+  end
+
+  # A season of 21 to 24 has no dates until it has a hemisphere, so what
+  # needs its months or its days is refused, and says how it is given one.
+  defp has_its_dates(%__MODULE__{time: time} = value, operation) when is_list(time) do
+    if List.keymember?(time, :season, 0) do
+      {:error, AbstractSeasonError.exception(value: value, operation: operation)}
+    else
+      :ok
+    end
+  end
+
+  defp has_its_dates(_value, _operation) do
+    :ok
+  end
+
+  # A value already on the week axis holds `:week` as a component, so
+  # the ordinary rule applies.
+  defp truncate(%__MODULE__{time: time} = tempo, :week) when is_list(time) do
+    if Keyword.has_key?(time, :week) do
+      take_units(tempo, :week)
+    else
+      week_of(tempo)
+    end
+  end
+
+  defp truncate(%__MODULE__{time: time} = tempo, truncate_to) do
+    with :ok <- same_axis(time, truncate_to, tempo) do
+      take_units(tempo, truncate_to)
+    end
+  end
+
+  # A Gregorian value cannot hold a week as a component, but the day
+  # its week begins on is a perfectly good Gregorian value — and it is
+  # what "the week containing this" means when the calendar has no week
+  # granule to name. Day resolution, matching `trunc(tempo, :day)`.
+  #
+  # The week starts where the value's own calendar starts its weeks:
+  # `Calendrical.Gregorian` begins on Monday, so a Sunday belongs to the
+  # week before it, while a calendar configured to begin on Sunday puts
+  # the same Sunday first in its week.
+  defp week_of(%__MODULE__{} = tempo) do
+    with %__MODULE__{} = day <- trunc(tempo, :day),
+         {:ok, date} <- to_date(day) do
+      date
+      |> Date.beginning_of_week(:default)
+      |> from_date()
+      |> then(&%{&1 | shift: tempo.shift, extended: tempo.extended})
+      |> take_units(:day)
+    end
+  end
+
+  defp take_units(%__MODULE__{time: time} = tempo, truncate_to) do
+    {dated, selection} = Enum.split_while(time, &(not match?({:selection, _selection}, &1)))
+
+    kept = Enum.take_while(dated, &(Unit.compare(&1, truncate_to) in [:gt, :eq]))
+
+    if kept == [] do
+      {:error,
+       ResolutionError.exception(
+         operation: :trunc,
+         target: truncate_to,
+         current:
+           resolution(tempo)
+           |> elem(0),
+         reason: :empty_resolution
+       )}
+    else
+      %{tempo | time: kept_with_selection(kept, dated, selection, truncate_to)}
+    end
+  end
+
+  # A selection (`2026Y4ML1K1IN`, the first Monday of April) is finer than the
+  # units before it. Truncating to one of them drops it (`2026Y4M`), and
+  # truncating to a unit finer than them all leaves the value as it is.
+  defp kept_with_selection(kept, _dated, [], _truncate_to) do
+    kept
+  end
+
+  defp kept_with_selection(kept, dated, selection, truncate_to) do
+    if kept == dated and Unit.compare(List.last(dated), truncate_to) == :gt do
+      dated ++ selection
+    else
+      kept
+    end
+  end
+
+  # Units that belong to one calendar axis and no other. `:year`,
+  # `:hour`, `:minute` and `:second` are shared by all three and so
+  # constrain nothing.
+  @gregorian_only [:month, :day]
+  @week_only [:day_of_week]
+  @ordinal_only [:day_of_year]
+
+  # Truncating to a unit the value's axis does not have is a category
+  # error rather than a coarsening: without a guard, `take_units/2`
+  # walks past the units it cannot match and answers with whatever
+  # coarser one it lands on — a plausible-looking value of the wrong
+  # kind. `:week` is the exception and is handled above, because the
+  # day a week begins on *is* expressible on every axis.
+  defp same_axis(time, truncate_to, tempo) do
+    with target when target != :any <- axis_of([truncate_to]),
+         value when value != :any <-
+           time
+           |> Keyword.keys()
+           |> value_axis(truncate_to),
+         true <- target != value do
+      {:error,
+       ResolutionError.exception(
+         operation: :trunc,
+         target: truncate_to,
+         current:
+           resolution(tempo)
+           |> elem(0),
+         reason:
+           "#{Calendars.inspect(truncate_to)} is on the #{target} axis and this value is on the " <>
+             "#{value} axis — truncating between axes is not a coarsening. Convert the " <>
+             "value to the #{target} axis first."
+       )}
+    else
+      _same_axis_or_unconstrained -> :ok
+    end
+  end
+
+  # A week has no month, so a value written to the week (`2026-W25`) is on
+  # the week axis when a month is asked of it, with or without a day of the
+  # week. Asked for a day it is left as it is: it is coarser than one.
+  defp value_axis(units, :month) do
+    if :week in units do
+      :week
+    else
+      axis_of(units)
+    end
+  end
+
+  defp value_axis(units, _truncate_to) do
+    axis_of(units)
+  end
+
+  defp axis_of(units) do
+    cond do
+      Enum.any?(units, &(&1 in @week_only)) -> :week
+      Enum.any?(units, &(&1 in @ordinal_only)) -> :ordinal
+      Enum.any?(units, &(&1 in @gregorian_only)) -> :gregorian
+      true -> :any
+    end
+  end
+
+  @doc """
+  Rounds a value to the nearest value of a unit.
+
+  The value rounds to the start of the unit it is in, or to the start
+  of the next, whichever its own start is nearer to: 21 November 2022
+  rounds to December at month resolution and to 2023 at year
+  resolution, where `trunc/2` would keep November and 2022. Half way
+  rounds up, as `Kernel.round/1` rounds a half: half past ten is
+  eleven o'clock, and noon is the next day.
+
+  How far into a unit a value is, is measured in the unit as it is
+  there: 16 January is 15 days into a month of 31, so it rounds to
+  January, and 15 February is 14 days into a month of 28, so it
+  rounds to March. A value in a zone is measured in the zone's days,
+  one of which is 23 hours long when the clocks go forward.
+
+  ### Arguments
+
+  * `tempo` is any `t:#{__MODULE__}.t/0` that is one value: a date, a
+    time of day, or a date and time.
+
+  * `round_to` is any time unit. The default is `:day`.
+
+  ### Returns
+
+  * The rounded value, at the resolution of `round_to`.
+
+  * `{:error, exception}` when `round_to` is finer than the value is
+    written to (`t:Tempo.RoundingError.t/0`), is a unit the value's
+    axis does not have (`t:Tempo.ResolutionError.t/0`), or is a month
+    whose length depends on a year the value does not have
+    (`t:Tempo.UnanchoredError.t/0`), when the value is a season with no
+    hemisphere, which has no dates to be nearer one unit than another
+    (`t:Tempo.AbstractSeasonError.t/0`), and when the value holds several
+    values or is not a date or time value.
+
+  ### Examples
+
+      iex> Tempo.round ~o"2022-11-21", :day
+      ~o"2022Y11M21D"
+
+      iex> Tempo.round ~o"2022-11-21", :month
+      ~o"2022Y12M"
+
+      iex> Tempo.round ~o"2022-11-21", :year
+      ~o"2023Y"
+
+      iex> Tempo.round ~o"2026-06-15T12:00", :day
+      ~o"2026Y6M16D"
+
+      iex> Tempo.round ~o"2026-06-15T10:29", :hour
+      ~o"2026Y6M15DT10H"
+
+      iex> Tempo.round ~o"T10:30", :hour
+      ~o"T11H"
+
+      iex> Tempo.round ~o"T23:45", :hour
+      ~o"T0H"
+
+  An interval rounded has each end taken to the start of the unit
+  nearer it, and an end written to a coarser unit left as it is. An
+  interval shorter than the unit may be left with its two ends on one
+  start, holding nothing.
+
+      iex> Tempo.round(~o"2026-06-15T10:30/2026-06-15T12:45", :hour)
+      ~o"2026Y6M15DT11H/T13H"
+
+  """
+  @spec round(tempo :: t | Tempo.Interval.t(), round_to :: time_unit()) ::
+          t | Tempo.Interval.t() | {:error, error_reason()}
+  def round(tempo, round_to \\ :day)
+
+  def round(tempo, round_to) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> round(round_to)
+    |> Calendars.outside()
+  end
+
+  def round(%__MODULE__{} = tempo, round_to) do
+    with {:ok, round_to} <- validate_unit(round_to),
+         :ok <- has_its_dates(tempo, "round"),
+         :ok <- one_to_round(tempo, round_to) do
+      tempo
+      |> Rounding.round(round_to)
+      |> qualified_as_it_stands()
+      |> at_its_offset()
+    end
+  end
+
+  # An interval rounded has each end taken to the start of the unit nearer
+  # it (decided 2026-10-07): half past ten to a quarter to one, rounded to
+  # the hour, is eleven to one. An end written to a coarser unit is on the
+  # start of one already.
+  def round(%Interval{} = interval, round_to) do
+    with {:ok, unit} <- validate_unit(round_to),
+         {:ok, %Interval{} = span} <- with_its_ends(interval, "round/2"),
+         {:ok, from} <- end_moved(span.from, &rounded_end(&1, unit)),
+         {:ok, to} <- end_moved(span.to, &rounded_end(&1, unit)) do
+      %{span | from: from, to: to}
+    end
+  end
+
+  def round(value, _round_to) do
+    {:error, not_one_value("round/2", value)}
+  end
+
+  defp rounded_end(%__MODULE__{} = endpoint, unit) do
+    {written_to, _span} = resolution(endpoint)
+
+    if Unit.compare(unit, written_to) == :lt do
+      endpoint
+    else
+      round(endpoint, unit)
+    end
+  end
+
+  # A value's qualifications name the units it holds, so one that has dropped
+  # a unit has dropped its qualifier.
+  defp qualified_as_it_stands(%__MODULE__{} = tempo) do
+    Qualification.only(tempo)
+  end
+
+  defp qualified_as_it_stands(other) do
+    other
+  end
+
+  # Rounding reads each unit as the one number it is, so a value that holds
+  # several (a set, a mask, an unspecified unit, a group) is none to round.
+  defp one_to_round(%__MODULE__{time: time} = tempo, round_to) do
+    if is_list(time) and Steps.whole_units?(time) do
+      :ok
+    else
+      {:error,
+       RoundingError.exception(
+         unit: round_to,
+         value: tempo,
+         reason:
+           "Cannot round #{Calendars.inspect(tempo)}: it holds several values (a set, a range, a " <>
+             "group or unspecified digits), and one value is rounded."
+       )}
+    end
+  end
+
+  @doc """
+  Splits a value into its date and its time of day.
+
+  Each part keeps what the value carries: its calendar, its zone or
+  offset, its qualification and its metadata. The date of a value in a
+  zone is the date in that zone, and its time the time of day there, so
+  `at/2` of the two parts is the value.
+
+  ### Arguments
+
+  * `tempo` is any `t:#{__MODULE__}.t/0`.
+
+  ### Returns
+
+  * `{date, time}`, where either is `nil` when the value has none.
+
+  ### Examples
+
+      iex> Tempo.split(~o"2026-06-15T14:30:00")
+      {~o"2026Y6M15D", ~o"T14H30M0S"}
+
+      iex> Tempo.split(~o"2026-06-15T14:30[Europe/Paris]")
+      {~o"2026Y6M15D[Europe/Paris]", ~o"T14H30M[Europe/Paris]"}
+
+      iex> Tempo.split(~o"2026-06-15")
+      {~o"2026Y6M15D", nil}
+
+  """
+  @spec split(t()) :: {t() | nil, t() | nil}
+  def split(tempo) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> split()
+    |> Calendars.outside()
+  end
+
+  def split(%__MODULE__{time: time} = tempo) when is_list(time) do
+    case Split.split(time) do
+      {date, []} ->
+        {%{tempo | time: date}, nil}
+
+      {[], time} ->
+        {nil, %{tempo | time: time}}
+
+      {date, time} ->
+        {at_its_offset(Qualification.only(%{tempo | time: date})),
+         Qualification.only(%{tempo | time: time})}
+    end
+  end
+
+  def split(value) do
+    raise(not_one_value("split/1", value))
+  end
+
+  # Merge `from`'s components into `base`, validated in `base`'s own
+  # calendar — the engine of `at/2` and `on/2`, which are the public way to
+  # combine two values. Passes through any non-`{:ok, _}` from
+  # `Validation.validate/2`, which dialyzer widens beyond the spec.
+  @doc false
+  @dialyzer {:nowarn_function, merge: 2}
+  @spec merge(t(), t()) :: t() | {:error, error_reason()}
+  def merge(%__MODULE__{calendar: calendar} = base, %Tempo{} = from) do
+    units = Enumeration.merge(base.time, from.time)
+    qualifications = Qualification.merge(base.qualifications, from.qualifications)
+
+    with {:ok, framed} <- in_one_frame(base, from) do
+      placed = Qualification.only(%{framed | time: units, qualifications: qualifications})
+
+      case Validation.validate(placed, calendar) do
+        {:ok, tempo} -> tempo
+        other -> other
+      end
+    end
+  end
+
+  # The zone or offset of a value placed on another. A value with none takes
+  # the other's, whichever of the two it is: 14:30 in Paris placed on 15 June
+  # is 14:30 in Paris on that day. Two that are each in a zone are in the same
+  # one, or are no one value.
+  defp in_one_frame(base, from) do
+    case {frame(base), frame(from)} do
+      {same, same} -> {:ok, base}
+      {_frame, nil} -> {:ok, base}
+      {nil, _frame} -> {:ok, in_frame_of(base, from)}
+      _two_frames -> {:error, two_frames_error(from)}
+    end
+  end
+
+  defp frame(%__MODULE__{shift: nil, extended: nil}) do
+    nil
+  end
+
+  defp frame(%__MODULE__{shift: shift, extended: extended}) do
+    zone = {shift, zone_field(extended, :zone_id), zone_field(extended, :zone_offset)}
+
+    if zone == {nil, nil, nil} do
+      nil
+    else
+      zone
+    end
+  end
+
+  defp zone_field(nil, _field) do
+    nil
+  end
+
+  defp zone_field(extended, field) do
+    Map.get(extended, field)
+  end
+
+  defp in_frame_of(base, %__MODULE__{shift: shift, extended: extended}) do
+    %{base | shift: shift, extended: with_zone_of(base.extended, extended)}
+  end
+
+  defp with_zone_of(nil, extended) do
+    zone_alone(extended)
+  end
+
+  defp with_zone_of(base_extended, extended) do
+    Map.merge(
+      base_extended,
+      Map.take(extended || %{}, [:zone_id, :zone_offset, :zone_critical])
+    )
+  end
+
+  # The zone of a value's annotations, without its tags, which stay its own.
+  defp zone_alone(nil) do
+    nil
+  end
+
+  defp zone_alone(%{zone_id: nil, zone_offset: nil}) do
+    nil
+  end
+
+  defp zone_alone(extended) do
+    Map.merge(
+      %{tags: %{}, zone_id: nil, zone_offset: nil, zone_critical: false},
+      Map.take(extended, [:zone_id, :zone_offset, :zone_critical])
+    )
+  end
+
+  defp two_frames_error(from) do
+    ZonedTempoError.exception(
+      operation: "place a value in one zone on a value in another",
+      value: from
+    )
+  end
+
+  @doc """
+  Place one value on another: the value with a year keeps it, and the
+  other supplies the finer components it lacks.
+
+  `~o"2026-06-15" |> Tempo.at(~o"T17")` reads *"15 June **at** 17:00"*
+  and `~o"T17" |> Tempo.on(~o"2026-06-15")` *"17:00 **on** 15 June"*;
+  both are the same value. The finer side is taken whole, so
+  `~o"2026-06-15T09:30" |> Tempo.at(~o"T17")` is 17:00, not 17:30.
+  When neither value has a year the coarser keeps its components —
+  `~o"3M" |> Tempo.on(~o"2D")` is `~o"3M2D"`, the 2nd of March in any
+  year — and when both have one there is nothing to place. `at/2` and
+  `on/2` are one function, so use the word that reads.
+
+  A time of day is a time of one day, so placed on a year, a month or a
+  week it is on the first day of it: `~o"2026-06" |> Tempo.at(~o"T17")`
+  is 17:00 on 1 June, as `~o"2026-06T17"` is read. ISO 8601 wants the
+  date of a date and time complete (ISO 8601-1 §5.4.1), so this reading
+  is Tempo's own. That time on each day is written with the days named:
+  `~o"2026Y6M{1..-1}DT17H"` is 17:00 on each day of June.
+
+  A value with a year is checked against its calendar, so
+  `~o"2026-02" |> Tempo.on(~o"29D")` is an error: 2026 is not a leap
+  year. One in a zone is checked against the zone's clock as a value
+  that is read is, so 02:30 placed on the night clocks go forward is
+  an error too. A month, a week and a day are numbered by their
+  calendar, so two values that hold them are of one calendar: a Gregorian
+  `~o"6M15D"` placed on a Hebrew year is an error and not the fifteenth
+  of that year's sixth month, which is written by reading it in that
+  calendar (`Tempo.from_iso8601("6M15D", Calendrical.Hebrew)`). A time
+  of day is placed on a value of any calendar. A value of a calendar
+  of weeks, such as `Calendrical.ISOWeek`, takes a week and a day of
+  the week of that calendar.
+
+  A date is written by its month and day, by its week and a day of it,
+  or by its day of the year. Where the two values are written by two of
+  those, what is placed is what `Tempo.select/2` selects by the one
+  from the other: `~o"15D" |> Tempo.on(~o"2026-W25")` is 15 June, the
+  15th in that week, and `~o"2W" |> Tempo.on(~o"2026-06")` is the
+  second week of June, the span of its days. A value that names no date
+  there (the 3rd on that week) or more than one (a Wednesday on a
+  month) is an error, and so are two such values with no year, which
+  name one date only in a year.
+
+  An interval is placed endpoint by endpoint, so nine to five on 15
+  June, or 2–15 April in 2027, is one call; an open end, or one its
+  duration gives, stays as it is.
+
+  ### Arguments
+
+  * `value` and `other` are `t:#{__MODULE__}.t/0` values, at most one
+    of them with a year, or one of them a `t:Tempo.Interval.t/0` whose
+    endpoints are placed on the other.
+
+  ### Returns
+
+  * `{:ok, tempo}` with the one value placed on the other, or
+    `{:ok, interval}` with an interval's endpoints placed, or with a
+    week placed on a month.
+
+  * `{:error, reason}` when both values have a year, when the two hold
+    date units of different calendars, when the result is not a date in
+    its calendar, is a time the clock skips in its zone or is an
+    interval whose start is not before its end, when either is a season
+    with no hemisphere, which has no dates to place a time on
+    (`t:Tempo.AbstractSeasonError.t/0`), or when either argument is not a
+    Tempo value or interval.
+
+  ### Examples
+
+      iex> Tempo.at(~o"2026-06-15", ~o"T17")
+      {:ok, ~o"2026Y6M15DT17H"}
+
+      iex> Tempo.at(~o"T17", ~o"2026-06-15")
+      {:ok, ~o"2026Y6M15DT17H"}
+
+      iex> Tempo.at(~o"3M", ~o"2D")
+      {:ok, ~o"3M2D"}
+
+      iex> Tempo.at(~o"2026-06-15", ~o"T09/T17")
+      {:ok, ~o"2026Y6M15DT9H/T17H"}
+
+      iex> Tempo.at(~o"2026-06", ~o"T17")
+      {:ok, ~o"2026Y6M1DT17H"}
+
+      iex> Tempo.on(~o"15D", ~o"2026-W25")
+      {:ok, ~o"2026Y6M15D"}
+
+  """
+  @dialyzer {:nowarn_function, at: 2}
+
+  @spec at(t() | Interval.t(), t() | Interval.t()) ::
+          {:ok, t() | Interval.t()} | {:error, error_reason()}
+  def at(value, other) when is_outside(value) or is_outside(other) do
+    Calendars.outside(at(Calendars.inside(value), Calendars.inside(other)))
+  end
+
+  def at(%__MODULE__{} = value, %__MODULE__{} = other) do
+    with {:ok, placed} <- place_on(value, other),
+         :ok <- shown_by_its_zone(placed) do
+      {:ok, at_its_offset(placed)}
+    end
+  end
+
+  def at(%Interval{} = interval, %__MODULE__{} = other) do
+    place_interval(interval, other)
+  end
+
+  def at(%__MODULE__{} = value, %Interval{} = interval) do
+    place_interval(interval, value)
+  end
+
+  def at(value, other) do
+    {:error,
+     ArgumentError.exception(
+       "at/2 and on/2 place a Tempo value on a value or an interval, not " <>
+         "#{Calendars.inspect(value)} on #{Calendars.inspect(other)}."
+     )}
+  end
+
+  # One value placed on another, and not yet held to the clock of its zone:
+  # `at/2` holds it there, as a value that is read is (02:30 on the night
+  # clocks go forward names no time, and nor does a day the zone leaves
+  # out). A recurrence's start placed on its window is not held: its first
+  # occurrence is then the reading the clock shows (`as_the_clock_shows/1`).
+  defp place_on(%__MODULE__{} = value, %__MODULE__{} = other) do
+    with :ok <- one_value(value),
+         :ok <- one_value(other),
+         :ok <- has_its_dates(value, "place a value on"),
+         :ok <- has_its_dates(other, "place a value on"),
+         :ok <- one_calendar(value, other) do
+      value = without_unspecified_year(value)
+      other = without_unspecified_year(other)
+      place(value, other, anchored?(value), anchored?(other))
+    end
+  end
+
+  # A month, a week and a day are numbered by their calendar: the sixth month
+  # of a Hebrew year is not June. So a value that holds a date unit is placed
+  # only on a value of its own calendar, and its numbers are never read in
+  # the other's. A time of day is the same in every calendar and is placed on
+  # any.
+  defp one_calendar(%__MODULE__{} = value, %__MODULE__{} = other) do
+    if dated?(value) and dated?(other) and value.calendar != other.calendar do
+      {:error, two_calendars_error(value, other)}
+    else
+      :ok
+    end
+  end
+
+  defp dated?(%__MODULE__{time: time}) when is_list(time) do
+    Enum.any?(time, &(elem(&1, 0) not in [:hour, :minute, :second, :microsecond]))
+  end
+
+  defp dated?(%__MODULE__{}) do
+    false
+  end
+
+  defp two_calendars_error(value, other) do
+    ConversionError.exception(
+      value: value,
+      target: other.calendar,
+      reason:
+        "#{Calendars.inspect(value)} is a value of #{Calendars.name(value.calendar)} and " <>
+          "#{Calendars.inspect(other)} one of #{Calendars.name(other.calendar)}, and a month, a " <>
+          "week and a day are numbered by their calendar: read both in one calendar to " <>
+          "place one on the other."
+    )
+  end
+
+  # An interval is placed endpoint by endpoint; an open end, or one its
+  # duration gives, has nothing to place.
+  defp place_interval(%Interval{from: from, to: to} = interval, other) do
+    with {:ok, placed_from} <- place_endpoint(from, other),
+         {:ok, placed_to} <- place_endpoint(to, other),
+         :ok <- in_order(placed_from, placed_to) do
+      {:ok, %{interval | from: placed_from, to: placed_to}}
+    end
+  end
+
+  # An end that is placed as a span, a week of a month, is where it starts.
+  defp place_endpoint(%__MODULE__{} = endpoint, other) do
+    case at(endpoint, other) do
+      {:ok, %Interval{from: %__MODULE__{} = start}} -> {:ok, start}
+      placed_or_an_error -> placed_or_an_error
+    end
+  end
+
+  defp place_endpoint(open_or_derived, _other) do
+    {:ok, open_or_derived}
+  end
+
+  # A value placed is held to the clock of its zone, as a value that is read
+  # is; a span, a week of a month, is the dates it names.
+  defp shown_by_its_zone(%__MODULE__{} = placed) do
+    Validation.validate_zone_existence(placed)
+  end
+
+  defp shown_by_its_zone(%Interval{}) do
+    :ok
+  end
+
+  defp in_order(%__MODULE__{} = from, %__MODULE__{} = to) do
+    with {:ok, _interval} <- Interval.new(from, to), do: :ok
+  end
+
+  defp in_order(_from, _to) do
+    :ok
+  end
+
+  # A value that is an unspecified year and nothing else (`X*Y`) names no
+  # unit to place, so the other value is where it was.
+  defp place(value, %__MODULE__{time: [{:year, :any}]}, _year, _other_year) do
+    {:ok, value}
+  end
+
+  defp place(%__MODULE__{time: [{:year, :any}]}, other, _year, _other_year) do
+    {:ok, other}
+  end
+
+  defp place(value, other, true = _year, true = _other_year) do
+    {:error,
+     ArgumentError.exception(
+       "at/2 and on/2 place a value without a year on one with a year, and both " <>
+         "#{Calendars.inspect(value)} and #{Calendars.inspect(other)} have one."
+     )}
+  end
+
+  defp place(value, other, false = _year, true = _other_year) do
+    grafted(other, value)
+  end
+
+  defp place(value, other, true = _year, false = _other_year) do
+    grafted(value, other)
+  end
+
+  defp place(value, other, false = _year, false = _other_year) do
+    if leading_key(value) >= leading_key(other) do
+      grafted(value, other)
+    else
+      grafted(other, value)
+    end
+  end
+
+  defp placed(%__MODULE__{} = tempo) do
+    {:ok, tempo}
+  end
+
+  defp placed(error) do
+    error
+  end
+
+  # A value's units placed under another's. A date is written by its month
+  # and day, by its week and day of it, or by its day of the year, and the
+  # units of two of those under one another are no value: a day of a month
+  # under a week (`2026Y25W15D`), a weekday under a month (`2026Y6M3K`), a
+  # week under a month, which names a week of the month. Such a value was
+  # given, and nothing reads it. What it names is what `Tempo.select/2`
+  # selects by the one from the other, which is the one reading of a unit
+  # in a period: the 15th placed on week 25 of 2026 is 15 June.
+  defp grafted(%__MODULE__{} = high, %__MODULE__{} = low) do
+    if of_two_axes?(high, low) do
+      selected_on(high, low, anchored?(high))
+    else
+      placed(graft(high, low))
+    end
+  end
+
+  defp of_two_axes?(%__MODULE__{time: high_time}, %__MODULE__{time: [_ | _] = low_time}) do
+    if List.keymember?(high_time, :selection, 0) or List.keymember?(low_time, :selection, 0) do
+      false
+    else
+      mixed_axes?(units_grafted(high_time, low_time))
+    end
+  end
+
+  defp of_two_axes?(_high, _low) do
+    false
+  end
+
+  # The units a graft holds: those of the one value coarser than the first
+  # of the other, and the other's (`graft_units/2`).
+  defp units_grafted(high_time, [{unit, _value} | _] = low_time) do
+    cutoff = Unit.sort_key(unit)
+    kept = for {kept, _value} <- high_time, Unit.sort_key(kept) > cutoff, do: kept
+
+    kept ++ Enum.map(low_time, &elem(&1, 0))
+  end
+
+  # A week beside a month, a day of one or a day of the year, and a day of
+  # the week with no week beside a year or a date.
+  defp mixed_axes?(units) do
+    week? = :week in units
+    by_month_or_day? = Enum.any?([:month, :day, :day_of_year], &(&1 in units))
+
+    (week? and by_month_or_day?) or
+      (:day_of_week in units and not week? and (by_month_or_day? or :year in units))
+  end
+
+  # The one value a unit names in a value with a year: what `select/2`
+  # selects there, where that is one span. None is a date the value does not
+  # have, and several are for `select/2` to give.
+  defp selected_on(high, low, true = _anchored?) do
+    case select(high, low) do
+      {:ok, %IntervalSet{} = selected} -> the_one_selected(selected, high, low)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp selected_on(high, low, false = _anchored?) do
+    {:error,
+     ArgumentError.exception(
+       "#{Calendars.inspect(low)} cannot be placed on #{Calendars.inspect(high)}: the two are written by " <>
+         "different units of a date (a month and its day, a week and its day, a day of the " <>
+         "year), which name one date only in a year. Place them on a value with a year."
+     )}
+  end
+
+  defp the_one_selected(selected, high, low) do
+    case IntervalSet.do_bounded?(selected) && IntervalSet.members(selected) do
+      [%Tempo.Interval{} = one] ->
+        {:ok, value_selected(one)}
+
+      [] ->
+        {:error,
+         InvalidDateError.exception(
+           reason: "#{Calendars.inspect(low)} names no date on #{Calendars.inspect(high)}."
+         )}
+
+      _several_or_unending ->
+        {:error,
+         ArgumentError.exception(
+           "#{Calendars.inspect(low)} names more than one date on #{Calendars.inspect(high)}, and at/2 and " <>
+             "on/2 place one. `Tempo.select/2` selects each of them."
+         )}
+    end
+  end
+
+  # A selected span that is one value's own is that value; any other, a
+  # week of a month, is the span.
+  defp value_selected(%Tempo.Interval{from: %__MODULE__{} = from, to: to} = selected) do
+    case Interval.do_next_unit_boundary(from) do
+      {:ok, {_lower, upper}, _unit} ->
+        if Compare.compare_endpoints(upper, to) == :same do
+          from
+        else
+          selected
+        end
+
+      {:error, _reason} ->
+        selected
+    end
+  end
+
+  # An unspecified year (`X*Y6M`) is no year, so it is where the year of the
+  # value it is placed on goes.
+  defp without_unspecified_year(%__MODULE__{time: [{:year, :any} | [_ | _] = rest]} = value) do
+    %{value | time: rest}
+  end
+
+  defp without_unspecified_year(%__MODULE__{} = value) do
+    value
+  end
+
+  # How coarse a value's leading unit is; a value with none is the finest.
+  #
+  # A selection with no period before it (`L5KN`, the Fridays) is as coarse
+  # as the finest unit it names, so a value finer than that is placed after
+  # it, on each date it selects (`L5KNT17H30M`), and a coarser one before it
+  # as its period (`6ML5KN`). It was held the finest of all, and a time of
+  # day was written before it, which no reader takes.
+  defp leading_key(%__MODULE__{time: [{:selection, selection} | _rest]}) do
+    selection
+    |> Enum.flat_map(&selected_key/1)
+    |> Enum.min(fn -> Unit.sort_key(:day) end)
+  end
+
+  defp leading_key(%__MODULE__{time: [{unit, _value} | _rest]}) do
+    case Unit.fetch_sort_key(unit) do
+      {:ok, key} -> key
+      :error -> -1
+    end
+  end
+
+  defp leading_key(%__MODULE__{}) do
+    -1
+  end
+
+  # How coarse a part of a selection is: its unit's own place, a day's for a
+  # part that names days in another way (a numbered weekday, an event, a
+  # window), and none for what is no unit (a position, the week's start).
+  @day_parts [:byday, :event, :interval, :nearest_weekday, :or_day]
+
+  defp selected_key({part, _value}) when part in [:instance, :wkst, :skip] do
+    []
+  end
+
+  defp selected_key({part, _value}) when part in @day_parts do
+    [Unit.sort_key(:day)]
+  end
+
+  defp selected_key({:traditional_month, _value}) do
+    [Unit.sort_key(:month)]
+  end
+
+  defp selected_key({:calendar_week, _value}) do
+    [Unit.sort_key(:week)]
+  end
+
+  defp selected_key({unit, _value}) do
+    case Unit.fetch_sort_key(unit) do
+      {:ok, key} -> [key]
+      :error -> []
+    end
+  end
+
+  defp selected_key(_another_entry) do
+    []
+  end
+
+  @doc """
+  Bang variant of `at/2` — returns the placed value or raises.
+
+  ### Examples
+
+      iex> Tempo.at!(~o"2026-06-15", ~o"T17")
+      ~o"2026Y6M15DT17H"
+
+  """
+  @spec at!(t() | Interval.t(), t() | Interval.t()) :: t() | Interval.t()
+  def at!(value, other) do
+    case at(value, other) do
+      {:ok, tempo} -> tempo
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, "at!/2 failed: #{Calendars.inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Place one value on another — `at/2`, spelled for how English reads
+  a date.
+
+  `at/2` reads for a time of day (*"15 June **at** 17:00"*) and `on/2`
+  for a day (*"17:00 **on** 15 June"*, *"March, **on** the 2nd"*).
+  They are the same function: the value with a year keeps it, and the
+  other supplies what it lacks.
+
+  ### Arguments
+
+  * `value` and `other` are `t:#{__MODULE__}.t/0` values, at most one
+    of them with a year.
+
+  ### Returns
+
+  * `{:ok, tempo}` or `{:error, reason}` — see `at/2`.
+
+  ### Examples
+
+      iex> Tempo.on(~o"T17", ~o"2026-06-15")
+      {:ok, ~o"2026Y6M15DT17H"}
+
+      iex> Tempo.on(~o"3M", ~o"2D")
+      {:ok, ~o"3M2D"}
+
+      iex> Tempo.on(~o"4M2D/4M16D", ~o"2027")
+      {:ok, ~o"2027Y4M2D/16D"}
+
+  """
+  @spec on(t() | Interval.t(), t() | Interval.t()) ::
+          {:ok, t() | Interval.t()} | {:error, error_reason()}
+  def on(value, other) do
+    at(value, other)
+  end
+
+  @doc """
+  Bang variant of `on/2` — returns the placed value or raises. See
+  `on/2`.
+
+  ### Examples
+
+      iex> Tempo.on!(~o"3M", ~o"2D")
+      ~o"3M2D"
+
+  """
+  @spec on!(t() | Interval.t(), t() | Interval.t()) :: t() | Interval.t()
+  def on!(value, other) do
+    at!(value, other)
+  end
+
+  # Compose two values along the resolution axis: keep `high_source`'s
+  # components strictly coarser than `low_value`'s coarsest, then graft
+  # `low_value` on. The engine of `at/2`, whose value with a year (or
+  # coarser value) is the high source. Reusing `merge/2` keeps a single
+  # validated path; pre-trimming `high_source` is what makes it a clean
+  # replace rather than a leaky overlay.
+  #
+  # A selection is not a unit to place: it stays after the units it selects
+  # in (ISO 8601-2 §12.11). The first Monday of April placed on 2027 is
+  # `2027Y4ML1K1IN`, and 09:00 placed on that is each Monday it selects at
+  # 09:00, `2027Y4ML1K1INT9H`.
+  defp graft(%__MODULE__{} = high_source, %__MODULE__{} = low_value) do
+    case {split_at_selection(high_source.time), split_at_selection(low_value.time)} do
+      {{_units, []}, {_low_units, []}} ->
+        graft_units(high_source, low_value)
+
+      {{_units, []}, {low_units, selection}} ->
+        high_source
+        |> graft_units(%{low_value | time: low_units})
+        |> with_units_after(selection)
+
+      {{_units, _selection}, {low_units, []}} ->
+        with_units_after(high_source, low_units)
+
+      _both_select ->
+        {:error,
+         ArgumentError.exception(
+           "at/2 and on/2 place one selection, and #{Calendars.inspect(high_source)} and " <>
+             "#{Calendars.inspect(low_value)} both hold one."
+         )}
+    end
+  end
+
+  defp graft_units(%__MODULE__{} = high_source, %__MODULE__{time: []} = low_value) do
+    merge(high_source, low_value)
+  end
+
+  defp graft_units(
+         %__MODULE__{} = high_source,
+         %__MODULE__{time: [{unit, _value} | _]} = low_value
+       ) do
+    cutoff = Unit.sort_key(unit)
+    trimmed = Enum.filter(high_source.time, fn {other, _v} -> Unit.sort_key(other) > cutoff end)
+    merge(%{high_source | time: trimmed}, low_value)
+  end
+
+  defp split_at_selection(time) do
+    Enum.split_while(time, &(not match?({:selection, _}, &1)))
+  end
+
+  defp with_units_after(%__MODULE__{time: time} = tempo, units) do
+    case Validation.validate(%{tempo | time: time ++ units}, tempo.calendar) do
+      {:ok, placed} -> placed
+      other -> other
+    end
+  end
+
+  defp with_units_after(error, _units) do
+    error
+  end
+
+  @doc """
+  Write a value as an enumeration of its next finer unit, covering the
+  same span.
+
+  `~o"2020"` becomes `~o"2020Y{1..12}M"` — the same year, written as its
+  twelve months — so the value's resolution rises while its span stays
+  the same.
+
+  The months of a year and the days of a month depend on which year or month it is. Under a value naming several, they are written from the first to the last (`{1..-1}`), and each year or month is walked by its own.
+
+  A second is written as its ten tenths and a fraction of a second as its next decimal place, down to a microsecond, which has no finer unit. Such a value is written with the fractions as a set after the decimal sign (`45.{0..9}S`), which `from_iso8601/1` reads back where a range names no more than a thousand fractions.
+
+  A value that ends in a group is written as the values the group names, in the group's own unit: the second group of three months of 2026 is its April to June. A group stops where its container does (the third ten days of a February are its 21st to its 28th or 29th), so one under several years or months is written only where it names the same values in each.
+
+  A value in a named zone is written by the values its clock shows. The day the clocks of Paris go forward has no 02:00, and is its hours but that one. Under several days or hours the clock may skip a value of one and not of another, and such a value is not written.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0`.
+
+  * `unit` is reserved and must be `nil`.
+
+  ### Returns
+
+  * `{:ok, tempo}` with the finer enumeration added.
+
+  * `{:error, exception}` — a `Tempo.ResolutionError` for a value with no finer unit to be written in (a fraction of a second at microsecond precision), a `Tempo.ConversionError` for a group that names other values in each of the years or months it is under and for a value in a zone whose clock skips a value under one of the days or hours it names and not under another, an `ArgumentError` for a value that is not a `t:t/0` or a `unit` that is not `nil`, and the validation error when the result fails validation.
+
+  ### Examples
+
+      iex> Tempo.extend(~o"2020")
+      {:ok, ~o"2020Y{1..12}M"}
+
+      iex> Tempo.extend(~o"2026-06")
+      {:ok, ~o"2026Y6M{1..30}D"}
+
+      iex> Tempo.extend(~o"2026Y{6,7}M")
+      {:ok, ~o"2026Y{6..7}M{1..-1}D"}
+
+      iex> Tempo.extend(~o"2026Y2G3MU")
+      {:ok, ~o"2026Y{4..6}M"}
+
+      iex> Tempo.extend(~o"2026-03-29[Europe/Paris]")
+      {:ok, ~o"2026Y3M29DT{0..1,3..23}H[Europe/Paris]"}
+
+      iex> {:error, %Tempo.ResolutionError{}} = Tempo.extend(~o"2026-06-15T10:30:45.123456")
+
+  """
+
+  @spec extend(t(), nil) :: {:ok, t()} | {:error, error_reason()}
+  def extend(tempo, unit \\ nil)
+
+  def extend(tempo, unit) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> extend(unit)
+    |> Calendars.outside()
+  end
+
+  def extend(%Tempo{time: time} = tempo, nil) when is_list(time) do
+    with :ok <- has_its_dates(tempo, "extend") do
+      extended =
+        if Enumeration.ends_in_group?(tempo) do
+          extend_group(tempo)
+        else
+          extend_by_enumeration(tempo)
+        end
+
+      extended
+      |> as_the_clock_shows_it(tempo)
+      |> written_at_its_offset()
+    end
+  end
+
+  def extend(%Tempo{time: time}, unit) when is_list(time) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.extend/2 writes a value by the unit below its own: its second argument is " <>
+         "reserved and must be nil, got #{Calendars.inspect(unit)}."
+     )}
+  end
+
+  def extend(value, _unit) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.extend/2 writes one date or time value by its next finer unit, and " <>
+         "#{Calendars.inspect(value)} is not one."
+     )}
+  end
+
+  # A value in a named zone is written by the values its clock shows. The
+  # day Paris's clocks go forward has no 02:00, and is written by its hours
+  # but that one (`T{0..1,3..23}H`): it was written with all twenty-four,
+  # and so named an hour the clock skips, which is no value and is refused
+  # when it is read (decided 2026-10-07).
+  #
+  # Under a value that names several days or hours the clock may show other
+  # values in each, and one set names the values of one: the hours of 28
+  # and 29 March there are no one list.
+  defp as_the_clock_shows_it({:ok, %__MODULE__{} = written} = extended, %__MODULE__{} = tempo) do
+    case Validation.validate_zone_existence(written) do
+      :ok -> extended
+      {:error, _names_a_skipped_reading} -> without_what_the_clock_skips(written, tempo)
+    end
+  end
+
+  defp as_the_clock_shows_it(not_written, _tempo) do
+    not_written
+  end
+
+  defp without_what_the_clock_skips(
+         %__MODULE__{time: written} = extended,
+         %__MODULE__{time: time}
+       ) do
+    case written_under_one_value(written, time) do
+      {:ok, unit, values} ->
+        shown = Enum.filter(values, &Zone.shown?(%{extended | time: time ++ [{unit, &1}]}))
+        {:ok, %{extended | time: time ++ [{unit, Parser.consolidate_ranges(shown)}]}}
+
+      :error ->
+        {:error,
+         ConversionError.exception(
+           value: extended,
+           reason:
+             "Cannot write #{Calendars.inspect(%{extended | time: time})} by its next finer unit: the " <>
+               "clock of its zone skips some of the values, and not the same ones under each " <>
+               "value it names."
+         )}
+    end
+  end
+
+  # The unit a value was written by and each value of it, where what was
+  # written by it is one value and the unit holds a set of whole numbers.
+  defp written_under_one_value(written, time) do
+    with true <- Compare.point?(time),
+         {^time, [{unit, [_ | _] = values}]} <- Enum.split(written, length(time)),
+         true <- Enum.all?(values, &(is_integer(&1) or is_struct(&1, Range))) do
+      {:ok, unit, Enum.flat_map(values, &each_value_named/1)}
+    else
+      _several_or_another_shape -> :error
+    end
+  end
+
+  defp each_value_named(value) when is_integer(value) do
+    [value]
+  end
+
+  defp each_value_named(%Range{} = values) do
+    Enum.to_list(values)
+  end
+
+  defp extend_by_enumeration(tempo) do
+    case Enumeration.implicit_enumeration(tempo) do
+      {:ok, enumerated} -> Validation.validate(enumerated, tempo.calendar)
+      {:finest, unit} -> {:error, no_finer_unit_error(tempo, unit)}
+    end
+  end
+
+  # A group names values of its own unit, the ones its walk yields, and is
+  # written as them: a unit below a group is counted from the group's start
+  # (ISO 8601-2 §5.4.2), so an enumeration of one would be read as no value
+  # of the group is.
+  defp extend_group(tempo) do
+    with {:ok, written} <- Enumeration.group_as_set(tempo),
+         do: Validation.validate(written, tempo.calendar)
+  end
+
+  defp no_finer_unit_error(tempo, unit) do
+    ResolutionError.exception(
+      operation: :extend,
+      current: unit,
+      calendar: tempo.calendar,
+      reason: no_finer_unit(tempo, unit)
+    )
+  end
+
+  defp no_finer_unit(tempo, :none) do
+    "Cannot extend #{Calendars.inspect(tempo)}: it names no unit."
+  end
+
+  defp no_finer_unit(tempo, :microsecond) do
+    "Cannot extend #{Calendars.inspect(tempo)}: a microsecond is the finest unit there is, so it has " <>
+      "no finer one to be written in."
+  end
+
+  defp no_finer_unit(tempo, unit) do
+    "Cannot extend #{Calendars.inspect(tempo)}: no unit finer than its #{unit} is defined."
+  end
+
+  @doc """
+  Bang variant of `extend/2`: the extended value, or a raised exception.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0`.
+
+  * `unit` is reserved and must be `nil`.
+
+  ### Returns
+
+  * The extended `t:t/0`.
+
+  ### Raises
+
+  * The exception `extend/2` returns.
+
+  ### Examples
+
+      iex> Tempo.extend!(~o"2020")
+      ~o"2020Y{1..12}M"
+
+  """
+  @spec extend!(t(), nil) :: t()
+  def extend!(tempo, unit \\ nil) do
+    case extend(tempo, unit) do
+      {:ok, zoomed} -> zoomed
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Create a `t:Tempo.t/0` from any Elixir date/time type.
+
+  Unifies `Date.t`, `Time.t`, `NaiveDateTime.t`, and `DateTime.t`
+  into the single `Tempo.t` representation under the principle
+  that every date/time value is a bounded interval on the time
+  line at some resolution. See the
+  [interop guide](interop.html) for what the resulting value
+  spans once converted with `to_interval/1`.
+
+  The intended resolution is either given explicitly via the
+  `:resolution` option or inferred from the input:
+
+  * `Date.t` → `:day` (Date has no time components).
+
+  * `Time.t`, `NaiveDateTime.t`, `DateTime.t` → `:second`, or
+    `:microsecond` when the value carries a declared sub-second
+    precision. These types are second-granular by construction, so
+    the resolution follows the type's declared precision rather than
+    the magnitude of the components — `09:00:00` is a fully
+    specified second, not an under-specified hour. Pass an explicit
+    `:resolution` to widen to a coarser span (e.g. `:day` for a
+    midnight value you want to treat as a whole day).
+
+  * `Date.Range` → a half-open `t:Tempo.Interval.t/0` covering
+    exactly the days the range enumerates (the inclusive `last`
+    becomes an exclusive day-after `to`), in the range's own
+    calendar. Returned as `{:ok, interval}` / `{:error, reason}`
+    because a stepped, descending, or empty range is refused — see
+    `from_date_range/2`.
+
+  When an explicit `:resolution` is given, the resulting Tempo is
+  passed through `at_resolution/2` to either truncate or pad to
+  that resolution.
+
+  ### Arguments
+
+  * `value` is any `t:Date.t/0`, `t:Time.t/0`,
+    `t:NaiveDateTime.t/0`, or `t:DateTime.t/0`.
+
+  ### Options
+
+  * `:resolution` is a time unit atom (`:year`, `:month`, `:day`,
+    `:hour`, `:minute`, `:second`) overriding the inferred
+    resolution.
+
+  ### Returns
+
+  * The `t:t/0` at the chosen resolution, or
+
+  * `{:error, reason}` if `:resolution` is incompatible with the
+    input, or the value is none of the types converted (a
+    `Tempo.ConversionError`).
+
+  ### Examples
+
+      iex> Tempo.from_elixir(~D[2022-06-15])
+      ~o"2022Y6M15D"
+
+      iex> Tempo.from_elixir(~T[10:30:00])
+      ~o"T10H30M0S"
+
+      iex> Tempo.from_elixir(~N[2022-06-15 10:30:00])
+      ~o"2022Y6M15DT10H30M0S"
+
+      iex> Tempo.from_elixir(~N[2022-06-15 00:00:00])
+      ~o"2022Y6M15DT0H0M0S"
+
+      iex> {:ok, july} = Tempo.from_elixir(Date.range(~D[2026-07-01], ~D[2026-07-31]))
+      iex> july
+      ~o"2026Y7M1D/8M1D"
+
+      iex> Tempo.from_elixir(~D[2022-06-15], resolution: :hour)
+      ~o"2022Y6M15DT0H"
+
+      iex> Tempo.from_elixir(~N[2022-06-15 10:30:00], resolution: :day)
+      ~o"2022Y6M15D"
+
+  """
+  @spec from_elixir(
+          value :: Date.t() | Time.t() | NaiveDateTime.t() | DateTime.t() | Date.Range.t(),
+          options :: Keyword.t()
+        ) :: t() | Duration.t() | {:ok, Tempo.Interval.t()} | {:error, error_reason()}
+  def from_elixir(value, options \\ [])
+
+  def from_elixir(value, options) when is_outside(value) do
+    value
+    |> Calendars.inside()
+    |> from_elixir(options)
+    |> Calendars.outside()
+  end
+
+  def from_elixir(%Date{} = date, options) do
+    resolution = Keyword.get(options, :resolution, :day)
+
+    date
+    |> from_date()
+    |> at_resolution(resolution)
+  end
+
+  # A `Date.Range` describes a span, so it converts to an interval —
+  # the inclusive-to-half-open bridge lives in `from_date_range/2`,
+  # and the result is tagged (`{:ok, interval}`) because a stepped,
+  # descending, or empty range is refused.
+  def from_elixir(%Date.Range{} = range, options) do
+    from_date_range(range, options)
+  end
+
+  def from_elixir(%Time{} = time, options) do
+    resolution = Keyword.get(options, :resolution) || infer_time_resolution(time)
+
+    time
+    |> from_time()
+    |> at_resolution(resolution)
+  end
+
+  def from_elixir(%NaiveDateTime{} = naive, options) do
+    resolution = Keyword.get(options, :resolution) || infer_datetime_resolution(naive)
+
+    naive
+    |> from_naive_datetime()
+    |> at_resolution(resolution)
+  end
+
+  def from_elixir(%DateTime{} = dt, options) do
+    resolution = Keyword.get(options, :resolution) || infer_datetime_resolution(dt)
+
+    dt
+    |> from_datetime()
+    |> at_resolution(resolution)
+  end
+
+  # Elixir's `Duration` (`~> 1.17`) carries the same units as Tempo's,
+  # under the same atoms, with the identical `{value, precision}`
+  # microsecond tuple — so the mapping is the present (non-zero)
+  # components. `:options` is accepted for signature parity with the
+  # date/time clauses but has no meaning for a duration.
+  def from_elixir(%Elixir.Duration{} = duration, _options) do
+    duration
+    |> elixir_duration_components()
+    |> Duration.new!()
+  end
+
+  # A value of no type it converts (a `nil`, a string, a map) raised a
+  # `FunctionClauseError`: the function takes whatever a caller holds, and
+  # says which of it is none of Elixir's dates and times.
+  def from_elixir(value, _options) do
+    written = Calendars.inspect(value, limit: 5, printable_limit: 60)
+
+    {:error,
+     ConversionError.exception(
+       value: value,
+       target: Tempo,
+       reason:
+         "Tempo.from_elixir/2 converts a Date, a Time, a NaiveDateTime, a DateTime, a " <>
+           "Date.Range or a Duration, and #{written} is none of them."
+     )}
+  end
+
+  # Elixir's `Time`, `NaiveDateTime`, and `DateTime` are
+  # second-granular by type: a component value of zero (`09:00:00`)
+  # is a fully specified second, not an under-specified hour. So
+  # resolution follows the type's *declared precision*, never the
+  # magnitude of the components — `:microsecond` when a sub-second
+  # precision is present, otherwise `:second`. Inferring a coarser
+  # resolution from a zero value would conflate "this component is
+  # zero" with "this unit was not specified", the very instant/span
+  # confusion Tempo exists to remove. It also silently broke
+  # round-tripping: `from_elixir(~N[2022-06-15 09:00:00])` used to
+  # coarsen to hour resolution, and `to_naive_datetime/1` then
+  # failed to reconstitute the second-granular value. Callers that
+  # genuinely want a coarser span pass `:resolution`.
+  defp infer_time_resolution(%Time{microsecond: {_v, p}}) when p > 0 do
+    :microsecond
+  end
+
+  defp infer_time_resolution(%Time{}) do
+    :second
+  end
+
+  defp infer_datetime_resolution(%{microsecond: {_v, p}}) when p > 0 do
+    :microsecond
+  end
+
+  defp infer_datetime_resolution(%{microsecond: {_v, _p}}) do
+    :second
+  end
+
+  @doc """
+  Extend a Tempo's resolution by padding finer units with their
+  start-of-unit minimum values.
+
+  `extend_resolution/2` is the scalar counterpart to `extend/2`:
+  where `extend/2` adds an implicit enumeration (turning `~o"2020Y"`
+  into `~o"2020Y{1..12}M"` — a range), `extend_resolution/2` fills
+  in concrete minimums (turning `~o"2020Y"` into `~o"2020Y1M1D"`
+  when extended to `:day`). This is the operation needed to align
+  resolutions before interval comparison.
+
+  ### Arguments
+
+  * `tempo` is any `t:#{__MODULE__}.t/0`.
+
+  * `target_unit` is the finer resolution to pad to. Must be
+    finer than or equal to `tempo`'s current resolution.
+
+  ### Returns
+
+  * The padded `t:t/0`, or
+
+  * `{:error, reason}` when `target_unit` is coarser than the
+    current resolution (use `trunc/2` for that direction), when
+    no path exists from the current unit to `target_unit` under
+    the tempo's calendar, or when the value holds a set and the clock
+    of its zone skips the first reading of one of the values the set
+    names (a `Tempo.ZoneGapError`).
+
+  ### Examples
+
+      iex> Tempo.extend_resolution(~o"2020Y", :day)
+      ~o"2020Y1M1D"
+
+      iex> Tempo.extend_resolution(~o"2020Y6M", :hour)
+      ~o"2020Y6M1DT0H"
+
+  A week is extended to the date of its first day:
+
+      iex> Tempo.extend_resolution(~o"2026-W25", :day)
+      ~o"2026Y6M15D"
+
+  A value in a zone starts on the reading its clock shows. Clocks in
+  Cairo went from midnight to 01:00 on 28 April 2023, so that day
+  starts at 01:00:
+
+      iex> Tempo.extend_resolution(~o"2023-04-28[Africa/Cairo]", :hour)
+      ~o"2023Y4M28DT1H[Africa/Cairo]"
+
+  """
+  @spec extend_resolution(tempo :: t, target_unit :: time_unit()) ::
+          t | {:error, error_reason()}
+  def extend_resolution(tempo, target_unit) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> extend_resolution(target_unit)
+    |> Calendars.outside()
+  end
+
+  # The first value of a finer unit is one the clock of the value's zone
+  # skips where it goes forward at that moment, and the value starts then on
+  # the reading the clock shows, which is where it is compared from already.
+  # It was given the skipped reading, which no value is read from, and so
+  # were the spans an operation on sets fills its ends to.
+  #
+  # A value that holds a set starts on a reading for each value the set
+  # names, and where the clock skips the first reading of one of them (the
+  # first hour of 28 April under `2023-04-{27,28}` in Cairo) they are not
+  # the one reading a value written with the set would name: it is refused
+  # as that value is when it is read.
+  def extend_resolution(%Tempo{} = tempo, target_unit) do
+    with :ok <- has_its_dates(tempo, "extend"),
+         %Tempo{} = extended <- extend_resolution_as_written(tempo, target_unit),
+         %Tempo{} = shown <-
+           extended
+           |> as_calendar_date()
+           |> Zone.shown_by_the_clock(),
+         :ok <- Validation.validate_zone_existence(shown) do
+      shown
+    end
+  end
+
+  def extend_resolution(value, _target_unit) do
+    {:error, not_one_value("extend_resolution/2", value)}
+  end
+
+  @doc false
+  # `extend_resolution/2` in the units the value is written in: a week is
+  # extended to a day of it in every calendar, the unit a step of days is
+  # counted on (`Tempo.Math`), where `extend_resolution/2` gives the date that
+  # day is in a calendar of months.
+  @spec extend_resolution_as_written(tempo :: t, target_unit :: time_unit()) ::
+          t | {:error, error_reason()}
+  def extend_resolution_as_written(%Tempo{time: time, calendar: calendar} = tempo, target_unit) do
+    with {:ok, target_unit} <- validate_unit(target_unit),
+         :ok <- one_value(tempo) do
+      target_unit = day_unit(target_unit, tempo)
+      {current_unit, _span} = resolution(tempo)
+
+      case Unit.compare(target_unit, current_unit) do
+        :eq ->
+          tempo
+
+        :gt ->
+          {:error,
+           ResolutionError.exception(
+             operation: :extend,
+             current: current_unit,
+             target: target_unit
+           )}
+
+        :lt ->
+          apply_filled_time(tempo, fill_to_resolution(time, current_unit, target_unit, calendar))
+      end
+    end
+  end
+
+  defp apply_filled_time(tempo, {:ok, new_time}) do
+    %{tempo | time: new_time}
+  end
+
+  defp apply_filled_time(_tempo, {:error, _} = err) do
+    err
+  end
+
+  # Walk the standard unit-successor chain, appending one
+  # `{next_unit, unit_minimum}` at each step until `target_unit` is
+  # reached. If the chain runs out before `target_unit` (no
+  # `implicit_enumerator` for the current unit), return an error.
+  defp fill_to_resolution(time, current_unit, target_unit, _calendar)
+       when current_unit == target_unit do
+    {:ok, time}
+  end
+
+  # `:microsecond` is deliberately absent from the unit-successor chain
+  # (a second is never enumerated into its million microseconds), so the
+  # generic walk below cannot reach it. Extension is still well-defined:
+  # the start-of-unit minimum is zero microseconds, declared at full
+  # (6-digit) precision — the same precision `Tempo.Math` uses when
+  # sub-second arithmetic introduces a fraction onto a whole second.
+  defp fill_to_resolution(time, :second, :microsecond, _calendar) do
+    {:ok, time ++ [microsecond: {0, 6}]}
+  end
+
+  defp fill_to_resolution(time, current_unit, target_unit, calendar) do
+    fill_by_unit(time, current_unit, target_unit, calendar)
+  end
+
+  defp fill_by_unit(time, current_unit, target_unit, calendar) do
+    case Unit.implicit_enumerator(current_unit, calendar) do
+      nil ->
+        {:error,
+         ResolutionError.exception(
+           operation: :extend,
+           current: current_unit,
+           target: target_unit,
+           calendar: calendar,
+           reason: :no_path
+         )}
+
+      {next_unit, range} ->
+        new_time = with_first(time, next_unit, range_first(range), calendar)
+        fill_to_resolution(new_time, next_unit, target_unit, calendar)
+    end
+  end
+
+  defp range_first(%Range{first: first}) do
+    first
+  end
+
+  # A unit is extended to the first value of the unit below it. A year's
+  # first month and a month's first day are asked of the calendar: they are
+  # the first, or in a year that begins on another day than the first of
+  # its first month the month and the day of the first date the calendar
+  # gives (`Tempo.UnitValues.with_first_month/2`, `with_first_day/2`).
+  defp with_first(time, :month, 1, calendar) do
+    UnitValues.with_first_month(time, calendar)
+  end
+
+  defp with_first(time, :day, 1, calendar) do
+    UnitValues.with_first_day(time, calendar)
+  end
+
+  defp with_first(time, unit, minimum, _calendar) do
+    time ++ [{unit, minimum}]
+  end
+
+  @doc """
+  Return a Tempo at the specified resolution, dispatching to
+  `trunc/2` or `extend_resolution/2` based on whether `target_unit`
+  is coarser or finer than the current resolution.
+
+  This is the unified entry point for normalising resolution. It
+  is idempotent when `target_unit` matches the current resolution.
+
+  ### Arguments
+
+  * `tempo` is any `t:#{__MODULE__}.t/0`.
+
+  * `target_unit` is any time unit atom (`:year`, `:month`,
+    `:day`, `:hour`, `:minute`, `:second`, …).
+
+  ### Returns
+
+  * The Tempo at the requested resolution, or
+
+  * `{:error, reason}`.
+
+  ### Examples
+
+      iex> Tempo.at_resolution(~o"2020Y", :day)
+      ~o"2020Y1M1D"
+
+      iex> Tempo.at_resolution(~o"2020Y6M15DT10H", :day)
+      ~o"2020Y6M15D"
+
+      iex> Tempo.at_resolution(~o"2020Y6M15D", :day)
+      ~o"2020Y6M15D"
+
+  """
+  @spec at_resolution(tempo :: t, target_unit :: time_unit()) ::
+          t | {:error, error_reason()}
+  def at_resolution(tempo, target_unit) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> at_resolution(target_unit)
+    |> Calendars.outside()
+  end
+
+  def at_resolution(%Tempo{} = tempo, target_unit) do
+    with {:ok, target_unit} <- validate_unit(target_unit) do
+      target_unit = day_unit(target_unit, tempo)
+      {current_unit, _span} = resolution(tempo)
+
+      case Unit.compare(target_unit, current_unit) do
+        :eq -> tempo
+        :gt -> trunc(tempo, target_unit)
+        :lt -> extend_resolution(tempo, target_unit)
+      end
+    end
+  end
+
+  def at_resolution(value, _target_unit) do
+    {:error, not_one_value("at_resolution/2", value)}
+  end
+
+  # A value an operation wrote by its week or by its day of the year, as the
+  # calendar date it names in a calendar of months: what reading it gives.
+  defp as_calendar_date(%__MODULE__{} = value) do
+    value
+    |> Validation.calendar_date_from_week_date()
+    |> Validation.calendar_date_from_ordinal_date()
+  end
+
+  # A week numbers each day within it, so the day of a value on the week
+  # axis is its day of the week (`K`): a week date at day resolution is
+  # `[year, week, day_of_week]`. A value that holds several days of the
+  # year has its day there (`O`); one alone is read as its date.
+  # Truncating, extending and rounding to `:day` all read the unit here. A
+  # week extended to it is then written as the date it names
+  # (`extend_resolution/2`).
+  defp day_unit(:day, %__MODULE__{time: time}) do
+    cond do
+      List.keymember?(time, :week, 0) -> :day_of_week
+      List.keymember?(time, :day_of_year, 0) -> :day_of_year
+      true -> :day
+    end
+  end
+
+  defp day_unit(unit, _tempo) do
+    unit
+  end
+
+  @doc """
+  Convert a Tempo struct into a Date.
+
+  Accepts the three single-day Tempo shapes:
+
+  * Calendar date — `[year: Y, month: M, day: D]`.
+
+  * Ordinal date — `[year: Y, day: DDD]`. When the Tempo carries
+    only year and day (no month), the day is interpreted as
+    day-of-year per ISO 8601-2 §4.3.4. `D` and `O` both parse to
+    the same `:day` key, so `~o"2020-166"`, `~o"2020Y166O"`, and
+    `~o"2020Y166D"` all convert correctly.
+
+  * Week date — `[year: Y, week: W, day_of_week: K]`, an ISO 8601 week
+    counted in the calendar's own year, or a week-based calendar's own
+    week.
+
+  ### Returns
+
+  * `{:ok, %Date{}}` on success.
+
+  * `{:error, reason}` when the Tempo covers a span rather than a
+    single day, or the components don't form a valid date.
+
+  ### Examples
+
+      iex> {:ok, date} = Tempo.to_date(~o"2020-06-15")
+      iex> date
+      ~D[2020-06-15]
+
+      iex> {:ok, date} = Tempo.to_date(~o"2020-166")
+      iex> date
+      ~D[2020-06-14]
+
+      iex> {:ok, date} = Tempo.to_date(~o"2020-W24-3")
+      iex> date
+      ~D[2020-06-10]
+
+  """
+  @spec to_date(t()) :: {:ok, Date.t()} | {:error, error_reason()}
+  def to_date(%Tempo{time: [year: year, month: month, day: day]} = tempo)
+      when is_integer(year) and is_integer(month) and is_integer(day) do
+    Date.new(year, month, day, tempo.calendar)
+  end
+
+  # Ordinal date: year plus day-of-year. Both `~o"...O"` and the
+  # bare `~o"YYYY-DDD"` form land here because Tempo's grammar
+  # stores `D` and `O` under the same `:day` key; the absence of
+  # `:month` is the disambiguator.
+  def to_date(%Tempo{time: [year: year, day: day_of_year]} = tempo)
+      when is_integer(year) and is_integer(day_of_year) do
+    calendar = tempo.calendar
+
+    case calendar.date_from_day_of_year(year, day_of_year) do
+      %Date{} = date ->
+        Date.convert(date, tempo.calendar)
+
+      {:error, _reason} ->
+        {:error,
+         InvalidDateError.exception(
+           unit: :day_of_year,
+           value: day_of_year,
+           year: year,
+           reason: "out of range for year #{year}"
+         )}
+    end
+  end
+
+  # Week date: year plus ISO 8601 week plus day of the week, the week
+  # counted by ISO 8601's rule over the calendar's own year.
+  def to_date(%Tempo{time: [year: year, week: week, day_of_week: day]} = tempo)
+      when is_integer(year) and is_integer(week) and is_integer(day) do
+    with {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, tempo.calendar) do
+      Date.convert(date, tempo.calendar)
+    end
+  end
+
+  def to_date(tempo) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> to_date()
+    |> Calendars.outside()
+  end
+
+  def to_date(value) do
+    {:error, ConversionError.exception(value: value, target: Date)}
+  end
+
+  @doc """
+  Convert a Tempo struct into a Time.
+
+  ### Examples
+
+      iex> Tempo.to_time(~o"T14:30:00")
+      {:ok, ~T[14:30:00]}
+
+      iex> Tempo.to_time(~o"T14:30:00.25")
+      {:ok, ~T[14:30:00.25]}
+
+  """
+  # A zoned time-of-day projects to the wall-clock `Time`, dropping
+  # the offset — the same lossy projection `Time` itself is (it has
+  # no zone). Mirrors `to_date/1`, and `DateTime.to_time/1` in the
+  # stdlib. Callers who need the offset should keep the Tempo.
+  #
+  # A second with no fraction has a precision of zero, as Elixir reads the
+  # same text (`~T[14:30:00]`), and a fraction the digits it is written to,
+  # so that `from_elixir/1` gives the value back.
+  @spec to_time(t()) :: {:ok, Time.t()} | {:error, error_reason()}
+  def to_time(%Tempo{time: [hour: hour, minute: minute, second: second]})
+      when is_integer(hour) and is_integer(minute) and is_integer(second) do
+    Time.new(hour, minute, second, {0, 0})
+  end
+
+  def to_time(value) when is_outside(value) do
+    value
+    |> Calendars.inside()
+    |> to_time()
+    |> Calendars.outside()
+  end
+
+  def to_time(%Tempo{
+        time: [
+          hour: hour,
+          minute: minute,
+          second: second,
+          microsecond: {_value, _digits} = fraction
+        ]
+      })
+      when is_integer(hour) and is_integer(minute) and is_integer(second) do
+    Time.new(hour, minute, second, fraction)
+  end
+
+  def to_time(value) do
+    {:error, ConversionError.exception(value: value, target: Time)}
+  end
+
+  @doc """
+  Convert a Tempo struct into a `NaiveDateTime`.
+
+  A `NaiveDateTime` is a zoneless wall-clock reading, so a zoned
+  Tempo projects to its wall-clock components with the offset
+  dropped — the same lossy projection `DateTime.to_naive/1`
+  performs in the stdlib, and consistent with `to_date/1` /
+  `to_time/1`. No time-zone math is involved: the wall-clock fields
+  are read verbatim. To keep the zone, use `to_datetime/1`; to
+  normalise to UTC wall time first, `shift_zone(tempo, "Etc/UTC")`.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` resolved to at least second resolution
+    (year through second, optionally microsecond). Coarser values
+    cannot fill a `NaiveDateTime` and return an error.
+
+  ### Returns
+
+  * `{:ok, naive_datetime}`, or
+
+  * `{:error, reason}` when the value is not resolved to a full
+    datetime.
+
+  ### Examples
+
+      iex> Tempo.to_naive_datetime(~o"2022-11-19T01:02:03")
+      {:ok, ~N[2022-11-19 01:02:03]}
+
+      iex> Tempo.to_naive_datetime(~o"2022-11-19T01:02:03.5")
+      {:ok, ~N[2022-11-19 01:02:03.5]}
+
+      iex> {:error, _} = Tempo.to_naive_datetime(~o"2022-11")
+
+  """
+  @spec to_naive_datetime(t()) :: {:ok, NaiveDateTime.t()} | {:error, error_reason()}
+  def to_naive_datetime(tempo) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> to_naive_datetime()
+    |> Calendars.outside()
+  end
+
+  def to_naive_datetime(
+        %Tempo{
+          time: [
+            year: year,
+            month: month,
+            day: day,
+            hour: hour,
+            minute: minute,
+            second: second,
+            microsecond: microsecond
+          ]
+        } = tempo
+      )
+      when is_integer(year) and is_integer(month) and is_integer(day) and is_integer(hour) and
+             is_integer(minute) and is_integer(second) do
+    NaiveDateTime.new(year, month, day, hour, minute, second, microsecond, tempo.calendar)
+  end
+
+  def to_naive_datetime(
+        %Tempo{
+          time: [year: year, month: month, day: day, hour: hour, minute: minute, second: second]
+        } = tempo
+      )
+      when is_integer(year) and is_integer(month) and is_integer(day) and is_integer(hour) and
+             is_integer(minute) and is_integer(second) do
+    NaiveDateTime.new(year, month, day, hour, minute, second, {0, 0}, tempo.calendar)
+  end
+
+  def to_naive_datetime(
+        %Tempo{
+          time: [
+            year: year,
+            week: week,
+            day_of_week: day,
+            hour: hour,
+            minute: minute,
+            second: second,
+            microsecond: microsecond
+          ]
+        } = tempo
+      )
+      when is_integer(year) and is_integer(week) and is_integer(day) do
+    week_naive_datetime(tempo, {year, week, day}, {hour, minute, second, microsecond})
+  end
+
+  def to_naive_datetime(
+        %Tempo{
+          time: [
+            year: year,
+            week: week,
+            day_of_week: day,
+            hour: hour,
+            minute: minute,
+            second: second
+          ]
+        } = tempo
+      )
+      when is_integer(year) and is_integer(week) and is_integer(day) do
+    week_naive_datetime(tempo, {year, week, day}, {hour, minute, second, {0, 0}})
+  end
+
+  def to_naive_datetime(value) do
+    {:error, ConversionError.exception(value: value, target: NaiveDateTime)}
+  end
+
+  # A week date's day as its calendar places it (`date_from_week_date/3`), at
+  # its time of day.
+  defp week_naive_datetime(tempo, {year, week, day}, {hour, minute, second, microsecond}) do
+    with {:ok, date} <- UnitValues.date_from_iso_week(year, week, day, tempo.calendar) do
+      NaiveDateTime.new(
+        date.year,
+        date.month,
+        date.day,
+        hour,
+        minute,
+        second,
+        microsecond,
+        tempo.calendar
+      )
+    end
+  end
+
+  @doc """
+  Convert a zoned Tempo into a `DateTime`.
+
+  The lossless inverse of `from_elixir/2` on a `t:DateTime.t/0`:
+  it preserves the named time zone, re-deriving the UTC offset from
+  the time-zone database so the result is DST-correct. This is the
+  conversion to reach for when the zone matters — unlike
+  `to_naive_datetime/1`, which deliberately drops it.
+
+  ### Arguments
+
+  * `tempo` is a zoned `t:t/0` resolved to at least second resolution.
+    A named IANA zone on `extended.zone_id` (a value built by
+    `from_elixir/2` from a `DateTime` in a zone has one) is kept; a UTC
+    offset (`Z` included), beside the time or as the value's time zone
+    (`[-05:00]`), gives the instant in `Etc/UTC`. A floating value
+    has no instant and returns an error — place it in a zone with
+    `in_zone/2` first, or use `to_naive_datetime/1`.
+
+  ### Returns
+
+  * `{:ok, datetime}`, or
+
+  * `{:error, reason}` when the value lacks a full datetime or a
+    named zone, or when the wall-clock time falls in a
+    spring-forward gap that does not exist in the zone.
+
+  ### Examples
+
+      iex> Tempo.to_datetime(~o"2022-11-19T01:02:03Z[Etc/UTC]")
+      {:ok, ~U[2022-11-19 01:02:03Z]}
+
+      iex> {:error, _} = Tempo.to_datetime(~o"2022-11-19T01:02:03")
+
+  """
+  @spec to_datetime(t()) :: {:ok, DateTime.t()} | {:error, error_reason()}
+  def to_datetime(%Tempo{extended: %{zone_id: zone_id}} = tempo)
+      when is_binary(zone_id) and zone_id != "" do
+    with {:ok, naive} <- to_naive_datetime(tempo) do
+      naive_to_zoned_datetime(naive, zone_id, tempo)
+    end
+  end
+
+  def to_datetime(tempo) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> to_datetime()
+    |> Calendars.outside()
+  end
+
+  # A value with a UTC offset (`+10:00`; `Z` is offset zero)
+  # denotes an exact instant. Convert the wall clock to UTC and return
+  # the instant as an `Etc/UTC` DateTime — the same normalisation
+  # Elixir's `DateTime.from_iso8601/1` applies to offset strings.
+  # iCalendar `DATE-TIME` values commonly carry offsets rather than
+  # named zones, so this is the common third-party path.
+  #
+  # An offset written as the value's time zone (`[-05:00]`, RFC 9557's
+  # zone of a fixed offset) is its offset as one written beside the time
+  # is, and comes first, as it does where values are compared.
+  def to_datetime(%Tempo{extended: %{zone_offset: minutes}} = tempo) when is_integer(minutes) do
+    instant_at_offset(tempo, minutes * 60)
+  end
+
+  def to_datetime(%Tempo{shift: shift} = tempo) when is_list(shift) do
+    instant_at_offset(tempo, Compare.offset_seconds(shift))
+  end
+
+  def to_datetime(%Tempo{} = value) do
+    {:error,
+     ConversionError.exception(
+       value: value,
+       target: DateTime,
+       reason:
+         "a floating value (no zone or offset) does not denote an instant — " <>
+           "place it in a zone with `Tempo.in_zone/2`, or parse it with a zone, offset, or `Z`"
+     )}
+  end
+
+  def to_datetime(value) do
+    {:error, ConversionError.exception(value: value, target: DateTime)}
+  end
+
+  defp instant_at_offset(tempo, offset_seconds) do
+    with {:ok, naive} <- to_naive_datetime(tempo) do
+      utc_naive = NaiveDateTime.add(naive, -offset_seconds, :second)
+
+      # `Etc/UTC` has no transitions, so `:ambiguous`/`:gap` cannot
+      # occur — but they are in `from_naive/2`'s contract, so convert
+      # any non-ok shape into the conversion error it would be.
+      case DateTime.from_naive(utc_naive, "Etc/UTC") do
+        {:ok, utc} ->
+          {:ok, utc}
+
+        _other ->
+          {:error,
+           ConversionError.exception(
+             value: tempo,
+             target: DateTime,
+             reason: "could not project the value to UTC from its offset"
+           )}
+      end
+    end
+  end
+
+  # Rebuild a `DateTime` from a wall-clock `NaiveDateTime` and a
+  # named zone. `DateTime.from_naive/3` re-derives the offset from
+  # the configured time zone database.
+  # A DST fall-back (`:ambiguous`) is disambiguated by the offset
+  # the Tempo already carries; a spring-forward `:gap` names a
+  # wall-clock time that does not exist, so it is an error.
+  defp naive_to_zoned_datetime(naive, zone_id, %Tempo{} = tempo) do
+    case DateTime.from_naive(naive, zone_id, TimeZoneDatabase.database()) do
+      {:ok, date_time} ->
+        {:ok, date_time}
+
+      {:ambiguous, first, second} ->
+        {:ok, disambiguate_fold(first, second, tempo)}
+
+      {:gap, _just_before, _just_after} ->
+        {:error,
+         ConversionError.exception(
+           value: tempo,
+           target: DateTime,
+           reason:
+             "wall-clock time #{NaiveDateTime.to_string(naive)} does not exist in " <>
+               "#{zone_id} (spring-forward gap)"
+         )}
+
+      {:error, _reason} ->
+        {:error, UnknownZoneError.exception(zone_id: zone_id)}
+    end
+  end
+
+  # On a DST fall-back the same wall time occurs at two offsets;
+  # pick the candidate whose total offset matches the offset the
+  # Tempo recorded — an offset annotation (`extended.zone_offset`,
+  # in minutes) or its UTC offset (`shift`). Falls back to the first
+  # (pre-transition, higher-offset) candidate.
+  defp disambiguate_fold(first, second, %Tempo{extended: %{zone_offset: minutes}})
+       when is_integer(minutes) do
+    fold_at_offset(first, second, minutes * 60)
+  end
+
+  defp disambiguate_fold(first, second, %Tempo{shift: shift}) when is_list(shift) do
+    fold_at_offset(first, second, Compare.offset_seconds(shift))
+  end
+
+  defp disambiguate_fold(first, _second, _tempo) do
+    first
+  end
+
+  defp fold_at_offset(first, second, offset_seconds) do
+    Enum.find([first, second], first, fn dt ->
+      dt.utc_offset + dt.std_offset == offset_seconds
+    end)
+  end
+
+  @doc """
+  Convert a day-resolution value from its current calendar into
+  `calendar`, preserving the days it names.
+
+  The value is read as a native `Date` in its own calendar, converted
+  with `Date.convert/2`, and brought back as a `%Tempo{}` in `calendar`.
+  A date with a time of day is its date in `calendar` at the same time of
+  day and in the same zone: the day its own clock is on. A value that has
+  no one date — a bare year or month, a time of day alone — returns an
+  error.
+
+  An interval converts its endpoints and keeps everything else: its
+  duration, recurrence, repeat rule, iteration unit and metadata are
+  carried across untouched, and an unbounded end stays unbounded. An
+  interval set converts each member. That saves the caller taking a
+  span apart and putting it back together, which is the library's job
+  and easy to get subtly wrong — a rebuilt interval loses whatever the
+  original was carrying.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` that is a date, or a date and a time of day, a
+    `t:Tempo.Interval.t/0` whose endpoints are such values, or a
+    `t:Tempo.IntervalSet.t/0` of those.
+
+  * `calendar` is a calendar module — a `Calendrical.*` calendar or any
+    module implementing Elixir's `Calendar` behaviour.
+
+  ### Returns
+
+  * `{:ok, t:t/0}` — the value in `calendar`; or
+
+  * `{:error, t:Tempo.ConversionError.t/0}`.
+
+  ### Examples
+
+      iex> {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
+      iex> {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)}
+      {5786, 9, 30}
+
+  A time of day stays as it is on the converted date:
+
+      iex> {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15T09:30", Calendrical.Hebrew)
+      iex> Tempo.to_iso8601!(hebrew)
+      "5786Y9M30DT9H30M[u-ca=hebrew]"
+
+  A whole span converts as one value. This is a fiscal quarter read back
+  as the dates it covers in `Calendar.ISO`, the calendar of a value that
+  names none:
+
+      iex> {:ok, calendar} = Calendrical.FiscalYear.calendar_for(:AU)
+      iex> {:ok, quarter} = Tempo.from_elixir(calendar.quarter(2027, 1))
+      iex> {:ok, dates} = Tempo.to_calendar(quarter, Calendar.ISO)
+      iex> Tempo.to_iso8601!(dates)
+      "2026Y7M1D/10M1D"
+
+  An interval set converts member by member:
+
+      iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-15/2026-06-16"])
+      iex> {:ok, hebrew} = Tempo.to_calendar(set, Calendrical.Hebrew)
+      iex> hebrew
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.to_iso8601!/1)
+      ["5786Y9M30D/10M1D[u-ca=hebrew]"]
+
+  """
+  @spec to_calendar(t() | Interval.t() | IntervalSet.t(), module()) ::
+          {:ok, t() | Interval.t() | IntervalSet.t()} | {:error, Tempo.ConversionError.t()}
+  def to_calendar(value, calendar) do
+    if Calendars.outside?([value, calendar]) do
+      Calendars.outside(to_calendar(Calendars.inside(value), Calendars.inside(calendar)))
+    else
+      do_to_calendar(value, calendar)
+    end
+  end
+
+  defp do_to_calendar(value, calendar) do
+    case Calendars.validated(calendar) do
+      {:ok, calendar} -> in_calendar(value, calendar)
+      :error -> {:error, not_a_calendar_error(value, calendar)}
+    end
+  end
+
+  defp not_a_calendar_error(value, calendar) do
+    ConversionError.exception(
+      value: value,
+      target: calendar,
+      reason:
+        "Cannot convert #{Calendars.inspect(value)} to #{Calendars.name(calendar)}, which is not a calendar " <>
+          "module. A calendar is a module such as `Calendrical.Hebrew`."
+    )
+  end
+
+  # A recurrence's rule counts the months and the days of its own calendar,
+  # and has no form in another. Its ends converted beside it were a
+  # recurrence of two calendars, whose rule was then counted in the ends'.
+  defp in_calendar(%Interval{repeat_rule: %Tempo{calendar: rule_calendar}} = interval, calendar)
+       when rule_calendar != calendar do
+    {:error,
+     ConversionError.exception(
+       value: interval,
+       target: calendar,
+       reason:
+         "A recurrence's rule counts the months and the days of its own calendar, " <>
+           "#{Calendars.name(rule_calendar)}, and has no form in #{Calendars.name(calendar)}. " <>
+           "Convert its occurrences: `Tempo.to_interval/2`, then `Tempo.to_calendar/2`."
+     )}
+  end
+
+  defp in_calendar(%Interval{} = interval, calendar) do
+    with {:ok, from} <- convert_endpoint(interval.from, calendar),
+         {:ok, to} <- convert_endpoint(interval.to, calendar) do
+      {:ok, %{interval | from: from, to: to}}
+    end
+  end
+
+  defp in_calendar(%IntervalSet{} = set, calendar) do
+    all_converted =
+      set
+      |> IntervalSet.members()
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+        case in_calendar(member, calendar) do
+          {:ok, converted} -> {:cont, {:ok, [converted | acc]}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+
+    case all_converted do
+      {:ok, members} -> IntervalSet.new(Enum.reverse(members))
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp in_calendar(
+         %Tempo{time: [year: year, month: month, day: day], shift: nil, calendar: source} = value,
+         calendar
+       )
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    convert_date(value, Date.new(year, month, day, source), calendar)
+  end
+
+  # A week date is the day of its week, as its calendar places it
+  # (`date_from_week_date/3`).
+  defp in_calendar(
+         %Tempo{
+           time: [year: year, week: week, day_of_week: day],
+           shift: nil,
+           calendar: source
+         } = value,
+         calendar
+       )
+       when is_atom(source) and not is_nil(source) and is_integer(year) and is_integer(week) and
+              is_integer(day) do
+    convert_date(value, UnitValues.date_from_iso_week(year, week, day, source), calendar)
+  end
+
+  # A date with a time of day is its date in the calendar, at the same time
+  # of day and in the same zone: the day its own clock is on.
+  defp in_calendar(
+         %Tempo{
+           time: [{:year, year}, {:month, month}, {:day, day}, {:hour, _hour} | _finer] = time,
+           calendar: source
+         } = value,
+         calendar
+       )
+       when is_integer(year) and is_integer(month) and is_integer(day) do
+    time_of_day = Enum.drop(time, 3)
+
+    with true <- Enum.all?(time_of_day, &plain_time_unit?/1),
+         date = %{value | time: Enum.take(time, 3), shift: nil},
+         {:ok, converted} <-
+           convert_date(
+             date,
+             Date.new(year, month, day, source),
+             calendar
+           ) do
+      {:ok, %{converted | time: converted.time ++ time_of_day, shift: value.shift}}
+    else
+      false -> {:error, not_a_date_error(value, calendar)}
+      {:error, _exception} = error -> error
+    end
+  end
+
+  defp in_calendar(%Tempo{} = value, calendar) do
+    {:error, not_a_date_error(value, calendar)}
+  end
+
+  defp in_calendar(value, calendar) do
+    {:error,
+     ConversionError.exception(
+       value: value,
+       target: calendar,
+       reason:
+         "Cannot convert #{Calendars.inspect(value)} to #{Calendars.name(calendar)}: a date, an interval of " <>
+           "dates or an interval set converts."
+     )}
+  end
+
+  defp not_a_date_error(value, calendar) do
+    ConversionError.exception(
+      value: value,
+      target: calendar,
+      reason: "only a date, or a date and a time of day, converts between calendars"
+    )
+  end
+
+  # A unit of a time of day that is one value: a set, a range or a mask of
+  # them has no one moment to keep.
+  defp plain_time_unit?({unit, value}) when unit in [:hour, :minute, :second] do
+    is_integer(value)
+  end
+
+  defp plain_time_unit?({:microsecond, {value, precision}}) do
+    is_integer(value) and is_integer(precision)
+  end
+
+  defp plain_time_unit?(_another) do
+    false
+  end
+
+  defp convert_date(value, date_in_source, calendar) do
+    with {:ok, in_source} <- date_in_source,
+         {:ok, converted} <- Date.convert(in_source, calendar) do
+      {:ok, carried_across(from_elixir(converted), value)}
+    else
+      {:error, reason} ->
+        {:error, ConversionError.exception(value: value, target: calendar, reason: reason)}
+    end
+  end
+
+  # A converted date keeps what its value says of it: its qualification, its
+  # metadata, and its zone and tags (its calendar is now the one converted
+  # to). Each unit of the converted date is worked out from all of the units
+  # it was written with, so a qualified year, month or day qualifies every
+  # unit of it.
+  defp carried_across(%__MODULE__{time: time} = converted, %__MODULE__{} = value) do
+    %{
+      converted
+      | qualifications: converted_qualifications(value.qualifications, time),
+        metadata: value.metadata,
+        extended: carried_extended(value.extended)
+    }
+  end
+
+  # A zone and tags carry across; a value with neither has nothing to carry.
+  defp carried_extended(%{} = extended) do
+    if is_binary(extended[:zone_id]) or is_integer(extended[:zone_offset]) or
+         map_size(extended[:tags] || %{}) > 0 do
+      extended
+    end
+  end
+
+  defp carried_extended(_none) do
+    nil
+  end
+
+  defp converted_qualifications(%{} = qualifications, time) do
+    case Map.values(qualifications) do
+      [] ->
+        nil
+
+      [first | rest] ->
+        qualification = Enum.reduce(rest, first, &Qualification.combine/2)
+        Qualification.complete(time, qualification)
+    end
+  end
+
+  defp converted_qualifications(_none, _time) do
+    nil
+  end
+
+  @doc """
+  Raising version of `to_calendar/2`.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, or
+    `t:Tempo.IntervalSet.t/0` — see `to_calendar/2`.
+
+  * `calendar` is the target calendar module.
+
+  ### Returns
+
+  * The converted value in the target calendar.
+
+  ### Examples
+
+      iex> Tempo.to_calendar!(~o"2026-06-15", Calendrical.Hebrew)
+      Tempo.from_iso8601!("5786Y9M30D", Calendrical.Hebrew)
+
+  """
+  @spec to_calendar!(t() | Tempo.Interval.t() | Tempo.IntervalSet.t(), module()) ::
+          t() | Tempo.Interval.t() | Tempo.IntervalSet.t()
+  def to_calendar!(value, calendar) do
+    case to_calendar(value, calendar) do
+      {:ok, converted} -> converted
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
+    end
+  end
+
+  # An endpoint that names no day — absent, or unbounded in either
+  # direction — has nothing to convert and is carried across as it is.
+  # Converting only what is there is what lets an open-ended span cross
+  # calendars at all.
+  defp convert_endpoint(nil, _calendar) do
+    {:ok, nil}
+  end
+
+  defp convert_endpoint(:undefined, _calendar) do
+    {:ok, :undefined}
+  end
+
+  defp convert_endpoint(%Tempo{} = endpoint, calendar) do
+    in_calendar(endpoint, calendar)
+  end
+
+  @doc """
+  Convert a Tempo value to its native Elixir equivalent — the
+  outbound mirror of `from_elixir/2`.
+
+  * A `t:Tempo.Duration.t/0` becomes an Elixir `Duration`: the units
+    and the `{value, precision}` microsecond map one-to-one. Tempo-
+    only components (`:day_of_year`, `:day_of_week`) have no Elixir
+    `Duration` equivalent and return an error.
+
+  * A `t:t/0` becomes its best-fit native calendar type by resolution —
+    a `Date`, `Time`, or `NaiveDateTime`. For a specific target
+    (including a zoned `DateTime`) use `to_date/1`, `to_time/1`,
+    `to_datetime/1`, or `to_naive_datetime/1`. To change a value's
+    *calendar* (e.g. Gregorian to Hebrew) use `to_calendar/2`.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` or a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `{:ok, native}` where `native` is an Elixir `Duration`, `Date`,
+    `Time`, `NaiveDateTime`, or — for a zoned value (a zone, an
+    offset, or `Z`) — a `DateTime`.
+
+  * `{:error, t:Tempo.ConversionError.t/0}` when the value cannot be
+    represented by a single native type.
+
+  ### Examples
+
+      iex> Tempo.to_elixir(~o"PT8H")
+      {:ok, Duration.new!(hour: 8)}
+
+      iex> Tempo.to_elixir(~o"2026-06-15")
+      {:ok, ~D[2026-06-15]}
+
+  """
+  @spec to_elixir(t() | Duration.t()) ::
+          {:ok, Elixir.Duration.t() | Date.t() | Time.t() | NaiveDateTime.t() | DateTime.t()}
+          | {:error, Tempo.ConversionError.t()}
+  def to_elixir(value) when is_outside(value) do
+    value
+    |> Calendars.inside()
+    |> to_elixir()
+    |> Calendars.outside()
+  end
+
+  def to_elixir(%Duration{time: time} = duration) do
+    case Enum.find(time, fn {unit, _value} -> unit in [:day_of_year, :day_of_week] end) do
+      nil ->
+        {:ok, Elixir.Duration.new!(time)}
+
+      {unit, _value} ->
+        {:error,
+         ConversionError.exception(
+           value: duration,
+           target: Elixir.Duration,
+           reason:
+             "duration component #{Calendars.inspect(unit)} has no Elixir Duration equivalent"
+         )}
+    end
+  end
+
+  # A zoned value — a named zone, or a UTC offset (`Z` included) —
+  # denotes an instant and converts to a `DateTime`; only floating
+  # values fall through to the Date/Time/NaiveDateTime cascade.
+  def to_elixir(%Tempo{extended: %{zone_id: zone_id}} = tempo)
+      when is_binary(zone_id) and zone_id != "" do
+    to_datetime(tempo)
+  end
+
+  def to_elixir(%Tempo{shift: shift} = tempo) when is_list(shift) do
+    to_datetime(tempo)
+  end
+
+  def to_elixir(%Tempo{} = tempo) do
+    with {:error, %Tempo.ConversionError{target: Date}} <- to_date(tempo),
+         {:error, %Tempo.ConversionError{target: Time}} <- to_time(tempo) do
+      to_naive_datetime(tempo)
+    end
+  end
+
+  def to_elixir(value) do
+    {:error,
+     ConversionError.exception(
+       value: value,
+       reason:
+         "Cannot convert #{Calendars.inspect(value)} to a native Elixir value: only one date or " <>
+           "time value, or a duration, has one."
+     )}
+  end
+
+  # The present (non-zero) components of an Elixir `Duration`, as the
+  # `{unit, value}` list Tempo's `Duration.new!/1` expects. Zero
+  # components are dropped (Tempo carries only the units present); an
+  # all-zero duration becomes `[second: 0]`.
+  defp elixir_duration_components(%Elixir.Duration{} = d) do
+    microsecond =
+      case d.microsecond do
+        {0, _precision} -> []
+        {_value, _precision} = present -> [microsecond: present]
+      end
+
+    integers =
+      [
+        year: d.year,
+        month: d.month,
+        week: d.week,
+        day: d.day,
+        hour: d.hour,
+        minute: d.minute,
+        second: d.second
+      ]
+      |> Enum.reject(fn {_unit, value} -> value == 0 end)
+
+    # `Tempo.Duration.new!/1` re-attaches `second: 0` when only a
+    # microsecond is present, so we don't have to here.
+    components = integers ++ microsecond
+
+    if components == [] do
+      [second: 0]
+    else
+      components
+    end
+  end
+
+  ## ---------------------------------------------------------
+  ## Current time — clock-backed "now" entry points
+  ## ---------------------------------------------------------
+
+  @doc """
+  Return the current UTC time as a second-resolution `t:t/0`
+  in `Etc/UTC`.
+
+  Reads from the clock configured under `:ex_tempo, :clock`,
+  defaulting to `Tempo.Clock.System`. Tests that need determinism
+  should configure `Tempo.Clock.Test` — see its module doc.
+
+  ### Returns
+
+  * A `t:t/0` at second resolution with `shift: [hour: 0]` and
+    `extended.zone_id: "Etc/UTC"`.
+
+  ### Examples
+
+      iex> tempo = Tempo.utc_now()
+      iex> tempo.extended.zone_id
+      "Etc/UTC"
+
+      iex> Tempo.utc_now()
+      ...> |> Tempo.resolution()
+      {:second, 1}
+
+  """
+  @spec utc_now() :: t()
+  def utc_now do
+    # Truncate the clock's microsecond so the result honours the
+    # documented second resolution. For a sub-second reading, use
+    # `Tempo.from_elixir(DateTime.utc_now())`.
+    Clock.do_utc_now()
+    |> DateTime.truncate(:second)
+    |> from_datetime()
+    |> Calendars.outside()
+  end
+
+  @doc """
+  Return the current time in the given IANA time zone as a
+  second-resolution `t:t/0`.
+
+  Reads from the configured clock (as `utc_now/0` does) and shifts
+  the result into `zone`. The returned Tempo's wall-clock time is
+  the zone-local reading of the current UTC instant.
+
+  ### Arguments
+
+  * `zone` is an IANA time zone name (e.g. `"Europe/Paris"`,
+    `"America/New_York"`). Defaults to `"Etc/UTC"`, in which case
+    `now/1` is equivalent to `utc_now/0`.
+
+  ### Returns
+
+  * A `t:t/0` at second resolution with `extended.zone_id: zone`.
+
+  * `{:error, %Tempo.UnknownZoneError{}}` when `zone` is not a zone
+    the time zone database knows.
+
+  ### Examples
+
+      iex> tempo = Tempo.now("Europe/London")
+      iex> tempo.extended.zone_id
+      "Europe/London"
+
+      iex> Tempo.now("Etc/UTC").extended.zone_id
+      "Etc/UTC"
+
+      iex> Tempo.now("Continent/Imaginary")
+      {:error, %Tempo.UnknownZoneError{zone_id: "Continent/Imaginary"}}
+
+  """
+  @spec now(String.t()) :: t() | {:error, UnknownZoneError.t()}
+  def now(zone \\ "Etc/UTC")
+
+  def now(zone) when is_binary(zone) do
+    # Second resolution per the contract — see `utc_now/0`.
+    Clock.do_utc_now()
+    |> DateTime.truncate(:second)
+    |> zoned_now(zone)
+    |> Calendars.outside()
+  end
+
+  def now(zone) do
+    {:error, UnknownZoneError.exception(zone_id: Calendars.inspect(zone))}
+  end
+
+  # The current UTC instant read in `zone`.
+  defp zoned_now(utc, "Etc/UTC") do
+    from_datetime(utc)
+  end
+
+  defp zoned_now(utc, zone) do
+    case DateTime.shift_zone(utc, zone, TimeZoneDatabase.database()) do
+      {:ok, zoned} -> from_datetime(zoned)
+      {:error, _reason} -> {:error, UnknownZoneError.exception(zone_id: zone)}
+    end
+  end
+
+  @doc """
+  Return today's date in UTC, as a floating day-resolution `t:t/0`.
+
+  ### Returns
+
+  * A floating `t:t/0` at day resolution: the calendar date in UTC,
+    with no zone. `utc_now/0` returns the zoned instant.
+
+  ### Examples
+
+      iex> Tempo.utc_today()
+      ...> |> Tempo.resolution()
+      {:day, 1}
+
+      iex> Tempo.utc_today()
+      ...> |> Tempo.floating?()
+      true
+
+  """
+  @spec utc_today() :: t() | {:error, error_reason()}
+  def utc_today do
+    today("Etc/UTC")
+  end
+
+  @doc """
+  Return today's date in the given IANA time zone, as a floating
+  day-resolution `t:t/0`.
+
+  "Today" is zone-relative: at 11pm in New York on the 14th it is
+  already the 15th in Paris. This function answers the zone-local
+  question with the calendar date there, and no zone: a date has
+  none, so it compares with a holiday, or any other date written
+  without one. `now/1` returns the zoned instant.
+
+  ### Arguments
+
+  * `zone` is an IANA time zone name. Defaults to `"Etc/UTC"`.
+
+  ### Returns
+
+  * A floating `t:t/0` at day resolution: the date in `zone` at the
+    current UTC instant.
+
+  * `{:error, %Tempo.UnknownZoneError{}}` when `zone` is not a zone
+    the time zone database knows.
+
+  ### Examples
+
+      iex> Tempo.today("Etc/UTC")
+      ...> |> Tempo.resolution()
+      {:day, 1}
+
+      iex> Tempo.today("Australia/Sydney")
+      ...> |> Tempo.floating?()
+      true
+
+  """
+  @spec today(String.t()) :: t() | {:error, error_reason()}
+  def today(zone \\ "Etc/UTC") do
+    case now(zone) do
+      %__MODULE__{} = now ->
+        now
+        |> trunc(:day)
+        |> drop_zone()
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # A zoned value's wall-clock reading with its zone and offset removed — its
+  # floating form. Tags it carries stay.
+  defp drop_zone(%__MODULE__{extended: %{tags: tags}} = tempo)
+       when map_size(tags) == 0 do
+    %{tempo | shift: nil, extended: nil}
+  end
+
+  defp drop_zone(%__MODULE__{extended: %{} = extended} = tempo) do
+    %{
+      tempo
+      | shift: nil,
+        extended: Map.merge(extended, %{zone_id: nil, zone_offset: nil, zone_critical: false})
+    }
+  end
+
+  defp drop_zone(%__MODULE__{} = tempo) do
+    %{tempo | shift: nil}
+  end
+
+  defp drop_zone({:error, _reason} = error) do
+    error
+  end
+
+  ## ---------------------------------------------------------
+  ## Zone placement — place a floating Tempo in a zone
+  ## ---------------------------------------------------------
+
+  @doc """
+  Place a floating `Tempo` in an IANA time zone, keeping its
+  wall-clock reading.
+
+  A floating value (`~o"2024-01-01"`) names a civil reading but not
+  *which* observer's — it has no position on the universal time line.
+  `in_zone/2` interprets that reading as the local time in `zone`,
+  producing a zoned value that projects to UTC. The wall-clock
+  fields are unchanged; only the zone is attached. This is the runtime
+  equivalent of writing the `[zone]` suffix in the source
+  (`~o"2024-01-01[Australia/Sydney]"`).
+
+  Use `in_zone/2` to *place* a floating value in a zone; use
+  `shift_zone/2` to *move* a zoned value to a different zone (which re-computes the wall clock to preserve the instant).
+
+  ### Arguments
+
+  * `tempo` is a floating `t:t/0` (no zone and no offset — see
+    `floating?/1`).
+
+  * `zone` is an IANA zone name (`"Europe/Paris"`, `"Australia/Sydney"`,
+    `"Etc/UTC"`, …).
+
+  ### Returns
+
+  * `{:ok, tempo}` in `zone`, with the same wall-clock fields.
+
+  * `{:error, reason}` when `tempo` is already zoned (use
+    `shift_zone/2` instead), when `zone` is unknown to the configured
+    time zone database, or when the clock in `zone` skips the whole of
+    `tempo` (a `Tempo.ZoneGapError`): 02:30 on the night clocks go
+    forward, the hour from 02:00 that night, or a day the zone left
+    out, and a set in a unit that names one of them.
+
+  ### Examples
+
+      iex> {:ok, sydney} = Tempo.in_zone(Tempo.from_iso8601!("2024-01-01"), "Australia/Sydney")
+      iex> sydney.extended.zone_id
+      "Australia/Sydney"
+
+      iex> {:error, _} = Tempo.in_zone(Tempo.from_iso8601!("2024-01-01[Australia/Sydney]"), "Europe/Paris")
+
+  """
+  @spec in_zone(t(), String.t()) :: {:ok, t()} | {:error, error_reason()}
+  def in_zone(tempo, zone) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> in_zone(zone)
+    |> Calendars.outside()
+  end
+
+  def in_zone(%Tempo{} = tempo, zone) when is_binary(zone) do
+    cond do
+      not floating?(tempo) ->
+        {:error, ZonedTempoError.exception(operation: :in_zone, value: tempo)}
+
+      not TimeZoneDatabase.zone_exists?(zone) ->
+        {:error, UnknownZoneError.exception(zone_id: zone)}
+
+      true ->
+        in_existing_zone(%{tempo | extended: put_zone_id(tempo.extended, zone)})
+    end
+  end
+
+  def in_zone(%Tempo{}, zone) do
+    {:error, UnknownZoneError.exception(zone_id: zone)}
+  end
+
+  def in_zone(value, _zone) do
+    {:error, not_one_value("in_zone/2", value)}
+  end
+
+  # A value placed in a zone is refused where the clock there skips every
+  # reading it spans, as one read with the zone is.
+  defp in_existing_zone(%Tempo{} = zoned) do
+    with :ok <- Validation.validate_zone_existence(zoned), do: {:ok, zoned}
+  end
+
+  defp put_zone_id(nil, zone) do
+    %{zone_id: zone, zone_offset: nil, zone_critical: false, tags: %{}}
+  end
+
+  defp put_zone_id(%{} = extended, zone) do
+    %{extended | zone_id: zone}
+  end
+
+  ## ---------------------------------------------------------
+  ## A season in a territory
+  ## ---------------------------------------------------------
+
+  @doc """
+  Give a season its dates in a territory.
+
+  ISO 8601-2 numbers four seasons "independent of location": 21 is
+  spring, 22 summer, 23 autumn and 24 winter, wherever they are read.
+  Spring is March to May north of the equator and September to November
+  south of it, so `~o"2026-21"` names a season and no dates.
+  `in_territory/2` reads it in the hemisphere a territory lies in, as
+  whole months: the meteorological season. A winter in the north and a
+  summer in the south are of the year they start in, and run into the
+  next.
+
+  A season written with the number of its hemisphere (25 to 28 in the
+  north, 29 to 32 in the south) has its dates when it is read, and a
+  value that holds no season of 21 to 24 is returned as it is.
+
+  Until it has its dates a season is kept as it is written. It is given
+  them where it is read with a `:territory` or a `:locale`
+  (`from_iso8601/2`), and by `to_interval/2` and what is built on it, the
+  comparisons, the relations, the set operations, `select/2` and
+  `to_string/2`: these ask the application's `:default_territory` and
+  then the current locale where no territory is named. What else needs
+  its dates returns or raises a `Tempo.AbstractSeasonError`: a walk, a
+  time of day placed on it (`at/2`), a step of anything but years
+  (`shift/3`), a finer unit (`extend/2`) or a rounding (`round/2`).
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, a `t:Tempo.Interval.t/0` or a `t:Tempo.Set.t/0`.
+    An interval from one season to another runs from where the first
+    starts to where the second does, and each season of a set is given
+    its dates.
+
+  * `territory` is a territory (`:AU`, `"GB"`), a locale (`"en-AU"`, a
+    `t:Localize.LanguageTag.t/0`) whose territory is taken, or `nil` for
+    the application's `:default_territory` and then the current locale's.
+    Two letters are a territory before they are a language: `"ar"` is
+    Argentina here, and Arabic as the `:locale` of `to_interval/2`.
+
+  ### Returns
+
+  * `{:ok, value}` with each season of 21 to 24 as the interval of dates
+    it is in the territory's hemisphere.
+
+  * `{:error, %Tempo.AbstractSeasonError{}}` for a territory the equator
+    runs through, or a region that lies on both sides of it, which has no
+    one hemisphere.
+
+  * `{:error, exception}` for what is no territory and no locale.
+
+  ### Examples
+
+      iex> Tempo.in_territory(~o"2026-21", :AU)
+      {:ok, ~o"2026Y9M/12M"}
+
+      iex> Tempo.in_territory(~o"2026-21", "en-GB")
+      {:ok, ~o"2026Y3M/6M"}
+
+      iex> {:ok, summer} = Tempo.in_territory(~o"2026-22", :NZ)
+      iex> summer
+      ~o"2026Y12M/2027Y3M"
+
+      iex> {:error, %Tempo.AbstractSeasonError{territory: :BR}} = Tempo.in_territory(~o"2026-21", :BR)
+
+  """
+  @spec in_territory(value, Tempo.Territory.input()) :: {:ok, term()} | {:error, error_reason()}
+        when value: t() | Interval.t() | Tempo.Set.t()
+  def in_territory(value, territory) do
+    if Calendars.outside?(value) do
+      value
+      |> Calendars.inside()
+      |> in_territory(territory)
+      |> Calendars.outside()
+    else
+      do_in_territory(value, territory)
+    end
+  end
+
+  defp do_in_territory(value, territory) do
+    if Group.abstract_season?(value) do
+      with {:ok, hemisphere} <- hemisphere_of_territory(territory, value) do
+        Group.resolve_seasons(value, hemisphere)
+      end
+    else
+      {:ok, value}
+    end
+  end
+
+  @doc false
+  # A value with each season of 21 to 24 it holds given its dates in the
+  # territory an option list names: its `:territory`, or else its
+  # `:locale`'s, and with neither the application's default territory and
+  # then the current locale's. A value that holds no such season is returned
+  # as it is, and the options are not read.
+  @spec with_seasons_dated(term(), keyword()) :: {:ok, term()} | {:error, error_reason()}
+  def with_seasons_dated(value, options) do
+    if Group.abstract_season?(value) do
+      with {:ok, territory} <- Territory.named(options), do: in_territory(value, territory)
+    else
+      {:ok, value}
+    end
+  end
+
+  defp hemisphere_of_territory(territory, value) do
+    with {:ok, territory} <- Territory.resolve(territory),
+         {:ok, hemisphere} <- Hemisphere.hemisphere(territory) do
+      one_hemisphere(hemisphere, territory, value)
+    end
+  end
+
+  # A territory the equator runs through has summer in both halves of the
+  # year, by where in it one stands, and a season has no one span there.
+  defp one_hemisphere(:ambiguous, territory, value) do
+    {:error, AbstractSeasonError.exception(value: value, territory: territory)}
+  end
+
+  defp one_hemisphere(hemisphere, _territory, _value) do
+    {:ok, hemisphere}
+  end
+
+  ## ---------------------------------------------------------
+  ## Zone shifting — project a zoned Tempo into another zone
+  ## ---------------------------------------------------------
+
+  @doc """
+  Project a zoned Tempo — one with a zone or an offset — into
+  another IANA time zone, preserving the span it names.
+
+  The result names the same span of the time line, read on the wall
+  clock an observer in `target_zone` would see. A value written to the
+  second, or to a fraction of one, is the same second there. A coarser
+  value keeps its resolution where its span is one unit on the other
+  clock, as an hour is between two zones a whole number of hours apart,
+  and is otherwise the interval it is there: a day in Paris is no one
+  day in New York. Zone rules are read from the configured time zone
+  database at call time.
+
+  The value stays in its own calendar and keeps its calendar annotation, tags, metadata and qualification; only its zone and offset change.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that carries zone information — either an
+    IANA zone on `extended.zone_id`, a numeric `zone_offset`, or a
+    `shift` keyword list. A floating Tempo (no zone info) cannot be
+    projected because its UTC instant is undefined.
+
+  * `target_zone` is an IANA zone name (`"Europe/Paris"`,
+    `"America/New_York"`, `"Etc/UTC"`, …).
+
+  ### Returns
+
+  * `{:ok, tempo}` in `target_zone`, at the resolution of `tempo`, when
+    its span is one value there.
+
+  * `{:ok, interval}` in `target_zone` when it is not.
+
+  * `{:error, reason}` when `tempo` is not zoned, names several spans,
+    or `target_zone` is unknown to the configured time zone database.
+
+  ### Examples
+
+      iex> paris = Tempo.from_iso8601!("2026-06-15T14:00:00[Europe/Paris]")
+      iex> {:ok, new_york} = Tempo.shift_zone(paris, "America/New_York")
+      iex> new_york.extended.zone_id
+      "America/New_York"
+      iex> Keyword.take(new_york.time, [:hour, :minute])
+      [hour: 8, minute: 0]
+
+  An hour in Paris is an hour in New York, half past the hour to half
+  past in Kolkata, and a day in Paris is from six in the evening to six
+  in New York:
+
+      iex> hour = Tempo.from_iso8601!("2026-06-15T14[Europe/Paris]")
+      iex> {:ok, new_york} = Tempo.shift_zone(hour, "America/New_York")
+      iex> new_york.time
+      [year: 2026, month: 6, day: 15, hour: 8]
+      iex> {:ok, kolkata} = Tempo.shift_zone(hour, "Asia/Kolkata")
+      iex> {kolkata.from.time, kolkata.to.time}
+      {[year: 2026, month: 6, day: 15, hour: 17, minute: 30],
+       [year: 2026, month: 6, day: 15, hour: 18, minute: 30]}
+
+      iex> day = Tempo.from_iso8601!("2026-06-15[Europe/Paris]")
+      iex> {:ok, new_york} = Tempo.shift_zone(day, "America/New_York")
+      iex> {new_york.from.time, new_york.to.time}
+      {[year: 2026, month: 6, day: 14, hour: 18, minute: 0],
+       [year: 2026, month: 6, day: 15, hour: 18, minute: 0]}
+
+  Rosh Hashanah 5787 at 10:00 in Jerusalem is 07:00 that day in UTC, in the Hebrew calendar:
+
+      iex> jerusalem = Tempo.from_iso8601!("5787-01-01T10:00:00[Asia/Jerusalem][u-ca=hebrew]")
+      iex> {:ok, utc} = Tempo.shift_zone(jerusalem, "Etc/UTC")
+      iex> {Tempo.year(utc), Tempo.month(utc), Tempo.day(utc), Tempo.hour(utc)}
+      {5787, 1, 1, 7}
+
+  """
+  @spec shift_zone(t(), String.t()) ::
+          {:ok, t() | Tempo.Interval.t()} | {:error, error_reason()}
+  def shift_zone(tempo, target_zone) when is_outside(tempo) do
+    tempo
+    |> Calendars.inside()
+    |> shift_zone(target_zone)
+    |> Calendars.outside()
+  end
+
+  def shift_zone(%Tempo{} = tempo, target_zone) when is_binary(target_zone) do
+    cond do
+      not anchored?(tempo) ->
+        {:error, UnanchoredError.exception(operation: :shift_zone, value: tempo)}
+
+      floating?(tempo) ->
+        {:error, FloatingTempoError.exception(operation: :shift_zone, value: tempo)}
+
+      not Compare.point?(tempo.time) ->
+        {:error, several_moments_error(tempo)}
+
+      true ->
+        do_shift_zone(tempo, target_zone)
+    end
+  end
+
+  def shift_zone(%Tempo{}, zone) do
+    {:error, UnknownZoneError.exception(zone_id: zone)}
+  end
+
+  def shift_zone(value, _zone) do
+    {:error, not_one_value("shift_zone/2", value)}
+  end
+
+  # A value that names several moments (a set, a mask, a group) has a wall
+  # time in the other zone for each, and no one value there to return.
+  defp several_moments_error(tempo) do
+    ConversionError.exception(
+      value: tempo,
+      reason:
+        "Cannot move #{Calendars.inspect(tempo)} to another zone: it names more than one moment (a " <>
+          "set, a mask or a group), and each has its own wall time there. Move each value " <>
+          "it names."
+    )
+  end
+
+  @doc """
+  Return whether a `Tempo` value is *floating* — a wall-clock reading
+  with no zone or offset, so it cannot be placed on the universal
+  (UTC) time line.
+
+  A floating value carries no `[IANA/Zone]` tag, no `Z`, and no numeric
+  offset. `~o"2024-01-01"` is floating: it names a civil day but not
+  *which* observer's civil day, so it has no single universal instant.
+  Placing it in a zone with `in_zone/2` (or writing an offset such as
+  `Z`) makes it zoned. The complement is `zoned?/1`.
+
+  Floating and zoned values cannot be compared — a floating value
+  has no universal position — so when only one operand is floating,
+  `relation/2` and the certainty functions return a
+  `Tempo.FloatingTempoError`, and the predicates, with only true and
+  false to give, raise it.
+
+  ### Arguments
+
+  * `tempo` is a `%Tempo{}` value.
+
+  ### Returns
+
+  * `true` when the value has no zone and no offset.
+
+  * `false` when the value carries a zone (`[IANA/Zone]`) or an offset
+    (`Z` or `+HH:MM`).
+
+  ### Examples
+
+      iex> Tempo.floating?(Tempo.from_iso8601!("2024-01-01"))
+      true
+
+      iex> Tempo.floating?(Tempo.from_iso8601!("2024-01-01Z"))
+      false
+
+      iex> Tempo.floating?(Tempo.from_iso8601!("2024-01-01[Australia/Sydney]"))
+      false
+
+  """
+  @spec floating?(t()) :: boolean()
+  def floating?(%Tempo{shift: nil, extended: nil}) do
+    true
+  end
+
+  def floating?(%Tempo{shift: nil, extended: %{zone_id: nil, zone_offset: nil}}) do
+    true
+  end
+
+  def floating?(%Tempo{}) do
+    false
+  end
+
+  def floating?(value) do
+    raise(not_one_value("floating?/1", value))
+  end
+
+  @doc """
+  Return whether a `Tempo` value is *zoned* — it carries a zone or an
+  offset and so has a position on the universal (UTC) time line.
+
+  Zoned is the exact complement of `floating?/1`: a value is zoned
+  when it has an `[IANA/Zone]` tag, a `Z`, or a numeric offset.
+
+  ### Arguments
+
+  * `tempo` is a `%Tempo{}` value.
+
+  ### Returns
+
+  * `true` when the value carries a zone or offset.
+
+  * `false` when the value is floating.
+
+  ### Examples
+
+      iex> Tempo.zoned?(Tempo.from_iso8601!("2024-01-01[Australia/Sydney]"))
+      true
+
+      iex> Tempo.zoned?(Tempo.from_iso8601!("2024-01-01"))
+      false
+
+  """
+  @spec zoned?(t()) :: boolean()
+  def zoned?(%Tempo{} = tempo) do
+    not floating?(tempo)
+  end
+
+  def zoned?(value) do
+    raise(not_one_value("zoned?/1", value))
+  end
+
+  # The same instant on `target_zone`'s wall clock, to the second and in the
+  # value's own calendar. The value keeps everything else it carries — its
+  # calendar annotation, tags, metadata and qualification — and the target
+  # zone and its offset take the place of its own.
+  # A value's span is read on the other zone's clock: where it starts and
+  # where it ends there. One written to the second or finer is one such
+  # value in any zone. A coarser one is a value there when its start is the
+  # start of a unit of its own resolution and its end that unit's end, and
+  # is otherwise the interval from the one to the other.
+  defp do_shift_zone(%Tempo{time: time} = tempo, target_zone) do
+    if written_to_the_second?(time) do
+      moment_in_zone(tempo, target_zone)
+    else
+      span_in_zone(tempo, target_zone)
+    end
+  end
+
+  defp written_to_the_second?(time) do
+    List.keymember?(time, :second, 0) or List.keymember?(time, :microsecond, 0)
+  end
+
+  defp span_in_zone(tempo, target_zone) do
+    {unit, _span} = resolution(tempo)
+
+    with {:ok, {lower, upper}, _walked_by} <- Interval.do_next_unit_boundary(tempo),
+         {:ok, start} <- moment_in_zone(lower, target_zone),
+         {:ok, finish} <- moment_in_zone(upper, target_zone) do
+      case one_unit_there(start, finish, unit) do
+        %Tempo{} = value -> {:ok, value}
+        nil -> {:ok, interval_there(start, finish, tempo)}
+      end
+    end
+  end
+
+  # The value of `unit`'s resolution that starts at `start` and ends at
+  # `finish` on the other zone's clock, or `nil` when there is none.
+  defp one_unit_there(start, finish, unit) do
+    with %Tempo{} = value <- trunc(start, unit),
+         value = in_the_zone_alone(value, unit),
+         {:ok, {lower, upper}, _walked_by} <- Interval.do_next_unit_boundary(value),
+         true <- same_moment?(lower, start) and same_moment?(upper, finish) do
+      value
+    else
+      _not_one_unit -> nil
+    end
+  end
+
+  # A date in a zone is written with the zone and no offset: the offset is
+  # the zone's wherever in the date it is asked for, and the day the clocks
+  # change has two. An hour or a minute keeps the offset it is at, which says
+  # which of the two it is when the clocks go back.
+  defp in_the_zone_alone(value, unit) when unit in [:hour, :minute] do
+    value
+  end
+
+  defp in_the_zone_alone(value, _unit) do
+    %{value | shift: nil}
+  end
+
+  defp same_moment?(a, b) do
+    Compare.to_utc_seconds(a) == Compare.to_utc_seconds(b)
+  end
+
+  # The interval carries the value's metadata, as the value there would.
+  defp interval_there(start, finish, %Tempo{metadata: metadata}) do
+    %Interval{
+      from: to_the_minute(start, finish),
+      to: to_the_minute(finish, start),
+      metadata: metadata
+    }
+  end
+
+  # An interval's ends are written to the minute, the finest unit two zones'
+  # clocks differ by, unless either falls between minutes.
+  defp to_the_minute(%Tempo{time: time} = endpoint, %Tempo{time: other}) do
+    if Keyword.get(time, :second) == 0 and Keyword.get(other, :second) == 0 do
+      %{endpoint | time: Keyword.delete(time, :second)}
+    else
+      endpoint
+    end
+  end
+
+  # The moment a value's span starts at, to the second or the fraction of
+  # one it is written to, on the wall clock of another zone.
+  defp moment_in_zone(%Tempo{time: time} = tempo, target_zone) do
+    calendar = tempo.calendar
+    {whole, fraction} = Enum.split_with(time, &(not match?({:microsecond, _fraction}, &1)))
+    utc_seconds = Compare.to_utc_seconds(%{tempo | time: whole})
+
+    with {:ok, offset} <- zone_offset_at(target_zone, utc_seconds),
+         {:ok, wall} <- wall_components(utc_seconds + offset, calendar) do
+      {:ok,
+       %{
+         tempo
+         | time: wall ++ fraction,
+           shift: Zone.offset_to_shift(offset),
+           calendar: calendar,
+           extended: in_zone_extended(tempo.extended, target_zone)
+       }}
+    end
+  end
+
+  defp zone_offset_at("Etc/UTC", _utc_seconds) do
+    {:ok, 0}
+  end
+
+  # A zone written as an offset (`[+08:45]`) is at that offset always.
+  defp zone_offset_at({:offset, minutes}, _utc_seconds) do
+    {:ok, minutes * 60}
+  end
+
+  defp zone_offset_at(zone, utc_seconds) do
+    case TimeZoneDatabase.do_period_at_utc(zone, utc_seconds) do
+      {:ok, period} -> {:ok, TimeZoneDatabase.do_total_offset(period)}
+      {:error, _reason} -> {:error, UnknownZoneError.exception(zone_id: zone)}
+    end
+  end
+
+  # A wall-clock reading in Gregorian seconds as a value's components in
+  # `calendar`: the day as the calendar numbers it, and the time of day.
+  # The day is the one the calendar gives the count of days it counts from
+  # (`date_from_iso_days/1`), which takes a day before year 0 on every OTP,
+  # as OTP ≤ 28's `:calendar.gregorian_seconds_to_datetime/1` does not.
+  defp wall_components(seconds, calendar) do
+    time_of_day = Integer.mod(seconds, 86_400)
+    {year, month, day} = calendar.date_from_iso_days(Integer.floor_div(seconds, 86_400))
+
+    {:ok,
+     [year: year, month: month, day: day] ++
+       [
+         hour: div(time_of_day, 3_600),
+         minute:
+           time_of_day
+           |> rem(3_600)
+           |> div(60),
+         second: rem(time_of_day, 60)
+       ]}
+  end
+
+  # The value's annotations with `zone` in place of its own zone or offset
+  # annotation: RFC 9557 gives a value one, and its offset is its shift. A
+  # critical flag belonged to the zone it replaces.
+  defp in_zone_extended(extended, {:offset, minutes}) do
+    Map.merge(
+      extended || %{tags: %{}},
+      %{zone_id: nil, zone_offset: minutes, zone_critical: false}
+    )
+  end
+
+  defp in_zone_extended(extended, zone) do
+    Map.merge(
+      extended || %{tags: %{}},
+      %{zone_id: zone, zone_offset: nil, zone_critical: false}
+    )
+  end
+
+  ## ---------------------------------------------------------
+  ## Metadata — the caller's own data on any value
+  ## ---------------------------------------------------------
+
+  @doc """
+  The qualifier a whole value carries: uncertain, approximate or both.
+
+  ISO 8601-2 §8 qualifies a value component by component, and a
+  qualifier written after a whole value (`2004-06-11~`) qualifies each
+  of its components. So a value is qualified as a whole when every
+  component it holds carries the same qualifier, however that was
+  written: `2026?` and `?2026` are the same uncertain year.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`.
+
+  ### Returns
+
+  * `:uncertain`, `:approximate` or `:uncertain_and_approximate` when
+    every component of the value carries that qualifier.
+
+  * `nil` when no component is qualified, or when they are not all
+    qualified alike: `qualification/2` reads one component.
+
+  ### Examples
+
+      iex> Tempo.qualification(~o"2004-06-11~")
+      :approximate
+
+      iex> Tempo.qualification(~o"2004-06~-11")
+      nil
+
+      iex> Tempo.qualification(~o"2004-06-11")
+      nil
+
+  """
+  @spec qualification(t()) :: qualification()
+  def qualification(%__MODULE__{} = value) do
+    Qualification.whole(value)
+  end
+
+  @doc """
+  The qualifier one component of a value carries.
+
+  A qualifier to the right of a component qualifies it and each
+  component before it (`2004-06~-11` is an approximate June of an
+  approximate 2004, on the 11th), and one to its left that component
+  alone (`2004-?06-11`).
+
+  ### Arguments
+
+  * `value` is a `t:t/0`.
+
+  * `unit` is the component's unit, such as `:year`, `:month` or `:day`.
+
+  ### Returns
+
+  * `:uncertain`, `:approximate` or `:uncertain_and_approximate`, or
+    `nil` when the component is not qualified or the value does not
+    hold it.
+
+  ### Examples
+
+      iex> Tempo.qualification(~o"2004-06~-11", :month)
+      :approximate
+
+      iex> Tempo.qualification(~o"2004-06~-11", :day)
+      nil
+
+      iex> Tempo.qualification(~o"2004-?06-11", :year)
+      nil
+
+  """
+  @spec qualification(t(), atom()) :: qualification()
+  def qualification(%__MODULE__{qualifications: nil}, unit) when is_atom(unit) do
+    nil
+  end
+
+  def qualification(%__MODULE__{qualifications: qualifications}, unit) when is_atom(unit) do
+    Map.get(qualifications, unit)
+  end
+
+  @doc """
+  Returns a value's metadata: the caller's own data carried with it (a holiday
+  name, an event's summary).
+
+  Every Tempo value carries a metadata map. It is not part of the value's
+  ISO 8601 form, and conversion carries it along: a recurrence's metadata
+  reaches every occurrence, and a recurrence set's tags each occurrence its
+  members produce.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0`,
+    `t:Tempo.RecurrenceSet.t/0` or `t:Tempo.RecurrenceSet.Conditional.t/0`.
+
+  ### Returns
+
+  * The metadata map, `%{}` when none was given, or
+
+  * `{:error, reason}` when `value` is not a Tempo value.
+
+  ### Examples
+
+      iex> Tempo.new!(year: 2026, month: 12, day: 25, metadata: %{name: "Christmas Day"})
+      ...> |> Tempo.metadata()
+      %{name: "Christmas Day"}
+
+      iex> Tempo.metadata(~o"2026-12-25")
+      %{}
+
+  """
+  @spec metadata(
+          t()
+          | Tempo.Interval.t()
+          | IntervalSet.t()
+          | Tempo.RecurrenceSet.t()
+          | Conditional.t()
+        ) ::
+          map() | {:error, Exception.t()}
+  def metadata(%module{metadata: metadata})
+      when module in [__MODULE__, Tempo.Interval, IntervalSet, Tempo.RecurrenceSet, Conditional] do
+    metadata
+  end
+
+  def metadata(value) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.metadata/1 takes a Tempo value, got #{Calendars.inspect(value)}"
+     )}
+  end
+
+  @doc """
+  Returns a value with its metadata replaced.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0`,
+    `t:Tempo.RecurrenceSet.t/0` or `t:Tempo.RecurrenceSet.Conditional.t/0`.
+
+  * `metadata` is a map.
+
+  ### Returns
+
+  * The value carrying `metadata`, or
+
+  * `{:error, reason}` when `metadata` is not a map or `value` is not a Tempo
+    value.
+
+  ### Examples
+
+      iex> ~o"R/../P1Y/FL12M25DN"
+      ...> |> Tempo.put_metadata(%{name: "Christmas Day"})
+      ...> |> Tempo.metadata()
+      %{name: "Christmas Day"}
+
+  """
+  @spec put_metadata(value, map()) :: value | {:error, Exception.t()}
+        when value:
+               t()
+               | Tempo.Interval.t()
+               | IntervalSet.t()
+               | Tempo.RecurrenceSet.t()
+               | Conditional.t()
+  def put_metadata(%module{} = value, metadata)
+      when module in [__MODULE__, Tempo.Interval, IntervalSet, Tempo.RecurrenceSet, Conditional] and
+             is_map(metadata) do
+    %{value | metadata: metadata}
+  end
+
+  def put_metadata(value, metadata) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.put_metadata/2 takes a Tempo value and a map, got " <>
+         "#{Calendars.inspect(value)} and #{Calendars.inspect(metadata)}"
+     )}
+  end
+
+  ## ---------------------------------------------------------
+  ## Calendar accessors — day_of_week, day_of_year, …
+  ## ---------------------------------------------------------
+
+  @doc """
+  Return the day of the week as an integer (`1..7`) using the
+  Tempo value's calendar.
+
+  For the Gregorian calendar with `:default` ordering, `1` is
+  Monday and `7` is Sunday — matching `Date.day_of_week/1`.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` anchored with at least year/month/day
+    components.
+
+  * `starting_on` is a day-of-week atom controlling which day is
+    numbered `1`. Accepts `:default` (calendar's default),
+    `:monday`, `:tuesday`, `:wednesday`, `:thursday`, `:friday`,
+    `:saturday`, or `:sunday`. Defaults to `:default`.
+
+  ### Returns
+
+  * Integer `1..7`.
+
+  ### Raises
+
+  * `ArgumentError` when `tempo` has no date components.
+
+  ### Examples
+
+      iex> Tempo.day_of_week(~o"2026-06-15")
+      1
+
+      iex> Tempo.day_of_week(~o"2026-06-15", :sunday)
+      2
+
+  """
+  @spec day_of_week(t(), atom()) :: Calendar.day_of_week()
+  def day_of_week(tempo, starting_on \\ :default)
+
+  def day_of_week(tempo, starting_on) when is_outside(tempo) do
+    day_of_week(Calendars.inside(tempo), starting_on)
+  end
+
+  def day_of_week(%Tempo{} = tempo, starting_on) do
+    {year, month, day} = require_ymd!(tempo, :day_of_week)
+    {dow, _first, _last} = tempo.calendar.day_of_week(year, month, day, starting_on)
+    dow
+  end
+
+  def day_of_week(value, _starting_on) do
+    raise(not_one_value("day_of_week/2", value))
+  end
+
+  @doc """
+  Return the 1-based ordinal day of the year (`1..365` or `1..366`
+  in a leap year) using the Tempo value's calendar.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` anchored with at least year/month/day
+    components.
+
+  ### Returns
+
+  * A positive integer.
+
+  ### Raises
+
+  * `ArgumentError` when `tempo` has no date components.
+
+  ### Examples
+
+      iex> Tempo.day_of_year(~o"2026-01-01")
+      1
+
+      iex> Tempo.day_of_year(~o"2024-12-31")
+      366
+
+  """
+  @spec day_of_year(t()) :: pos_integer()
+  def day_of_year(tempo) when is_outside(tempo) do
+    day_of_year(Calendars.inside(tempo))
+  end
+
+  def day_of_year(%Tempo{} = tempo) do
+    {year, month, day} = require_ymd!(tempo, :day_of_year)
+    tempo.calendar.day_of_year(year, month, day)
+  end
+
+  def day_of_year(value) do
+    raise(not_one_value("day_of_year/1", value))
+  end
+
+  @doc """
+  Return the 1-based quarter of the year (`1..4`) that the value's
+  calendar puts its month in — a Hebrew leap year's Adar I is in the
+  second quarter, a Coptic epagomenal month in the fourth.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` anchored with at least year/month
+    components.
+
+  ### Returns
+
+  * An integer `1..4`.
+
+  ### Raises
+
+  * `ArgumentError` when `tempo` has no year/month components.
+
+  ### Examples
+
+      iex> Tempo.quarter_of_year(~o"2026-01-15")
+      1
+
+      iex> Tempo.quarter_of_year(~o"2026-11-30")
+      4
+
+      iex> Tempo.quarter_of_year(Tempo.from_iso8601!("5787-06-15", Calendrical.Hebrew))
+      2
+
+  """
+  @spec quarter_of_year(t()) :: 1..4
+  def quarter_of_year(tempo) when is_outside(tempo) do
+    quarter_of_year(Calendars.inside(tempo))
+  end
+
+  def quarter_of_year(%Tempo{} = tempo) do
+    {year, month, day} = require_ymd!(tempo, :quarter_of_year, default_day: 1)
+    tempo.calendar.quarter_of_year(year, month, day)
+  end
+
+  def quarter_of_year(value) do
+    raise(not_one_value("quarter_of_year/1", value))
+  end
+
+  @doc """
+  Return `true` when the Tempo's year is a leap year under its
+  calendar.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` with at least a year component.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  ### Raises
+
+  * `ArgumentError` when `tempo` has no year component.
+
+  ### Examples
+
+      iex> Tempo.leap_year?(~o"2024")
+      true
+
+      iex> Tempo.leap_year?(~o"2025")
+      false
+
+  """
+  @spec leap_year?(t()) :: boolean()
+  def leap_year?(tempo) when is_outside(tempo) do
+    leap_year?(Calendars.inside(tempo))
+  end
+
+  def leap_year?(%Tempo{} = tempo) do
+    tempo.calendar.leap_year?(whole!(tempo, :year, "leap_year?"))
+  end
+
+  def leap_year?(value) do
+    raise(not_one_value("leap_year?/1", value))
+  end
+
+  @doc """
+  Return the number of days in the Tempo's month under its
+  calendar.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` with year and month components.
+
+  ### Returns
+
+  * A positive integer.
+
+  ### Raises
+
+  * `ArgumentError` when `tempo` has no year or no month
+    component.
+
+  ### Examples
+
+      iex> Tempo.days_in_month(~o"2024-02-15")
+      29
+
+      iex> Tempo.days_in_month(~o"2025-02")
+      28
+
+      iex> Tempo.days_in_month(~o"2026-04")
+      30
+
+  """
+  @spec days_in_month(t()) :: pos_integer()
+  def days_in_month(tempo) when is_outside(tempo) do
+    days_in_month(Calendars.inside(tempo))
+  end
+
+  def days_in_month(%Tempo{} = tempo) do
+    year = whole!(tempo, :year, "days_in_month")
+    month = whole!(tempo, :month, "days_in_month")
+    calendar = tempo.calendar
+
+    calendar.days_in_month(year, month)
+  end
+
+  def days_in_month(value) do
+    raise(not_one_value("days_in_month/1", value))
+  end
+
+  # Extract {year, month, day} from a Tempo or raise a uniform
+  # error. Missing month or day default to 1 (start-of-unit) so
+  # quarter-of-year on a year-resolution value still works. A value on the
+  # week axis is read by its week and its day, and one that holds a day of
+  # the year by that day: several of them are no one date to read.
+  defp require_ymd!(%Tempo{time: time} = tempo, function, options \\ []) do
+    year = whole!(tempo, :year, function)
+
+    cond do
+      # A season of 21 to 24 has no date to read until it has a hemisphere.
+      List.keymember?(time, :season, 0) ->
+        raise AbstractSeasonError, value: tempo, operation: "read a date from"
+
+      List.keymember?(time, :week, 0) ->
+        week = whole!(tempo, :week, function)
+        week_date_ymd!(tempo, function, {year, week, whole!(tempo, :day_of_week, function, 1)})
+
+      List.keymember?(time, :day_of_year, 0) ->
+        ordinal_date_ymd(year, whole!(tempo, :day_of_year, function), tempo.calendar)
+
+      true ->
+        month_date_ymd!(tempo, function, year, Keyword.get(options, :default_day, 1))
+    end
+  end
+
+  defp month_date_ymd!(%Tempo{time: time} = tempo, function, year, default_day) do
+    month = whole!(tempo, :month, function, 1)
+    day = whole!(tempo, :day, function, default_day)
+
+    if List.keymember?(time, :day, 0) do
+      {year, month, day}
+    else
+      first_ymd(time, {year, month, day}, tempo.calendar)
+    end
+  end
+
+  defp ordinal_date_ymd(year, day_of_year, calendar) do
+    %{year: year, month: month, day: day} = calendar.date_from_day_of_year(year, day_of_year)
+
+    {year, month, day}
+  end
+
+  # The first day of a year or a month written with no day is the first of
+  # its first month, or of the month, and where the year does not begin with
+  # its first month the first date the calendar gives it
+  # (`Tempo.UnitValues.start_date/2`).
+  defp first_ymd(time, default, calendar) do
+    case UnitValues.start_date(time, calendar) do
+      {:ok, ymd} -> ymd
+      :error -> default
+    end
+  end
+
+  # A unit an accessor reads, as the one whole number it is. A unit the
+  # value lacks is the default when there is one, and otherwise the
+  # accessor's `ArgumentError`, as is a unit that holds several values (a set,
+  # a mask, a group), which is no one number to read.
+  defp whole!(%Tempo{time: time} = tempo, unit, function, default \\ nil) when is_list(time) do
+    case List.keyfind(time, unit, 0) do
+      {^unit, value} when is_integer(value) ->
+        value
+
+      nil when is_integer(default) ->
+        default
+
+      nil ->
+        raise ArgumentError,
+              "Tempo.#{function}/1 requires a #{unit} component. Got: #{Calendars.inspect(tempo)}"
+
+      _several ->
+        raise ArgumentError,
+              "Tempo.#{function}/1 reads one #{unit}, and #{Calendars.inspect(tempo)} holds several."
+    end
+  end
+
+  # A week date's day as its calendar places it (`date_from_week_date/3`).
+  defp week_date_ymd!(tempo, function, {year, week, day}) do
+    case UnitValues.date_from_iso_week(year, week, day, tempo.calendar) do
+      {:ok, date} ->
+        {date.year, date.month, date.day}
+
+      {:error, _reason} ->
+        raise ArgumentError,
+              "Tempo.#{function}/1 cannot place #{Calendars.inspect(tempo)} on a day."
+    end
+  end
+
+  ## ---------------------------------------------------------
+  ## shift/2 — ergonomic keyword-list arithmetic
+  ## ---------------------------------------------------------
+
+  @doc """
+  Shift a `t:t/0` by a duration, returning a new `t:t/0`.
+
+  The shift amount may be given either as a `t:Tempo.Duration.t/0`
+  (when you already have one, e.g. `~o"P1M"`) or as a keyword list of
+  signed unit amounts (the ergonomic ad-hoc form). Both take the same
+  path internally, so pass a `t:Tempo.Duration.t/0` when composing
+  durations directly.
+
+  Units are applied largest-to-smallest with the standard
+  month-end clamping rule (e.g. `~o"2024-01-31" + 1 month` is
+  `2024-02-29`, not `2024-03-02`).
+
+  A fractional amount (ISO 8601-2 §11.4) becomes whole units of the
+  next smaller unit, truncated toward zero: `P1.3D` is one day and
+  seven hours, `P1.5W` ten days and `P1.5Y` a year and six months. A
+  fraction of a month is that fraction of the days from the value to
+  one month later (ISO 8601-2 D.4.4), so `2018-01-23` plus `P0.5M` is
+  `2018-02-07`.
+
+  A value in a named zone gives the reading its wall clock shows. Years,
+  months, weeks and days step the calendar, so a day after noon is noon
+  however long the day, and hours, minutes and seconds are time on the
+  time line, so five hours after 23:00 is the reading the clock shows
+  five hours later — 05:00 on the night it springs forward. Days are
+  added before hours (RFC 5545 §3.3.6). A day that lands in the hour a
+  spring-forward skips moves on by that hour, one that lands on a
+  reading the fall-back repeats is its first occurrence (RFC 5545
+  §3.3.5), and an hour that lands on a repeated reading carries its
+  offset, so it names its own side of the fold.
+
+  An interval is shifted by moving both its ends, and keeps its length.
+  Each end is shifted as a value is. A month or a year on, two dates may
+  land on a shorter month and fewer days apart than they were (29 and 31
+  January are both 28 February), so the end is moved on by the days that
+  makes up, and the interval is as many days long as it was. One written
+  with a duration keeps its duration, an open end stays open, and a
+  recurrence is shifted by its start.
+
+  ### Arguments
+
+  * `tempo` is any `t:t/0` or `t:Tempo.Interval.t/0`.
+
+  * `shift` is either a `t:Tempo.Duration.t/0`, or a keyword list of
+    `{unit, amount}` pairs such as `[month: 1, day: -5]` or
+    `[year: 2]`. Valid units: `:year`, `:month`, `:week`, `:day`,
+    `:hour`, `:minute`, `:second`. Keyword amounts may be negative.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:skipping` is a busy set the shift jumps over: the duration is
+    consumed from *free* time only. Accepts anything
+    `Tempo.to_interval_set/1` accepts (an interval, an interval set, a
+    `t:t/0`, a bounded recurrence), or a list of such values. The busy
+    spans cost nothing to cross, and an origin already inside a busy
+    span first moves to its edge (forward: the end; backward: the
+    start) at no cost. The duration must be exact — built from
+    `:week`/`:day`/`:hour`/`:minute`/`:second` — because a month or
+    year of free time has no fixed length; `:year`/`:month` components
+    return `{:error, %Tempo.InvalidUnitError{}}`. Busy spans must be
+    anchored and bounded. In the keyword-units form `:skipping` may
+    ride in the same list: `Tempo.shift(t, hour: -1, skipping: busy)`.
+    A day shifted by days or weeks steps from free day to free day, a
+    calendar day at a time, and lands on a day: one day of free time
+    after a Friday before a long weekend is the Tuesday, and a week of
+    it seven free days on.
+
+  ### Returns
+
+  * The shifted `t:t/0`.
+
+  * `{:error, %Tempo.UnanchoredError{}}` when the value has no
+    `:year` (an unanchored month/day, bare-day, or time-of-day value)
+    and the shift's result would depend on the missing year. The rule:
+    an unanchored shift is **computed when its result is invariant to
+    the year, and errors when it isn't** (it never raises). So
+    `~o"1M31D"` plus one day is `~o"2M1D"` (January always has 31 days)
+    and a whole-year step is a no-op (`~o"1M31D"` plus `P1Y` is
+    `~o"1M31D"`), but `~o"1M31D"` plus one month lands on an unresolvable
+    "Feb 31" and `~o"2M28D"` plus one day (Feb 29 or Mar 1?) both error.
+
+  * For a value that holds a set or a range (`~o"2026Y6M{1,15}D"`),
+    each value it names shifted: a `t:t/0` that holds them where one
+    value can, and a `t:Tempo.IntervalSet.t/0` of their spans where none
+    can — a day on from the 15th and the 30th of June is 16 June and
+    1 July. With `:skipping` each value is walked from, and gathered
+    the same way.
+
+  * For a value that holds unspecified digits (`~o"2026-06-XX"`, some
+    day of June), each value they stand for shifted: the value with its
+    unspecified digits where the shift passes them by and they stand for
+    the values landed on still (an hour on is `~o"2026Y6MXXDT1H"`, and
+    eight months on `~o"2027Y2MXXD"`, each day of that February landed
+    on), a `t:Tempo.Set.t/0` that is one of a run of values where they
+    are a run the shift keeps one (a day on is
+    `~o"[2026Y6M2D..2026Y7M1D]"`, and a month on
+    `~o"[2026Y7M1D..2026Y7M30D]"`, no day of June landing on the 31st of
+    July), and a `t:Tempo.IntervalSet.t/0` of their spans otherwise.
+
+  * `{:error, %Tempo.ConversionError{reason: :grouped_component}}` when
+    the shift would count from a unit that holds a group, which names a
+    span of values and none to shift one by one. A step that passes the
+    group by is computed.
+
+  * `{:error, %Tempo.ConversionError{reason: :too_many_values}}` when
+    each value the value names is stepped and it names more than 10,000,
+    the most that are listed at once.
+
+  * `{:error, reason}` when the value holds a selection and the shift
+    steps a unit it does not carry: a month on `~o"2027Y4ML1K1IN"`, the
+    first Monday of April 2027, is the first Monday of May, but it has no
+    day to add a day to. Also when the arguments are not a Tempo value
+    and a shift, or a keyword unit is not a duration's unit and a number
+    of it.
+
+  ### Examples
+
+      iex> Tempo.shift(~o"2026-06-15", month: 1, day: -5)
+      ~o"2026Y7M10D"
+
+      iex> Tempo.shift(~o"2026-01-31", month: 1)
+      ~o"2026Y2M28D"
+
+      iex> Tempo.shift(~o"2018-01-23", ~o"P0.5M")
+      ~o"2018Y2M7D"
+
+      iex> Tempo.shift(~o"2026-06-15T10:00:00", hour: -3)
+      ~o"2026Y6M15DT7H0M0S"
+
+      iex> Tempo.shift(~o"2026", ~o"P2Y")
+      ~o"2028Y"
+
+      iex> Tempo.shift(~o"1M31D", ~o"P1D")
+      ~o"2M1D"
+
+      iex> Tempo.shift(~o"1M31D", ~o"P1Y")
+      ~o"1M31D"
+
+      iex> match?({:error, %Tempo.UnanchoredError{}}, Tempo.shift(~o"1M31D", ~o"P1M"))
+      true
+
+  A week steps by weeks to a week, and by days or hours to the date it
+  lands on, as a week date is read (`2026-W25-2` is 16 June):
+
+      iex> Tempo.shift(~o"2026-W25", week: 1)
+      ~o"2026Y26W"
+
+      iex> Tempo.shift(~o"2026-W25", day: 1)
+      ~o"2026Y6M16D"
+
+  A value that holds a set is shifted value by value. A day on from the
+  1st and the 15th of June is the 2nd and the 16th, and a month on from
+  the 15th of June and of July is the 15th of July and of August:
+
+      iex> Tempo.shift(~o"2026Y6M{1,15}D", day: 1)
+      ~o"2026Y6M{2,16}D"
+
+      iex> Tempo.shift(~o"2026Y{6,7}M15D", month: 1)
+      ~o"2026Y{7..8}M15D"
+
+  A day on from the 15th and the 30th of June is 16 June and 1 July,
+  which no one value names, so the answer is the set of the two days:
+
+      iex> days = Tempo.shift(~o"2026Y6M{15,30}D", day: 1)
+      iex> days
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.Interval.from/1)
+      [~o"2026Y6M16D", ~o"2026Y7M1D"]
+
+  Some day of June, a day on, is one of the days from 2 June to 1 July,
+  and an hour on is 01:00 of some day of June:
+
+      iex> Tempo.shift(~o"2026-06-XX", day: 1)
+      ~o"[2026Y6M2D..2026Y7M1D]"
+
+      iex> Tempo.shift(~o"2026-06-XX", hour: 1)
+      ~o"2026Y6MXXDT1H"
+
+  On the night New York's clocks spring forward, five hours after 23:00
+  is 05:00, and a day after noon is noon:
+
+      iex> Tempo.shift(~o"2026-03-07T23[America/New_York]", hour: 5)
+      ~o"2026Y3M8DT5H[America/New_York]"
+
+      iex> Tempo.shift(~o"2026-03-07T12[America/New_York]", day: 1)
+      ~o"2026Y3M8DT12H[America/New_York]"
+
+  One hour of working time from 09:30, skipping a 10:00–11:00 meeting,
+  ends at 11:30 — the meeting hour costs nothing:
+
+      iex> meeting = ~o"2026-06-15T10:00/2026-06-15T11:00"
+      iex> Tempo.shift(~o"2026-06-15T09:30", ~o"PT1H", skipping: meeting)
+      ~o"2026Y6M15DT11H30M0S"
+
+      iex> meeting = ~o"2026-06-15T10:00/2026-06-15T11:00"
+      iex> Tempo.shift(~o"2026-06-15T10:30", ~o"PT0S", skipping: meeting)
+      ~o"2026Y6M15DT11H0M"
+
+  A season with no hemisphere steps by whole years, a year on being a
+  season as this one is. A month or a day on is counted from dates it does
+  not have until `in_territory/2` gives it them:
+
+      iex> Tempo.shift(~o"2026-21", year: 1)
+      ~o"2027Y21M"
+
+      iex> match?({:error, %Tempo.AbstractSeasonError{}}, Tempo.shift(~o"2026-21", month: 1))
+      true
+
+      iex> {:ok, spring} = Tempo.in_territory(~o"2026-21", :AU)
+      iex> Tempo.shift(spring, month: 1)
+      ~o"2026Y10M/2027Y1M"
+
+  A booking a day on is at the same times the day after, and two days at
+  the end of January are two days a month on:
+
+      iex> Tempo.shift(~o"2026-06-15T10:30/2026-06-15T12:45", day: 1)
+      ~o"2026Y6M16DT10H30M/T12H45M"
+
+      iex> Tempo.shift(~o"2026-01-29/2026-01-31", month: 1)
+      ~o"2026Y2M28D/3M2D"
+
+  """
+  @spec shift(t() | Tempo.Interval.t(), Tempo.Duration.t() | keyword() | String.t(), keyword()) ::
+          t()
+          | Tempo.Interval.t()
+          | Tempo.Set.t()
+          | Tempo.IntervalSet.t()
+          | {:error, error_reason()}
+  def shift(tempo, shift, options \\ []) do
+    if Calendars.outside?([tempo, shift, options]) do
+      Calendars.outside(
+        shift(Calendars.inside(tempo), Calendars.inside(shift), Calendars.inside(options))
+      )
+    else
+      do_shift(tempo, shift, options)
+    end
+  end
+
+  defp do_shift(%Tempo{} = tempo, %Tempo.Duration{} = duration, []) do
+    Math.add(tempo, duration)
+  end
+
+  defp do_shift(%Tempo{} = tempo, %Tempo.Duration{} = duration, options) when is_list(options) do
+    case Keyword.fetch(options, :skipping) do
+      {:ok, busy} -> Math.shift_skipping(tempo, duration, busy)
+      :error -> Math.add(tempo, duration)
+    end
+  end
+
+  # Every ISO 8601 duration arriving from outside is a string —
+  # iCalendar `DURATION`, `TRIGGER`, `REPEAT` — so accept the string
+  # and parse it here rather than at every call site. `"-PT30M"`
+  # (leading-sign form) parses to the negated duration.
+  defp do_shift(%Tempo{} = tempo, duration_string, options) when is_binary(duration_string) do
+    case read(duration_string) do
+      {:ok, %Duration{} = duration} ->
+        shift(tempo, duration, options)
+
+      {:ok, other} ->
+        {:error,
+         ConversionError.exception(
+           value: duration_string,
+           target: Duration,
+           reason:
+             "the string parsed as #{Calendars.inspect(other)}, not a duration — " <>
+               "`Tempo.shift/2` takes an ISO 8601 duration such as \"PT30M\" or \"-P1D\""
+         )}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp do_shift(%Tempo{} = tempo, units, options) when is_list(units) do
+    # In the keyword form the options merge into the same list —
+    # `shift(t, second: -3600, skipping: busy)` — so split them
+    # out before the rest becomes a duration.
+    with {:ok, units} <- shift_units(units) do
+      {skip_options, units} = Keyword.split(units, [:skipping])
+      shift(tempo, Duration.build(units), Keyword.merge(skip_options, options))
+    end
+  end
+
+  # An interval shifted has both its ends moved, and keeps its length
+  # (decided 2026-10-07): half past ten to a quarter to one, a day on, is
+  # the same times the day after. Each end is shifted as a value is. A month
+  # or a year on, the two may land on a shorter month and fewer days apart
+  # than they were (29 and 31 January, a month on, are both 28 February), so
+  # the end is then moved on by the days that makes up, and the interval is
+  # as many days long as it was. One written with a duration keeps the
+  # duration, and an open end stays open.
+  defp do_shift(%Interval{} = interval, shift, options) when is_list(options) do
+    if skipping?(shift, options) do
+      {:error, skipping_an_interval(interval)}
+    else
+      shift_interval(interval, shift, options, months_and_years_apart(shift))
+    end
+  end
+
+  defp do_shift(tempo, shift, _options) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.shift/3 shifts a Tempo value or an interval by a duration or by keyword " <>
+         "units, not #{Calendars.inspect(tempo)} by #{Calendars.inspect(shift)}."
+     )}
+  end
+
+  defp skipping?(shift, options) do
+    Keyword.has_key?(options, :skipping) or
+      (is_list(shift) and Keyword.keyword?(shift) and Keyword.has_key?(shift, :skipping))
+  end
+
+  defp skipping_an_interval(interval) do
+    ArgumentError.exception(
+      "Tempo.shift/3 with :skipping walks free time from one moment, and " <>
+        "#{Calendars.inspect(interval)} has two ends: shift its start, and count its length from there."
+    )
+  end
+
+  # The months and years a shift counts, apart from what else it counts: a
+  # date can land on a shorter month than it left only by them, so they are
+  # counted first, as a value's shift counts them, and the days made up.
+  defp months_and_years_apart(%Duration{time: time}) do
+    months_and_years_apart(time)
+  end
+
+  defp months_and_years_apart(units) when is_list(units) do
+    if Keyword.keyword?(units) and Enum.all?(units, fn {_unit, amount} -> is_number(amount) end) do
+      Enum.split_with(units, fn {unit, _amount} -> unit in [:year, :month] end)
+    else
+      :as_given
+    end
+  end
+
+  defp months_and_years_apart(text) when is_binary(text) do
+    case read(text) do
+      {:ok, %Duration{} = duration} -> months_and_years_apart(duration)
+      _no_duration -> :as_given
+    end
+  end
+
+  defp months_and_years_apart(_other) do
+    :as_given
+  end
+
+  # A shift of no months or years, and one that is no duration, which each
+  # end refuses in its own words.
+  defp shift_interval(interval, shift, options, apart)
+       when apart == :as_given or elem(apart, 0) == [] do
+    shift_ends(interval, &shift(&1, shift, options), :as_they_land)
+  end
+
+  defp shift_interval(interval, _shift, _options, {months_and_years, []}) do
+    shift_ends(interval, &shift(&1, Duration.build(months_and_years)), :as_many_days_on)
+  end
+
+  defp shift_interval(interval, _shift, _options, {months_and_years, rest}) do
+    with %Interval{} = by_the_calendar <-
+           shift_ends(interval, &shift(&1, Duration.build(months_and_years)), :as_many_days_on) do
+      shift_ends(by_the_calendar, &shift(&1, Duration.build(rest)), :as_they_land)
+    end
+  end
+
+  defp shift_ends(%Interval{from: from, to: to} = interval, shift_end, :as_they_land) do
+    with {:ok, shifted_from} <- end_moved(from, shift_end),
+         {:ok, shifted_to} <- end_moved(to, shift_end) do
+      %{interval | from: shifted_from, to: shifted_to}
+    end
+  end
+
+  defp shift_ends(%Interval{from: from, to: to} = interval, shift_end, :as_many_days_on) do
+    with {:ok, shifted_from} <- end_moved(from, shift_end),
+         {:ok, shifted_to} <- end_moved(to, shift_end),
+         {:ok, shifted_to} <- as_many_days_on(shifted_to, shifted_from, interval) do
+      %{interval | from: shifted_from, to: shifted_to}
+    end
+  end
+
+  # The end of an interval of two dates, as many days from its start as it
+  # was before the two were shifted.
+  defp as_many_days_on(
+         %__MODULE__{} = shifted_to,
+         %__MODULE__{} = shifted_from,
+         %Interval{
+           from: %__MODULE__{} = from,
+           to: %__MODULE__{} = to,
+           recurrence: 1,
+           duration: nil
+         }
+       ) do
+    case {days_between(from, to), days_between(shifted_from, shifted_to)} do
+      {days, days} ->
+        {:ok, shifted_to}
+
+      {days, landed} when is_integer(days) and is_integer(landed) ->
+        end_moved(shifted_to, &shift(&1, day: days - landed))
+
+      _no_two_dates ->
+        {:ok, shifted_to}
+    end
+  end
+
+  defp as_many_days_on(shifted_to, _shifted_from, _interval) do
+    {:ok, shifted_to}
+  end
+
+  defp days_between(%__MODULE__{} = from, %__MODULE__{} = to) do
+    with {:ok, %Date{} = first} <- date_of(from),
+         {:ok, %Date{} = last} <- date_of(to) do
+      Date.diff(last, first)
+    else
+      _no_date -> nil
+    end
+  end
+
+  # The date an end is on, where it is written to the day or finer.
+  defp date_of(%__MODULE__{time: time} = endpoint) do
+    if Keyword.has_key?(time, :day) or Keyword.has_key?(time, :day_of_week) or
+         Keyword.has_key?(time, :day_of_year) do
+      endpoint
+      |> trunc(:day)
+      |> to_date()
+    else
+      :error
+    end
+  end
+
+  # The units a value is shifted by are a duration's: a number of each, and a
+  # fraction of a second as `{microseconds, digits}`. A unit a duration has
+  # none of was passed over, leaving the value where it was, and a value
+  # that is no number reached the calendar's arithmetic.
+  @shift_units [:year, :month, :week, :day, :hour, :minute, :second]
+
+  defp shift_units(units) do
+    other = Enum.find(units, &(not shift_unit?(&1)))
+
+    if is_nil(other) do
+      {:ok, units}
+    else
+      {:error, shift_unit_error(other)}
+    end
+  end
+
+  defp shift_unit?({:skipping, _busy}) do
+    true
+  end
+
+  defp shift_unit?({unit, value}) when unit in @shift_units do
+    is_number(value)
+  end
+
+  defp shift_unit?({:microsecond, {value, digits}}) do
+    is_integer(value) and digits in 0..6
+  end
+
+  defp shift_unit?(_other) do
+    false
+  end
+
+  defp shift_unit_error(other) do
+    ArgumentError.exception(
+      "Tempo.shift/3 shifts by a number of #{Calendars.inspect(@shift_units)}, or by " <>
+        "`microsecond: {microseconds, digits}`, and #{Calendars.inspect(other)} is neither."
+    )
+  end
+
+  ## ---------------------------------------------------------
+  ## Locale-aware formatting — to_string/1,2
+  ## ---------------------------------------------------------
+
+  @doc """
+  Format a Tempo value as a locale-aware string.
+
+  Routes through Localize so format patterns, month and weekday names, day periods, and punctuation all follow CLDR data for the chosen locale. The default format is keyed off the Tempo's resolution — a year renders as its first and last months, a month or a week as its first and last days, a day as that day, and so on. A week date is the day it names.
+
+  A value that names something other than its own one span renders as the span or spans `Tempo.to_interval/2` gives it: a mask its span (`~o"202X"` is 2020 to 2029), and a recurrence, a selection or a set its spans as a list in the locale. A one-of set renders as its alternatives ("2026 or 2027").
+
+  An interval renders from its first value to its last, the end being excluded, in the unit it is walked by: the finer of its two ends' units, so `~o"2026/2026-03"` is January to February 2026. A week beside a date is shown as the date its first day is.
+
+  `Tempo.to_string/1,2` is the end-user display function. `inspect/1` remains the programmer-facing form and returns the `~o"…"` sigil representation unchanged. Interpolation renders a value as `to_string/1` does, and writes one it cannot render in its ISO 8601 form.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0`, `t:Tempo.Set.t/0`, `t:Tempo.RecurrenceSet.t/0` or `t:Tempo.Duration.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:format` is a CLDR format atom (`:short | :medium | :long | :full`), a skeleton atom (`:yMMM`, `:yMMMd`, `:hm`, …), or a pattern string. Defaults to a resolution-appropriate choice (see the module doc of `Tempo.Format` for the table).
+
+  * `:locale` is a CLDR locale identifier such as `"en"`, `"en-GB"`, or `"de"`. Defaults to Localize's configured default locale.
+
+  * `:within` is the window for a value with no end of its own — a recurrence with no count or `UNTIL`, a selection in an unspecified year, a recurrence set — whose occurrences are shown, as `Tempo.to_interval/2` takes it.
+
+  * Any other option accepted by `Localize.Date.to_string/2`, `Localize.Time.to_string/2`, `Localize.DateTime.to_string/2`, `Localize.Interval.to_string/3` or `Localize.Duration.to_string/2` is forwarded verbatim. A duration shows a fraction of a second as microseconds unless `:except` leaves them out.
+
+  ### Returns
+
+  * `{:ok, string}` with the formatted value.
+
+  * `{:error, exception}` when the value cannot be rendered: a `Tempo.IntervalEndpointsError` for an interval without both ends, a `Tempo.UnboundedRecurrenceError` for a recurrence with no end and no `:within` window, a `Tempo.UnboundedSetError` for an interval set without an end, a `Tempo.UnanchoredError` for a week or a day of the week without a year, a `Tempo.InvalidDateError` for a mask that names no date, an `ArgumentError` for a value of another kind or options that are not a keyword list, and Localize's error for a locale or format it does not accept.
+
+  ### Examples
+
+      iex> Tempo.to_string(~o"2026")
+      {:ok, "Jan\u2009\u2013\u2009Dec 2026"}
+
+      iex> Tempo.to_string(~o"2026-06")
+      {:ok, "Jun 1\u2009\u2013\u200930, 2026"}
+
+      iex> Tempo.to_string(~o"2026-06-15")
+      {:ok, "Jun 15, 2026"}
+
+      iex> Tempo.to_string(~o"2026-W25")
+      {:ok, "Jun 15\u2009\u2013\u200921, 2026"}
+
+      iex> Tempo.to_string(~o"2026-06-15", format: :long)
+      {:ok, "June 15, 2026"}
+
+      iex> Tempo.to_string(~o"2026", format: :long)
+      {:ok, "January\u2009\u2013\u2009December 2026"}
+
+      iex> Tempo.to_string(~o"P1Y6M")
+      {:ok, "1 year, 6 months"}
+
+      iex> Tempo.to_string(~o"P3DT2H", format: :short)
+      {:ok, "3 days, 2 hr"}
+
+  An interval is shown from its first value to its last, and one of no year by the months and days it has:
+
+      iex> Tempo.to_string(~o"2026/2026-03")
+      {:ok, "Jan\u2009\u2013\u2009Feb 2026"}
+
+      iex> Tempo.to_string(~o"6M/9M")
+      {:ok, "Jun\u2009\u2013\u2009Aug"}
+
+  A span of clock times is shown to its end as it is written, nine to five:
+
+      iex> Tempo.to_string(~o"2026-06-15T09/2026-06-15T17")
+      {:ok, "Jun 15, 2026, 9\u202FAM\u2009\u2013\u20095\u202FPM"}
+
+  A year before 1 is shown with its era where no `:format` is given, and a span with such an end names the era at both. ISO 8601's year -44 is 45 BC, and the Julian calendar's is 44 BC:
+
+      iex> Tempo.to_string(~o"-0044-03-15")
+      {:ok, "Mar 15, 45 BC"}
+
+      iex> Tempo.to_string(~o"-0044/0014")
+      {:ok, "45 BC\u2009\u2013\u200913 AD"}
+
+      iex> Tempo.to_string(Tempo.from_iso8601!("-0044-03-15", Calendrical.Julian))
+      {:ok, "Mar 15, 44 BC"}
+
+  A week is its days, from the first to the last, in the formats of its calendar. A calendar of weeks' months are named as CLDR's generic calendar names them:
+
+      iex> Tempo.to_string(~o"2026-W25")
+      {:ok, "Jun 15\u2009\u2013\u200921, 2026"}
+
+      iex> week = Tempo.from_iso8601!("2026-W25", Calendrical.ISOWeek)
+      iex> Tempo.to_string(week)
+      {:ok, "M06 15\u2009\u2013\u200921, 2026 AD"}
+
+  A recurrence is its occurrences, as a list, and a one-of set its alternatives:
+
+      iex> Tempo.to_string(~o"R3/2026-06-15/P1D")
+      {:ok, "Jun 15, 2026, Jun 16, 2026, and Jun 17, 2026"}
+
+      iex> Tempo.to_string(~o"[2026-06-15,2026-07-04]")
+      {:ok, "Jun 15, 2026 or Jul 4, 2026"}
+
+  A season with no hemisphere is shown as the dates it has in the territory of the locale it is rendered in: the spring of 2026 is March to May in Britain, and September to November in Australia.
+
+      iex> Tempo.to_string(~o"2026-21", locale: "en-GB")
+      {:ok, "Mar\u2009\u2013\u2009May 2026"}
+
+  An open interval has no last day to show, so it is an error, and interpolation writes it in ISO 8601:
+
+      iex> {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"2026-06-15/..")
+      iex> "From \#{~o"2026-06-15/.."}"
+      "From 2026Y6M15D/.."
+
+  """
+  @spec to_string(
+          t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
+          | Tempo.Duration.t(),
+          keyword()
+        ) :: {:ok, String.t()} | {:error, Exception.t()}
+  def to_string(value, options \\ []) do
+    if Calendars.outside?([value, options]) do
+      to_string(Calendars.inside(value), Calendars.inside(options))
+    else
+      Format.do_to_string(value, options)
+    end
+  end
+
+  @doc """
+  Format a Tempo value as a locale-aware string, raising for a value it cannot render.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`, `t:Tempo.Interval.t/0`, `t:Tempo.IntervalSet.t/0` or `t:Tempo.Duration.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * The options of `to_string/2`, `:within` included.
+
+  ### Returns
+
+  * A `t:String.t/0` like `"Jun 15, 2026"`.
+
+  ### Raises
+
+  * The exception `to_string/2` returns.
+
+  ### Examples
+
+      iex> Tempo.to_string!(~o"2026-06-15")
+      "Jun 15, 2026"
+
+  """
+  @spec to_string!(
+          t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
+          | Tempo.Duration.t(),
+          keyword()
+        ) :: String.t()
+  def to_string!(value, options \\ []) do
+    case to_string(value, options) do
+      {:ok, string} -> string
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Format a Tempo as a locale-aware relative time string like `"3 hours ago"` or `"in 2 days"`.
+
+  Routes through Localize's CLDR `relativeTime` patterns. The reference point ("now") comes from `Tempo.utc_now/0` unless overridden with the `:from` option — which makes this safe to use in tests via `Tempo.Clock.Test`.
+
+  The difference is counted in calendar periods of the value's own calendar, on the value's own wall clock: 1 February is "next month" from 31 January, and a Hebrew date counts Hebrew months. A value is where its span starts. A day or longer is a date, counted in days and longer periods; a finer value, or one counted in hours, minutes or seconds, is a moment of its day, in its time zone when it has one, so the hours across a change of offset are the hours that pass.
+
+  For intervals, where the interval starts is used as the target — "the meeting starts in 2 hours" rather than "lasts 2 hours" (for duration phrasing, use `Tempo.to_string/2` on a `Tempo.Duration`). An interval written as a duration and an end starts where the duration is counted back to, and a counted recurrence where its first occurrence does.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`. The value must be anchored (have a year component); an unanchored one is an error.
+
+  ### Options
+
+  * `:from` is a `t:t/0` — the reference point the output is relative to, from where its span starts. When the value and `:from` are both zoned, `:from` is read on the value's clock, and otherwise on its own. A zoned value finer than a day needs a zoned `:from`; a floating one is an error. Defaults to `Tempo.utc_now/0`.
+
+  * `:unit` is the unit to count in: `:year`, `:quarter`, `:month`, `:week`, `:day`, `:hour`, `:minute`, `:second`, or a weekday from `:mon` to `:sun`. The difference is the number of the unit's calendar periods from `:from` to the value, and weeks and weekdays start on the locale's first day of the week. When `:unit` is omitted, it is the largest unit of which a whole one lies between them, but never one finer than the value's own: 2027 is "next year" from July 2026, not "in 6 months".
+
+  * `:format` is `:standard`, `:narrow`, or `:short`. Defaults to `:standard`.
+
+  * `:locale` is a CLDR locale. Defaults to Localize's configured default.
+
+  ### Returns
+
+  * `{:ok, string}` — the relative time.
+
+  * `{:error, exception}` — a `Tempo.UnanchoredError` for a value or `:from` without a year, a `Tempo.IntervalEndpointsError` for an interval without a start, a `Tempo.FloatingTempoError` for a zoned value finer than a day from a floating `:from`, an `ArgumentError` for a value naming several spans, a value or `:from` that is not a Tempo value, or options that are not a keyword list, and Localize's error for a locale, unit or format it does not accept.
+
+  ### Examples
+
+      iex> now = Tempo.from_iso8601!("2026-06-15T12:00:00Z")
+      iex> Tempo.to_relative_string(~o"2026-06-14T12:00:00Z", from: now)
+      {:ok, "yesterday"}
+
+      iex> now = Tempo.from_iso8601!("2026-06-15T12:00:00Z")
+      iex> Tempo.to_relative_string(~o"2026-06-15T15:00:00Z", from: now)
+      {:ok, "in 3 hours"}
+
+      iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
+      {:ok, "next month"}
+
+      iex> Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01")
+      {:ok, "next year"}
+
+  Rosh Hashanah 5787 is the day after 11 September 2026, and in the Hebrew calendar it is next year:
+
+      iex> new_year = Tempo.from_iso8601!("5787-01-01[u-ca=hebrew]")
+      iex> Tempo.to_relative_string(new_year, from: ~o"2026-09-11", unit: :year)
+      {:ok, "next year"}
+
+  A time of day names no year to count from:
+
+      iex> {:error, %Tempo.UnanchoredError{}} = Tempo.to_relative_string(~o"T10:30")
+
+  """
+  @spec to_relative_string(t() | Tempo.Interval.t(), keyword()) ::
+          {:ok, String.t()} | {:error, Exception.t()}
+  def to_relative_string(value, options \\ []) do
+    if Calendars.outside?([value, options]) do
+      to_relative_string(Calendars.inside(value), Calendars.inside(options))
+    else
+      Format.do_to_relative_string(value, options)
+    end
+  end
+
+  @doc """
+  Format a Tempo as a locale-aware relative time string, raising for a value it cannot format.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` or `t:Tempo.Interval.t/0`.
+
+  ### Options
+
+  * The options of `to_relative_string/2`.
+
+  ### Returns
+
+  * A `t:String.t/0` like `"3 hours ago"` or `"in 2 days"`.
+
+  ### Raises
+
+  * The exception `to_relative_string/2` returns.
+
+  ### Examples
+
+      iex> Tempo.to_relative_string!(~o"2027", from: ~o"2026-07-01")
+      "next year"
+
+  """
+  @spec to_relative_string!(t() | Tempo.Interval.t(), keyword()) :: String.t()
+  def to_relative_string!(value, options \\ []) do
+    case to_relative_string(value, options) do
+      {:ok, string} -> string
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Convert an implicit-span `t:#{__MODULE__}.t/0` into the
+  equivalent explicit `t:Tempo.Interval.t/0` or
+  `t:Tempo.IntervalSet.t/0`.
+
+  Every Tempo value represents a bounded interval on the time
+  line. `~o"2026-01"` *is* the interval `[2026-01-01, 2026-02-01)`
+  — `to_interval/1` converts that implicit span to a pair of
+  concrete endpoints under the half-open `[from, to)` convention
+  (`from` inclusive, `to` exclusive). The span is one unit at the
+  value's resolution: a day value becomes a one-day interval, a
+  second value a one-second interval. This is the canonical
+  representation used by the set-operations API (`union/2`,
+  `intersection/2`, `coalesce/1`). See the
+  [interop guide](interop.html) for the spans converted Elixir
+  date and time values cover.
+
+  When the input expands to multiple disjoint spans — a set of
+  explicit values, a range over a time unit, a stepped range —
+  the result is a `%Tempo.IntervalSet{}` with intervals sorted
+  and coalesced. The conversion is idempotent on values that are
+  already explicit.
+
+  A value holding a selection (ISO 8601-2 §12.11) is the dates the
+  selection picks in each period of the units before it:
+  `~o"2018Y3ML1K1IN"` is the first Monday of March 2018, and a set or
+  mask of years resolves one year at a time. A selection in an
+  unspecified year (`~o"X*YL5M7K2IN"`) needs a `:within` window.
+
+  A mask is the span its digits allow: `~o"156X"` is the 1560s and `~o"2026-06-1X"` the 10th to the 19th of June 2026. Candidates that are not consecutive (`~o"2026-06-X5"`), or a mask with a narrower unit after it (`~o"1985-XX-15"`), are a span each, and a candidate the calendar has no room for drops out. An unspecified month, week, day, hour, minute or second (`~o"2026Y6MX*D"`, any day of June 2026) is read as the mask of all its digits is: the month.
+
+  A recurrence is its occurrences however ISO 8601-1 §5.6.1 writes it: a start and a duration, a start and an end that are its first occurrence (each one after it starts where the one before ends and is as long), or a duration and an end that are its last. A rule on the last of these is asked of each period back from the end, so `R3/P1D/2019-01-08/FL7KN` is the three Sundays before 8 January, each over by the end and the nearest it first.
+
+  ### Arguments
+
+  * `value` is a `t:#{__MODULE__}.t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.IntervalSet.t/0`, `t:Tempo.RecurrenceSet.t/0`, or
+    `t:Tempo.Set.t/0`.
+
+  ### Options
+
+  * `:territory` is the territory a season of 21 to 24 is given its dates in, as `in_territory/2` takes it. With neither this nor `:locale` it is the application's `:default_territory`, and then the current locale's.
+
+  * `:locale` is a locale whose territory such a season is given its dates in. A `:territory` wins over it.
+
+  * `:within` is the window whose occurrences you want — a Tempo
+    value such as `~o"2026"`. Every recurrence keeps the occurrences
+    that overlap the window: one already in progress when the
+    window opens, and one that runs past its end. Required for a
+    recurrence with no end (no count and no `UNTIL`), a recurrence
+    with an open start (`R/../P1Y/…`) and a selection in an
+    unspecified year; a single value or interval ignores it.
+
+    A recurrence of one occurrence that has a rule
+    (`FREQ=DAILY;BYDAY=SU;COUNT=1`) is its one interval where that
+    overlaps the window and the empty set where it does not, as a
+    longer one's occurrences are kept. A rule with an open start
+    starts where the window does, so one with a count has that many
+    occurrences from there: `R2/../P1Y/FL1M1DN` within June 2026 to
+    June 2029 is 1 January 2027 and 2028, as
+    `R2/2026-06-01/P1Y/FL1M1DN` is, and an occurrence the window
+    opens in is the first of them.
+
+    A window with no zone bounds a value in a zone in that zone:
+    `~o"2026-06"` is June in New York for a recurrence written in
+    `[America/New_York]`. A window written with a zone or an offset
+    is the moments it names.
+
+    A window of several spans, a `t:Tempo.IntervalSet.t/0` of two separate days say, is the one stretch from the first of their starts to the last of their ends, so a recurrence keeps its occurrences between the spans too: a daily rule within 2 June and 5 June has 3 and 4 June.
+
+    An open-ended window — `~o"2026-09-28/.."`, or
+    `Tempo.Interval.new(from: today)` — keeps the occurrences from
+    its start on. For a value with no end of its own they are a
+    lazy `t:Tempo.IntervalSet.t/0`, walked as it is read, so
+    `Tempo.IntervalSet.first/1` is the next occurrence; a walk that
+    finds none in a thousand years ends.
+
+  * `:coalesce` — `true` merges adjacent or overlapping
+    occurrences into single spans; `false`, the default, keeps
+    each occurrence as its own interval, as event identity needs
+    (`Tempo.ICal`, the RRULE expander). An open-ended window's
+    occurrences are never merged.
+
+  ### Returns
+
+  * `{:ok, interval}` when the value converts to a single
+    contiguous span.
+
+  * `{:ok, interval_set}` when the value expands to multiple
+    disjoint spans.
+
+  * `{:ok, interval_set}` on the lazy backend when an open-ended
+    `:within` window walks a value with no end of its own. It
+    answers `Tempo.IntervalSet.first/1` and the other walking
+    questions; `Tempo.IntervalSet.count/1` and `members/1` raise
+    `Tempo.UnboundedSetError`.
+
+  * `{:error, reason}` when the input cannot be converted — a
+    bare `Tempo.Duration` (no start), a `Tempo` at a resolution
+    with no finer unit available to bound the span (a microsecond
+    converts to a one-microsecond span; only exotic selector
+    resolutions have no span), a one-of `Tempo.Set` (epistemic
+    disjunction is not an interval list; the user must pick one or
+    handle the disjunction themselves), a recurrence with no end and
+    no `:within` window, or a leftover `:bound` option.
+
+  * `{:error, %Tempo.UnboundedRecurrenceError{}}` when a recurrence
+    does not come to its end, a count, an `UNTIL` or the close of the
+    `:within` window, in 10,000 periods of its cadence, or has more than
+    10,000 occurrences before it. What was found is then not all of its
+    occurrences, so none are given. A rule whose parts leave its
+    occurrences far apart for its frequency is not asked of each period
+    (`FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0` goes from each morning to the
+    next), and a rule that has no occurrence, the 31st of April, returns
+    the empty set. A walk kept to a `:within` window
+    begins at the first period that can reach the window, however long
+    before it the recurrence starts, so a daily rule from 1990 has its
+    days of this month; a rule with a count is counted from its start.
+
+  * `{:error, %Tempo.ConversionError{reason: :too_many_values}}` when
+    the value names more than 10,000 values: the sets of
+    `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"` (483,840 minutes), the
+    candidates of a mask (`~o"1XXX-XX-15"`), a range of values, the
+    dates a selection picks, the occurrences of one period of a rule,
+    whatever its count or its window, and the candidates of a period that
+    a position (`I`) picks among. A value is converted to at most 10,000
+    spans at once, as a recurrence gives at most 10,000 occurrences;
+    `Enum` and `Stream` take its values one at a time. The 10,000 here
+    and above is the application's `:max_values_at_once`, which is read
+    when Tempo is compiled: `config :ex_tempo, max_values_at_once: 100_000`.
+
+  * `{:error, %Tempo.UnanchoredError{}}` when the value has no
+    concrete year and resolving the span would depend on the missing
+    one — `~o"X*Y2M28D"` (February is 28 or 29 days), or a yearless
+    masked month in a calendar whose month count varies by year. An
+    interval's duration, or a recurrence's cadence, that cannot be
+    counted from such a value is the same error: the second month
+    after `~o"12M31D"` is a 31 February.
+
+  * `{:error, %Tempo.IntervalEndpointsError{}}` when an interval's
+    duration would be counted from a start or an end that names several
+    spans and holds no set — the day after `~o"2026-06-X5"`, the 5th,
+    the 15th or the 25th — or when an interval of two ends has a set at
+    each of them (`2026Y6M{1,15}D/2026Y6M{20,25}D`). An interval written
+    with a duration from a value that holds a set is the span from each
+    value it names: `2026Y6M{1,15}D/P1D` is a day from the 1st and a day
+    from the 15th, as the recurrence `R2/2026Y6M{1,15}D/P1D` is two from
+    each. One written with two ends, one of which holds a set, is the
+    span from each of its values to the other end, or to each from it:
+    `2026Y6M{1,15}D/2026Y6M20D` runs from the 1st to the 20th and from
+    the 15th to the 20th, and a value at or after the end it runs to is
+    the error that interval is alone.
+
+  * `{:error, %Tempo.ConversionError{reason: :grouped_component}}`
+    when a recurrence would be stepped from a start that names no one
+    value and no set of them — a group of a set, as in
+    `R3/2026Y{1,2}G3MU15D/P1D`.
+
+  * `{:error, %Tempo.InvalidDateError{}}` when a mask names no date —
+    `~o"2026-02-3X"`, as February has no 30th or 31st — or a set none
+    of whose values exists does, `~o"2026Y{2,6}M31D"`.
+
+  * `{:error, %Tempo.EventError{}}` when a computed event has no date where the value asks for it: a year the event is not computed for (`~o"R2/0500Y/P1Y/FL(march-equinox)eN"`, an equinox being computed from 1000 CE), or a name no resolver knows. The error names the event and the year.
+
+  ### Examples
+
+      iex> {:ok, tempo} = Tempo.from_iso8601("2026-01")
+      iex> {:ok, interval} = Tempo.to_interval(tempo)
+      iex> interval.from.time
+      [year: 2026, month: 1]
+      iex> interval.to.time
+      [year: 2026, month: 2]
+      iex> interval.unit
+      :day
+
+      iex> {:ok, tempo} = Tempo.from_iso8601("156X")
+      iex> {:ok, interval} = Tempo.to_interval(tempo)
+      iex> {interval.from.time, interval.to.time}
+      {[year: 1560], [year: 1570]}
+
+      iex> {:ok, duration} = Tempo.from_iso8601("P3M")
+      iex> {:error, %Tempo.ConversionError{reason: :bare_duration}} = Tempo.to_interval(duration)
+
+      iex> {:ok, election_day} = Tempo.from_iso8601("2024Y11MLLL1K1IN/P9DN2K1IN")
+      iex> {:ok, dates} = Tempo.to_interval(election_day)
+      iex> Tempo.relation(dates, ~o"2024-11-05")
+      :equals
+
+      iex> {:ok, christmases} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", within: ~o"2026/2028")
+      iex> Tempo.IntervalSet.count(christmases)
+      2
+
+      iex> {:ok, christmases} = Tempo.to_interval(~o"R/../P1Y/FL12M25DN", within: ~o"2026-12-26/..")
+      iex> Tempo.IntervalSet.first(christmases)
+      ~o"2027Y12M25D/26D"
+
+      iex> nine_each_day = ~o"R/2026-06-01/P1D/FLT9HN"
+      iex> {:ok, two_days} = Tempo.union(~o"2026-06-02", ~o"2026-06-05")
+      iex> {:ok, kept} = Tempo.to_interval(nine_each_day, within: two_days)
+      iex> Tempo.IntervalSet.count(kept)
+      4
+
+  """
+  @spec to_interval(
+          Tempo.t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
+          | Tempo.Duration.t(),
+          keyword()
+        ) ::
+          {:ok, Tempo.Interval.t() | Tempo.IntervalSet.t()} | {:error, error_reason()}
+  def to_interval(value, options \\ []) do
+    if Calendars.outside?([value, options]) do
+      Calendars.outside(to_interval(Calendars.inside(value), Calendars.inside(options)))
+    else
+      do_to_interval(value, options)
+    end
+  end
+
+  defp do_to_interval(value, options) do
+    if Group.abstract_season?(value) or Group.abstract_season?(Keyword.get(options, :within)) do
+      season_to_interval(value, options)
+    else
+      value_to_interval(value, options)
+    end
+  end
+
+  # A season of 21 to 24 is given its dates where it is converted, and so
+  # is one that is the window: in the territory or the locale the caller
+  # names, a territory winning over a locale, and with neither in the
+  # application's default territory and then the current locale's
+  # (`Tempo.Territory.resolve/1`).
+  defp season_to_interval(value, options) do
+    with {:ok, value} <- with_seasons_dated(value, options),
+         {:ok, within} <- with_seasons_dated(Keyword.get(options, :within), options) do
+      value_to_interval(value, window_with_dates(options, within))
+    end
+  end
+
+  defp window_with_dates(options, nil) do
+    options
+  end
+
+  defp window_with_dates(options, within) do
+    Keyword.put(options, :within, within)
+  end
+
+  defp value_to_interval(value, options) do
+    with :ok <- check_bound_option(options, "Tempo.to_interval/2"),
+         options = window_in_value_frame(value, options),
+         :ok <- ends_expand(value),
+         value = counted_from_points(value),
+         value = Selection.read_in_its_period(value),
+         {:ok, value} <- placed_on_window(value, Keyword.get(options, :within)),
+         :one_start <- recurrence_from_each_value(value, options),
+         :ok <- rule_has_a_date(value),
+         :ok <- counted_in_steps(value),
+         :ok <- walkable(value) do
+      case open_window_start(Keyword.get(options, :within)) do
+        {:ok, window_from} ->
+          occurrences_from(value, window_from, options)
+
+        {:error, _reason} = error ->
+          error
+
+        :bounded ->
+          value
+          |> materialise(options)
+          |> spans_between_points(value)
+      end
+    end
+  end
+
+  # A recurrence is counted in occurrences, none or more, and each is a step
+  # of its cadence on from the one before. A count below none and a cadence
+  # of no length are no recurrence, and are said so: an interval built with
+  # a count of -3 was handed back as it was given, and `R3/2026-06-01/P0D`
+  # gave its start three times, each an interval of no length.
+  defp counted_in_steps(%Interval{recurrence: recurrence} = interval)
+       when is_integer(recurrence) and recurrence < 0 do
+    {:error,
+     ConversionError.exception(
+       value: interval,
+       reason:
+         "A recurrence has a number of occurrences, none or more, and #{Calendars.inspect(interval)} " <>
+           "has #{recurrence}."
+     )}
+  end
+
+  defp counted_in_steps(
+         %Interval{recurrence: recurrence, duration: %Tempo.Duration{time: time}} = interval
+       )
+       when recurrence not in [0, 1] do
+    if Enum.all?(time, &no_amount?/1) do
+      {:error, steps_by_nothing_error(interval)}
+    else
+      :ok
+    end
+  end
+
+  defp counted_in_steps(_value) do
+    :ok
+  end
+
+  defp no_amount?({_unit, {amount, _precision}}) do
+    amount == 0
+  end
+
+  defp no_amount?({_unit, amount}) do
+    amount == 0
+  end
+
+  defp steps_by_nothing_error(%Interval{duration: cadence} = interval) do
+    ConversionError.exception(
+      value: interval,
+      reason:
+        "A recurrence steps by its cadence from one occurrence to the next, and " <>
+          "#{Calendars.inspect(cadence)} is no length of time."
+    )
+  end
+
+  # A recurrence's rule that selects a day of a month, a weekday, a week or a
+  # month from the end counts it in the date of each occurrence, and a
+  # recurrence that starts with no year (`R3/6M/P1M/FL15DN`) has no date to
+  # count it in: which days a month has, and which is a Monday, depend on the
+  # year. Months as they are written and the units of a time of day need none.
+  defp rule_has_a_date(%Interval{
+         from: %__MODULE__{time: time} = from,
+         repeat_rule: %__MODULE__{time: [{:selection, selection} | _units]}
+       })
+       when is_list(time) do
+    if Keyword.has_key?(time, :year) or not Selection.needs_a_date?(selection) do
+      :ok
+    else
+      {:error, UnanchoredError.exception(value: from)}
+    end
+  end
+
+  defp rule_has_a_date(_value) do
+    :ok
+  end
+
+  # A group of a set at an end of an interval (`R3/2026Y{1,2}G3MU15D/P1D`) names
+  # a span in each of its groups, which nothing expands, so the interval has
+  # no one start to count from or end to count to.
+  defp ends_expand(%Interval{from: from, to: to}) do
+    endpoint = Enum.find([from, to], &group_of_set_end?/1)
+
+    if is_nil(endpoint) do
+      :ok
+    else
+      {:error, materialisation_error(endpoint, :grouped_component)}
+    end
+  end
+
+  defp ends_expand(_value) do
+    :ok
+  end
+
+  defp group_of_set_end?(%__MODULE__{time: time}) when is_list(time) do
+    group_of_set?(time)
+  end
+
+  defp group_of_set_end?(_absent) do
+    false
+  end
+
+  # A duration is counted from a point. A start or an end that names a span
+  # (a mask, a group) is read as the point the span starts at before the
+  # duration is counted, as it is in an interval written with two ends:
+  # `2026YXXO/P1M` runs a month from 1 January. One that names several spans
+  # is left to be walked, or refused, as it is written.
+  defp counted_from_points(%Interval{duration: %Duration{}} = interval) do
+    if Interval.points?(interval) do
+      interval
+    else
+      points_or_as_written(interval)
+    end
+  end
+
+  defp counted_from_points(value) do
+    value
+  end
+
+  defp points_or_as_written(interval) do
+    case Interval.endpoints_as_points(interval) do
+      {:ok, counted_from} -> counted_from
+      {:error, _several_spans} -> interval
+    end
+  end
+
+  # A `:within` window with no zone bounds a value in a zone in that zone.
+  defp window_in_value_frame(value, options) do
+    case Keyword.fetch(options, :within) do
+      {:ok, window} -> Keyword.put(options, :within, Interval.window_in_frame_of(window, value))
+      :error -> options
+    end
+  end
+
+  # An interval written with a duration, or a recurrence, steps from its
+  # start as it is written, so a start that is no one point — a mask, a
+  # group, an unspecified unit (`2026Y6MXXD/P1M`) — is still in the ends of
+  # each span it gives. Each is then read as an interval written with two
+  # ends is: from the point its start's span starts at to the point its
+  # end's does.
+  defp spans_between_points(
+         {:ok, converted},
+         %Interval{recurrence: recurrence, duration: duration} = written
+       )
+       when recurrence != 1 or not is_nil(duration) do
+    if Interval.points?(written) do
+      {:ok, converted}
+    else
+      between_points(converted)
+    end
+  end
+
+  defp spans_between_points(result, _written) do
+    result
+  end
+
+  defp between_points(%Interval{} = span) do
+    Interval.endpoints_as_points(span)
+  end
+
+  defp between_points(%IntervalSet{} = set) do
+    if IntervalSet.do_bounded?(set) do
+      members_between_points(set)
+    else
+      {:ok, set}
+    end
+  end
+
+  defp members_between_points(set) do
+    as_points =
+      set
+      |> IntervalSet.members()
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, spans} ->
+        case Interval.endpoints_as_points(member) do
+          {:ok, span} -> {:cont, {:ok, [span | spans]}}
+          {:error, _exception} = error -> {:halt, error}
+        end
+      end)
+
+    case as_points do
+      {:ok, spans} -> IntervalSet.new(Enum.reverse(spans), metadata: IntervalSet.metadata(set))
+      {:error, _exception} = error -> error
+    end
+  end
+
+  # A recurrence whose start has no year, given a dated window, starts on the
+  # window's first day, month or year, whichever its start lacks — as
+  # `at/2` places one value on another: `R/T22H/PT1H` within 15 June is from
+  # 22:00 on 15 June, and `R/12M31D/P1D` within 2026 from 31 December 2026.
+  #
+  # One occurrence that has a rule is such a recurrence (`R1/T10H/PT1H/FL7KN`,
+  # the first hour of the first Sunday), and was refused as a value with no
+  # year. With no rule it is an interval, on the cycle it is written on.
+  defp placed_on_window(
+         %Interval{
+           recurrence: recurrence,
+           repeat_rule: rule,
+           from: %__MODULE__{time: [{unit, _} | _] = time} = start
+         } =
+           interval,
+         within
+       )
+       when (recurrence != 1 or is_struct(rule, __MODULE__)) and not is_nil(within) do
+    with false <- on_the_time_line?(time),
+         %__MODULE__{time: window_time} = window_from <- bound_lower(within),
+         true <- on_the_time_line?(window_time),
+         {:ok, %__MODULE__{} = placed} <- placed_start(window_from, unit, start) do
+      {:ok, %{interval | from: placed}}
+    else
+      {:error, _reason} = error -> error
+      _not_placed -> {:ok, interval}
+    end
+  end
+
+  defp placed_on_window(value, _within) do
+    {:ok, value}
+  end
+
+  # A day of the week starts on the first such day on or after the window's
+  # start.
+  defp placed_start(
+         window_from,
+         :day_of_week,
+         %__MODULE__{time: [{:day_of_week, weekday} | finer]} = start
+       )
+       when is_integer(weekday) do
+    case at_resolution(window_from, :week) do
+      %__MODULE__{} = week -> place_on(week, start)
+      {:error, _no_week} -> weekday_on_or_after(window_from, weekday, finer)
+    end
+  end
+
+  defp placed_start(window_from, unit, start) do
+    with %__MODULE__{} = base <- at_resolution(window_from, placement_unit(unit)),
+         do: place_on(base, start)
+  end
+
+  defp weekday_on_or_after(window_from, weekday, finer) do
+    with %__MODULE__{} = day <- at_resolution(window_from, :day),
+         {:ok, date} <- to_date(day) do
+      first =
+        date
+        |> Kday.kday_on_or_after(weekday)
+        |> from_date()
+
+      if finer == [] do
+        {:ok, first}
+      else
+        place_on(first, %{first | time: finer})
+      end
+    end
+  end
+
+  # The unit a start with no year is placed below: the window's day for a
+  # time of day, its year for a month, and so on.
+  defp placement_unit(:hour) do
+    :day
+  end
+
+  defp placement_unit(:minute) do
+    :hour
+  end
+
+  defp placement_unit(:second) do
+    :minute
+  end
+
+  defp placement_unit(:day) do
+    :month
+  end
+
+  defp placement_unit(:day_of_week) do
+    :week
+  end
+
+  defp placement_unit(_unit) do
+    :year
+  end
+
+  # A recurrence from a start that holds a set or a range
+  # (`R3/2026Y6M{1,15}D/P1M`, from the 1st and the 15th of June) is a
+  # recurrence from each of the start's values, as a set in a value is each of
+  # its members: six occurrences here. A start that holds anything else (a
+  # mask, a group) is walked, or refused, as one start.
+  #
+  # An interval written with a duration is the one occurrence of such a
+  # recurrence, and is the span from each value too (decided 2026-10-07):
+  # `2026Y6M{1,15}D/P1D` is a day from the 1st and a day from the 15th, and
+  # `P1D/2026Y6M{1,15}D` the day to each. It was refused as an interval with
+  # no one start, where `R2/2026Y6M{1,15}D/P1D` gave the two days from each.
+  defp recurrence_from_each_value(
+         %Interval{recurrence: recurrence, from: %__MODULE__{} = from} = interval,
+         options
+       )
+       when recurrence != 1 do
+    from_each(from, &%{interval | from: &1}, interval, options)
+  end
+
+  defp recurrence_from_each_value(
+         %Interval{from: %__MODULE__{} = from, to: to, duration: %Duration{}} = interval,
+         options
+       )
+       when to in [nil, :undefined] do
+    from_each(from, &%{interval | from: &1}, interval, options)
+  end
+
+  defp recurrence_from_each_value(
+         %Interval{from: from, to: %__MODULE__{} = to, duration: %Duration{}} = interval,
+         options
+       )
+       when from in [nil, :undefined] do
+    from_each(to, &%{interval | to: &1}, interval, options)
+  end
+
+  # An interval written with two ends, one of which holds a set, is the span
+  # from each of its values to the other end, or from the other end to each
+  # (decided 2026-10-08), as one written with a duration is the span from
+  # each: `2026Y6M{1,15}D/2026Y6M20D` runs from the 1st to the 20th and from
+  # the 15th to the 20th. It was refused as an interval with no one start.
+  # A set at each end names no one span for any of its values, and is
+  # refused still.
+  defp recurrence_from_each_value(
+         %Interval{
+           recurrence: 1,
+           from: %__MODULE__{} = from,
+           to: %__MODULE__{} = to,
+           duration: nil
+         } =
+           interval,
+         options
+       ) do
+    case {Enumeration.names_each_value?(from), Enumeration.names_each_value?(to)} do
+      {true, false} -> between_each(from, &[from: &1, to: to], interval, options)
+      {false, true} -> between_each(to, &[from: from, to: &1], interval, options)
+      _one_span_or_a_set_at_each_end -> :one_start
+    end
+  end
+
+  defp recurrence_from_each_value(_value, _options) do
+    :one_start
+  end
+
+  # The span between each value of an end that holds a set and the other
+  # end. Each is the interval its two ends make, held to the order an
+  # interval's ends are in, so a value at or after the end it runs to is
+  # the error it is alone. They are kept apart, overlapping as they do,
+  # unless `:coalesce` is asked.
+  defp between_each(%__MODULE__{} = endpoint, ends, %Interval{metadata: metadata}, options) do
+    with {:ok, values} <- Enumeration.expand(endpoint),
+         {:ok, spans} <- spans_between(values, ends, metadata) do
+      IntervalSet.new(spans, coalesce: coalesce_opt(options))
+    end
+  end
+
+  defp spans_between(values, ends, metadata) do
+    all_spans =
+      values
+      |> Enum.reduce_while({:ok, []}, fn value, {:ok, spans} ->
+        case span_between(ends.(value), metadata) do
+          {:ok, span} -> {:cont, {:ok, [span | spans]}}
+          {:error, _exception} = error -> {:halt, error}
+        end
+      end)
+
+    case all_spans do
+      {:ok, spans} -> {:ok, Enum.reverse(spans)}
+      {:error, _exception} = error -> error
+    end
+  end
+
+  defp span_between(ends, metadata) do
+    with {:ok, span} <- Interval.new(ends ++ [metadata: metadata]),
+         do: Interval.endpoints_as_points(span)
+  end
+
+  # The most spans a value is converted to at once, as a recurrence gives at
+  # most `@recurrence_safety_cap` occurrences. It is the most values of one
+  # that are listed (`Tempo.Enumeration.listed_at_once/0`): the application's
+  # `:max_values_at_once` (`Tempo.Limit`), 10,000 unless it is set.
+  @spans_at_once Tempo.Limit.values_at_once()
+
+  # The interval with each value of an end that holds a set in its place.
+  defp from_each(%__MODULE__{} = endpoint, with_value, interval, options) do
+    case Enumeration.expand(endpoint) do
+      {:ok, values} ->
+        occurrences_from_each(Enum.map(values, with_value), interval, options, {[], 0})
+
+      {:error, _exception} = error ->
+        error
+
+      :not_expandable ->
+        :one_start
+    end
+  end
+
+  # The occurrences from each start, gathered with their count: no more than
+  # `@spans_at_once` are given, as from one start.
+  defp occurrences_from_each(_starts, interval, _options, {_occurrences, count})
+       when count > @spans_at_once do
+    {:error, too_many_spans_error(interval)}
+  end
+
+  defp occurrences_from_each([], _interval, options, {occurrences, _count}) do
+    IntervalSet.new(occurrences, coalesce: coalesce_opt(options))
+  end
+
+  defp occurrences_from_each([from_one | from_others], interval, options, {occurrences, count}) do
+    case to_interval(from_one, options) do
+      {:ok, %Interval{} = occurrence} ->
+        occurrences_from_each(
+          from_others,
+          interval,
+          options,
+          {[occurrence | occurrences], count + 1}
+        )
+
+      {:ok, %IntervalSet{} = set} ->
+        gathered_from_each(set, from_others, interval, options, {occurrences, count})
+
+      {:error, _exception} = error ->
+        error
+    end
+  end
+
+  # An open-ended window gives each start's occurrences lazily, and lazy sets
+  # are not merged.
+  defp gathered_from_each(set, starts, interval, options, {occurrences, count}) do
+    if IntervalSet.do_bounded?(set) do
+      own = IntervalSet.members(set)
+      gathered = {Enum.reverse(own, occurrences), count + Enum.count(own)}
+      occurrences_from_each(starts, interval, options, gathered)
+    else
+      {:error,
+       ConversionError.exception(
+         value: interval,
+         reason:
+           "A recurrence from a start that holds several values gathers the occurrences " <>
+             "of each, which an open-ended `:within` window does not end. Give the window an end."
+       )}
+    end
+  end
+
+  # A recurrence is walked by stepping its start by its cadence and applying
+  # its selection to each step. A cadence its start cannot be stepped by (a
+  # month, from a week) gives nothing to walk, and is an error.
+  defp walkable(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: %Tempo{time: from_time} = from,
+           duration: %Tempo.Duration{} = cadence
+         } = interval
+       )
+       when recurrence != 1 do
+    dated? = on_the_time_line?(from_time)
+
+    case Math.add(from, cadence) do
+      # A cadence that brings a start with no year back to itself (`R3/7K/P1W`,
+      # `R3/T22H/P1D`) makes every occurrence the same whole turn of its axis,
+      # which no two endpoints on that axis can write.
+      %Tempo{time: ^from_time} when not dated? -> {:error, whole_turn_error(from, cadence)}
+      %Tempo{} -> selectable(interval.repeat_rule, interval)
+      {:error, reason} -> {:error, step_error(from, reason)}
+      # A start that holds unspecified digits steps to a set of candidates
+      # (`202XY` and a month, some February of the 2020s), not to one next
+      # occurrence.
+      _several -> {:error, step_error(from, :grouped_component)}
+    end
+  end
+
+  defp walkable(%Tempo.Interval{repeat_rule: %Tempo{} = rule} = interval) do
+    selectable(rule, interval)
+  end
+
+  # A value holding a selection (ISO 8601-2 §12.11) selects as a rule does.
+  defp walkable(%Tempo{time: time} = value) when is_list(time) do
+    case List.keyfind(time, :selection, 0) do
+      {:selection, selection} -> selectable(%{value | time: selection}, value)
+      nil -> :ok
+    end
+  end
+
+  defp walkable(_value) do
+    :ok
+  end
+
+  # Whether a value is placed on the time line by a year of its own, where one
+  # with no year lies on an axis that comes round again.
+  defp on_the_time_line?(time) do
+    case List.keyfind(time, :year, 0) do
+      {:year, year} when is_integer(year) -> true
+      {:year, {year, _annotations}} when is_integer(year) -> true
+      _no_year -> false
+    end
+  end
+
+  defp whole_turn_error(from, cadence) do
+    ConversionError.exception(
+      value: from,
+      reason:
+        "#{Calendars.inspect(cadence)} brings #{Calendars.inspect(from)}, which has no year, back to itself, so " <>
+          "each occurrence would be the same whole turn of its axis. Place the start on a " <>
+          "date first with `Tempo.at/2` or `Tempo.on/2`."
+    )
+  end
+
+  # The stepper names what it cannot step by an atom where it has no value to
+  # name; the start is in scope here.
+  defp step_error(_from, reason) when is_exception(reason) do
+    reason
+  end
+
+  defp step_error(from, :unanchored) do
+    UnanchoredError.exception(value: from)
+  end
+
+  defp step_error(from, reason) do
+    materialisation_error(from, reason)
+  end
+
+  # The span a value and a duration give: the stepper's error when the
+  # duration cannot be counted from the value (a day past 28 February of no
+  # year), never an interval holding it. A value that holds unspecified
+  # digits steps to a set of candidates, which is no one end either.
+  defp derived_span({:error, reason}, value, _span) do
+    {:error, step_error(value, reason)}
+  end
+
+  defp derived_span(%Tempo{} = derived, _value, span) do
+    {:ok, span.(derived)}
+  end
+
+  defp derived_span(_several, value, _span) do
+    {:error, step_error(value, :grouped_component)}
+  end
+
+  defp selectable(%Tempo{time: time}, interval) do
+    Selection.calendar_week_in_its_year(time, interval)
+  end
+
+  defp selectable(_no_rule, _interval) do
+    :ok
+  end
+
+  @doc false
+  # 1.x called the window `:bound`. A leftover `:bound` is an error naming
+  # `:within`, never silently ignored — every function that takes the window
+  # checks its options here. An open-ended window (`2026-09-28/..`) is a lazy
+  # walk that only `to_interval/2` and `to_interval_set/2` return, so every
+  # other function that takes a window needs one with an end.
+  @spec check_within_option(keyword(), String.t()) :: :ok | {:error, Exception.t()}
+  def check_within_option(options, function) do
+    with :ok <- check_bound_option(options, function) do
+      check_window_end(Keyword.get(options, :within), function)
+    end
+  end
+
+  defp check_bound_option(options, function) do
+    if Keyword.has_key?(options, :bound) do
+      {:error,
+       ArgumentError.exception(
+         ":bound is not an option of #{function}; pass the window as :within"
+       )}
+    else
+      :ok
+    end
+  end
+
+  defp check_window_end(within, function) do
+    case open_window_start(within) do
+      :bounded ->
+        :ok
+
+      {:ok, _start} ->
+        {:error,
+         ArgumentError.exception(
+           "#{function} needs a :within window with an end; " <>
+             "an open-ended window is for Tempo.to_interval_set/2"
+         )}
+
+      # A window with no start, or whose start is no point in time.
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # An open-ended window — `~o"2026-09-28/.."`, or `Tempo.Interval.new(from: today)`
+  # — has a start and no end. Its start is the earliest instant of its `from`,
+  # as a bounded window's is, so a masked or selected `from` starts where the
+  # span it names does.
+  defp open_window_start(%Tempo.Interval{
+         from: %Tempo{} = from,
+         to: to,
+         duration: nil,
+         recurrence: 1
+       })
+       when to in [nil, :undefined] do
+    with %Tempo{} = start <- bound_lower(from),
+         true <- anchored?(start) do
+      {:ok, start}
+    else
+      _no_point_in_time ->
+        {:error,
+         ArgumentError.exception(
+           "an open-ended :within window must start at a point in time; " <>
+             "#{Calendars.inspect(from)} names none"
+         )}
+    end
+  end
+
+  # A window with no start (`~o"../2027"`, `~o"../.."`) names no moment to
+  # begin from. It was taken for a bounded one, and refused further on as a
+  # span that cannot be a member of a set, which says nothing of windows.
+  defp open_window_start(%Tempo.Interval{from: from, duration: nil, recurrence: 1} = within)
+       when from in [nil, :undefined] do
+    {:error,
+     ArgumentError.exception(
+       "a :within window needs a start, and #{Calendars.inspect(within)} has none: a window is the " <>
+         "time from one moment to another, or from one moment on"
+     )}
+  end
+
+  defp open_window_start(_within) do
+    :bounded
+  end
+
+  # With an open-ended window, a value with no end of its own walks its
+  # occurrences lazily from the window's start; any other value materialises as
+  # in a bounded window, keeping what overlaps the time from the start on.
+  defp occurrences_from(value, window_from, options) do
+    if unending?(value) do
+      lazy_occurrences(value, window_from, options)
+    else
+      materialise(value, options)
+    end
+  end
+
+  # A value with no end of its own: a recurrence with no count or UNTIL, one
+  # with an open start, one over an open domain, a selection made in every
+  # year, or a recurrence set holding one — a conditional member counting when
+  # the set it reads its condition from has no end.
+  defp unending?(%Tempo.Interval{from: %Tempo.Set{} = domain}) do
+    open_domain?(domain)
+  end
+
+  # A rule with no start and a count has as many occurrences from the
+  # window's start as it counts, and ends. It was walked as one with no end,
+  # stretch by stretch, and counted afresh in each: `FREQ=DAILY;COUNT=2`
+  # from 2026 on was two days of each stretch the walk took.
+  defp unending?(%Tempo.Interval{from: from, to: to, recurrence: :infinity})
+       when from in [nil, :undefined] and to in [nil, :undefined] do
+    true
+  end
+
+  defp unending?(%Tempo.Interval{from: %Tempo{}, to: to, recurrence: :infinity})
+       when to in [nil, :undefined] do
+    true
+  end
+
+  defp unending?(%Tempo.RecurrenceSet{members: members}) do
+    Enum.any?(members, &unending?/1)
+  end
+
+  defp unending?(%Conditional{member: member, falls_on: falls_on}) do
+    unending?(member) or unending?(falls_on)
+  end
+
+  defp unending?(%Tempo{time: time}) do
+    every_year_selection?(time)
+  end
+
+  defp unending?(_value) do
+    false
+  end
+
+  defp open_domain?(%Tempo.Set{set: [_ | _] = members}) do
+    Enum.any?(members, &open_ended_range?/1)
+  end
+
+  defp open_domain?(%Tempo.Set{set: [], except: [], filter: nil}) do
+    false
+  end
+
+  defp open_domain?(%Tempo.Set{set: []}) do
+    true
+  end
+
+  defp open_ended_range?(%Tempo.Range{last: :undefined}) do
+    true
+  end
+
+  defp open_ended_range?(_member) do
+    false
+  end
+
+  defp every_year_selection?(time) do
+    case Enum.split_while(time, &(not match?({:selection, _}, &1))) do
+      {context, [{:selection, _selection} | _trailing]} ->
+        Keyword.get(context, :year) in [nil, :any]
+
+      {_time, []} ->
+        false
+    end
+  end
+
+  # How far the walk from an open-ended window's start goes without finding an
+  # occurrence before it ends. A calendar rule repeats within its calendar's
+  # cycle — 400 years in the Gregorian — so a rule with no occurrence in a
+  # thousand years has none to find.
+  @occurrence_horizon %Tempo.Duration{time: [year: 1_000]}
+
+  # The occurrences of a value with no end of its own, from an open-ended
+  # window's start on, as a lazy set. The walk materialises one bounded window
+  # at a time, as a `:within` window does: small at first, so the next
+  # occurrence comes quickly, then doubling to a limit. An occurrence belongs to
+  # the window it starts in, the first window also keeping one already under
+  # way, so none repeats and they come in time order, never coalesced. The walk
+  # ends once the horizon passes with no occurrence, or where a window cannot be
+  # materialised (beyond a calendar's range); an error in the first window is
+  # returned, and a computed event with no date in a later one is raised when
+  # the walk reaches it (`walked/5`).
+  defp lazy_occurrences(value, window_from, options) do
+    base =
+      value
+      |> cadence_unit()
+      |> walk_base()
+
+    walk_options = Keyword.delete(options, :coalesce)
+
+    with %Tempo{} = first_to <- walk_end(window_from, base, 0),
+         {:ok, first} <- walk_window(value, window_from, first_to, walk_options) do
+      found = IntervalSet.members(first)
+      horizon = horizon_after(Math.add(window_from, @occurrence_horizon), found)
+
+      later =
+        {first_to, 1, horizon}
+        |> Stream.unfold(&walk_next(&1, value, base, walk_options))
+        |> Stream.concat()
+
+      {:ok, IntervalSet.lazy(Stream.concat(found, later), metadata: IntervalSet.metadata(first))}
+    end
+  end
+
+  defp walk_next({_window_from, _step, horizon}, _value, _base, _options)
+       when not is_struct(horizon, Tempo) do
+    nil
+  end
+
+  defp walk_next({window_from, step, horizon}, value, base, options) do
+    with :earlier <- Compare.compare_endpoints(window_from, horizon),
+         %Tempo{} = window_to <- walk_end(window_from, base, step) do
+      value
+      |> walk_window(window_from, window_to, options)
+      |> walked(window_from, window_to, step, horizon)
+    else
+      _past_the_horizon_or_unreachable -> nil
+    end
+  end
+
+  # A window's occurrences that start in it, and the walk's next state; a window
+  # that cannot be materialised ends the walk. One in which a computed event
+  # has no date does not end it quietly, which would say the event stops
+  # happening: the walk goes back to its smallest window, so that it gives
+  # every occurrence before the year the event is not computed for, and there
+  # it raises the event's error, as `Enum` raises for a walk it cannot make.
+  defp walked({:ok, set}, window_from, window_to, step, horizon) do
+    found =
+      set
+      |> IntervalSet.members()
+      |> Enum.filter(&starts_from?(&1, window_from))
+
+    {found, {window_to, step + 1, horizon_after(horizon, found)}}
+  end
+
+  defp walked({:error, %EventError{}}, window_from, _window_to, step, horizon) when step > 0 do
+    {[], {window_from, 0, horizon}}
+  end
+
+  defp walked({:error, %EventError{} = no_date}, _window_from, _window_to, _step, _horizon) do
+    raise(no_date)
+  end
+
+  defp walked({:error, _reason}, _window_from, _window_to, _step, _horizon) do
+    nil
+  end
+
+  defp walk_window(value, window_from, window_to, options) do
+    window = %Tempo.Interval{from: window_from, to: window_to}
+
+    case materialise(value, Keyword.put(options, :within, window)) do
+      {:ok, %IntervalSet{} = set} -> {:ok, set}
+      {:ok, %Tempo.Interval{} = interval} -> IntervalSet.new([interval])
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # The end of the walk's `step`th window: the base size, doubled each step up
+  # to 64 times it.
+  defp walk_end(window_from, {unit, count}, step) do
+    Math.add(window_from, %Tempo.Duration{time: [{unit, count * Integer.pow(2, min(step, 6))}]})
+  end
+
+  defp starts_from?(%Tempo.Interval{from: %Tempo{} = from}, window_from) do
+    at_or_after_bound?(from, window_from)
+  end
+
+  defp starts_from?(_occurrence, _window_from) do
+    false
+  end
+
+  # The walk ends a horizon after the last occurrence it found.
+  defp horizon_after(horizon, []) do
+    horizon
+  end
+
+  defp horizon_after(_horizon, found) do
+    horizon_from(List.last(found))
+  end
+
+  defp horizon_from(%Tempo.Interval{from: %Tempo{} = from}) do
+    Math.add(from, @occurrence_horizon)
+  end
+
+  # The finest unit a value recurs by, which sizes the walk's windows.
+  defp cadence_unit(%Tempo.Interval{duration: %Tempo.Duration{time: [_ | _] = time}}) do
+    time
+    |> List.last()
+    |> elem(0)
+  end
+
+  defp cadence_unit(%Tempo.RecurrenceSet{members: [_ | _] = members}) do
+    members
+    |> Enum.map(&cadence_unit/1)
+    |> Enum.reduce(&finer_unit/2)
+  end
+
+  defp cadence_unit(%Conditional{member: member}) do
+    cadence_unit(member)
+  end
+
+  defp cadence_unit(_value) do
+    :year
+  end
+
+  defp finer_unit(unit, other) do
+    if coarser_unit?(unit, other) do
+      other
+    else
+      unit
+    end
+  end
+
+  defp walk_base(unit) when unit in [:year, :month] do
+    {:year, 1}
+  end
+
+  defp walk_base(unit) when unit in [:week, :day] do
+    {:month, 1}
+  end
+
+  defp walk_base(:hour) do
+    {:day, 1}
+  end
+
+  defp walk_base(:minute) do
+    {:hour, 1}
+  end
+
+  defp walk_base(:second) do
+    {:minute, 1}
+  end
+
+  defp walk_base(_unit) do
+    {:year, 1}
+  end
+
+  @doc false
+  # A window with each of its ends that has no zone placed in UTC: how
+  # `Tempo.ICal.available/2` reads a window written with none, since the
+  # times it is met with are in UTC or a named zone (RFC 7953) and a value
+  # with no zone is not combined with a zoned one.
+  @spec read_in_utc(term()) :: term()
+  def read_in_utc(%__MODULE__{} = value) do
+    with true <- floating?(value),
+         {:ok, placed} <- in_zone(value, "Etc/UTC") do
+      placed
+    else
+      _zoned_or_unplaceable -> value
+    end
+  end
+
+  def read_in_utc(%Interval{from: from, to: to} = interval) do
+    %{interval | from: read_in_utc(from), to: read_in_utc(to)}
+  end
+
+  def read_in_utc(%IntervalSet{} = set) do
+    if IntervalSet.do_bounded?(set) do
+      IntervalSet.with_intervals(set, Enum.map(IntervalSet.members(set), &read_in_utc/1))
+    else
+      set
+    end
+  end
+
+  def read_in_utc(other) do
+    other
+  end
+
+  @doc false
+  # The occurrences a `:within` window keeps — those that overlap it — for the
+  # modules that assemble occurrences themselves (an iCalendar's events, a
+  # JSCalendar's), so every function that takes a window keeps the same ones.
+  # No window keeps them all.
+  @spec occurrences_within([Tempo.Interval.t()], keyword()) ::
+          {:ok, [Tempo.Interval.t()]} | {:error, error_reason()}
+  def occurrences_within(occurrences, options) do
+    keep_within(occurrences, options)
+  end
+
+  # A recurrence of no occurrences (`R0/2026-06-15/P1D`) is an empty set.
+  defp materialise(%Tempo.Interval{recurrence: 0}, _options) do
+    IntervalSet.new([])
+  end
+
+  # A bounded recurrence (`R3/1985-01/P1M`) expands to N disjoint
+  # intervals. Each occurrence starts at `from + i*duration` and
+  # runs for one duration. Requires `Tempo.Math.add/2`.
+  #
+  # When `repeat_rule` is present, BY-rule selections apply
+  # before the COUNT cap: N = "the first N occurrences that
+  # survived the BY-rule filter," per RFC 5545. A `:within` window
+  # then keeps those of the N that overlap it.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: n,
+           direction: direction,
+           from: %Tempo{} = from,
+           duration: %Tempo.Duration{} = duration
+         } = interval,
+         options
+       )
+       when is_integer(n) and n > 1 do
+    {from, floor, interval} = selection_start(from, interval)
+
+    step =
+      if direction == -1 do
+        Duration.negate(duration)
+      else
+        duration
+      end
+
+    walk =
+      iterate_recurrence(
+        {from, counted_from(floor, options), 0},
+        step,
+        occurrence_end_fn(from, duration, interval),
+        fn _start -> true end,
+        selection_fn(interval, duration),
+        interval.metadata,
+        n
+      )
+
+    with {:ok, intervals} <- walk,
+         {:ok, kept} <- keep_within(intervals, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
+    end
+  end
+
+  # An unbounded recurrence with UNTIL: `recurrence: :infinity`
+  # plus `to: %Tempo{}`. Iterate by one cadence at a time and stop
+  # the step before the first occurrence whose start is at or past
+  # the UNTIL endpoint. `from + i*duration` while `from(i) ≤ to`, and
+  # every occurrence a period's selection gives is held to the same
+  # inclusive UNTIL (RFC 5545), so a week expanded to its days stops
+  # at the UNTIL day. A `:within` window then keeps those that start
+  # within it.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: :infinity,
+           from: %Tempo{} = from,
+           duration: %Tempo.Duration{} = duration,
+           to: %Tempo{} = until
+         } = interval,
+         options
+       ) do
+    {from, floor, interval} = selection_start(from, interval)
+    occurrence_end = occurrence_end_fn(from, duration, interval)
+    within = Keyword.get(options, :within)
+    first = first_period_reaching({from, duration, occurrence_end}, interval, within)
+
+    walk =
+      iterate_recurrence(
+        {from, floor, first},
+        duration,
+        occurrence_end,
+        &under_until?(&1, until),
+        selection_fn(interval, duration),
+        interval.metadata
+      )
+
+    with {:ok, intervals} <- walk,
+         under_until = Enum.filter(intervals, &starts_under_until?(&1, until)),
+         {:ok, kept} <- keep_within(under_until, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
+    end
+  end
+
+  # A recurrence with no end: `recurrence: :infinity`, `to` is
+  # nil/:undefined, so the caller's `:within` window is what ends it.
+  # Iterate while every new occurrence's start falls strictly before
+  # the window's end — a period that starts before it can select days
+  # at or past it (a week expanded to its days) — and keep the
+  # occurrences that overlap the window, as every recurrence does:
+  # `R/2020-01-01/P1Y` within 2026 is 2026's occurrence alone.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: :infinity,
+           from: %Tempo{},
+           duration: %Tempo.Duration{},
+           to: to
+         } = interval,
+         options
+       )
+       when to in [nil, :undefined] do
+    materialise_unending(interval, Keyword.get(options, :within), options)
+  end
+
+  # A count-1 recurrence carrying a BY-rule selection —
+  # `FREQ=DAILY;BYDAY=SU;COUNT=1` — is "the first occurrence that
+  # survives the filter", not the raw `[from, from + duration)` period
+  # (DTSTART itself need not satisfy the rule — it may be a Monday). So
+  # apply the selection and return that first occurrence, still a single
+  # interval per the count-1 contract and consistent with COUNT ≥ 2. A
+  # `:within` window keeps it or does not, as it does the occurrences of a
+  # longer rule (`one_occurrence_within/2`).
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: 1,
+           direction: direction,
+           from: %Tempo{} = from,
+           duration: %Tempo.Duration{} = duration,
+           repeat_rule: %Tempo{},
+           to: to
+         } = interval,
+         options
+       )
+       when to in [nil, :undefined] do
+    {from, floor, interval} = selection_start(from, interval)
+
+    step =
+      if direction == -1 do
+        Duration.negate(duration)
+      else
+        duration
+      end
+
+    case iterate_recurrence(
+           {from, counted_from(floor, options), 0},
+           step,
+           occurrence_end_fn(from, duration, interval),
+           fn _start -> true end,
+           selection_fn(interval, duration),
+           interval.metadata,
+           1
+         ) do
+      {:ok, [%Tempo.Interval{} = first | _]} ->
+        one_occurrence_within(first, options)
+
+      {:ok, []} ->
+        {:error,
+         IntervalEndpointsError.exception(
+           interval: interval,
+           operation: "convert a count-1 recurrence whose BY-rule selects no occurrence",
+           reason: :empty_selection
+         )}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # A one-occurrence rule with no BY-rule (`FREQ=WEEKLY;COUNT=1`) steps
+  # nothing, so its occurrence spans the event it carries — the
+  # `occurrence_base_to` or `occurrence_duration` every occurrence of a
+  # longer rule spans — not its cadence, which is all `duration` holds.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: 1,
+           from: %Tempo{} = from,
+           duration: %Tempo.Duration{} = duration,
+           to: to,
+           metadata: metadata
+         } = interval,
+         _options
+       )
+       when to in [nil, :undefined] and
+              (is_map_key(metadata, :occurrence_base_to) or
+                 is_map_key(metadata, :occurrence_duration)) do
+    occurrence_end = occurrence_end_fn(from, duration, interval)
+
+    {:ok,
+     %Tempo.Interval{
+       from: from,
+       to: occurrence_end.(from, 0),
+       metadata: strip_span_directives(metadata)
+     }}
+  end
+
+  # A `from + duration` interval (`1985-01/P3M`). Materialise to
+  # a closed `[from, from + duration)` interval. Preserves the
+  # source interval's metadata — callers like `Tempo.ICal` need
+  # event-level metadata (summary, location, …) to ride along
+  # onto every materialised occurrence. A start that holds a set
+  # (`2026Y6M{1,15}D/P1D`) is the span from each of its values
+  # (`recurrence_from_each_value/2`), and never comes here; one that names
+  # several spans another way, a mask whose values do not run together, is
+  # no one point to count the duration from.
+  defp materialise(
+         %Tempo.Interval{
+           from: %Tempo{time: time} = from,
+           duration: %Tempo.Duration{} = duration,
+           to: to,
+           recurrence: 1,
+           metadata: metadata
+         } = interval,
+         options
+       )
+       when to in [nil, :undefined] do
+    if Keyword.has_key?(time, :selection) do
+      selected_spans(from, &{&1, Math.add(&1, duration)}, metadata, options)
+    else
+      with {:ok, _one_start} <- Interval.endpoints_as_points(interval) do
+        from
+        |> Math.add(duration)
+        |> derived_span(from, &%Tempo.Interval{from: from, to: &1, metadata: metadata})
+      end
+    end
+  end
+
+  # A rule on a recurrence written to its end (`R3/P1D/2019-01-08/FL7KN`, the
+  # three Sundays before 8 January 2019). The recurrence is counted back from
+  # its end, as one with no rule is, and the rule is asked of each period
+  # back from there, as a rule from a start is asked of each period on from
+  # it (`selected_back_from/2`). It was the three days before the end, the
+  # walk back never asking the rule, and then refused by name.
+  #
+  # A §12.10 window in such a rule can place an occurrence outside the period
+  # that selects it, which the walk back does not reach for: it is not built
+  # (`Tempo.NotBuilt.rule_to_an_end/1`).
+  defp materialise(
+         %Tempo.Interval{
+           from: :undefined,
+           duration: %Tempo.Duration{},
+           to: %Tempo{},
+           repeat_rule: %Tempo{time: [{:selection, selection} | _units]}
+         } = interval,
+         options
+       ) do
+    if List.keymember?(selection, :interval, 0) do
+      {:error, NotBuilt.rule_to_an_end(interval)}
+    else
+      selected_back_from(interval, options)
+    end
+  end
+
+  # A rule with a count, no start and an end it runs until is neither a rule
+  # written to its end nor one an RRULE reads, which has a count or an
+  # `UNTIL` and not both: it is refused by the same name. One with no count
+  # starts where its window does (`from_where_its_window_starts/2`).
+  defp materialise(
+         %Tempo.Interval{
+           from: nil,
+           recurrence: recurrence,
+           duration: %Tempo.Duration{},
+           to: %Tempo{},
+           repeat_rule: %Tempo{}
+         } = interval,
+         _options
+       )
+       when recurrence != :infinity do
+    {:error, NotBuilt.rule_to_an_end(interval)}
+  end
+
+  # A `duration + to` interval (`P1M/1985-06`). Materialise to a
+  # closed `[to - duration, to)` interval.
+  defp materialise(
+         %Tempo.Interval{
+           from: :undefined,
+           duration: %Tempo.Duration{} = duration,
+           to: %Tempo{time: time} = to,
+           recurrence: 1,
+           metadata: metadata
+         } = interval,
+         options
+       ) do
+    if Keyword.has_key?(time, :selection) do
+      selected_spans(to, &{Math.subtract(&1, duration), &1}, metadata, options)
+    else
+      with {:ok, _one_end} <- Interval.endpoints_as_points(interval) do
+        to
+        |> Math.subtract(duration)
+        |> derived_span(to, &%Tempo.Interval{from: &1, to: to, metadata: metadata})
+      end
+    end
+  end
+
+  # A recurrence over a domain set (`R/{2020Y..2030Y,^2026Y}/P1Y/FL…N`). The
+  # domain's plain members are the window: the selection is materialised for each
+  # and unioned. `^` exclusions are already removed by materialising the domain
+  # set, so an excluded year yields no occurrence — the domain is self-bounding.
+  # A `:within` window, when given, narrows it further: only the domain periods
+  # whose occurrences can reach it are materialised, and only the occurrences
+  # that overlap it are kept — the rule every recurrence keeps. An open-ended
+  # range (`{2017Y..}`, `{..2016Y}`) takes its missing end from the window, so it
+  # needs one. A cadence longer than one period (`R/{1848Y..}/P4Y/…`) keeps every
+  # nth period, phased from the domain's first stated value.
+  defp materialise(%Tempo.Interval{from: %Tempo.Set{set: [_ | _]} = domain} = interval, options) do
+    with {:ok, window} <- within_window(options),
+         {:ok, reach} <- domain_reach_window(window, interval),
+         {:ok, closed_domain} <- close_domain_ranges(domain, reach),
+         {:ok, domain_set} <- to_interval(closed_domain) do
+      domain_set
+      |> IntervalSet.members()
+      |> filter_domain_years(domain.filter)
+      |> step_domain_periods(domain, interval.duration)
+      |> domain_periods_to_walk(interval, reach)
+      |> reduce_domain_occurrences(interval)
+      |> first_occurrences(interval)
+      |> keep_occurrences_in_window(window)
+    end
+  end
+
+  # An open, filtered domain (`R/..e/P1Y/FL…N`) has no window of its own, so it
+  # needs a `:within` window: materialise the recurrence there, then keep only
+  # the years matching the `:even` / `:odd` / `:leap` filter.
+  defp materialise(
+         %Tempo.Interval{from: %Tempo.Set{set: [], except: [], filter: filter}} = interval,
+         options
+       )
+       when not is_nil(filter) do
+    with {:ok, occurrences} <- to_interval(%{interval | from: nil}, options) do
+      occurrences
+      |> IntervalSet.members()
+      |> filter_domain_years(filter)
+      |> IntervalSet.new()
+    end
+  end
+
+  # An exclusions-only domain (`R/^2026/P1Y/FL…N`) has no window of its own, so
+  # it needs a `:within` window: materialise the recurrence there, then subtract
+  # the excluded values.
+  defp materialise(%Tempo.Interval{from: %Tempo.Set{set: [], except: except}} = interval, options) do
+    with {:ok, occurrences} <- to_interval(%{interval | from: nil}, options),
+         {:ok, excluded} <- to_interval(%Tempo.Set{type: :all, set: except}) do
+      difference(occurrences, excluded)
+    end
+  end
+
+  # A recurrence with an open start — `Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO")`
+  # ("every Monday" beginning nowhere), or the ISO 8601 holiday form
+  # `R/../P1Y/FL…N` — has no start of its own. The `:within` window supplies
+  # one: the recurrence starts at the window's start and yields every
+  # occurrence that starts within it. The start takes the recurrence's own
+  # selection resolution — day for `FL6M1K2IN` ("the 2nd Monday of June"),
+  # month for `FL6MN` ("June") — so each occurrence lands at the grain the
+  # selection names rather than being forced to a day. With no window there is
+  # nothing to start from, so it stays an error rather than reporting success
+  # while handing back the unmaterialised rule.
+  #
+  # One of one occurrence is such a recurrence where it is written with a
+  # cadence (`R1/../P1D/FL7KN`, `FREQ=DAILY;BYDAY=SU;COUNT=1` with no start):
+  # it was handed back as it was given, window or none, where one of two
+  # occurrences gave the first two Sundays of the window. An interval open at
+  # both ends with no cadence (`../..`) is the span it is.
+  defp materialise(
+         %Tempo.Interval{from: from, to: to, recurrence: recurrence, duration: cadence} = interval,
+         options
+       )
+       when from in [nil, :undefined] and to in [nil, :undefined] and
+              (recurrence != 1 or is_struct(cadence, Tempo.Duration)) do
+    from_where_its_window_starts(interval, options)
+  end
+
+  # A rule with no start that runs until an end, as an RRULE with `UNTIL`
+  # read with no start is (`FREQ=DAILY;UNTIL=20190108`): it starts where its
+  # window does and runs on to its end. It was handed back as it was given,
+  # with no occurrences and no error, and with a part that selects it was
+  # refused as a rule written to its end, which is another thing: a
+  # recurrence written with a duration and an end (`R3/P1D/2019-01-08`) has
+  # no start to be given, and is counted back from its end.
+  defp materialise(
+         %Tempo.Interval{
+           from: nil,
+           recurrence: :infinity,
+           duration: %Tempo.Duration{},
+           to: %Tempo{}
+         } = interval,
+         options
+       ) do
+    from_where_its_window_starts(interval, options)
+  end
+
+  # A recurrence written with a start and an end (`R5/2026-06-15/2026-06-20`,
+  # ISO 8601-1 §5.6.1 a). The two identify the first occurrence, and each one
+  # after it starts where the one before ends and is as long, measured in the
+  # unit its endpoints are written in (`duration/2`): `R3/2026-01/2026-03` steps
+  # two months at a time. It materialises as the same recurrence written with
+  # that duration, so its count, an unending one's `:within` window and a repeat
+  # rule apply as they do there.
+  #
+  # One occurrence that has a rule (`R1/2019-01-01/2019-01-02/FL7KN`) is the
+  # first its rule selects, as one written with a duration is: it was handed
+  # back as it was given. With no rule it is the interval its two ends are.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: %Tempo{} = from,
+           to: %Tempo{} = to,
+           duration: nil,
+           repeat_rule: rule
+         } = interval,
+         options
+       )
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) or
+              (recurrence == 1 and is_struct(rule, Tempo)) do
+    with {:ok, duration} <- duration(from, to) do
+      case materialise(%{interval | to: nil, duration: duration}, options) do
+        # An exception holds its values as a caller holds them.
+        {:error, %UnboundedRecurrenceError{} = error} ->
+          {:error, %{error | interval: Calendars.outside(interval)}}
+
+        materialised ->
+          materialised
+      end
+    end
+  end
+
+  # A recurrence written with a duration and an end (`R5/P1D/2026-06-20`,
+  # ISO 8601-1 §5.6.1 c). The two identify the last occurrence, and the others
+  # run back from it, one duration each. Every occurrence is counted from the
+  # end (`end − k × duration`), as a forward recurrence counts from its start,
+  # so a month cadence keeps the stated end. An unending one runs back without
+  # limit, so the `:within` window ends it.
+  defp materialise(
+         %Tempo.Interval{
+           recurrence: recurrence,
+           from: :undefined,
+           duration: %Tempo.Duration{} = duration,
+           to: %Tempo{} = to
+         } = interval,
+         options
+       )
+       when recurrence == :infinity or (is_integer(recurrence) and recurrence > 1) do
+    back = Duration.negate(duration)
+    metadata = strip_span_directives(interval.metadata)
+
+    with {:ok, occurrences} <- occurrences_back(to, back, recurrence, interval, metadata, options),
+         {:ok, kept} <- keep_within(occurrences, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
+    end
+  end
+
+  # A single interval is its own span, each end read as the point it names:
+  # `20C/21C` is `2000Y/2100Y`.
+  defp materialise(%Tempo.Interval{} = interval, _options) do
+    Interval.endpoints_as_points(interval)
+  end
+
+  defp materialise(%Tempo.IntervalSet{} = set, _options) do
+    {:ok, set}
+  end
+
+  # A `%Tempo.RecurrenceSet{}` materialises each member in the `:within` window
+  # (recurrences and nested sets) or as-is (concrete members), tags each
+  # occurrence with the member's own metadata (a holiday name, say), and unions
+  # them into one set carrying the recurrence set's own metadata. Conditional
+  # members resolve in a second pass over the others' occurrences. The window's
+  # start rule holds for every member, a concrete one included: a one-off 2026
+  # member is not among the set's occurrences within 2027.
+  defp materialise(%Tempo.RecurrenceSet{members: members, metadata: metadata}, options) do
+    with {:ok, occurrences} <- set_member_occurrences(members, options),
+         {:ok, kept} <- keep_within(occurrences, options) do
+      IntervalSet.new(kept, metadata: metadata)
+    end
+  end
+
+  # A value's metadata (`new/1`'s `:metadata`) moves to the interval or
+  # intervals it materialises to, so each endpoint is the value alone and
+  # compares equal to it written plainly.
+  defp materialise(%Tempo{metadata: metadata} = tempo, options) when map_size(metadata) > 0 do
+    with {:ok, materialised} <- to_interval(%{tempo | metadata: %{}}, options) do
+      {:ok, with_value_metadata(materialised, metadata)}
+    end
+  end
+
+  defp materialise(%Tempo{time: time} = tempo, options) do
+    case Enum.split_while(time, &(not match?({:selection, _}, &1))) do
+      {context, [{:selection, selection} | trailing]} ->
+        materialise_selection(tempo, context, selection, trailing, options)
+
+      {_time, []} ->
+        materialise_value(tempo)
+    end
+  end
+
+  # An all-of `%Tempo.Set{}` (`{a,b,c}` syntax at the expression
+  # level) is free/busy semantics — every member is materialised
+  # and coalesced into an `IntervalSet`. A one-of set
+  # (`[a,b,c]`) is an epistemic disjunction ("it was one of
+  # these, I don't know which") and stays as a set; flattening it
+  # to an IntervalSet would assert all members happened, which is
+  # the opposite of what the user wrote.
+  #
+  # Exclusion members (`^x`, carried in `:except`) are subtracted
+  # from the plain members — `{2020..2030, ^2026}` is the range
+  # 2020–2030 with 2026 removed.
+  #
+  # A set of durations names lengths of time and no time, so it has no span,
+  # as one duration has none.
+  defp materialise(%Tempo.Set{set: [%Duration{} | _durations]} = set, _options) do
+    {:error, ConversionError.exception(value: set, reason: :bare_duration)}
+  end
+
+  defp materialise(%Tempo.Set{type: :all, set: members, except: [_ | _] = except} = set, options) do
+    with {:ok, included} <- members_to_interval_set(members, set),
+         {:ok, excluded} <- members_to_interval_set(except, set) do
+      difference(included, excluded, options)
+    end
+  end
+
+  defp materialise(%Tempo.Set{type: :all, set: members} = set, _options) do
+    members_to_interval_set(members, set)
+  end
+
+  defp materialise(%Tempo.Set{type: :one} = value, _options) do
+    {:error, ConversionError.exception(value: value, reason: :one_of_set)}
+  end
+
+  # A `%Tempo.Range{}` set member (`{2020Y..2030Y}`) is inclusive of both bounds,
+  # so it materialises to every value from `first` to `last` at the range's own
+  # resolution — a year range yields years, a month range months. An open-ended
+  # range (`:undefined` endpoint) spans no finite set and cannot materialise.
+  defp materialise(%Tempo.Range{first: %Tempo{} = first, last: %Tempo{} = last} = range, _options) do
+    {unit, _level} = resolution(first)
+
+    first
+    |> Stream.iterate(&shift(&1, [{unit, 1}]))
+    |> Stream.take_while(fn value -> compare(value, last) != :gt end)
+    |> members_to_interval_set(range)
+  end
+
+  defp materialise(%Tempo.Range{} = range, _options) do
+    {:error, ConversionError.exception(value: range, reason: :open_range)}
+  end
+
+  defp materialise(%Tempo.Duration{} = value, _options) do
+    {:error, ConversionError.exception(value: value, reason: :bare_duration)}
+  end
+
+  defp materialise(value, _options) do
+    {:error, ConversionError.exception(value: value, target: Tempo.Interval)}
+  end
+
+  # The one occurrence of a recurrence that has a rule is kept to a `:within`
+  # window as the occurrences of a longer one are (decided 2026-10-08): where
+  # it does not overlap the window the recurrence has none there, which is
+  # the empty set. It was given whatever the window was, so
+  # `FREQ=DAILY;BYDAY=SU;COUNT=1` from 2019 within 2026 was a Sunday of 2019,
+  # where `COUNT=2` was nothing, and a window that is no window was passed
+  # over. One with no rule is the interval it is, as an interval is.
+  defp from_where_its_window_starts(%Tempo.Interval{} = interval, options) do
+    within = Keyword.get(options, :within)
+
+    if is_nil(within) do
+      {:error,
+       IntervalEndpointsError.exception(
+         interval: interval,
+         operation: "convert a recurrence that has no start",
+         reason: :open_start
+       )}
+    else
+      case window_start(within, interval) do
+        {:ok, start} ->
+          start = in_rule_zone(start, interval)
+          materialise_from_bound(interval, start, within, counted_from_window(options, within))
+
+        {:error, _} = error ->
+          error
+      end
+    end
+  end
+
+  defp one_occurrence_within(%Tempo.Interval{} = occurrence, options) do
+    case keep_within([occurrence], options) do
+      {:ok, [kept]} -> {:ok, kept}
+      {:ok, []} -> IntervalSet.new([])
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # The start a window supplies takes the zone the rule's suffix names, unless
+  # the window is in one of its own.
+  defp in_rule_zone(%__MODULE__{extended: nil} = start, %Interval{
+         repeat_rule: %__MODULE__{extended: %{} = extended}
+       }) do
+    %{start | extended: extended}
+  end
+
+  defp in_rule_zone(start, _interval) do
+    start
+  end
+
+  # A recurrence with no end is ended by the caller's `:within` window; with
+  # none it cannot be materialised. A window running back from each anchor
+  # carries occurrences into the window from periods after it, so the walk goes
+  # on to the last of those.
+  defp materialise_unending(interval, nil, _options) do
+    {:error, UnboundedRecurrenceError.exception(interval: interval)}
+  end
+
+  defp materialise_unending(
+         %Tempo.Interval{from: from, duration: duration} = interval,
+         within,
+         options
+       ) do
+    with {:ok, window_to} <- bound_upper(within),
+         {_forward, backward} = window_reach(interval),
+         {:ok, walk_to} <- reach_end(window_to, interval, backward),
+         {from, floor, interval} = selection_start(from, interval),
+         occurrence_end = occurrence_end_fn(from, duration, interval),
+         first = first_period_reaching({from, duration, occurrence_end}, interval, within),
+         {:ok, intervals} <-
+           iterate_recurrence(
+             {from, floor, first},
+             duration,
+             occurrence_end,
+             &under_bound?(&1, walk_to),
+             selection_fn(interval, duration),
+             interval.metadata
+           ),
+         {:ok, kept} <- keep_within(intervals, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
+    end
+  end
+
+  # The first period a walk kept to a window has to make: the first that is
+  # not over before the window opens. A walk began at the recurrence's start
+  # however long before the window that was, and takes ten thousand periods
+  # at most, so a recurrence of days from 1990 never came to June 2026 and
+  # gave no occurrences there, as if it had none.
+  #
+  # A period is over where the occurrence of the period after it has ended
+  # by the window's start, and the start of the period two on, carried on by
+  # as far as an occurrence reaches past its period (`window_reach/1`), has
+  # not passed it. The count of periods doubles while that holds and halves
+  # back, and each start is one step of the calendar's arithmetic from the
+  # recurrence's own (`nth_start/3`), so a start at a month's end never
+  # drifts.
+  defp first_period_reaching(_walk, _interval, nil) do
+    0
+  end
+
+  defp first_period_reaching(walk, interval, within) do
+    case bound_lower(within) do
+      %Tempo{} = window_from ->
+        {forward, _backward} = window_reach(interval)
+        reach = Enum.uniq(forward ++ spanned_durations(interval.metadata))
+        over? = &over_before?(&1, walk, reach, window_from)
+
+        if over?.(0) do
+          first_not(over?, 0, 1)
+        else
+          0
+        end
+
+      _no_lower_edge ->
+        0
+    end
+  end
+
+  defp over_before?(period, {from, cadence, occurrence_end}, reach, window_from) do
+    with %Tempo{} = next <- nth_start(from, cadence, period + 1),
+         %Tempo{} = after_next <- nth_start(from, cadence, period + 2),
+         %Tempo{} = ended <- occurrence_ended(occurrence_end, next, period + 1, after_next),
+         %Tempo{} = reached <- carried(after_next, reach, :on) do
+      under_until?(ended, window_from) and under_until?(reached, window_from)
+    else
+      _no_such_step -> false
+    end
+  end
+
+  # Where the occurrence of a period ends: what the walk's own end function
+  # gives, or the start of the next period where the occurrences are
+  # contiguous.
+  defp occurrence_ended(occurrence_end, start, period, _next_start)
+       when is_function(occurrence_end, 2) do
+    occurrence_end.(start, period)
+  end
+
+  defp occurrence_ended(_contiguous, _start, _period, next_start) do
+    next_start
+  end
+
+  # No recurrence is passed over for more periods than this without being
+  # walked: the seconds of thirty-four thousand years.
+  @most_periods_passed_over 1_099_511_627_776
+
+  # The least count `over?` does not hold of, given that it holds of `over`.
+  defp first_not(over?, over, count) do
+    cond do
+      count > @most_periods_passed_over -> over + 1
+      over?.(count) -> first_not(over?, count, count * 2)
+      true -> narrow_unreached(over?, over, count)
+    end
+  end
+
+  # The `:within` window supplies the recurrence's start, at the window's start.
+  # The start is aligned to the start of the cadence period it sits in, so the
+  # recurrence walks whole calendar periods — a `P1Y` cadence whole calendar
+  # years, `P1M` whole months, `P1W` whole weeks from their Monday — and every
+  # period the window overlaps is walked; the occurrences are then kept by
+  # overlap with the window. Unaligned, a period boundary falls mid-period, and
+  # the last period the window reaches into is never walked
+  # (`R/../P1Y/FL1M15DN` over September 2026 to March 2027 lost
+  # 15 January 2027). When the selection resolves in another calendar — an IXDTF
+  # `[u-ca=…]` suffix on the whole expression, carried on the `repeat_rule` —
+  # the start is converted into that calendar first, so the periods are that
+  # calendar's and the selection resolves in-calendar, with the window
+  # intersection converting back. This makes `R/../P1Y/FL1M1DN[u-ca=persian]`
+  # behave like the form with a calendared start, `R/<persian new year>/P1Y[u-ca=persian]`.
+  # A rule in a calendar of the notation's own, of its dates or of its week
+  # dates, names no calendar, and its start is left in the one it has.
+  defp start_in_repeat_calendar(
+         %Tempo{} = start,
+         %Tempo.Interval{
+           repeat_rule: %Tempo{calendar: calendar},
+           duration: %Tempo.Duration{} = cadence
+         }
+       )
+       when not (is_notation(calendar) or is_notation_weeks(calendar)) do
+    with {:ok, %Tempo{} = converted} <- to_calendar(start, calendar),
+         %Tempo{} = aligned <- aligned_to_cadence(converted, cadence) do
+      aligned
+    else
+      _other -> start
+    end
+  end
+
+  defp start_in_repeat_calendar(%Tempo{} = start, %Tempo.Interval{
+         duration: %Tempo.Duration{} = cadence
+       }) do
+    case aligned_to_cadence(start, cadence) do
+      %Tempo{} = aligned -> aligned
+      _other -> start
+    end
+  end
+
+  defp start_in_repeat_calendar(%Tempo{} = start, _interval) do
+    start
+  end
+
+  # The start of the cadence period a value sits in, at the value's own
+  # resolution: 1 April 2026 for a month, 30 March 2026 (its week's Monday) for
+  # a week holding 3 April.
+  defp aligned_to_cadence(%Tempo{} = start, cadence) do
+    with {unit, _span} <- resolution(start),
+         %Tempo{} = period <- at_resolution(start, freq_of(cadence)) do
+      at_resolution(period, unit)
+    end
+  end
+
+  # A recurrence with an open start keeps the occurrences that overlap its
+  # window, `[window_from, window_to)`. The periods it walks can place one
+  # outside: a calendar-aligned recurrence walks whole calendar years, so the
+  # year it starts in can begin before `window_from` or straddle `window_to`, and
+  # in any calendar a period that starts inside the window can select a day at
+  # or after its end (`R/../P1Y/FL9M23DN` over `[1 Sep, 23 Sep)` selects 23
+  # September). Trim the materialised set to the window.
+  defp filter_to_bound_window(
+         {:ok, %Tempo.IntervalSet{}} = result,
+         %Tempo.Interval{repeat_rule: %Tempo{}},
+         within
+       ) do
+    case bound_upper(within) do
+      {:ok, window_to} -> keep_occurrences_in_window(result, {bound_lower(within), window_to})
+      _no_upper_edge -> result
+    end
+  end
+
+  defp filter_to_bound_window(result, _interval, _within) do
+    result
+  end
+
+  # Materialise a recurrence with an open start from its window's start. A
+  # §12.10 window can move an occurrence off the period whose selection produced
+  # it — a Saturday 1 January observed the previous Friday lands in the year
+  # before, a Saturday 31 December observed the following Monday in the year
+  # after — a week a year numbers can hold days of the year beside it, and an
+  # occurrence's own span can run on past its period, so a
+  # recurrence that reaches out of its periods walks from the first period
+  # whose occurrences can reach the window, and keeps those that overlap it.
+  defp materialise_from_bound(interval, start, within, options) do
+    case window_reach(interval) do
+      {[], []} ->
+        %{interval | from: start_in_repeat_calendar(start, interval)}
+        |> to_interval(options)
+        |> filter_to_bound_window(interval, within)
+
+      reach ->
+        materialise_reaching(interval, start, reach, options)
+    end
+  end
+
+  # A window reaching back places a period's occurrence before the period
+  # starts, and the walk keeps none that starts before the walk does, so the
+  # walk starts that much earlier again. The walk's end reaches on in
+  # `materialise_unending/3`.
+  defp materialise_reaching(interval, start, {forward, backward}, options) do
+    with {:ok, %Tempo{} = reach_from} <- reach_start(start, interval, forward),
+         %Tempo{} = carried_from <- carried(reach_from, backward, :back),
+         %Tempo{} = walk_from <- at_start_resolution(carried_from, start, interval) do
+      to_interval(%{interval | from: start_in_repeat_calendar(walk_from, interval)}, options)
+    end
+  end
+
+  # The walk's start at the resolution the start it reaches from has, so an
+  # occurrence keeps the shape it has without a reach (a week selected from a
+  # year is the week, not its days), unless that resolution cannot hold the
+  # cadence's periods (a day, for an hourly cadence): then the carried start
+  # stands as it is.
+  defp at_start_resolution(carried_from, start, %Tempo.Interval{duration: cadence}) do
+    {unit, _span} = resolution(start)
+
+    if coarser_unit?(unit, freq_of(cadence)) do
+      carried_from
+    else
+      at_resolution(carried_from, unit)
+    end
+  end
+
+  # How far an occurrence can reach outside the period that selects it, as the
+  # durations that carry it there, `{forward, backward}`: a §12.10 window
+  # running on from its anchor or back from it, a nested window adding its own,
+  # an occurrence's own span (`:occurrence_duration`) running on, as a
+  # December–January school break does, and a week reaching past the period's
+  # edges.
+  defp window_reach(%Tempo.Interval{
+         repeat_rule: %Tempo{time: [{:selection, selection} | _units]},
+         duration: %Tempo.Duration{} = cadence,
+         metadata: metadata
+       }) do
+    durations = window_durations(selection)
+    {forward_weeks, backward_weeks} = week_reach(selection, cadence)
+
+    {reaching(durations ++ spanned_durations(metadata), &(&1 > 0)) ++ forward_weeks,
+     reaching(durations, &(&1 < 0)) ++ backward_weeks}
+  end
+
+  defp window_reach(_interval) do
+    {[], []}
+  end
+
+  defp spanned_durations(%{occurrence_duration: %Tempo.Duration{} = span}) do
+    [span]
+  end
+
+  defp spanned_durations(_metadata) do
+    []
+  end
+
+  # The parts of each duration that run one way, as a duration of that way's
+  # length: a window of `P-3D` reaches three days back.
+  defp reaching(durations, direction?) do
+    for %Tempo.Duration{time: time} <- durations,
+        parts = for({unit, amount} <- time, direction?.(amount), do: {unit, abs(amount)}),
+        parts != [],
+        do: %Tempo.Duration{time: parts}
+  end
+
+  defp window_durations(selection) when is_list(selection) do
+    Enum.flat_map(selection, fn
+      {:interval, %Tempo.Interval{duration: %Tempo.Duration{} = duration, from: inner}} ->
+        [duration | window_durations(window_inner_selection(inner))]
+
+      _other ->
+        []
+    end)
+  end
+
+  defp window_inner_selection(%Tempo{time: [selection: selection]}) do
+    selection
+  end
+
+  defp window_inner_selection(%Tempo{time: time}) when is_list(time) do
+    time
+  end
+
+  defp window_inner_selection(_inner) do
+    []
+  end
+
+  # A week reaches past the period it is selected in: a week a year numbers
+  # (`W`, or the calendar's own `w`) can hold days of the year either side,
+  # and a weekday in a weekly period comes from the week holding the period's
+  # start, which can begin before it. Either lies within a week of the period.
+  defp week_reach(selection, cadence) do
+    week = %Tempo.Duration{time: [week: 1]}
+
+    cond do
+      selects_any?(selection, [:week, :calendar_week, :week_of_month]) ->
+        {[week], [week]}
+
+      freq_of(cadence) == :week and selects_any?(selection, [:day_of_week, :byday]) ->
+        {[], [week]}
+
+      true ->
+        {[], []}
+    end
+  end
+
+  # Whether a selection, or a window's anchor in it, names one of `units`.
+  defp selects_any?(selection, units) do
+    Enum.any?(selection, fn
+      {:interval, %Tempo.Interval{from: inner}} ->
+        selects_any?(window_inner_selection(inner), units)
+
+      {unit, _value} ->
+        unit in units
+
+      _other ->
+        false
+    end)
+  end
+
+  # The start of the first period whose occurrences can reach forward into a
+  # window opening at `window_from`: back from the period holding the window's
+  # start, whole cadences at a time so a multi-period cadence keeps its phase,
+  # while the period ending there, carried on by the reach, still runs past the
+  # window's start. Periods and reach are both stepped with the recurrence
+  # calendar's own arithmetic, so a month is that calendar's month and a year
+  # that calendar's year.
+  defp reach_start(window_from, _interval, []) do
+    {:ok, window_from}
+  end
+
+  defp reach_start(%Tempo{} = window_from, %Tempo.Interval{duration: cadence} = interval, forward) do
+    with {:ok, first} <- period_holding(window_from, interval) do
+      period_not_reaching(
+        first,
+        Duration.negate(cadence),
+        &reaches_forward?(&1, forward, window_from)
+      )
+    end
+  end
+
+  defp reach_start(window_from, _interval, _forward) do
+    {:ok, window_from}
+  end
+
+  # Where a walk that must meet every occurrence reaching back into a window
+  # closing at `window_to` can stop: the start of the first period, on from the
+  # one holding the window's end, whose occurrences cannot. A period's start,
+  # carried back by the reach, falls at or after the window's end.
+  defp reach_end(window_to, _interval, []) do
+    {:ok, window_to}
+  end
+
+  defp reach_end(%Tempo{} = window_to, %Tempo.Interval{duration: cadence} = interval, backward) do
+    with {:ok, last} <- period_holding(window_to, interval) do
+      period_not_reaching(last, cadence, &reaches_back?(&1, backward, window_to))
+    end
+  end
+
+  defp reach_end(window_to, _interval, _backward) do
+    {:ok, window_to}
+  end
+
+  # The period `count` steps from `period` for the least `count` at which
+  # `reaching?` no longer holds. The count doubles until it fails, then halves
+  # back to the first that does, so a reach of many periods takes few steps.
+  # Each period is `period + count × step`, so a month-end start never drifts.
+  defp period_not_reaching(period, step, reaching?) do
+    reached? = fn count -> reaching?.(add_n_durations(period, step, count)) end
+
+    count =
+      if reached?.(0) do
+        first_unreached(reached?, 0, 1)
+      else
+        0
+      end
+
+    case add_n_durations(period, step, count) do
+      %Tempo{} = unreached -> {:ok, unreached}
+      error -> error
+    end
+  end
+
+  # A reach past this many periods is a malformed rule, not a reason to search
+  # for ever.
+  @most_periods_reaching 1_048_576
+
+  defp first_unreached(reached?, reached, count) do
+    cond do
+      count > @most_periods_reaching -> count
+      reached?.(count) -> first_unreached(reached?, count, count * 2)
+      true -> narrow_unreached(reached?, reached, count)
+    end
+  end
+
+  defp narrow_unreached(_reached?, reached, unreached) when unreached - reached <= 1 do
+    unreached
+  end
+
+  defp narrow_unreached(reached?, reached, unreached) do
+    middle = div(reached + unreached, 2)
+
+    if reached?.(middle) do
+      narrow_unreached(reached?, middle, unreached)
+    else
+      narrow_unreached(reached?, reached, middle)
+    end
+  end
+
+  # Whether the period ending at `period_end` has occurrences that can run past
+  # `window_from`: its anchors fall before `period_end`, and run on as far as
+  # the reach carries them.
+  defp reaches_forward?(period_end, forward, window_from) do
+    case carried(period_end, forward, :on) do
+      %Tempo{} = reach -> under_bound?(window_from, reach)
+      _error -> false
+    end
+  end
+
+  # Whether the period starting at `period_start` has occurrences that can
+  # start before `window_to`: its anchors fall at or after `period_start`, and
+  # start as far back as the reach carries them.
+  defp reaches_back?(period_start, backward, window_to) do
+    case carried(period_start, backward, :back) do
+      %Tempo{} = reach -> under_bound?(reach, window_to)
+      _error -> false
+    end
+  end
+
+  # A value carried on or back by each duration in turn, with its calendar's
+  # own arithmetic. A step the calendar cannot take is returned as it is.
+  defp carried(%Tempo{} = value, durations, direction) do
+    Enum.reduce_while(durations, value, fn duration, carried ->
+      case Math.add(carried, oriented(duration, direction)) do
+        %Tempo{} = next -> {:cont, next}
+        other -> {:halt, other}
+      end
+    end)
+  end
+
+  defp carried(error, _durations, _direction) do
+    error
+  end
+
+  defp oriented(duration, :on) do
+    duration
+  end
+
+  defp oriented(duration, :back) do
+    Duration.negate(duration)
+  end
+
+  # The start of the cadence period `edge` falls in, at the grain the
+  # recurrence starts at and in the calendar it selects in.
+  defp period_holding(edge, interval) do
+    with {:ok, start} <- start_at_unit(edge, start_unit(interval)),
+         do: {:ok, start_in_repeat_calendar(start, interval)}
+  end
+
+  # Apply a duration N times as a single scalar-multiplied step:
+  # `tempo + (n × duration)` in one call, not `n` successive
+  # `+ duration` calls.
+  #
+  # Scalar vs iterative matters when the start is a day the
+  # calendar clamps. DTSTART = 2020-02-29 with cadence
+  # `year: 1`:
+  #
+  # * Iterative (+1y then +1y then +1y then +1y): the first step
+  #   clamps Feb 29 → Feb 28. Every subsequent step starts from
+  #   Feb 28, so day 29 is lost forever.
+  #
+  # * Scalar (+4y in one shot): 2020-02-29 → 2024-02-29 (a leap
+  #   year, valid).
+  #
+  # Matches the RFC intent: "DTSTART + i × INTERVAL" addresses a
+  # specific point relative to DTSTART, not a walk.
+  defp add_n_durations(tempo, _duration, 0) do
+    tempo
+  end
+
+  defp add_n_durations(tempo, %Tempo.Duration{time: time}, n) when n > 0 do
+    scaled = Enum.map(time, &scaled_amount(&1, n))
+    Math.add(tempo, %Tempo.Duration{time: scaled})
+  end
+
+  # A fractional second's microseconds are a `{value, precision}` pair.
+  defp scaled_amount({:microsecond, {value, precision}}, n) do
+    {:microsecond, {value * n, precision}}
+  end
+
+  defp scaled_amount({unit, amount}, n) do
+    {unit, amount * n}
+  end
+
+  ## ---------------------------------------------------------
+  ## Recurrence-expansion helpers
+  ##
+  ## `iterate_recurrence/5` is the single stepwise expander used
+  ## by both the UNTIL and :within clauses above. The only
+  ## difference between the two is the termination predicate;
+  ## factoring it out keeps the interpreter's loop authoritative
+  ## and eliminates parallel engines in calling modules.
+  ## ---------------------------------------------------------
+
+  # Hard safety ceiling on how many occurrences any single
+  # recurrence can materialise, and on the periods its walk takes. Matches
+  # `Tempo.ICal.@safety_cap`: each is the application's `:max_values_at_once`
+  # (`Tempo.Limit`), 10,000 unless it is set.
+  @recurrence_safety_cap Tempo.Limit.values_at_once()
+
+  # Coalescing is the default for back-compat with `to_interval/1`
+  # semantics: an `R3/1985-01/P1M` interval is a single 3-month
+  # span post-coalesce, which matches the documented contract.
+  # Expansion consumers that care about event identity
+  # (Tempo.ICal, the RRULE expander) pass `coalesce: false`.
+  # Pre-semantic-flip this defaulted to `true`. As of v0.2 the
+  # IntervalSet default is member-preserving (`coalesce: false`),
+  # so this helper passes the caller's explicit opt through
+  # unchanged and otherwise omits the option — letting
+  # `IntervalSet.new/2` apply its own default.
+  defp coalesce_opt(options) do
+    value = Keyword.get(options, :coalesce)
+
+    if is_nil(value) do
+      false
+    else
+      value
+    end
+  end
+
+  # The stepwise expander. Shared by all three recurrence shapes:
+  #
+  # * `start_predicate` drives upstream termination — returns
+  #   `true` while the candidate's start is still in-bounds
+  #   (pre-filter), `false` once we're past UNTIL / the `:within` window's end.
+  #
+  # * `selection_fn` is the BY-rule resolver. It takes one
+  #   candidate `%Interval{}` and returns a list (0 for LIMIT
+  #   rejection, 1 for passthrough, N for EXPAND). Delegates to
+  #   `Tempo.RRule.Selection.apply/3`. For a rule that moves a day
+  #   (`moves_days?/1`) it is `{:each_start_once, resolver}`, and an
+  #   occurrence an earlier period gave is not given again.
+  #
+  # * `output_limit` is the downstream cap — `n` for a bounded
+  #   recurrence, `@recurrence_safety_cap` otherwise. BY-rule
+  #   filtering happens before this cap, so a COUNT of 3 with
+  #   `BYMONTH=6` really means "first 3 June occurrences."
+  #
+  # The upstream `@recurrence_safety_cap` on the candidate stream
+  # is a belt-and-braces guard against impossible BY-rule
+  # combinations (e.g. `BYMONTHDAY=31` for months that never have
+  # 31 days — the filter would reject every candidate forever).
+  defp iterate_recurrence(
+         {%Tempo{} = from, floor, first},
+         %Tempo.Duration{} = cadence,
+         occurrence_end,
+         start_predicate,
+         selection_fn,
+         metadata,
+         output_limit \\ :every
+       )
+       when is_function(start_predicate, 1) and is_integer(first) do
+    from
+    |> period_occurrences(cadence, occurrence_end, start_predicate, selection_fn, metadata, first)
+    |> from_the_start(floor)
+    |> as_many_as(output_limit)
+    |> Enum.to_list()
+    |> walked(from)
+  end
+
+  # The occurrences a walk is asked for: a count of them, or every one it
+  # has before its end, which are no more than `@recurrence_safety_cap`.
+  defp as_many_as(occurrences, count) when is_integer(count) do
+    Stream.take(occurrences, count)
+  end
+
+  defp as_many_as(occurrences, :every) do
+    no_more_than_the_cap(occurrences, :occurrences)
+  end
+
+  # A walk takes at most `@recurrence_safety_cap` periods of its cadence, and
+  # gives at most that many occurrences where it has no count. Past either
+  # it fails. It was cut short there and said nothing, so
+  # `R20000/2026-06-01/P1D` gave ten thousand occurrences, as if it had no
+  # more. A walk that has what it was asked for before the cap never meets
+  # the failure, which is its last element (`walked/2`).
+  defp no_more_than_the_cap(walked, counted) do
+    Stream.transform(walked, 0, fn
+      _element, :past -> {:halt, :past}
+      _element, @recurrence_safety_cap -> {[{:error, walk_too_long_error(counted)}], :past}
+      element, count -> {[element], count + 1}
+    end)
+  end
+
+  defp walk_too_long_error(:periods) do
+    UnboundedRecurrenceError.exception(
+      reason:
+        "A recurrence is walked for at most #{@recurrence_safety_cap} periods of its cadence, and " <>
+          "this one has not come to its end in them: its count, its UNTIL or the end of its " <>
+          ":within window. What was found is not all of its occurrences, so none are given. " <>
+          "Give it a narrower :within window, or write the rule at a coarser frequency, as " <>
+          "FREQ=DAILY;BYHOUR=9 is for FREQ=HOURLY;BYHOUR=9."
+    )
+  end
+
+  defp walk_too_long_error(:occurrences) do
+    UnboundedRecurrenceError.exception(
+      reason:
+        "A recurrence gives at most #{@recurrence_safety_cap} occurrences at once, and this one " <>
+          "has more before its end. What was found is not all of them, so none are given. " <>
+          "Give it a narrower :within window."
+    )
+  end
+
+  # A rule that has no occurrence has nothing for a walk to find: the 31st of
+  # April (`FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31`), the 30th of February, an
+  # April of a rule of years that starts on the 31st of a month. Such a rule
+  # has no occurrences, which is its answer, and it was a walk that never
+  # ended until it was cut short (decided 2026-10-07).
+  #
+  # A walk asks when it has made `@periods_before_asking` periods and found
+  # nothing (`selected_within_the_cap/3`): a rule with occurrences nearly
+  # always has one by then, and is never asked. It is told of a rule whose
+  # parts are counted in a date or a time of day: in two ways from its
+  # dates, each in a calendar whose years come round, and in one from its
+  # steps. One whose dates are worked out in another way (an event, a
+  # window, a listed year), or that names no date in a calendar whose years
+  # come round in no cycle, is not told so, and its walk goes on until it is
+  # cut short.
+  #
+  # A calendar says the years its own come round in, in their dates and in
+  # their days of the week (`years_in_cycle/0`): four hundred for the
+  # Gregorian. So a rule of years that has selected nothing in that many of
+  # its periods never will, whatever it starts on and however many years it
+  # steps by, and nor will a rule of months in the months of those years:
+  # the periods after them are those again, and the walk has shown it.
+  #
+  # A rule of a finer frequency has more periods in a cycle than a walk
+  # makes, and is told from its parts. A year is one of a few kinds, by the
+  # days and the months it has and the day of the week it begins on
+  # (fourteen, in the Gregorian calendar), and a year's kind settles every
+  # date in it: its months' lengths, its weekdays, its weeks. So the parts
+  # of a rule that name a date, asked of one year of each kind, select a
+  # date in some year or in none. They are asked as the walk asks them
+  # (`Tempo.RRule.Selection`), of
+  # every period of the year, which is as many periods as the rule has or
+  # more. The parts that do not name a date are left out there: a time of
+  # day, and a position among what a period selects, each of which only
+  # keeps or drops what the others select.
+  #
+  # That asks nothing of what a rule steps by, and a rule whose parts name
+  # dates can still step past every one: `FREQ=DAILY;INTERVAL=7;BYDAY=MO`
+  # from a Tuesday. It is told so from its steps (`steps_past_its_parts?/2`),
+  # in whatever calendar it is: a week and a clock are the same in each.
+  @names_a_date [
+    :wkst,
+    :skip,
+    :month,
+    :week,
+    :week_of_month,
+    :day_of_year,
+    :day,
+    :day_of_week,
+    :byday
+  ]
+  @names_no_date [:hour, :minute, :second, :instance]
+  @time_of_day [:hour, :minute, :second, :microsecond]
+
+  # The periods a walk has made, having found nothing, when it first asks
+  # whether its rule has any occurrence. A rule of years or of months is
+  # asked again where it has made the periods its calendar's years come
+  # round in (`asked_at/2`).
+  @periods_before_asking 400
+
+  defp has_no_occurrence?(
+         %Tempo.Interval{
+           from: %Tempo{time: [{:year, year} | _rest]},
+           repeat_rule: %Tempo{time: [{:selection, selection} | units]}
+         } = interval,
+         cadence,
+         periods
+       )
+       when is_integer(year) and year >= 1 do
+    Enum.all?(selection, fn {token, _value} ->
+      token in @names_a_date or token in @names_no_date
+    end) and
+      Enum.all?(units, fn {token, _value} -> token in @time_of_day end) and
+      ((periods == @periods_before_asking and
+          (steps_past_its_parts?(interval, cadence) or position_no_period_has?(interval, cadence))) or
+         names_no_date_of_any_year?(interval, cadence, periods))
+  end
+
+  defp has_no_occurrence?(_interval, _cadence, _periods) do
+    false
+  end
+
+  # A position among what a period selects (RFC 5545's `BYSETPOS`) that no
+  # period has. A rule whose parts only keep or drop its period has one
+  # occurrence in a period at most, which is its first and its last, so a
+  # position that is neither is none of them: the second of each day's one
+  # (`FREQ=DAILY;BYSETPOS=2`). It was walked to its end and was an error.
+  defp position_no_period_has?(
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]} = rule},
+         %Tempo.Duration{time: [{unit, _amount} | _finer]}
+       ) do
+    case List.keyfind(selection, :instance, 0) do
+      {:instance, positions} ->
+        not Selection.expands?(rule, unit) and UnitValues.named(positions, 1..1//1) == []
+
+      nil ->
+        false
+    end
+  end
+
+  # The question of a calendar whose years come round: of the periods it
+  # comes round in, and of one year of each kind it has.
+  defp names_no_date_of_any_year?(
+         %Tempo.Interval{from: %Tempo{calendar: calendar}} = interval,
+         cadence,
+         periods
+       ) do
+    case calendar.years_in_cycle() do
+      years when is_integer(years) ->
+        come_round?(cadence, periods, calendar) or
+          (periods == @periods_before_asking and
+             selects_no_date?(interval, cadence, calendar, years))
+
+      _comes_round_in_none ->
+        false
+    end
+  end
+
+  # A walk that steps by a whole number of days, hours, minutes or seconds
+  # stops at places in the week that are a fixed distance apart: every
+  # seventh day from a Tuesday is a Tuesday, and every twelfth hour from
+  # 10:00 is 10:00 or 22:00. The parts of a rule that keep or drop a period
+  # by where it is in the week name places too: its day of the week, and
+  # each unit of the clock no finer than the step (a finer one makes times
+  # in the period, `Tempo.RRule.Selection`). Where the walk stops at none of
+  # them the rule has no occurrence, which no walk of its periods shows.
+  #
+  # A place is counted in the step's unit from the start of a week. A walk
+  # of `amount` at a time stops at each place that is a multiple of what
+  # `amount` and the week's count have in common on from its start, and at
+  # no other. A place the parts name is looked for a unit at a time from the
+  # finest, and a unit's value is passed over where no place that has it is
+  # one the walk stops at, whatever the coarser units are.
+  #
+  # The clock of a zone changes, so an hour of its day is not the same place
+  # in every week, and a rule in a zone is asked only where it steps by
+  # days, whose dates the calendar keeps (`moved_by_its_zone/2`). A stop
+  # there can still be moved a day on, where its date is one the zone leaves
+  # out or its time of day one the clock skips until past midnight, so a
+  # day of the week is one the walk comes to where it stops on it or on the
+  # day before.
+  @places_in_a_week [:second, :minute, :hour, :day_of_week]
+  @places_finer_than %{second: 0, minute: 1, hour: 2, day: 3}
+
+  defp steps_past_its_parts?(
+         %Tempo.Interval{
+           from: %Tempo{} = from,
+           repeat_rule: %Tempo{time: [{:selection, selection} | _units], calendar: calendar}
+         },
+         %Tempo.Duration{time: [{unit, amount}]}
+       )
+       when is_integer(amount) and amount > 0 and is_map_key(@places_finer_than, unit) do
+    parts = Enum.drop(@places_in_a_week, Map.fetch!(@places_finer_than, unit))
+    places = Enum.map(parts, &place_named(&1, selection, from, calendar))
+    moved = moved_by_its_zone(from, unit, amount)
+
+    moved != :not_known and Enum.all?(places, &is_tuple/1) and
+      not stops_where_named?(places, moved, amount)
+  end
+
+  defp steps_past_its_parts?(_interval, _cadence) do
+    false
+  end
+
+  # Whether a zone can move a stop of the walk off the place it steps to. A
+  # value in no zone is never moved. In a zone a rule of days from a date is
+  # never moved either, where the zone leaves no day out. Any other rule of
+  # days there can be moved a day on: a date that lands on a day left out
+  # is, as Samoa's 30 December 2011, and so is a time of day the clock skips
+  # until midnight or past it, as 23:45 on 4 May 2018 in Pyongyang and 23:30
+  # on the Saturday before the last Sunday of each March in Nuuk. It is
+  # never moved further, a zone skipping a day at most, nor back.
+  #
+  # A walk of hours, minutes or seconds in a zone steps by time passed, and
+  # a change of the zone's clock moves every stop after it by what the clock
+  # changed by: every twenty-fourth hour from 10:00 in Paris is 10:00 until
+  # the clocks go back, and 09:00 after. So its stops are at the places it
+  # steps to, each moved by one of the offsets the clock is at over the time
+  # the walk can cover (`shifted_by_its_clock/3`).
+  defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}, time: time}, :day, _amount)
+       when is_binary(zone) do
+    if not Keyword.has_key?(time, :hour) and Tempo.TimeZoneDatabase.do_days_left_out(zone) == [] do
+      :never
+    else
+      :a_day_on
+    end
+  end
+
+  defp moved_by_its_zone(%Tempo{extended: %{zone_id: zone}} = from, unit, amount)
+       when is_binary(zone) do
+    shifted_by_its_clock(from, unit, amount)
+  end
+
+  defp moved_by_its_zone(%Tempo{}, _unit, _amount) do
+    :never
+  end
+
+  @seconds_in %{hour: 3_600, minute: 60, second: 1}
+
+  # The time a walk can cover that a zone's changes are looked for in: a
+  # walk makes `@recurrence_safety_cap` periods at most, and the zone's
+  # changes are found a day at a time (`Tempo.TimeZoneDatabase.do_changes/3`),
+  # so one that could cover more than thirty years is not asked.
+  @years_of_changes_asked 30
+  @seconds_of_changes_asked @years_of_changes_asked * 366 * 86_400
+
+  # How far a zone's clock moves the stops of a walk of hours or less, as
+  # so many of the walk's unit for each offset the clock is at from the
+  # walk's start for as long as the walk can run: none, and an hour back,
+  # for a walk from the summer in Paris. `:not_known` where the walk can
+  # cover more time than is asked of the zone, and where the start names no
+  # one moment.
+  #
+  # A change that is no whole number of the walk's unit moves a stop into
+  # the unit before or leaves it in its own, by how far into its unit the
+  # walk starts. Lord Howe's clock goes back half an hour, so every
+  # twenty-fourth hour from 10:00 in its summer is 09:30 in its winter,
+  # which is in hour 9, and from 10:45 it is 10:15, in hour 10 still. The
+  # stops are so many whole units on from the start of the unit the walk
+  # starts in, which is the start's seconds into its unit and the change,
+  # together, in whole units. Such a change was not answered for, and the
+  # rule was walked to its end.
+  defp shifted_by_its_clock(%Tempo{extended: %{zone_id: zone}} = from, unit, amount) do
+    per_unit = Map.fetch!(@seconds_in, unit)
+    reach = @recurrence_safety_cap * amount * per_unit
+
+    with true <- reach <= @seconds_of_changes_asked,
+         start when is_number(start) <- utc_seconds_of(from) do
+      start = Kernel.trunc(start)
+      into_its_unit = seconds_into(from, unit)
+
+      {:by,
+       zone
+       |> clock_shifts(start, start + reach)
+       |> Enum.map(&Integer.floor_div(into_its_unit + &1, per_unit))
+       |> Enum.uniq()}
+    else
+      _not_asked -> :not_known
+    end
+  end
+
+  # How far a start is into the unit its walk steps by, in seconds: 10:45
+  # is 2,700 into its hour.
+  defp seconds_into(%Tempo{time: time}, :hour) do
+    whole_of(time, :minute) * 60 + whole_of(time, :second)
+  end
+
+  defp seconds_into(%Tempo{time: time}, :minute) do
+    whole_of(time, :second)
+  end
+
+  defp seconds_into(%Tempo{}, :second) do
+    0
+  end
+
+  defp whole_of(time, unit) do
+    case List.keyfind(time, unit, 0) do
+      {^unit, value} when is_integer(value) -> value
+      _not_written -> 0
+    end
+  end
+
+  defp utc_seconds_of(%Tempo{} = from) do
+    if anchored?(from) and Compare.point?(from.time) do
+      Compare.to_utc_seconds(from)
+    end
+  end
+
+  # Each offset a zone's clock is at between two moments, as its distance
+  # from the offset at the first.
+  defp clock_shifts(zone, from, to) do
+    case Tempo.TimeZoneDatabase.do_changes(zone, from, to) do
+      [] ->
+        [0]
+
+      [{_moment, at_the_start, _later} | _] = changes ->
+        Enum.uniq([
+          0 | Enum.map(changes, fn {_moment, _before, later} -> later - at_the_start end)
+        ])
+    end
+  end
+
+  # Whether a walk stops at a place its parts name, wherever its zone moves
+  # its stops to.
+  defp stops_where_named?(places, {:by, shifts}, amount) do
+    Enum.any?(shifts, &stops_at_one?(places, amount, &1))
+  end
+
+  defp stops_where_named?(places, moved, amount) do
+    stops_at_one?(named_where_stopped(places, moved), amount, 0)
+  end
+
+  # The places the parts name, as places the walk stops at: a day of the
+  # week a stop can be moved onto is named where the day before it is.
+  defp named_where_stopped(places, :never) do
+    places
+  end
+
+  defp named_where_stopped([{days, began, named}], :a_day_on) do
+    [{days, began, Enum.uniq(named ++ Enum.map(named, &Integer.mod(&1 - 1, days)))}]
+  end
+
+  # One unit of a place in the week: how many values it takes, the one the
+  # walk starts from and those the rule's part names, each counted from the
+  # unit's first. A rule with no such part names them all. They are the
+  # values the part is asked by when it limits (`Tempo.RRule.Selection`): a
+  # day of the week is a number of the rule's calendar, counted from the day
+  # its weeks begin on, and is the weekday ISO 8601 numbers here, as the
+  # start's is.
+  defp place_named(part, selection, %Tempo{} = from, calendar) do
+    with {:ok, %Range{first: first} = values} <- UnitValues.in_period(part, [], calendar),
+         {:ok, start} <- value_stepped_from(from, part) do
+      named =
+        selection
+        |> named_by(part, values)
+        |> Enum.map(&as_stepped(&1, part, calendar))
+
+      {Range.size(values), start - first, Enum.map(named, &(&1 - first))}
+    else
+      _no_one_value -> nil
+    end
+  end
+
+  defp named_by(selection, part, values) do
+    case List.keyfind(selection, part, 0) do
+      {^part, written} -> UnitValues.named(written, values)
+      nil -> Enum.to_list(values)
+    end
+  end
+
+  defp as_stepped(day, :day_of_week, calendar) do
+    UnitValues.iso_weekday_from_day_of_week(day, calendar)
+  end
+
+  defp as_stepped(value, _unit_of_the_clock, _calendar) do
+    value
+  end
+
+  defp value_stepped_from(%Tempo{} = from, :day_of_week) do
+    iso_day_of_week(from, :to_interval)
+  end
+
+  # A unit of the clock a start is not written to is at its first value.
+  defp value_stepped_from(%Tempo{time: time}, unit) do
+    case List.keyfind(time, unit, 0, {unit, 0}) do
+      {^unit, value} when is_integer(value) -> {:ok, value}
+      _several_values -> :error
+    end
+  end
+
+  # Whether a walk stops at a place the parts name. `apart` is how far apart
+  # its stops are, `weight` how many places one of a unit is, and `place`
+  # the place the finer units' values make.
+  #
+  # `shift` is how far every stop is moved from the place it steps to, in
+  # the step's unit: none, but where a zone's clock has changed.
+  defp stops_at_one?(places, amount, shift) do
+    {count, start} =
+      Enum.reduce(places, {1, 0}, fn {size, began, _named}, {weight, start} ->
+        {weight * size, start + began * weight}
+      end)
+
+    stops_at_one?(places, start + shift, Integer.gcd(amount, count), 1, 0)
+  end
+
+  defp stops_at_one?([], _start, _apart, _weight, _place) do
+    true
+  end
+
+  defp stops_at_one?([{size, _began, named} | coarser], start, apart, weight, place) do
+    held_to = Integer.gcd(apart, weight * size)
+
+    Enum.any?(named, fn value ->
+      place = place + value * weight
+
+      rem(place - start, held_to) == 0 and
+        stops_at_one?(coarser, start, apart, weight * size, place)
+    end)
+  end
+
+  # Whether a walk has made every period its rule ever has, the calendar
+  # having come round: in the Gregorian calendar a rule of every fourth year
+  # makes four hundred periods in sixteen hundred years, which are four
+  # hundred years' kinds again.
+  defp come_round?(%Tempo.Duration{time: [{unit, amount}]}, periods, calendar)
+       when unit in [:year, :month] and is_integer(amount) and amount > 0 do
+    case periods_of_a_cycle(unit, calendar) do
+      {:ok, count} -> periods >= count
+      :error -> false
+    end
+  end
+
+  defp come_round?(_cadence, _periods, _calendar) do
+    false
+  end
+
+  # The periods of years or of months a calendar's years come round in: the
+  # years of its cycle, and the months of them where every year has as
+  # many. A calendar whose years come round in no cycle has neither.
+  defp periods_of_a_cycle(:year, calendar) do
+    case calendar.years_in_cycle() do
+      years when is_integer(years) -> {:ok, years}
+      _comes_round_in_none -> :error
+    end
+  end
+
+  defp periods_of_a_cycle(:month, calendar) do
+    with {:ok, years} <- periods_of_a_cycle(:year, calendar),
+         months when is_integer(months) <- calendar.months_in_year() do
+      {:ok, years * months}
+    else
+      _no_one_count -> :error
+    end
+  end
+
+  # The counts of periods at which a walk that has found nothing asks
+  # whether its rule has any occurrence: early, and where a rule of years or
+  # of months has made the periods its calendar's years come round in.
+  defp asked_at(
+         %Tempo.Interval{from: %Tempo{calendar: calendar}},
+         %Tempo.Duration{time: [{unit, _amount}]}
+       )
+       when unit in [:year, :month] do
+    case periods_of_a_cycle(unit, calendar) do
+      {:ok, count} -> Enum.uniq([@periods_before_asking, count])
+      :error -> [@periods_before_asking]
+    end
+  end
+
+  defp asked_at(_interval, _cadence) do
+    [@periods_before_asking]
+  end
+
+  defp selects_no_date?(
+         %Tempo.Interval{
+           from: %Tempo{time: [{:year, year} | _rest]},
+           repeat_rule: %Tempo{time: [{:selection, selection} | _units]} = rule
+         },
+         %Tempo.Duration{time: [{unit, _amount} | _]},
+         calendar,
+         years_in_cycle
+       ) do
+    dates = Enum.reject(selection, fn {token, _value} -> token in @names_no_date end)
+    rule_of_dates = %{rule | time: [selection: dates]}
+
+    dates != [] and
+      year
+      |> one_year_of_each_kind(calendar, years_in_cycle)
+      |> Enum.all?(&no_date_in_year?(&1, rule_of_dates, each(unit), calendar))
+  end
+
+  # Every period of a year: each of the rule's own, or each day where its
+  # periods are shorter than a day.
+  defp each(unit) when unit in [:year, :month, :week, :day] do
+    %Tempo.Duration{time: [{unit, 1}]}
+  end
+
+  defp each(_shorter_than_a_day) do
+    %Tempo.Duration{time: [day: 1]}
+  end
+
+  # One year of each kind a calendar has, from `year` on: the kinds are
+  # those of the years of one cycle, since the years after them are those
+  # again.
+  defp one_year_of_each_kind(year, calendar, years_in_cycle) do
+    Enum.uniq_by(year..(year + years_in_cycle - 1)//1, &kind_of_year(&1, calendar))
+  end
+
+  # A year's kind: the days and the months it has, and the day of the week
+  # it begins on, each as the calendar answers it.
+  defp kind_of_year(year, calendar) do
+    case calendar.year(year) do
+      %Date.Range{first: first} ->
+        {calendar.days_in_year(year), calendar.months_in_year(year),
+         calendar.day_of_week(first.year, first.month, first.day, :monday)}
+
+      no_such_year ->
+        {year, no_such_year}
+    end
+  end
+
+  # Whether a rule selects no date of a year, walked from the year's first
+  # day to its last. A year the calendar does not have tells nothing, and
+  # the walk that asked goes on.
+  defp no_date_in_year?(year, rule, cadence, calendar) do
+    case calendar.year(year) do
+      %Date.Range{first: first, last: last} ->
+        start = day_of_calendar(first, calendar)
+        rule_of_dates = %Tempo.Interval{from: start, duration: cadence, repeat_rule: rule}
+
+        walk =
+          iterate_recurrence(
+            {start, start, 0},
+            cadence,
+            fn period_start, _period -> Math.add(period_start, cadence) end,
+            &under_until?(&1, day_of_calendar(last, calendar)),
+            selected_by_the_rule(rule_of_dates, cadence),
+            %{}
+          )
+
+        walk == {:ok, []}
+
+      _no_such_year ->
+        false
+    end
+  end
+
+  defp day_of_calendar(%Date{year: year, month: month, day: day}, calendar) do
+    %Tempo{time: [year: year, month: month, day: day], calendar: calendar}
+  end
+
+  # The occurrences a walk gave. A step its cadence could not take ends the
+  # walk as its last element, and is the walk's error: the second month after
+  # `12M31D` is a 31 February, and an occurrence that would end there has no
+  # end. A walk that has all the occurrences it was asked for before such a
+  # step never meets it.
+  defp walked(occurrences, from) do
+    case List.last(occurrences) do
+      {:error, reason} -> {:error, step_error(from, reason)}
+      _occurrence -> {:ok, occurrences}
+    end
+  end
+
+  # The occurrences of a rule on a recurrence written to its end, earliest
+  # first. The end stands where a start does: the rule is read from it
+  # (`Tempo.RRule.Selection.read_in_its_period/1`), a coarse end is filled to
+  # the unit the rule names as a coarse start is, and the periods are counted
+  # from it, the first being the one that starts there. An occurrence is one
+  # that is over by the end, as each of a recurrence with no rule is, and the
+  # count is of those the rule selects, nearest the end first.
+  defp selected_back_from(
+         %Tempo.Interval{to: to, duration: duration, recurrence: recurrence, metadata: metadata} =
+           interval,
+         options
+       ) do
+    {anchor, _floor, anchored} = selection_start(to, %{interval | from: to, to: nil})
+    %{select: select, once?: once?} = selection_parts(selected_by_the_rule(anchored, duration))
+    asked = {duration, select, strip_span_directives(metadata)}
+
+    with {:ok, as_far_back?} <- as_far_back(recurrence, interval, options),
+         {:ok, selected} <- selected_back({anchor, to}, asked, as_far_back?, 0, []) do
+      selected
+      |> one_of_each_start(once?)
+      |> nearest_the_end(recurrence)
+      |> counted_back(recurrence, options)
+    end
+  end
+
+  # How far back a walk goes: for a count until it has that many, and with
+  # no count to the start of its `:within` window, without which it has no
+  # first occurrence.
+  defp as_far_back(count, _interval, _options) when is_integer(count) do
+    {:ok, fn _period, found -> Enum.count_until(found, count) < count end}
+  end
+
+  defp as_far_back(:infinity, interval, options) do
+    case bound_lower(Keyword.get(options, :within)) do
+      %Tempo{} = window_from ->
+        {:ok, fn period, _found -> ends_after?(period.to, window_from) end}
+
+      nil ->
+        {:error, UnboundedRecurrenceError.exception(interval: interval)}
+    end
+  end
+
+  defp selected_back({anchor, to} = ends, {duration, select, metadata} = asked, more?, k, found)
+       when k < @recurrence_safety_cap do
+    with {:ok, period} <- period_back(anchor, duration, k, metadata),
+         true <- more?.(period, found) || {:ok, found},
+         {:ok, selected} <- over_by(select.(period), to) do
+      selected_back(ends, asked, more?, k + 1, selected ++ found)
+    end
+  end
+
+  defp selected_back(_ends, _asked, _more?, _k, _found) do
+    {:error, walk_too_long_error(:periods)}
+  end
+
+  # The period `k` cadences back from the end, which starts there: the first
+  # is the one that starts at the end, whose occurrences are over by it only
+  # where they are no length of time, and each one after it ends where the
+  # one before starts.
+  defp period_back(anchor, duration, k, metadata) do
+    back = Duration.negate(duration)
+
+    stop =
+      if k == 0 do
+        Math.add(anchor, duration)
+      else
+        add_n_durations(anchor, back, k - 1)
+      end
+
+    case {add_n_durations(anchor, back, k), stop} do
+      {%Tempo{} = start, %Tempo{} = stop} ->
+        {:ok, %Tempo.Interval{from: start, to: stop, metadata: metadata}}
+
+      {{:error, _reason} = error, _stop} ->
+        error
+
+      {_start, {:error, _reason} = error} ->
+        error
+
+      {start, _stop} ->
+        {:error,
+         ConversionError.exception(
+           value: anchor,
+           reason:
+             "Stepping #{Calendars.inspect(anchor)} back by #{Calendars.inspect(back)} gives #{Calendars.inspect(start)}, not one value."
+         )}
+    end
+  end
+
+  # What a period selects that is over by the end, or the error its rule
+  # gave.
+  defp over_by(selected, to) do
+    case Enum.find(selected, &match?({:error, _reason}, &1)) do
+      nil -> {:ok, Enum.reject(selected, &ends_after?(&1.to, to))}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp one_of_each_start(occurrences, true) do
+    Enum.uniq_by(occurrences, & &1.from)
+  end
+
+  defp one_of_each_start(occurrences, false) do
+    occurrences
+  end
+
+  defp nearest_the_end(occurrences, count) when is_integer(count) do
+    Enum.take(occurrences, -count)
+  end
+
+  defp nearest_the_end(occurrences, :infinity) do
+    occurrences
+  end
+
+  # One occurrence is the interval it is, as that of a rule from a start is,
+  # and more are a set. A `:within` window keeps those that overlap it.
+  defp counted_back([%Tempo.Interval{} = one], 1, options) do
+    one_occurrence_within(one, options)
+  end
+
+  defp counted_back(occurrences, _recurrence, options) do
+    with {:ok, kept} <- keep_within(occurrences, options) do
+      IntervalSet.new(kept, coalesce: coalesce_opt(options))
+    end
+  end
+
+  # The occurrences of a recurrence written with a duration and an end, earliest
+  # first: a count's, or an unending one's back to the start of its `:within`
+  # window, without which it has no first occurrence.
+  defp occurrences_back(to, back, count, _interval, metadata, _options) when is_integer(count) do
+    occurrences_back_to(to, back, metadata, 0, fn k, _occurrence -> k < count end, [])
+  end
+
+  defp occurrences_back(to, back, :infinity, interval, metadata, options) do
+    case Keyword.fetch(options, :within) do
+      {:ok, within} -> occurrences_back_within(to, back, bound_lower(within), metadata)
+      :error -> {:error, UnboundedRecurrenceError.exception(interval: interval)}
+    end
+  end
+
+  defp occurrences_back_within(_to, _back, nil, _metadata) do
+    {:error, empty_bound_error()}
+  end
+
+  defp occurrences_back_within(to, back, %Tempo{} = window_from, metadata) do
+    ends_in_window? = fn _k, %Tempo.Interval{to: stop} ->
+      Compare.compare_endpoints(stop, window_from) == :later
+    end
+
+    occurrences_back_to(to, back, metadata, 0, ends_in_window?, [])
+  end
+
+  # Walks back from the end one occurrence at a time while `more?` holds for an
+  # occurrence and its index, prepending each, so the list comes out earliest
+  # first.
+  defp occurrences_back_to(to, back, metadata, k, more?, occurrences)
+       when k < @recurrence_safety_cap do
+    case occurrence_back(to, back, k, metadata) do
+      {:ok, occurrence} ->
+        if more?.(k, occurrence) do
+          occurrences_back_to(to, back, metadata, k + 1, more?, [occurrence | occurrences])
+        else
+          {:ok, occurrences}
+        end
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp occurrences_back_to(_to, _back, _metadata, _k, _more?, _occurrences) do
+    {:error, walk_too_long_error(:occurrences)}
+  end
+
+  # The occurrence `k` cadences back from the end: it ends `k` durations before
+  # the end and starts one duration earlier.
+  defp occurrence_back(to, back, k, metadata) do
+    case {add_n_durations(to, back, k + 1), add_n_durations(to, back, k)} do
+      {%Tempo{} = start, %Tempo{} = stop} ->
+        {:ok, %Tempo.Interval{from: start, to: stop, metadata: metadata}}
+
+      {{:error, _reason} = error, _stop} ->
+        error
+
+      {_start, {:error, _reason} = error} ->
+        error
+
+      {start, _stop} ->
+        {:error,
+         ConversionError.exception(
+           value: to,
+           reason:
+             "Stepping #{Calendars.inspect(to)} back by #{Calendars.inspect(back)} gives #{Calendars.inspect(start)}, not one value."
+         )}
+    end
+  end
+
+  # Every occurrence the periods from `from` select, walking while a
+  # period's start satisfies `start_predicate`.
+  defp period_occurrences(
+         from,
+         cadence,
+         occurrence_end,
+         start_predicate,
+         selection,
+         metadata,
+         first \\ 0
+       ) do
+    %{select: select, rules_out: rules_out, once?: once?, nothing?: nothing?} =
+      selection_parts(selection)
+
+    occurrences =
+      from
+      |> candidates(cadence, occurrence_end, metadata, first, {select, rules_out})
+      |> Stream.take_while(&walking?(&1, start_predicate))
+      |> selected_within_the_cap(select, nothing?)
+      |> until_failure()
+
+    if once? do
+      Stream.uniq_by(occurrences, &start_of/1)
+    else
+      occurrences
+    end
+  end
+
+  # What a selection is made of (`selection_fn/2`): the resolver, and what a
+  # rule adds to it. A rule that moves a day (`moves_days?/1`) gives each
+  # start once; one with a part that limits by a unit coarser than its
+  # frequency is walked past the periods that part drops; and a rule may
+  # be asked whether it selects any date at all.
+  defp selection_parts(select) when is_function(select, 1) do
+    %{select: select, rules_out: nil, once?: false, nothing?: nil}
+  end
+
+  defp selection_parts({:each_start_once, selection}) do
+    %{selection_parts(selection) | once?: true}
+  end
+
+  defp selection_parts({:passing_over, rules_out, selection}) do
+    %{selection_parts(selection) | rules_out: rules_out}
+  end
+
+  defp selection_parts({:nothing_where, nothing?, selection}) do
+    %{selection_parts(selection) | nothing?: nothing?}
+  end
+
+  defp candidates(from, cadence, occurrence_end, metadata, first, {_select, rules_out} = asked)
+       when is_function(rules_out, 1) and is_function(occurrence_end, 2) do
+    candidates_passing_over(from, cadence, occurrence_end, metadata, first, asked)
+  end
+
+  defp candidates(from, cadence, occurrence_end, metadata, first, _asked) do
+    recurrence_candidates(from, cadence, occurrence_end, metadata, first)
+  end
+
+  # What each period selects, for at most `@recurrence_safety_cap` periods
+  # (`no_more_than_the_cap/2`). A walk that has found nothing in its first
+  # `@periods_before_asking`, or in the periods its calendar's years come
+  # round in, asks whether its rule has any occurrence
+  # (`has_no_occurrence?/3`), and ends there with nothing where it has none.
+  defp selected_within_the_cap(periods, select, nothing?) do
+    Stream.transform(periods, {0, false}, fn
+      _period, :past ->
+        {:halt, :past}
+
+      _period, {@recurrence_safety_cap, _found?} ->
+        {[{:error, walk_too_long_error(:periods)}], :past}
+
+      period, {count, false} = made ->
+        if nothing_at?(nothing?, count) do
+          {:halt, :past}
+        else
+          selected_in(period, select, made)
+        end
+
+      period, made ->
+        selected_in(period, select, made)
+    end)
+  end
+
+  # Whether a walk that has found nothing in `count` periods is at one of
+  # the counts its rule is asked at, and the rule has no occurrence.
+  defp nothing_at?({asked_at, nothing?}, count) when is_function(nothing?, 1) do
+    count in asked_at and nothing?.(count)
+  end
+
+  defp nothing_at?(_no_question, _count) do
+    false
+  end
+
+  defp selected_in(period, select, {count, found?}) do
+    occurrences = selected(period, select)
+    {occurrences, {count + 1, found? or occurrences != []}}
+  end
+
+  defp start_of(%Tempo.Interval{from: from}) do
+    from
+  end
+
+  defp start_of(failure) do
+    failure
+  end
+
+  # A walk ends with its first failure: a step the cadence could not take, or
+  # a selection that has no answer for a candidate (a computed event with no
+  # date in its year). The failure is the walk's last element, which
+  # `walked/2` returns as its error.
+  defp until_failure(occurrences) do
+    Stream.transform(occurrences, :walking, fn
+      _occurrence, :failed -> {:halt, :failed}
+      {:error, _reason} = failure, :walking -> {[failure], :failed}
+      occurrence, :walking -> {[occurrence], :walking}
+    end)
+  end
+
+  # A step the cadence could not take is the walk's last candidate, kept so
+  # the walk can return it (`walked/2`).
+  defp walking?({:error, _reason}, _start_predicate) do
+    true
+  end
+
+  defp walking?({start, _candidate}, start_predicate) do
+    start_predicate.(start)
+  end
+
+  defp selected({:error, _reason} = failure, _selection_fn) do
+    [failure]
+  end
+
+  defp selected({_start, :passed_over}, _selection_fn) do
+    []
+  end
+
+  defp selected({_start, {:selected, occurrences}}, _selection_fn) do
+    occurrences
+  end
+
+  defp selected({_start, candidate}, selection_fn) do
+    selection_fn.(candidate)
+  end
+
+  # Contiguous fast path: walk the starts once and pair each with the
+  # next, so occurrence i's `to` is occurrence i+1's `from`. One
+  # `Math.add` per occurrence instead of two.
+  #
+  # Each path starts at period `first`, which is 0 for a walk from the
+  # recurrence's own start, and each start is `from + i × cadence`.
+  defp recurrence_candidates(from, cadence, :contiguous, metadata, first) do
+    occurrence_metadata = strip_span_directives(metadata)
+
+    from
+    |> nth_start(cadence, first)
+    |> Stream.unfold(&contiguous_candidate(&1, cadence, occurrence_metadata))
+  end
+
+  # Contiguous occurrences whose starts are each `from + i × cadence`: a
+  # cadence of days or weeks from a time of day in a zone. A step that lands
+  # on a reading the clock skips is moved to the reading that long after
+  # (02:30 on the night of a spring-forward is 03:30), and the step after it
+  # is taken from the start again, where it was taken from the moved
+  # reading and every later occurrence kept the moved time. One step for
+  # each occurrence, as on the path above.
+  defp recurrence_candidates(from, cadence, :contiguous_from_the_start, metadata, first) do
+    occurrence_metadata = strip_span_directives(metadata)
+
+    Stream.unfold(
+      {first, nth_start(from, cadence, first)},
+      &candidate_from_the_start(&1, from, cadence, occurrence_metadata)
+    )
+  end
+
+  # General path: each start is `from + i × cadence` (scaled, so
+  # month/year cadences don't clamp-drift) and the `to` comes from the
+  # end function.
+  defp recurrence_candidates(from, cadence, occurrence_end_fn, metadata, first)
+       when is_function(occurrence_end_fn, 2) do
+    occurrence_metadata = strip_span_directives(metadata)
+
+    first
+    |> Stream.unfold(
+      &stepped_candidate(&1, from, cadence, occurrence_end_fn, occurrence_metadata)
+    )
+    |> each_start_once(from)
+  end
+
+  # In a zone that leaves a day out (Samoa had no 30 December 2011) the step
+  # onto that day is moved to the day after, where the step after it lands
+  # too. The two are one occurrence, and the later is the one that is kept:
+  # it is the step that lands there, and its end is counted from where it is.
+  defp each_start_once(candidates, %Tempo{extended: %{zone_id: zone}}) when is_binary(zone) do
+    if TimeZoneDatabase.do_days_left_out(zone) == [] do
+      candidates
+    else
+      candidates
+      |> Stream.concat([:walked])
+      |> Stream.transform(nil, &held_for_the_next/2)
+    end
+  end
+
+  defp each_start_once(candidates, _from) do
+    candidates
+  end
+
+  # Each candidate is held until the one after it is known, and dropped
+  # where that one has its start.
+  defp held_for_the_next(:walked, held) do
+    {List.wrap(held), nil}
+  end
+
+  defp held_for_the_next(candidate, nil) do
+    {[], candidate}
+  end
+
+  defp held_for_the_next({start, _span} = candidate, {start, _held}) do
+    {[], candidate}
+  end
+
+  defp held_for_the_next(candidate, held) do
+    {[held], candidate}
+  end
+
+  # The candidates of a rule one of whose parts limits by a unit coarser than
+  # its frequency, or by the unit it steps by: `FREQ=MINUTELY;BYHOUR=9` keeps
+  # a minute by its hour, and `FREQ=DAILY;BYMONTH=2` a day by its month. Such
+  # a part drops a candidate with every candidate after it until the next
+  # value it names, so where a period selects nothing the walk asks whether
+  # such a part dropped it (`Tempo.RRule.Selection.rules_out/3`), and goes on
+  # from the first period that starts no earlier than that value, asking
+  # nothing of the periods between.
+  #
+  # Each period was asked, and a walk takes ten thousand at most, so a rule
+  # whose occurrences are far apart for its frequency never came to them:
+  # `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` is thirty mornings and
+  # 43,000 minutes, and it was refused. It is now walked in a few periods a
+  # day. A period that selects nothing is one of the walk's, and is counted
+  # as one.
+  #
+  # A period is asked what it selects here, where the walk is made, and the
+  # walk asks where to go on from at a period that selects nothing. An
+  # answer that takes it no further than its next step is asked for less
+  # often: after a run of two such periods, and then of three
+  # (`@longest_run_before_asking`). So a rule for Mondays, Wednesdays and
+  # Fridays, which has a day between its occurrences, is walked as it was
+  # and asked nothing more, and one for Mondays alone goes from each Tuesday
+  # to the Monday after.
+  defp candidates_passing_over(from, cadence, occurrence_end_fn, metadata, first, asked) do
+    walk = {from, cadence, occurrence_end_fn, strip_span_directives(metadata)}
+
+    {first, 0, 1}
+    |> Stream.unfold(&candidate_or_passed_over(&1, walk, asked))
+    |> each_start_once(from)
+  end
+
+  defp candidate_or_passed_over(:stopped, _walk, _asked) do
+    nil
+  end
+
+  defp candidate_or_passed_over(
+         {step, run, run_before_asking},
+         {from, cadence, occurrence_end_fn, metadata} = walk,
+         asked
+       ) do
+    case stepped_candidate(step, from, cadence, occurrence_end_fn, metadata) do
+      {{%Tempo{} = start, candidate}, next} ->
+        selected_or_passed_over(start, candidate, {next, run, run_before_asking}, walk, asked)
+
+      {failure, :stopped} ->
+        {failure, :stopped}
+    end
+  end
+
+  @longest_run_before_asking 3
+
+  defp selected_or_passed_over(
+         start,
+         candidate,
+         {next, run, run_before_asking},
+         walk,
+         {select, rules_out}
+       ) do
+    case select.(candidate) do
+      [] when run + 1 < run_before_asking ->
+        {{start, :passed_over}, {next, run + 1, run_before_asking}}
+
+      [] ->
+        goes_on = going_on(rules_out.(candidate), start, next, walk)
+        {{start, :passed_over}, {goes_on, 0, run_after(goes_on, next, run_before_asking)}}
+
+      occurrences ->
+        {{start, {:selected, occurrences}}, {next, 0, run_before_asking}}
+    end
+  end
+
+  # The run of periods that select nothing before the walk asks again: the
+  # next such period where the answer took it further than its next step,
+  # and a longer run where it did not.
+  defp run_after(next, next, run_before_asking) do
+    min(run_before_asking + 1, @longest_run_before_asking)
+  end
+
+  defp run_after(_further, _next, _run_before_asking) do
+    1
+  end
+
+  @seconds_in %{second: 1, minute: 60, hour: 3_600, day: 86_400}
+
+  # Where a walk goes on from is found by counting to it and asking a few of
+  # the walk's starts, which is more than the next few steps cost: Mondays,
+  # Wednesdays and Fridays are two days apart, and a rule of days is walked
+  # to each by its steps. A month and a year are always further.
+  @periods_worth_passing_over 3
+
+  defp going_on(nil, _start, next, _walk) do
+    next
+  end
+
+  defp going_on(goes_on, start, next, {_from, cadence, _end, _metadata} = walk) do
+    if anchored?(start) and worth_passing_over?(seconds_on(goes_on, start), cadence) do
+      step_going_on(goes_on, start, next, walk)
+    else
+      next
+    end
+  end
+
+  defp worth_passing_over?(:longer, _cadence) do
+    true
+  end
+
+  defp worth_passing_over?(seconds, %Tempo.Duration{time: [{unit, amount}]}) do
+    seconds > @periods_worth_passing_over * amount * Map.fetch!(@seconds_in, unit)
+  end
+
+  # How far on the walk would go, where that is a count of seconds.
+  defp seconds_on({:in_days, days}, _start) do
+    days * Map.fetch!(@seconds_in, :day)
+  end
+
+  defp seconds_on({:next, unit}, _start) do
+    Map.get(@seconds_in, unit, :longer)
+  end
+
+  defp seconds_on({:on_day, _month, _day}, _start) do
+    :longer
+  end
+
+  defp seconds_on({:on, unit, value}, %Tempo{time: time}) do
+    case {Map.get(@seconds_in, unit), Keyword.get(time, unit)} do
+      {seconds, current} when is_integer(seconds) and is_integer(current) ->
+        (value - current) * seconds
+
+      _a_month_or_a_year ->
+        :longer
+    end
+  end
+
+  # The first step whose period starts no earlier than where the walk goes
+  # on from: the reading of `start` with its `unit` a later value the part
+  # names (09:00 of its day), a later day of its year, the start of the day
+  # so many days on, or the start of the next `unit`. A reading the clock of
+  # its zone skips is no reading to go on from, and the walk goes on from
+  # the next `unit` there.
+  defp step_going_on({:next, unit}, start, next, walk) do
+    step_past(unit, start, next, walk)
+  end
+
+  defp step_going_on({:on, unit, value}, start, next, walk) do
+    step_onto(start, unit, [{unit, value}], next, walk)
+  end
+
+  defp step_going_on({:on_day, month, day}, start, next, walk) do
+    step_onto(start, :day, [month: month, day: day], next, walk)
+  end
+
+  defp step_going_on({:in_days, days}, start, next, {from, cadence, _end, _metadata} = walk) do
+    with %Tempo{} = day <- trunc(start, :day),
+         %Tempo{} = named <- Math.add(day, %Tempo.Duration{time: [day: days]}) do
+      first_step_reaching(named, start, next, from, cadence)
+    else
+      _no_such_day -> step_past(:day, start, next, walk)
+    end
+  end
+
+  # The reading of `start` cut to `unit`, with the units named given their
+  # values.
+  defp step_onto(start, unit, named_units, next, {from, cadence, _end, _metadata} = walk) do
+    with %Tempo{time: time} = unit_start <- trunc(start, unit),
+         named = earliest_showing(%{unit_start | time: Keyword.merge(time, named_units)}),
+         true <- Zone.shown?(named) do
+      first_step_reaching(named, start, next, from, cadence)
+    else
+      _no_such_reading -> step_past(unit, start, next, walk)
+    end
+  end
+
+  # A reading made from another's units is at its zone's offset and not at
+  # the other's, and at the earlier of two where the clock shows it twice:
+  # no period that starts on it is passed over.
+  defp earliest_showing(%Tempo{extended: %{zone_id: zone}} = named) when is_binary(zone) do
+    %{named | shift: nil}
+  end
+
+  defp earliest_showing(named) do
+    named
+  end
+
+  # The first step whose period starts no earlier than the end of the
+  # `unit` that `start` is in: the next minute, hour, day, month or year.
+  # `next` is the step after the one that gave `start`, and the answer where
+  # there is no such moment to reach.
+  defp step_past(unit, %Tempo{} = start, next, {from, cadence, _occurrence_end, _metadata}) do
+    with %Tempo{} = unit_start <- trunc(start, unit),
+         %Tempo{} = unit_end <- Math.add(unit_start, %Tempo.Duration{time: [{unit, 1}]}) do
+      first_step_reaching(unit_end, start, next, from, cadence)
+    else
+      _no_such_moment -> next
+    end
+  end
+
+  # How far an estimate of a step is put right, a step at a time: a day is
+  # an hour longer or shorter where the clock changes, and no more.
+  @steps_put_right 4
+
+  # The steps are a whole number of seconds apart but where a day is longer
+  # or shorter than twenty-four hours, so the step is counted from the time
+  # between and then held to the walk's own starts: the period before it
+  # starts before the limit, so every period passed over does, and it does
+  # not.
+  defp first_step_reaching(
+         limit,
+         start,
+         next,
+         from,
+         %Tempo.Duration{time: [{unit, amount}]} = cadence
+       ) do
+    apart = seconds_between(start, limit)
+    period = amount * Map.fetch!(@seconds_in, unit)
+    estimate = next - 1 + max(1, div(apart + period - 1, period))
+    before? = &period_starts_before?(nth_start(from, cadence, &1), limit)
+
+    with {:ok, count} <- back_to_the_first(estimate, next, before?, @steps_put_right),
+         {:ok, count} <- on_to_the_first(count, before?, @steps_put_right) do
+      count
+    else
+      :not_found -> next
+    end
+  end
+
+  defp first_step_reaching(_limit, _start, next, _from, _cadence) do
+    next
+  end
+
+  defp seconds_between(from, to) do
+    Kernel.trunc(Compare.to_utc_seconds(to)) - Kernel.trunc(Compare.to_utc_seconds(from))
+  end
+
+  defp period_starts_before?(%Tempo{} = start, limit) do
+    Compare.compare_endpoints(start, limit) == :earlier
+  end
+
+  defp period_starts_before?(_no_start, _limit) do
+    false
+  end
+
+  # The estimate, or the step before it, and so on, down to the first whose
+  # predecessor starts before the limit.
+  defp back_to_the_first(count, next, _before?, _tries) when count <= next do
+    {:ok, next}
+  end
+
+  defp back_to_the_first(_count, _next, _before?, 0) do
+    :not_found
+  end
+
+  defp back_to_the_first(count, next, before?, tries) do
+    if before?.(count - 1) do
+      {:ok, count}
+    else
+      back_to_the_first(count - 1, next, before?, tries - 1)
+    end
+  end
+
+  defp on_to_the_first(_count, _before?, 0) do
+    :not_found
+  end
+
+  defp on_to_the_first(count, before?, tries) do
+    if before?.(count) do
+      on_to_the_first(count + 1, before?, tries - 1)
+    else
+      {:ok, count}
+    end
+  end
+
+  # The candidate that starts at `start` and the start of the one after it,
+  # which is where it ends. A step the cadence cannot take is the walk's last
+  # candidate.
+  defp contiguous_candidate(:stopped, _cadence, _metadata) do
+    nil
+  end
+
+  defp contiguous_candidate(%Tempo{} = start, cadence, metadata) do
+    case Math.add(start, cadence) do
+      %Tempo{} = next_start ->
+        {{start, %Tempo.Interval{from: start, to: next_start, metadata: metadata}}, next_start}
+
+      failed ->
+        {step_failure(failed), :stopped}
+    end
+  end
+
+  defp contiguous_candidate(no_first_start, _cadence, _metadata) do
+    {step_failure(no_first_start), :stopped}
+  end
+
+  defp candidate_from_the_start(:stopped, _from, _cadence, _metadata) do
+    nil
+  end
+
+  defp candidate_from_the_start({step, %Tempo{} = start}, from, cadence, metadata) do
+    case start_after(step, start, from, cadence) do
+      {next_step, %Tempo{} = next_start} ->
+        occurrence = %Tempo.Interval{from: start, to: next_start, metadata: metadata}
+        {{start, occurrence}, {next_step, next_start}}
+
+      {_next_step, failed} ->
+        {step_failure(failed), :stopped}
+    end
+  end
+
+  defp candidate_from_the_start({_step, no_first_start}, _from, _cadence, _metadata) do
+    {step_failure(no_first_start), :stopped}
+  end
+
+  # The start after `start`, and the step that reaches it. A step onto a day
+  # the zone leaves out is moved to the day after, where the step after it
+  # lands too: the two are one occurrence, so the start after is the next
+  # step's. One step on is as far as that reaches, so a cadence that goes
+  # nowhere is not followed.
+  defp start_after(step, start, from, cadence) do
+    case add_n_durations(from, cadence, step + 1) do
+      ^start -> {step + 2, add_n_durations(from, cadence, step + 2)}
+      next_start -> {step + 1, next_start}
+    end
+  end
+
+  defp stepped_candidate(:stopped, _from, _cadence, _occurrence_end_fn, _metadata) do
+    nil
+  end
+
+  defp stepped_candidate(step, from, cadence, occurrence_end_fn, metadata) do
+    with %Tempo{} = start <- nth_start(from, cadence, step),
+         %Tempo{} = stop <- occurrence_end_fn.(start, step) do
+      {{start, %Tempo.Interval{from: start, to: stop, metadata: metadata}}, step + 1}
+    else
+      failed -> {step_failure(failed), :stopped}
+    end
+  end
+
+  defp nth_start(from, _cadence, 0) do
+    as_the_clock_shows(from)
+  end
+
+  defp nth_start(from, cadence, step) do
+    add_n_durations(from, cadence, step)
+  end
+
+  # A start with no year, placed on a window, can be a reading the clock
+  # skips there: 02:30 on the night clocks go forward, or the day a zone
+  # leaves out. The first occurrence is then the reading that long after, as
+  # RFC 5545 §3.3.5 has it and as a step that lands there is, and each
+  # occurrence after it is stepped from the start as it is written. A start
+  # that is read is never such a reading, which is refused.
+  @no_step %Tempo.Duration{time: [day: 0]}
+
+  defp as_the_clock_shows(%Tempo{extended: %{zone_id: zone}} = start) when is_binary(zone) do
+    if Zone.zone_status(start) == :gap do
+      Math.add(start, @no_step)
+    else
+      start
+    end
+  end
+
+  defp as_the_clock_shows(start) do
+    start
+  end
+
+  # A start or an end the cadence could not be stepped to, as the candidate
+  # that ends the walk. A value that holds unspecified digits steps to a set
+  # of candidates, which is no one start either.
+  defp step_failure({:error, _reason} = failure) do
+    failure
+  end
+
+  defp step_failure(_several) do
+    {:error, :grouped_component}
+  end
+
+  # `occurrence_duration` / `occurrence_base_to` are *directives* to
+  # this materialiser — they say how to span each occurrence. Once the
+  # span is fixed in `from`/`to` they've done their job, so they're
+  # dropped from the emitted occurrences rather than riding along as
+  # pseudo-semantic metadata (which would surface, e.g., in inspect).
+  defp strip_span_directives(metadata) when is_map(metadata) do
+    Map.drop(metadata, [:occurrence_duration, :occurrence_base_to])
+  end
+
+  defp strip_span_directives(metadata) do
+    metadata
+  end
+
+  # DTSTART floor — per RFC 5545, DTSTART is always the first occurrence.
+  # BY-rule EXPAND can legitimately produce dates earlier in the
+  # DTSTART-containing period (e.g. BYMONTHDAY=1 with DTSTART=Sep 30 → also
+  # Sep 1), and those are dropped. A start with no year lies on an axis that
+  # comes round again — the hours of a day, the days of a week — so an
+  # occurrence after it in the walk can be earlier on the axis
+  # (`R3/T22H/PT1H` reaches 00:00): only those before the first occurrence
+  # at or after the start are dropped.
+  defp from_the_start(occurrences, %Tempo{time: time} = from) do
+    if on_the_time_line?(time) do
+      Stream.reject(occurrences, &before_dtstart?(&1, from))
+    else
+      Stream.drop_while(occurrences, &before_dtstart?(&1, from))
+    end
+  end
+
+  # A rule with no start begins where its window does, and its count is of
+  # the occurrences from the window's start (decided 2026-10-08). The walk
+  # begins at the period the window starts in, so an occurrence of that
+  # period that is over before the window opens is no part of the count: it
+  # was counted and then dropped, and `R2/../P1Y/FL1M1DN` within June 2026 to
+  # June 2029 was 1 January 2027 alone, where `R2/2026-06-01/P1Y/FL1M1DN` is
+  # that day and 1 January 2028.
+  defp from_the_start(occurrences, {%Tempo{} = from, %Tempo{} = window_from}) do
+    occurrences
+    |> from_the_start(from)
+    |> Stream.reject(&over_before?(&1, window_from))
+  end
+
+  defp over_before?(%Tempo.Interval{to: %Tempo{} = to}, window_from) do
+    not ends_after?(to, window_from)
+  end
+
+  # The step that ended a walk is not an occurrence to drop.
+  defp over_before?(_failure, _window_from) do
+    false
+  end
+
+  # The floor of a walk that is counted from a window's start, which the
+  # conversion of a rule with no start says in the option `:counted_from`:
+  # it is no option of a caller's.
+  defp counted_from(floor, options) do
+    case Keyword.get(options, :counted_from) do
+      %Tempo{} = window_from -> {floor, window_from}
+      _no_window -> floor
+    end
+  end
+
+  defp counted_from_window(options, within) do
+    case window_lower(within) do
+      %Tempo{} = window_from -> Keyword.put(options, :counted_from, window_from)
+      _no_lower -> options
+    end
+  end
+
+  # Where a window starts: an open-ended one at its start, and a set of
+  # spans at the first of theirs.
+  defp window_lower(within) do
+    case open_window_start(within) do
+      {:ok, %Tempo{} = from} -> from
+      _bounded -> bound_lower(within)
+    end
+  end
+
+  defp before_dtstart?(%Tempo.Interval{from: %Tempo{} = candidate_from}, %Tempo{} = dtstart) do
+    Compare.compare_endpoints(candidate_from, dtstart) == :earlier
+  end
+
+  # The step that ended a walk is not an occurrence to drop.
+  defp before_dtstart?(_failure, _dtstart) do
+    false
+  end
+
+  # Build the per-candidate selection filter/expand function. When
+  # `repeat_rule` is nil, returns a passthrough (identity). When
+  # non-nil, delegates to `Tempo.RRule.Selection.apply/3` with the
+  # enclosing FREQ derived from the cadence's primary unit.
+  defp selection_fn(%Tempo.Interval{repeat_rule: nil}, _cadence) do
+    fn candidate -> [candidate] end
+  end
+
+  # A rule's selection, with the question a walk that finds nothing asks of
+  # it (`has_no_occurrence?/3`).
+  defp selection_fn(%Tempo.Interval{repeat_rule: %Tempo{}} = interval, cadence) do
+    {:nothing_where, {asked_at(interval, cadence), &has_no_occurrence?(interval, cadence, &1)},
+     selected_by_the_rule(interval, cadence)}
+  end
+
+  defp selected_by_the_rule(
+         %Tempo.Interval{repeat_rule: %Tempo{} = rule, metadata: metadata} = interval,
+         %Tempo.Duration{} = cadence
+       ) do
+    freq = freq_of(cadence)
+    explicit_span? = explicit_occurrence_span?(metadata)
+    resize? = not explicit_span? and Selection.expands?(rule, freq)
+    origin_day = origin_day_of(interval)
+
+    select = fn candidate ->
+      case Selection.apply(candidate, rule, freq,
+             origin_day: origin_day,
+             keep_span: explicit_span?,
+             at_most: @recurrence_safety_cap
+           ) do
+        # A period that gives more occurrences than a recurrence gives at
+        # once, or a position that would pick among as many (decided
+        # 2026-10-08): the rule is refused as a value that names as many
+        # is, whatever its count or its window, and no more than that are
+        # made to find it out. Every minute of the working hours of a year
+        # was 140,000 occurrences made for a count of ten.
+        {:error, {:more_than, _most}} -> [{:error, too_many_spans_error(interval)}]
+        {:error, _reason} = failure -> [failure]
+        occurrences -> resize_selected_occurrences(occurrences, resize?)
+      end
+    end
+
+    select = passing_over(select, rule, freq, cadence)
+
+    if moves_days?(rule) do
+      {:each_start_once, select}
+    else
+      select
+    end
+  end
+
+  # A rule of days, hours, minutes or seconds, a whole number of them apart
+  # and running forward, that has a part which limits by a coarser unit is
+  # walked past the periods that part drops.
+  defp passing_over(select, rule, freq, %Tempo.Duration{time: [{unit, amount}]})
+       when unit in [:day, :hour, :minute, :second] and is_integer(amount) and amount > 0 do
+    if Selection.passes_over?(rule, freq) do
+      {:passing_over, &Selection.rules_out(&1, rule, freq), select}
+    else
+      select
+    end
+  end
+
+  defp passing_over(select, _rule, _freq, _cadence) do
+    select
+  end
+
+  # A rule that moves a day its month lacks (RFC 7529's `SKIP`) can move it
+  # onto a day the period after selects too: the 31st of February moved
+  # forward is 1 March, which a rule for the 1st and the 31st selects in
+  # March as well. The two are one occurrence (RFC 8984 §4.3.3.1: "eliminate
+  # any date-times that have already been produced by previous iterations").
+  defp moves_days?(%Tempo{time: [{:selection, selection} | _units]}) do
+    List.keymember?(selection, :skip, 0)
+  end
+
+  defp moves_days?(_rule) do
+    false
+  end
+
+  # The day the recurrence started on — DTSTART's day-of-month —
+  # which cadence stepping may have clamped away on individual
+  # candidates (a start on 29 February steps to the 28th in common years).
+  defp origin_day_of(%Tempo.Interval{from: %Tempo{time: time}}) do
+    case Keyword.get(time, :day) do
+      day when is_integer(day) -> day
+      _other -> nil
+    end
+  end
+
+  defp origin_day_of(_interval) do
+    nil
+  end
+
+  # A selection that expands picks *points* at their own resolution —
+  # "the 15th" is the day the 15th, not the month it sits in. The
+  # candidate it expands spans a whole cadence period (so the resolver
+  # can see the enclosing month/year), so each point inherits that
+  # period as its span. Unless the recurrence carries an explicit event
+  # span (a DTEND-style `occurrence_base_to` or `occurrence_duration`),
+  # resize each point to one unit of its own resolution. A selection
+  # that only limits keeps whole candidates, each spanning its cadence
+  # as it would without the selection: the Monday hours of an hourly
+  # recurrence are hours, and the January weeks of a weekly one weeks.
+  # This keeps native `~o".../FL15DN"`, RRULE, and cron consistent
+  # without storing any per-occurrence metadata.
+  defp resize_selected_occurrences(occurrences, false) do
+    Enum.map(occurrences, &drop_windowed_marker/1)
+  end
+
+  defp resize_selected_occurrences(occurrences, true) do
+    Enum.map(occurrences, &resize_to_resolution/1)
+  end
+
+  defp drop_windowed_marker(%Tempo.Interval{metadata: %{windowed: _} = metadata} = occurrence) do
+    %{occurrence | metadata: Map.delete(metadata, :windowed)}
+  end
+
+  defp drop_windowed_marker(occurrence) do
+    occurrence
+  end
+
+  # A §12.10 window occurrence already carries its own span, so it is kept as
+  # is; the internal marker that protected it from resizing is dropped here.
+  defp resize_to_resolution(%Tempo.Interval{metadata: %{windowed: true} = metadata} = occurrence) do
+    %{occurrence | metadata: Map.delete(metadata, :windowed)}
+  end
+
+  defp resize_to_resolution(%Tempo.Interval{from: %Tempo{} = from} = occurrence) do
+    {unit, _value} = resolution(from)
+    stepped = Math.add(from, %Tempo.Duration{time: [{unit, 1}]})
+    %{occurrence | to: where_the_point_ends(from, unit, stepped)}
+  end
+
+  defp resize_to_resolution(occurrence) do
+    occurrence
+  end
+
+  # A point ends a unit of its resolution on. Where the clock of its zone
+  # skips its start a step is counted from the reading the clock comes out
+  # on, which is past where the point itself ends: the hour 02:00 on the
+  # morning Lord Howe's clocks go from 02:00 to 02:30 is the half of it the
+  # clock shows and ends at 03:00 (decided 2026-10-08), as the value
+  # `T2H` there does and as `Tempo.select/2` gives it. It ran to 03:30, an
+  # hour from 02:30 and half an hour into the hour selected after it.
+  #
+  # A point nowhere near a change of its zone's clock ends a unit on, which
+  # is where it was stepped to, and its own end is not asked for.
+  defp where_the_point_ends(%Tempo{extended: %{zone_id: zone}} = from, unit, %Tempo{} = stepped)
+       when is_binary(zone) and unit in [:hour, :minute] do
+    if Zone.clear_of_changes?(from, Map.fetch!(@seconds_in, unit)) do
+      stepped
+    else
+      its_own_end_or(from, stepped)
+    end
+  end
+
+  defp where_the_point_ends(_from, _unit, stepped) do
+    stepped
+  end
+
+  defp its_own_end_or(from, stepped) do
+    with {:ok, {_lower, %Tempo{} = own_end}, _unit} <- Interval.do_next_unit_boundary(from),
+         :earlier <- Compare.compare_endpoints(own_end, stepped) do
+      own_end
+    else
+      _a_unit_on -> stepped
+    end
+  end
+
+  defp explicit_occurrence_span?(metadata) do
+    match?(%{occurrence_base_to: %Tempo{}}, metadata) or
+      match?(%{occurrence_duration: %Tempo.Duration{}}, metadata)
+  end
+
+  # The FREQ of a recurrence is the primary unit of its cadence —
+  # e.g. `%Duration{time: [week: 1]}` → `:week`.
+  defp freq_of(%Tempo.Duration{time: [{unit, _amount} | _]}) do
+    unit
+  end
+
+  # Resolve a "given this iteration's start, what's the
+  # occurrence's `to`?" function from the interval's metadata or
+  # its AST fields. Priority order:
+  #
+  # 1. `metadata.occurrence_base_to` — an occurrence-0 `to` Tempo.
+  #    Each occurrence's `to` is `base_to` shifted by `i × cadence`.
+  #    This matches iCal semantics where DTEND − DTSTART defines
+  #    the event span and every occurrence carries it forward.
+  #
+  # 2. `metadata.occurrence_duration` — an explicit Duration for
+  #    each occurrence's span. Used when a caller knows the span
+  #    as a Duration (hand-built AST, adapter layers).
+  #
+  # 3. The AST's `duration` — when no override is supplied, each
+  #    occurrence spans one cadence, and ends where the next starts: ISO
+  #    8601-1 §3.1.1.11 defines a recurring time interval as a series of
+  #    consecutive time intervals. A month from 31 January is 28 February,
+  #    and the occurrence from there runs to 31 March, where the third
+  #    starts, not to the 28th a month on from its own start.
+  defp occurrence_end_fn(
+         %Tempo{} = from,
+         %Tempo.Duration{} = cadence,
+         %Tempo.Interval{metadata: metadata, duration: duration} = interval
+       ) do
+    cond do
+      match?(%{occurrence_base_to: %Tempo{}}, metadata) ->
+        base_to = metadata.occurrence_base_to
+        fn _start, i -> add_n_durations(base_to, cadence, i) end
+
+      match?(%{occurrence_duration: %Tempo.Duration{}}, metadata) ->
+        span = metadata.occurrence_duration
+        fn start, _i -> Math.add(start, span) end
+
+      contiguous_occurrences?(cadence, interval) ->
+        if settled_by_the_clock?(from, cadence) do
+          :contiguous_from_the_start
+        else
+          :contiguous
+        end
+
+      consecutive_occurrences?(cadence, interval) ->
+        fn _start, i -> add_n_durations(from, cadence, i + 1) end
+
+      true ->
+        fn start, _i -> Math.add(start, duration) end
+    end
+  end
+
+  # A plain recurrence that runs forward, each occurrence one cadence long:
+  # its occurrences are consecutive whatever the cadence's unit. One whose
+  # unit has one length is `contiguous_occurrences?/2`'s, which reaches each
+  # end by the step it takes anyway.
+  defp consecutive_occurrences?(cadence, %Tempo.Interval{
+         repeat_rule: nil,
+         direction: direction,
+         duration: cadence
+       }) do
+    direction != -1
+  end
+
+  defp consecutive_occurrences?(_cadence, _interval) do
+    false
+  end
+
+  # A plain frequency recurrence (no BY-rules) whose cadence is a
+  # fixed-length unit and that runs forward has *contiguous*
+  # occurrences: each occurrence's `to` is exactly the next
+  # occurrence's `from`. The loop can then reuse every computed start
+  # as the previous occurrence's end — one `Math.add` per occurrence
+  # rather than two. Excluded: month/year cadences (they clamp, so
+  # `start + 2×month` ≠ `(start + month) + month`); backward
+  # recurrences (the next start precedes this one); and BY-filtered
+  # recurrences (selection resizes each occurrence anyway).
+  defp contiguous_occurrences?(
+         %Tempo.Duration{time: [{unit, _amount} | _]},
+         %Tempo.Interval{repeat_rule: repeat_rule, direction: direction}
+       ) do
+    is_nil(repeat_rule) and direction != -1 and
+      unit in [:week, :day, :hour, :minute, :second]
+  end
+
+  defp contiguous_occurrences?(_cadence, _interval) do
+    false
+  end
+
+  # A step of days or weeks from a time of day in a zone keeps the reading
+  # of the clock, and is moved where the clock skips it; from a date it is
+  # moved off a day the zone leaves out (Samoa had no 30 December 2011). A
+  # step of hours or less counts time that has passed and lands on no such
+  # reading, and a date in any other zone has no reading to be moved.
+  defp settled_by_the_clock?(
+         %Tempo{extended: %{zone_id: zone}, time: time},
+         %Tempo.Duration{time: [{unit, _amount} | _]}
+       )
+       when is_binary(zone) and unit in [:week, :day] do
+    List.keymember?(time, :hour, 0) or TimeZoneDatabase.do_days_left_out(zone) != []
+  end
+
+  defp settled_by_the_clock?(_from, _cadence) do
+    false
+  end
+
+  # Termination predicates for the recurrence loop.
+  defp under_until?(%Tempo{} = from, %Tempo{} = until) do
+    Compare.compare_endpoints(from, until) in [:earlier, :same]
+  end
+
+  defp under_bound?(%Tempo{} = from, %Tempo{} = bound_to) do
+    Compare.compare_endpoints(from, bound_to) == :earlier
+  end
+
+  defp starts_under_until?(%Tempo.Interval{from: %Tempo{} = from}, until) do
+    under_until?(from, until)
+  end
+
+  defp starts_under_until?(_occurrence, _until) do
+    true
+  end
+
+  defp at_or_after_bound?(%Tempo{} = from, %Tempo{} = bound_from) do
+    Compare.compare_endpoints(from, bound_from) in [:same, :later]
+  end
+
+  # Compute the upper endpoint of a `:within` window. Accepts any
+  # Tempo value that `to_interval_set/1` handles; uses the
+  # highest `:to` across the set's intervals as the termination
+  # boundary.
+  defp bound_upper(bound) do
+    case to_interval_set(bound) do
+      {:ok, %Tempo.IntervalSet{} = set} -> bound_upper_from_set(set)
+      {:error, _} = err -> err
+    end
+  end
+
+  defp bound_upper_from_set(set) do
+    if IntervalSet.do_empty?(set) do
+      {:error,
+       UnboundedRecurrenceError.exception(
+         reason: "An empty `:within` window — nothing to end the recurrence against."
+       )}
+    else
+      upper =
+        set
+        |> IntervalSet.members()
+        |> Enum.map(& &1.to)
+        |> Enum.reduce(&later_endpoint/2)
+
+      {:ok, upper}
+    end
+  end
+
+  # The lower endpoint of a `:within` window — the earliest `:from` across its
+  # intervals. Used to drop occurrences that a calendar-aligned start places
+  # before the window (a start at the beginning of the calendar year that
+  # contains the window's start can precede the window itself). `nil` when the
+  # bound is empty, so the window has no lower edge to enforce.
+  defp bound_lower(bound) do
+    case to_interval_set(bound) do
+      {:ok, %Tempo.IntervalSet{} = set} -> bound_lower_from_set(set)
+      {:error, _} -> nil
+    end
+  end
+
+  defp bound_lower_from_set(set) do
+    if IntervalSet.do_empty?(set) do
+      nil
+    else
+      set
+      |> IntervalSet.members()
+      |> Enum.map(& &1.from)
+      |> Enum.reduce(&earlier_endpoint/2)
+    end
+  end
+
+  # The start for a recurrence with an open start, materialised in a `:within`
+  # window: the window's lower endpoint, taken at the resolution the
+  # recurrence's selection names — day for `FL6M1K2IN` ("the 2nd Monday
+  # of June"), month for `FL6MN` ("June"), hour for a time-of-day rule.
+  # Starting at that grain (rather than always a day) is what lets a
+  # coarse selection yield a coarse occurrence; the window already says
+  # where it starts, so a separate start option would be redundant.
+  # The start a window gives a rule that has none: where the window starts,
+  # at the grain the rule starts at. An open-ended window starts at its
+  # start, and is no span to put in a set.
+  defp window_start(bound, %Tempo.Interval{} = interval) do
+    case open_window_start(bound) do
+      {:ok, %Tempo{} = from} -> start_at_unit(from, start_unit(interval))
+      {:error, _reason} = error -> error
+      :bounded -> bounded_window_start(bound, interval)
+    end
+  end
+
+  defp bounded_window_start(bound, interval) do
+    case to_interval_set(bound) do
+      {:ok, %Tempo.IntervalSet{} = set} -> window_start_from_set(set, start_unit(interval))
+      {:error, _} = err -> err
+    end
+  end
+
+  # A recurrence's start as its walk takes it (`fill_selection_start/2`), and
+  # the floor its occurrences are held to come at or after: the start as it
+  # is written, but for a year whose rule selects a week of the year. A week
+  # selected from a year is a week of its ISO 8601 week-year (decided
+  # 2026-10-05), which starts on the Monday of week 1, up to three days before
+  # 1 January: week 1 of 2026 starts on 29 December 2025 and is the first
+  # occurrence of `R/2026/P1Y/FL1WN`, as it is the value `2026YL1WN`. A start
+  # that is a date holds its occurrences to that date, as DTSTART does.
+  defp selection_start(%Tempo{} = from, %Tempo.Interval{} = interval) do
+    {start, filled} = fill_selection_start(from, interval)
+    {start, start_floor(from, interval, start), filled}
+  end
+
+  #
+  # A week of a month can start before its month does, as the first week of
+  # July 2026 does on 29 June, so a rule of them is held to the day the
+  # first week of its start's month begins on: that week is the first
+  # occurrence of `R/2026Y7M/P1M/FL1WN`, as it is the value `2026Y7ML1WN`.
+  defp start_floor(
+         %Tempo{} = from,
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}},
+         start
+       ) do
+    cond do
+      List.keymember?(selection, :week_of_month, 0) -> first_week_of_month_floor(from, start)
+      List.keymember?(selection, :week, 0) -> week_year_floor(from, start)
+      true -> start
+    end
+  end
+
+  defp start_floor(_from, _interval, start) do
+    start
+  end
+
+  defp week_year_floor(%Tempo{time: [year: year], calendar: calendar} = from, start)
+       when is_integer(year) do
+    with {:ok, %Date{} = monday} <- UnitValues.date_from_iso_week(year, 1, 1, calendar),
+         {:ok, %Date{} = monday} <- Date.convert(monday, calendar) do
+      %{from | time: [year: monday.year, month: monday.month, day: monday.day]}
+    else
+      _the_start -> start
+    end
+  end
+
+  defp week_year_floor(_from, start) do
+    start
+  end
+
+  defp first_week_of_month_floor(
+         %Tempo{calendar: calendar} = from,
+         %Tempo{time: [{:year, year}, {:month, month} | _finer]} = start
+       )
+       when is_integer(year) and is_integer(month) do
+    case UnitValues.weeks_of_month(year, month, calendar) do
+      {:ok, [%Date.Range{first: first} | _later_weeks]} ->
+        %{from | time: [year: first.year, month: first.month, day: first.day]}
+
+      _no_weeks ->
+        start
+    end
+  end
+
+  defp first_week_of_month_floor(_from, start) do
+    start
+  end
+
+  # A written start coarser than the grain its selection names —
+  # `R/2020Y/P4Y/FL11M3DN`, a year starting a day selection — is filled down to
+  # that grain (2020-01-01) before the recurrence walks from it, as the window
+  # start of a recurrence with an open start is; otherwise the selection would
+  # expand days within a year that names no month. A start at or finer than the
+  # grain is left exactly as written.
+  defp fill_selection_start(
+         %Tempo{} = from,
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, [_ | _]} | _units]}} = interval
+       ) do
+    unit = start_unit(interval)
+
+    with {from_unit, _span} <- resolution(from),
+         true <- coarser_unit?(from_unit, unit),
+         {:ok, %Tempo{} = filled} <- start_at_unit(from, unit) do
+      {filled, %{interval | from: filled}}
+    else
+      _other -> {from, interval}
+    end
+  end
+
+  defp fill_selection_start(from, interval) do
+    {from, interval}
+  end
+
+  defp coarser_unit?(unit_1, unit_2) do
+    case {Unit.fetch_sort_key(unit_1), Unit.fetch_sort_key(unit_2)} do
+      {{:ok, key_1}, {:ok, key_2}} -> key_1 > key_2
+      _unknown -> false
+    end
+  end
+
+  defp window_start_from_set(set, unit) do
+    case IntervalSet.first(set) do
+      %Tempo.Interval{from: %Tempo{} = from} -> start_at_unit(from, unit)
+      _ -> {:error, empty_bound_error()}
+    end
+  end
+
+  defp start_at_unit(%Tempo{} = from, :day) do
+    case at_resolution(from, :day) do
+      %Tempo{} = start -> {:ok, start}
+      {:error, _} = error -> error
+    end
+  end
+
+  # A selection whose resolution the bound's start cannot reach — a week
+  # selection over a year value, where the ISO-week axis has no path from
+  # the calendar axis — falls back to the day floor rather than failing.
+  # Day is reachable from every value, so the recurrence still
+  # materialises (at day grain) instead of erroring.
+  defp start_at_unit(%Tempo{} = from, unit) do
+    case at_resolution(from, unit) do
+      %Tempo{} = start -> {:ok, start}
+      {:error, _} -> start_at_unit(from, :day)
+    end
+  end
+
+  # The grain a recurrence starts at: the finest unit its selection
+  # names, mapped onto the calendar axis (a weekday or ordinal selects a
+  # *day*, and a §12.10 window ending the selection runs from a day). With
+  # no selection, the day floor keeps a plain cadence (`R/../P1D`) walking
+  # days.
+  defp start_unit(
+         %Tempo.Interval{repeat_rule: %Tempo{time: [{:selection, selection} | _units]}} =
+           interval
+       )
+       when selection != [] do
+    # The finest unit is the last selection component (they are written
+    # coarse-to-fine), the week start (`q`) and a skip aside: they are
+    # context, not units.
+    # Read it straight from the AST rather than through `resolution/1`, whose
+    # declared `time_unit()` return elides the selection-only keys (`:byday`,
+    # `:day_of_week`) this must normalise.
+    finest =
+      selection
+      |> Enum.reject(&context?/1)
+      |> List.last()
+
+    case finest do
+      {finest_unit, _value} ->
+        finest_unit
+        |> calendar_start_unit(stepped_by(interval))
+        |> in_a_window(selection)
+
+      nil ->
+        :day
+    end
+  end
+
+  defp start_unit(%Tempo.Interval{}) do
+    :day
+  end
+
+  # The unit a recurrence steps by, where it is written with a cadence.
+  defp stepped_by(%Tempo.Interval{duration: %Tempo.Duration{time: [{unit, _amount} | _finer]}}) do
+    unit
+  end
+
+  defp stepped_by(_no_cadence) do
+    nil
+  end
+
+  # The week start (`q`) and a rule's skip are context, and name no unit.
+  defp context?({part, _value}) do
+    part in [:wkst, :skip]
+  end
+
+  # A §12.10 window runs from a day, whatever is selected within it. A week
+  # or a month selected there keeps the days of the window that are in it,
+  # and a start as coarse as they are would hold no day for the window to
+  # start on: the week alone in the seven days from a first Monday
+  # (`LLL1K1IN/P7DN45WN`) selected nothing. A time of day selected within a
+  # window starts as finely as the time.
+  defp in_a_window(unit, selection) do
+    if List.keymember?(selection, :interval, 0) and coarser_unit?(unit, :day) do
+      :day
+    else
+      unit
+    end
+  end
+
+  # A week-of-year selection starts from its enclosing year (a dayless
+  # year value), not the week axis: `at_resolution/2` has no path from a
+  # calendar year to a week, and the week expander builds the week from
+  # the candidate's year. The dayless start is also what marks the
+  # selection as native (a whole week), distinct from RRULE `BYWEEKNO`,
+  # whose `DTSTART` day expands the week to its seven days.
+  #
+  # A week of a month, which the calendar numbers, starts from its month as
+  # a week of the year does from its year
+  # (`Tempo.RRule.Selection.read_in_its_period/1` says which a week is).
+  defp calendar_start_unit(:week_of_month, _stepped_by) do
+    :month
+  end
+
+  defp calendar_start_unit(week, _stepped_by) when week in [:week, :calendar_week] do
+    :year
+  end
+
+  defp calendar_start_unit(unit, _stepped_by)
+       when unit in [:byday, :day_of_week, :day_of_year, :instance, :event, :interval] do
+    :day
+  end
+
+  defp calendar_start_unit(unit, _stepped_by) do
+    unit
+  end
+
+  defp empty_bound_error do
+    UnboundedRecurrenceError.exception(
+      reason: "An empty `:within` window — nothing to start the recurrence from."
+    )
+  end
+
+  defp later_endpoint(a, b) do
+    if Compare.compare_endpoints(a, b) == :later do
+      a
+    else
+      b
+    end
+  end
+
+  defp earlier_endpoint(a, b) do
+    if Compare.compare_endpoints(a, b) == :earlier do
+      a
+    else
+      b
+    end
+  end
+
+  # A mask narrows to the values its digits allow (`Mask.valid_values/4`, which
+  # asks the calendar how many months, days and weeks there are). One followed
+  # by something that narrows further — a concrete unit, a set, a group or a
+  # partly masked unit (`1985-XX-15`, `2026-XX-1X`) — names disjoint spans, so
+  # it is replaced by its candidate values and expanded member by member. A
+  # partly masked unit with nothing that narrows after it is the span from its
+  # first candidate to its last (`2026-06-1X`, 10 to 19 June), or its candidates
+  # when they are not consecutive (`2026-06-X5`, the 5th, 15th and 25th). A
+  # fully masked unit with nothing that narrows after it (`1985-XX-XX`) widens
+  # to the units before it, which is exactly its span, as a year mask is the
+  # span its digits allow (`202X`, the 2020s).
+  defp expand_non_contiguous_mask(%Tempo{time: time, calendar: calendar} = tempo) do
+    case find_non_contiguous_mask(time, [], calendar) do
+      nil ->
+        {:ok, tempo}
+
+      {new_time} ->
+        {:ok, %{tempo | time: new_time}}
+
+      {:span, first, last} ->
+        {:span, first_shown(%{tempo | time: first}), %{tempo | time: last}}
+
+      {:members, times} ->
+        {:members,
+         times
+         |> Enum.map(&%{tempo | time: &1})
+         |> shown()}
+
+      {:error, reason} ->
+        {:error, Mask.error(tempo, reason)}
+    end
+  end
+
+  # What a mask stands for in a zone are the values its clock shows: the
+  # thirties of December 2011 in Samoa are the 31st alone, the zone having
+  # left the 30th out. A run of them starts on the first the clock shows,
+  # and one of a list that it skips the whole of is no member.
+  defp first_shown(%__MODULE__{} = first) do
+    Zone.shown_by_the_clock(first)
+  end
+
+  defp shown(members) do
+    Enum.filter(members, &Zone.shown?/1)
+  end
+
+  defp find_non_contiguous_mask([], _previous, _calendar) do
+    nil
+  end
+
+  defp find_non_contiguous_mask([{unit, {:mask, mask}} = entry | rest], previous, calendar) do
+    narrowed_mask(entry, unit, mask, Enum.reverse(previous), rest, calendar)
+  end
+
+  # An unspecified unit other than the year (`X*D`, any day) is every value
+  # the unit takes, as one with every digit masked is (`XXD`).
+  defp find_non_contiguous_mask([{unit, :any} = entry | rest], previous, calendar)
+       when unit != :year do
+    narrowed_mask(entry, unit, :any, Enum.reverse(previous), rest, calendar)
+  end
+
+  defp find_non_contiguous_mask([entry | rest], previous, calendar) do
+    find_non_contiguous_mask(rest, [entry | previous], calendar)
+  end
+
+  defp narrowed_mask(entry, unit, mask, prefix, rest, calendar) do
+    if tail_narrows?(rest, prefix ++ [entry]) or every_week_follows?(rest) do
+      mask_before_narrower(unit, mask, prefix, rest, calendar)
+    else
+      mask_alone(unit, mask, prefix, calendar)
+    end
+  end
+
+  # Every week of a year is not the year (`spans_its_values?/4`), so a mask
+  # of all the weeks after a masked year (`202XYXXW`) narrows it: the weeks
+  # of each year, where any other unit masked whole widens to the years.
+  defp every_week_follows?([{:week, week} | _rest]) when week == :any or is_tuple(week) do
+    true
+  end
+
+  defp every_week_follows?(_rest) do
+    false
+  end
+
+  # A mask with something after it that narrows: its candidates are values of
+  # their own when a later mask narrows within each, and otherwise replace it.
+  defp mask_before_narrower(unit, mask, prefix, rest, calendar) do
+    if tail_masked?(rest) do
+      mask_members(unit, mask, prefix, rest, calendar)
+    else
+      substitute_mask(unit, mask, prefix, rest, calendar)
+    end
+  end
+
+  # A mask with nothing after it that narrows is the span of its values when
+  # they are fewer than the unit's, and otherwise is left to widen to the
+  # units before it.
+  defp mask_alone(unit, mask, prefix, calendar) do
+    if spans_its_values?(unit, mask, prefix, calendar) do
+      narrow_mask(unit, mask, prefix, calendar)
+    else
+      nil
+    end
+  end
+
+  defp spans_its_values?(:year, _mask, _prefix, _calendar) do
+    false
+  end
+
+  # Every week of a year is not the year: ISO 8601's weeks of 2026 run from
+  # 29 December 2025 to 3 January 2027. So a mask of all of them is the span
+  # from the first week to the last, where any other unit's is the span of the
+  # units before it.
+  defp spans_its_values?(:week, mask, prefix, _calendar) do
+    narrowing_mask?(:week, mask, prefix) or prefix != []
+  end
+
+  defp spans_its_values?(unit, mask, prefix, _calendar) do
+    narrowing_mask?(unit, mask, prefix)
+  end
+
+  # The values a masked unit takes after the units before it: those the walk
+  # of the value yields (`Tempo.Mask.candidates/4`), so a conversion and a
+  # walk cannot read a mask two ways. An unspecified unit takes all the unit
+  # has there.
+  defp masked_values(unit, :any, prefix, calendar) do
+    with {:ok, range} <- Mask.unspecified(unit, prefix, calendar) do
+      {:ok, Enum.to_list(range)}
+    end
+  end
+
+  defp masked_values(unit, mask, prefix, calendar) do
+    Mask.candidates(unit, mask, prefix, calendar)
+  end
+
+  # Whether a mask allows fewer values than its unit takes: some digit of it
+  # is given (`1X`), it counts from the end (`-X`, the last nine), or it has
+  # fewer digits than the unit's values do (`XM` is months 1 to 9). One that
+  # allows them all is the span of the units before it.
+  defp narrowing_mask?(_unit, :any, _before) do
+    false
+  end
+
+  defp narrowing_mask?(_unit, [:negative | _digits], _before) do
+    true
+  end
+
+  defp narrowing_mask?(unit, mask, before) do
+    partial_mask?(mask) or length(mask) < unit_digits(unit, before)
+  end
+
+  # The digits of the greatest value a unit takes, in any calendar: a day of
+  # the year, or a day written straight after its year, has three.
+  defp unit_digits(:day_of_week, _before) do
+    1
+  end
+
+  defp unit_digits(:day_of_year, _before) do
+    3
+  end
+
+  defp unit_digits(:day, before) do
+    if List.keymember?(before, :month, 0) do
+      2
+    else
+      3
+    end
+  end
+
+  defp unit_digits(_unit, _before) do
+    2
+  end
+
+  # Use a scalar when exactly one candidate survives the calendar
+  # constraint; otherwise a list, which the multi path expands via
+  # `Enumerable`.
+  defp substitute_mask(unit, mask, prefix, rest, calendar) do
+    case masked_values(unit, mask, prefix, calendar) do
+      {:ok, []} -> {:error, {:no_candidates, unit}}
+      {:ok, [single]} -> {prefix ++ [{unit, single}] ++ rest}
+      {:ok, many} -> {prefix ++ [{unit, many}] ++ rest}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # A mask with a mask after it that narrows: each candidate is a value of its
+  # own, so the later mask narrows within it rather than being walked value by
+  # value (`2026-XX-1X` is twelve spans of ten days, not 120 days).
+  defp mask_members(unit, mask, prefix, rest, calendar) do
+    case masked_values(unit, mask, prefix, calendar) do
+      {:ok, []} -> {:error, {:no_candidates, unit}}
+      {:ok, values} -> {:members, Enum.map(values, &(prefix ++ [{unit, &1}] ++ rest))}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp tail_masked?(rest) do
+    Enum.any?(rest, &masked?/1)
+  end
+
+  # A unit some or all of whose digits are masked, which an unspecified unit
+  # other than the year is.
+  defp masked?({_unit, {:mask, _mask}}) do
+    true
+  end
+
+  defp masked?({unit, :any}) do
+    unit != :year
+  end
+
+  defp masked?(_component) do
+    false
+  end
+
+  # A partly masked unit with nothing that narrows after it. Anything after it
+  # is fully masked and widens, so it is dropped.
+  defp narrow_mask(unit, mask, prefix, calendar) do
+    case masked_values(unit, mask, prefix, calendar) do
+      {:ok, []} ->
+        {:error, {:no_candidates, unit}}
+
+      {:ok, [single]} ->
+        {prefix ++ [{unit, single}]}
+
+      {:ok, [first | _] = values} ->
+        consecutive_or_scattered(unit, first, values, prefix)
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp consecutive_or_scattered(unit, first, values, prefix) do
+    last = List.last(values)
+
+    if last - first + 1 == length(values) do
+      {:span, prefix ++ [{unit, first}], prefix ++ [{unit, last}]}
+    else
+      {prefix ++ [{unit, values}]}
+    end
+  end
+
+  # A mask some of whose digits are given (`1X`, `X5`, `XXX{0,2,4,6,8}`).
+  defp partial_mask?(mask) do
+    Enum.any?(mask, &(is_integer(&1) or is_list(&1)))
+  end
+
+  # Whether anything after a mask narrows its span further. `before` is the
+  # units before the one looked at, which say how many digits a day has.
+  defp tail_narrows?([], _before) do
+    false
+  end
+
+  defp tail_narrows?([{_unit, value} | _rest], _before) when is_integer(value) do
+    true
+  end
+
+  defp tail_narrows?([{_unit, values} | _rest], _before) when is_list(values) do
+    true
+  end
+
+  defp tail_narrows?([{_unit, {:group, _range}} | _rest], _before) do
+    true
+  end
+
+  defp tail_narrows?([{_unit, {value, meta}} | _rest], _before)
+       when is_integer(value) and is_list(meta) do
+    true
+  end
+
+  defp tail_narrows?([{unit, {:mask, mask}} = entry | rest], before) do
+    narrowing_mask?(unit, mask, before) or tail_narrows?(rest, before ++ [entry])
+  end
+
+  defp tail_narrows?([entry | rest], before) do
+    tail_narrows?(rest, before ++ [entry])
+  end
+
+  # A Tempo is "multi" if any of its time slots holds a list of
+  # more than one candidate value. The existing Enumerable
+  # protocol handles the expansion — we just detect the trigger
+  # here and let Enumerable do the walk.
+  defp multi_tempo?(%Tempo{time: time}) do
+    Enum.any?(time, &multi_slot?/1)
+  end
+
+  defp multi_slot?({_unit, value}) when is_integer(value) do
+    false
+  end
+
+  defp multi_slot?({_unit, {:mask, _}}) do
+    false
+  end
+
+  defp multi_slot?({_unit, :any}) do
+    false
+  end
+
+  defp multi_slot?({_unit, {_value, meta}}) when is_list(meta) do
+    false
+  end
+
+  defp multi_slot?({_unit, values}) when is_list(values) do
+    case values do
+      [] ->
+        false
+
+      # A count-from-the-end bound that survived parsing could not be
+      # resolved there — a coarser component is itself set-valued, so
+      # this unit's extent is not yet known. Counting it now would
+      # read the inverted range as empty and send a value that needs
+      # expansion down the single-interval path, where the unresolved
+      # bound reaches calendar arithmetic. Expansion resolves it
+      # against each concrete context instead.
+      [%Range{first: first, last: last}] when first < 0 or last < 0 ->
+        true
+
+      [%Range{first: first, last: last, step: step}] ->
+        Enum.count(first..last//step) > 1
+
+      [_single] ->
+        false
+
+      _ ->
+        true
+    end
+  end
+
+  defp multi_slot?(_) do
+    false
+  end
+
+  defp materialise_multi(%Tempo{} = tempo) do
+    # The existing Enumerable.Tempo yields one concrete Tempo per
+    # cartesian-product combination. Each of those is a single
+    # Tempo we can pass through the single-interval path. Collect
+    # the intervals, then build a coalesced IntervalSet.
+    #
+    # A negative component under a set-valued container
+    # (`2026Y{1..12}M-1D`) cannot resolve at parse time — there is
+    # no single month for `-1D` to count back from — so it survives
+    # into the members. Each member's context is concrete now:
+    # re-validate, which resolves the negative against that member's
+    # own month or year (leap-aware, per ISO 8601-2 §4.4.1), exactly
+    # as a scalar literal resolves at parse.
+    with {:ok, members} <- expand_members(tempo) do
+      members
+      |> Stream.map(&member_interval/1)
+      |> gathered_at_once(tempo)
+    end
+  end
+
+  # Members expanded from a mask, or from a set before one, are kept only when
+  # they hold a date, as a set drops the values its context cannot hold
+  # (`2026-XX-3X` has no February). When none does, the value names no date.
+  defp materialise_mask_members(members, value) do
+    members
+    |> Stream.map(&member_interval/1)
+    |> gathered_at_once(value, :the_answer_if_alone)
+  end
+
+  defp member_interval(member) do
+    case normalise_member(member) do
+      {:ok, %Tempo{} = resolved} -> to_interval(resolved)
+      {:error, _} = err -> err
+    end
+  end
+
+  # The spans of a value's members, gathered into one set, or the first
+  # error among them. A member that still holds a mask (`2026-01-1X` from
+  # `2026-XX-1X`) may be a span or several.
+  #
+  # A value is converted to at most `@spans_at_once` spans, and is refused
+  # past them (decided 2026-10-08). Its spans were found however many it
+  # named: `2026Y{1..12}M{1..28}DT{0..23}H{0..59}M` was half a million
+  # minutes, ten seconds in the finding, and `{0001-01-01..9999-12-31}` did
+  # not come to an end. The results are read no further than the first error
+  # or the span past the most, so they are given as a stream.
+  #
+  # A member its context cannot hold (an `InvalidDateError`) is that error,
+  # or is passed over as a set drops a value its context lacks: `:dropped`,
+  # or `:the_answer_if_alone` where a value none of whose members holds a
+  # date names none.
+  defp gathered_at_once(results, value, lacking \\ :an_error) do
+    results
+    |> Enum.reduce_while({[], 0, nil}, &gather_one(&1, &2, value, lacking))
+    |> gathered(lacking)
+  end
+
+  defp gather_one({:error, %InvalidDateError{}} = lacks, {spans, count, first}, _value, lacking)
+       when lacking != :an_error do
+    {:cont, {spans, count, first || lacks}}
+  end
+
+  defp gather_one({:error, _reason} = error, _gathered, _value, _lacking) do
+    {:halt, error}
+  end
+
+  defp gather_one({:ok, _converted} = result, {spans, count, first}, value, _lacking) do
+    own = member_intervals(result)
+    count = count + Enum.count(own)
+
+    if count > @spans_at_once do
+      {:halt, {:error, too_many_spans_error(value)}}
+    else
+      {:cont, {[own | spans], count, first}}
+    end
+  end
+
+  defp gathered({:error, _reason} = error, _lacking) do
+    error
+  end
+
+  defp gathered({[], _count, {:error, _invalid} = lacks}, :the_answer_if_alone) do
+    lacks
+  end
+
+  defp gathered({spans, _count, _first}, _lacking) do
+    spans
+    |> Enum.reverse()
+    |> Enum.concat()
+    |> IntervalSet.new()
+  end
+
+  defp member_intervals({:ok, %IntervalSet{} = set}) do
+    IntervalSet.members(set)
+  end
+
+  defp member_intervals({:ok, %Tempo.Interval{} = interval}) do
+    [interval]
+  end
+
+  defp member_intervals({:ok, spans}) when is_list(spans) do
+    spans
+  end
+
+  defp too_many_spans_error(value) do
+    ConversionError.exception(value: value, reason: :too_many_values)
+  end
+
+  # The members are the values the walk of `Tempo.Enumeration` names: each
+  # component resolves against its already-concrete coarser units, so nested
+  # open ranges (`{2000..2010}Y{1..-1}M{1..-1}D`) terminate, and a value that
+  # cannot be walked is an error here rather than a raise.
+  defp expand_members(%Tempo{} = tempo) do
+    Enumeration.members(tempo)
+  end
+
+  # An expanded member is a raw combination of component values, in
+  # whatever axis the source value used. The parser normalises such a
+  # value on its way in — a week-and-weekday becomes a calendar date,
+  # an ordinal day becomes a month and day — and `to_interval/1`
+  # expects that normalised form, so each member takes the same route
+  # through the validator. It also resolves any count-from-the-end
+  # component against the member's now-concrete context.
+  # The member's *own* calendar decides what its components mean —
+  # validating a Hebrew member against the default Gregorian calendar
+  # would reject its thirteenth month.
+  defp normalise_member(%Tempo{calendar: calendar} = member) when not is_nil(calendar) do
+    Validation.validate(member, calendar)
+  end
+
+  defp normalise_member(%Tempo{} = member) do
+    Validation.validate(member)
+  end
+
+  # The spans of the members of a set, or of the values of a range, which
+  # may be a stream: no more than `@spans_at_once` of them, as of a value's.
+  defp members_to_interval_set(members, value) do
+    members
+    |> Stream.map(&to_interval/1)
+    |> gathered_at_once(value)
+  end
+
+  # Materialise a recurrence's selection over its domain's periods (each an
+  # interval from the domain set), unioning the occurrences. Adjacent domain
+  # periods — each starting where the one before ends, as the years of
+  # `{2020Y..2024Y}` do — run as one recurrence across them.
+  defp reduce_domain_occurrences(domain_intervals, %Tempo.Interval{} = interval) do
+    runs =
+      domain_intervals
+      |> adjacent_periods()
+      |> Enum.reduce_while({:ok, []}, fn {first, last}, {:ok, acc} ->
+        case run_occurrences(interval, Interval.from(first), Interval.to(last)) do
+          {:ok, own} -> {:cont, {:ok, acc ++ own}}
+          {:error, _reason} = error -> {:halt, error}
+        end
+      end)
+
+    case runs do
+      {:ok, intervals} -> IntervalSet.new(intervals)
+      {:error, _} = err -> err
+    end
+  end
+
+  # The occurrences a run's periods select. A domain is in the calendar of
+  # its recurrence, as every part of an expression is, so the run's periods
+  # are the recurrence's own: a walk from the period the run starts in, at
+  # the grain the recurrence starts at, while a period starts before the run
+  # ends, keeps all they give, wherever a §12.10 window, a week or an
+  # occurrence's span carries them.
+  defp run_occurrences(%Tempo.Interval{} = interval, run_from, run_to) do
+    with {:ok, %Tempo{} = start} <- start_at_unit(run_from, start_unit(interval)) do
+      start
+      |> start_in_repeat_calendar(interval)
+      |> walk_run(interval, run_to)
+    end
+  end
+
+  defp walk_run(first_period, %Tempo.Interval{duration: cadence} = interval, run_to) do
+    {from, interval} = fill_selection_start(first_period, %{interval | from: first_period})
+
+    from
+    |> period_occurrences(
+      cadence,
+      occurrence_end_fn(from, cadence, interval),
+      &under_bound?(&1, run_to),
+      selection_fn(interval, cadence),
+      interval.metadata
+    )
+    |> Enum.to_list()
+    |> walked(from)
+  end
+
+  # A counted recurrence (`R3/{…}/…`) counts its occurrences from the
+  # domain's first period, so it walks them all; any other walks the periods
+  # whose occurrences can reach the window.
+  defp domain_periods_to_walk(periods, %Tempo.Interval{recurrence: count}, _reach)
+       when is_integer(count) do
+    periods
+  end
+
+  defp domain_periods_to_walk(periods, _interval, reach) do
+    Enum.filter(periods, &domain_period_in_window?(&1, reach))
+  end
+
+  # A counted recurrence keeps its domain's first occurrences, as one from a
+  # start keeps its first.
+  defp first_occurrences({:ok, %Tempo.IntervalSet{} = set}, %Tempo.Interval{recurrence: count})
+       when is_integer(count) do
+    set
+    |> IntervalSet.members()
+    |> Enum.take(count)
+    |> IntervalSet.new()
+  end
+
+  defp first_occurrences(result, _interval) do
+    result
+  end
+
+  # The runs of periods each starting where the one before ends, as
+  # `{first_period, last_period}` pairs in order.
+  defp adjacent_periods([]) do
+    []
+  end
+
+  defp adjacent_periods([first | rest]) do
+    {runs, run} =
+      Enum.reduce(rest, {[], {first, first}}, fn period, {runs, {run_first, run_last}} ->
+        if adjacent_period?(run_last, period) do
+          {runs, {run_first, period}}
+        else
+          {[{run_first, run_last} | runs], {period, period}}
+        end
+      end)
+
+    Enum.reverse([run | runs])
+  end
+
+  defp adjacent_period?(%Tempo.Interval{to: %Tempo{} = previous_to}, %Tempo.Interval{
+         from: %Tempo{} = next_from
+       }) do
+    Compare.compare_endpoints(previous_to, next_from) == :same
+  end
+
+  defp adjacent_period?(_previous, _next) do
+    false
+  end
+
+  # A caller's `:within` as a half-open `{window_from, window_to}` start window,
+  # or `:none` when no window is given (a domain, a count or an UNTIL then
+  # bounds the recurrence alone). An open-ended window has no `window_to`.
+  defp within_window(options) do
+    case Keyword.fetch(options, :within) do
+      {:ok, within} -> window_edges(within)
+      :error -> {:ok, :none}
+    end
+  end
+
+  # An open-ended window's start and no end, or the earliest start and the
+  # latest end of what any other window materialises to.
+  defp window_edges(within) do
+    case open_window_start(within) do
+      {:ok, window_from} ->
+        {:ok, {window_from, nil}}
+
+      {:error, _reason} = error ->
+        error
+
+      :bounded ->
+        with {:ok, window_to} <- bound_upper(within) do
+          {:ok, {bound_lower(within), window_to}}
+        end
+    end
+  end
+
+  # One rule for every recurrence: the occurrences kept are those that overlap
+  # the caller's window, `[from, to)` — one already in progress when the window
+  # opens, and one that runs past its end. No window keeps them all.
+  defp keep_within(occurrences, options) do
+    with {:ok, window} <- within_window(options) do
+      {:ok, occurrences_in_window(occurrences, window)}
+    end
+  end
+
+  defp occurrences_in_window(occurrences, :none) do
+    occurrences
+  end
+
+  defp occurrences_in_window(occurrences, {window_from, window_to}) do
+    Enum.filter(occurrences, &overlaps_window?(&1, window_from, window_to))
+  end
+
+  # A domain period is materialised when an occurrence it yields can overlap
+  # the window: the periods the window overlaps, and those either side whose
+  # occurrences can reach it (a December–January break yielded by 2025
+  # overlaps a window in January 2026). The rest are skipped.
+  defp domain_period_in_window?(_period, :none) do
+    true
+  end
+
+  defp domain_period_in_window?(%Tempo.Interval{} = period, {window_from, window_to}) do
+    overlaps_window?(period, window_from, window_to)
+  end
+
+  defp domain_reach_window(:none, _interval) do
+    {:ok, :none}
+  end
+
+  defp domain_reach_window({window_from, window_to}, %Tempo.Interval{} = interval) do
+    {forward, backward} = window_reach(interval)
+
+    with {:ok, reach_from} <- reach_start(window_from, interval, forward),
+         {:ok, reach_to} <- reach_end(window_to, interval, backward),
+         do: {:ok, {reach_from, reach_to}}
+  end
+
+  defp keep_occurrences_in_window(result, :none) do
+    result
+  end
+
+  defp keep_occurrences_in_window({:ok, %Tempo.IntervalSet{} = set}, window) do
+    set
+    |> IntervalSet.members()
+    |> occurrences_in_window(window)
+    |> IntervalSet.new()
+  end
+
+  defp keep_occurrences_in_window({:error, _} = error, _window) do
+    error
+  end
+
+  # An occurrence overlaps the window `[window_from, window_to)` when it starts
+  # before the window's end and ends after its start — so one that only touches
+  # an edge does not. A nil `window_from` (an empty window) enforces only the
+  # upper edge, and a nil `window_to` (an open-ended window) only the lower.
+  defp overlaps_window?(
+         %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to},
+         window_from,
+         window_to
+       ) do
+    starts_before?(from, window_to) and ends_after?(to, window_from)
+  end
+
+  defp overlaps_window?(_occurrence, _window_from, _window_to) do
+    true
+  end
+
+  defp starts_before?(_from, nil) do
+    true
+  end
+
+  defp starts_before?(from, window_to) do
+    under_bound?(from, window_to)
+  end
+
+  defp ends_after?(_to, nil) do
+    true
+  end
+
+  defp ends_after?(to, window_from) do
+    under_bound?(window_from, to)
+  end
+
+  # Close an open-ended domain range against the bound's window: a missing upper
+  # end becomes the bound's end and a missing lower end the bound's start, each
+  # truncated to the range's own resolution (the window filter then drops any
+  # period the bound only touches). With no bound an open range stays open, and
+  # materialising it reports the open range.
+  defp close_domain_ranges(domain, :none) do
+    {:ok, domain}
+  end
+
+  defp close_domain_ranges(%Tempo.Set{set: members} = domain, {bound_from, bound_to}) do
+    all_closed =
+      members
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+        case close_domain_range(member, bound_from, bound_to) do
+          {:ok, closed} -> {:cont, {:ok, [closed | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case all_closed do
+      {:ok, closed} -> {:ok, %{domain | set: Enum.reverse(closed)}}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp close_domain_range(
+         %Tempo.Range{first: %Tempo{} = first, last: :undefined} = range,
+         _bound_from,
+         %Tempo{} = bound_to
+       ) do
+    with {:ok, last} <- closing_end(bound_to, first) do
+      {:ok, %{range | last: last}}
+    end
+  end
+
+  defp close_domain_range(
+         %Tempo.Range{first: :undefined, last: %Tempo{} = last} = range,
+         %Tempo{} = bound_from,
+         _bound_to
+       ) do
+    with {:ok, first} <- closing_end(bound_from, last) do
+      {:ok, %{range | first: first}}
+    end
+  end
+
+  defp close_domain_range(member, _bound_from, _bound_to) do
+    {:ok, member}
+  end
+
+  # The end a bound gives an open range: the day the bound starts on, as a
+  # day of the range's calendar, at the range's resolution. A window is
+  # another expression and may be of another calendar, where a range is in
+  # one: a Gregorian year closed a range of Hebrew years as the year of
+  # that number.
+  defp closing_end(%Tempo{} = bound, %Tempo{calendar: calendar} = like) do
+    with {:ok, day} <- start_at_unit(bound, :day),
+         {:ok, %Tempo{} = there} <- to_calendar(day, calendar),
+         %Tempo{} = closed <- trunc_to_resolution_of(there, like) do
+      {:ok, closed}
+    end
+  end
+
+  defp trunc_to_resolution_of(value, like) do
+    {unit, _level} = resolution(like)
+    trunc(value, unit)
+  end
+
+  # A cadence longer than one period — `R/{1848Y..}/P4Y/…`, "every four years
+  # since 1848" — keeps every nth domain period, counted from the domain's first
+  # stated value, as RRULE's INTERVAL steps from DTSTART. The cadence unit must be
+  # the periods' own (years stepping years, months stepping months); a
+  # one-period cadence keeps every period.
+  defp step_domain_periods([], _domain, _duration) do
+    []
+  end
+
+  defp step_domain_periods(
+         [first_period | _rest] = periods,
+         domain,
+         %Tempo.Duration{time: [{unit, step}]}
+       )
+       when unit in [:year, :month] and is_integer(step) and step > 1 do
+    with {^unit, _level} <- resolution(Interval.from(first_period)),
+         %Tempo{} = phase <- domain_phase(domain) do
+      origin = cadence_index(phase, unit)
+
+      Enum.filter(periods, fn period ->
+        Integer.mod(cadence_index(Interval.from(period), unit) - origin, step) == 0
+      end)
+    else
+      _other -> periods
+    end
+  end
+
+  defp step_domain_periods(periods, _domain, _duration) do
+    periods
+  end
+
+  # The domain's earliest stated value — the origin its cadence counts from.
+  defp domain_phase(%Tempo.Set{set: members}) do
+    members
+    |> Enum.flat_map(&stated_domain_values/1)
+    |> Enum.reduce(nil, fn
+      value, nil -> value
+      value, earliest -> earlier_endpoint(value, earliest)
+    end)
+  end
+
+  defp stated_domain_values(%Tempo{} = value) do
+    [value]
+  end
+
+  defp stated_domain_values(%Tempo.Range{first: %Tempo{} = first}) do
+    [first]
+  end
+
+  defp stated_domain_values(%Tempo.Range{last: %Tempo{} = last}) do
+    [last]
+  end
+
+  defp stated_domain_values(_member) do
+    []
+  end
+
+  defp cadence_index(%Tempo{} = value, :year) do
+    year(value)
+  end
+
+  defp cadence_index(%Tempo{} = value, :month) do
+    year(value) * 12 + month(value)
+  end
+
+  # Keep only the domain years matching a `:even` / `:odd` / `:leap` / `:common`
+  # filter (`{2000Y..2020Y}e`). Parity is arithmetic on the year number; leap and
+  # common delegate to each year's calendar `leap_year?/1` (Calendrical), so the
+  # Gregorian century rule applies — 2100, divisible by 4 but not 400, is common.
+  defp filter_domain_years(year_intervals, nil) do
+    year_intervals
+  end
+
+  defp filter_domain_years(year_intervals, filter) do
+    Enum.filter(year_intervals, fn year_interval ->
+      tempo = Interval.from(year_interval)
+      year_filter_matches?(filter, year(tempo), tempo.calendar)
+    end)
+  end
+
+  defp year_filter_matches?(:even, year, _calendar) do
+    Integer.mod(year, 2) == 0
+  end
+
+  defp year_filter_matches?(:odd, year, _calendar) do
+    Integer.mod(year, 2) == 1
+  end
+
+  defp year_filter_matches?(:leap, year, calendar) do
+    calendar.leap_year?(year)
+  end
+
+  defp year_filter_matches?(:common, year, calendar) do
+    not calendar.leap_year?(year)
+  end
+
+  # A recurrence set's occurrences, member by member. A set holding a conditional
+  # member (`Tempo.RecurrenceSet.keep_when/2`, `move_when/2`) resolves in two
+  # passes, since a conditional depends on the other members' occurrences.
+  defp set_member_occurrences(members, options) do
+    if Enum.any?(members, &match?(%Conditional{}, &1)) do
+      conditional_set_occurrences(members, options)
+    else
+      members_occurrences(members, options)
+    end
+  end
+
+  defp members_occurrences(members, options) do
+    all_occurrences =
+      members
+      |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+        case recurrence_set_member(member, options) do
+          {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case all_occurrences do
+      {:ok, occurrences} ->
+        {:ok,
+         occurrences
+         |> Enum.reverse()
+         |> Enum.concat()}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  # The second pass — date-holidays' `PostRule`, generalised. Every member's
+  # occurrences over the `:within` window widened by the conditions' reach are
+  # the tally a condition reads; each conditional resolves its own occurrences
+  # against the others' and keeps those that overlap the window. The other
+  # members materialise over the window itself, exactly as in a set without
+  # conditionals.
+  defp conditional_set_occurrences(members, options) do
+    conditionals = Enum.filter(members, &match?(%Conditional{}, &1))
+
+    with :ok <- validate_conditionals(conditionals),
+         {:ok, window} <- conditional_window(conditionals, options),
+         {:ok, first_pass, first_options} <- first_pass(members, conditionals, window, options),
+         {:ok, reads} <- conditional_reads(first_pass, first_options),
+         {:ok, others_occurrences} <- others_occurrences(first_pass, first_options, options) do
+      resolved =
+        for {index, %Conditional{} = conditional, occurrences} <- first_pass,
+            occurrence <- occurrences,
+            outcome <-
+              resolve_conditional_occurrence(occurrence, conditional, Map.get(reads, index, [])),
+            in_conditional_window?(outcome, window),
+            do: outcome
+
+      {:ok, others_occurrences ++ resolved}
+    end
+  end
+
+  # What the conditions read: every member's occurrences over the window,
+  # where no condition reaches past it, and over the window widened by the
+  # conditions' reach where one does.
+  #
+  # A condition that keeps an occurrence reads the days `:at` from it, and
+  # only an occurrence at an end of the window has one of those outside it:
+  # a bridge on 2 January reads the 1st and the 3rd. The widened window
+  # touches a period more at each end, and each member was walked through
+  # the whole of both, three years for the days of one, which was two fifths
+  # of what a set of sixteen yearly rules and a bridge took. A condition
+  # that moves an occurrence can move one into the window from before it,
+  # so a set that holds one is read over the widened window, as it was.
+  defp first_pass(members, _conditionals, :none, options) do
+    read_over(members, options)
+  end
+
+  defp first_pass(members, conditionals, window, options) do
+    with true <- Enum.all?(conditionals, &match?(%Conditional{to_next: nil}, &1)),
+         {:ok, first_pass, ^options} = read <- read_over(members, options),
+         false <- reaches_past?(first_pass, window) do
+      read
+    else
+      {:error, _reason} = error -> error
+      _a_condition_reaches_past_the_window -> read_over(members, widened_options(options, window))
+    end
+  end
+
+  defp read_over(members, options) do
+    with {:ok, first_pass} <- first_pass_occurrences(members, options),
+         do: {:ok, first_pass, options}
+  end
+
+  # Whether a day a condition reads from one of its occurrences is outside
+  # the window. The occurrences are in the order of time and each is read
+  # the same days from, so the first says whether any reads before the
+  # window, and the last whether any reads after it.
+  defp reaches_past?(first_pass, {window_from, window_to, _widened}) do
+    lower = Compare.to_utc_seconds(window_from)
+
+    upper =
+      if window_to do
+        Compare.to_utc_seconds(window_to)
+      end
+
+    Enum.any?(first_pass, fn
+      {_index, %Conditional{at: offsets}, [first | _] = occurrences} ->
+        read_outside?(first, offsets, lower, upper) or
+          read_outside?(List.last(occurrences), offsets, lower, upper)
+
+      _another_member_or_no_occurrence ->
+        false
+    end)
+  end
+
+  defp read_outside?(occurrence, offsets, lower, upper) do
+    Enum.any?(offsets, fn offset ->
+      case offset_span(occurrence, offset) do
+        {from_seconds, to_seconds} ->
+          from_seconds < lower or (upper != nil and to_seconds > upper)
+
+        :none ->
+          false
+      end
+    end)
+  end
+
+  # The occurrences of the members that are no conditional, over the window
+  # itself. Where the first pass read the window itself, they are its own.
+  # Where it read the widened window, a member whose occurrences are the
+  # same wherever its window starts is taken from there, the set keeping
+  # those its window holds: each was converted a second time, which was a
+  # third of what a set with one bridge took. A member that is counted or
+  # placed from its window's start is converted in the window, as it was.
+  defp others_occurrences(first_pass, options, options) do
+    others =
+      for {_index, member, occurrences} <- first_pass,
+          not is_struct(member, Conditional),
+          occurrence <- occurrences,
+          do: occurrence
+
+    {:ok, others}
+  end
+
+  defp others_occurrences(first_pass, _widened_options, options) do
+    in_windows =
+      first_pass
+      |> Enum.reject(&match?({_index, %Conditional{}, _occurrences}, &1))
+      |> Enum.reduce_while({:ok, []}, fn {_index, member, occurrences}, {:ok, acc} ->
+        case in_the_window(member, occurrences, options) do
+          {:ok, occurrences} -> {:cont, {:ok, [occurrences | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case in_windows do
+      {:ok, occurrences} ->
+        {:ok,
+         occurrences
+         |> Enum.reverse()
+         |> Enum.concat()}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp in_the_window(member, occurrences, options) do
+    if same_in_any_window?(member) do
+      {:ok, occurrences}
+    else
+      recurrence_set_member(member, options)
+    end
+  end
+
+  # Whether a member's occurrences in a window are those of a wider window
+  # that the window holds: a value with a year, a rule from a start that has
+  # one, and a rule with no start and no count, which is walked by the
+  # periods of the calendar wherever its window starts. A rule with no start
+  # and a count is counted from its window's start, and a start with no year
+  # is placed on it.
+  defp same_in_any_window?(%__MODULE__{} = value) do
+    anchored?(value)
+  end
+
+  defp same_in_any_window?(%Tempo.Interval{from: %__MODULE__{} = from}) do
+    anchored?(from)
+  end
+
+  defp same_in_any_window?(%Tempo.Interval{
+         from: from,
+         to: to,
+         recurrence: :infinity,
+         duration: %Tempo.Duration{}
+       })
+       when from in [nil, :undefined] and to in [nil, :undefined] do
+    true
+  end
+
+  defp same_in_any_window?(%Tempo.RecurrenceSet{members: members}) do
+    Enum.all?(members, &same_in_any_window?/1)
+  end
+
+  defp same_in_any_window?(_another_member) do
+    false
+  end
+
+  # A conditional names what it falls on and either the offsets it keeps `:at`
+  # or the selector it moves `:to_next`, never both.
+  defp validate_conditionals(conditionals) do
+    case Enum.reject(conditionals, &Conditional.valid?/1) do
+      [] ->
+        :ok
+
+      [invalid | _] ->
+        {:error, ConversionError.exception(value: invalid, reason: :conditional_member)}
+    end
+  end
+
+  # Each conditional's condition as the spans of the occurrences it can fall on,
+  # keyed by the conditional's member index: the other members' first-pass
+  # occurrences whose metadata includes a `:falls_on` map — never its own — or
+  # every occurrence of a `:falls_on` recurrence set, materialised over the same
+  # widened window.
+  defp conditional_reads(first_pass, options) do
+    tally = occurrence_tally(first_pass)
+
+    first_pass
+    |> Enum.filter(&match?({_index, %Conditional{}, _occurrences}, &1))
+    |> Enum.reduce_while({:ok, %{}}, fn {index, conditional, _occurrences}, {:ok, reads} ->
+      case condition_spans(conditional, index, tally, options) do
+        {:ok, spans} -> {:cont, {:ok, Map.put(reads, index, spans)}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp condition_spans(
+         %Conditional{falls_on: %Tempo.RecurrenceSet{} = reference},
+         _index,
+         _tally,
+         options
+       ) do
+    with {:ok, occurrences} <- to_interval_set(reference, options) do
+      spans =
+        for %Tempo.Interval{from: %Tempo{}, to: %Tempo{}} = occurrence <-
+              IntervalSet.members(occurrences),
+            do: occurrence_span(occurrence)
+
+      {:ok, spans}
+    end
+  end
+
+  defp condition_spans(%Conditional{falls_on: falls_on}, index, tally, _options) do
+    spans =
+      for {other, from, to, metadata} <- tally,
+          other != index,
+          metadata_includes?(metadata, falls_on),
+          do: {from, to}
+
+    {:ok, spans}
+  end
+
+  # The `:within` window, and the window widened by the conditions' reach — each
+  # `:at` offset from either edge, and a move's search span back from the lower
+  # edge — so a condition near an edge reads the occurrences just outside it.
+  # Without a window (or with an empty one) the members bound themselves and
+  # nothing widens.
+  defp conditional_window(conditionals, options) do
+    with {:ok, window} <- within_window(options) do
+      widened_window(window, conditional_reach(conditionals))
+    end
+  end
+
+  defp widened_window(:none, _reach) do
+    {:ok, :none}
+  end
+
+  defp widened_window({nil, _window_to}, _reach) do
+    {:ok, :none}
+  end
+
+  defp widened_window({%Tempo{} = window_from, window_to}, {lower_reach, upper_reach}) do
+    widened_from =
+      Enum.reduce(lower_reach, window_from, &earlier_endpoint(Math.add(window_from, &1), &2))
+
+    widened = %Tempo.Interval{from: widened_from, to: widened_upper(window_to, upper_reach)}
+    {:ok, {window_from, window_to, widened}}
+  end
+
+  # An open-ended window stays open.
+  defp widened_upper(nil, _upper_reach) do
+    :undefined
+  end
+
+  defp widened_upper(window_to, upper_reach) do
+    Enum.reduce(upper_reach, window_to, &later_endpoint(Math.add(window_to, &1), &2))
+  end
+
+  defp conditional_reach(conditionals) do
+    Enum.reduce(conditionals, {[], []}, fn
+      %Conditional{to_next: nil, at: offsets}, {lower, upper} ->
+        {offsets ++ lower, offsets ++ upper}
+
+      %Conditional{to_next: selector}, {lower, upper} ->
+        {[Duration.negate(selection_search_span(selector)) | lower], upper}
+    end)
+  end
+
+  defp widened_options(options, {_bound_from, _bound_to, widened}) do
+    Keyword.put(options, :within, widened)
+  end
+
+  defp in_conditional_window?(_occurrence, :none) do
+    true
+  end
+
+  defp in_conditional_window?(occurrence, {window_from, window_to, _widened}) do
+    overlaps_window?(occurrence, window_from, window_to)
+  end
+
+  # Every member's occurrences, a conditional's being its member's, tagged with
+  # the conditional's metadata as a nested set's are.
+  defp first_pass_occurrences(members, options) do
+    first_pass =
+      members
+      |> Enum.with_index()
+      |> Enum.reduce_while({:ok, []}, fn {member, index}, {:ok, acc} ->
+        case recurrence_set_member(first_pass_member(member), options) do
+          {:ok, occurrences} -> {:cont, {:ok, [{index, member, occurrences} | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case first_pass do
+      {:ok, entries} -> {:ok, Enum.reverse(entries)}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp first_pass_member(%Conditional{member: member, metadata: metadata}) do
+    %Tempo.RecurrenceSet{members: [member], metadata: metadata}
+  end
+
+  defp first_pass_member(member) do
+    member
+  end
+
+  # Each first-pass occurrence as `{member_index, from, to, metadata}`, its extent
+  # in UTC seconds so a condition compares spans without materialising again.
+  defp occurrence_tally(first_pass) do
+    for {index, _member, occurrences} <- first_pass,
+        %Tempo.Interval{from: %Tempo{} = from, to: %Tempo{} = to, metadata: metadata} <-
+          occurrences,
+        do: {index, Compare.to_utc_seconds(from), Compare.to_utc_seconds(to), metadata}
+  end
+
+  # Keep an occurrence when every day `:at` from its start falls on one of the
+  # condition's spans; move one that falls on such a span to the next span its
+  # selector gives.
+  defp resolve_conditional_occurrence(occurrence, %Conditional{to_next: nil, at: offsets}, spans) do
+    if Enum.all?(offsets, &falls_on?(offset_span(occurrence, &1), spans)) do
+      [occurrence]
+    else
+      []
+    end
+  end
+
+  defp resolve_conditional_occurrence(occurrence, %Conditional{to_next: selector}, spans) do
+    if falls_on?(occurrence_span(occurrence), spans) do
+      [next_selected(occurrence, selector)]
+    else
+      [occurrence]
+    end
+  end
+
+  defp occurrence_span(%Tempo.Interval{from: from, to: to}) do
+    {Compare.to_utc_seconds(from), Compare.to_utc_seconds(to)}
+  end
+
+  # The span of the value `offset` from an occurrence's start, at the start's
+  # resolution (a day for a day's occurrence).
+  defp offset_span(%Tempo.Interval{from: from}, offset) do
+    case to_interval(Math.add(from, offset)) do
+      {:ok, %Tempo.Interval{} = span} -> occurrence_span(span)
+      _no_single_span -> :none
+    end
+  end
+
+  defp falls_on?({from_seconds, to_seconds}, spans) do
+    Enum.any?(spans, fn {span_from, span_to} ->
+      span_from < to_seconds and from_seconds < span_to
+    end)
+  end
+
+  defp falls_on?(:none, _spans) do
+    false
+  end
+
+  defp metadata_includes?(metadata, pattern) do
+    Enum.all?(pattern, fn {key, value} -> Map.fetch(metadata, key) == {:ok, value} end)
+  end
+
+  # The first span `selector` gives after the occurrence, searched over a week
+  # for a weekday and a year otherwise; with none, the occurrence stays.
+  defp next_selected(
+         %Tempo.Interval{to: after_occurrence, metadata: metadata} = occurrence,
+         selector
+       ) do
+    search = %Tempo.Interval{
+      from: after_occurrence,
+      to: Math.add(after_occurrence, selection_search_span(selector))
+    }
+
+    with {:ok, %IntervalSet{} = selected} <- select(search, selector),
+         %Tempo.Interval{} = next <- IntervalSet.first(selected) do
+      %{next | metadata: metadata}
+    else
+      _nothing_selected -> occurrence
+    end
+  end
+
+  defp selection_search_span(%Tempo{time: [day_of_week: _]}) do
+    %Tempo.Duration{time: [week: 1]}
+  end
+
+  defp selection_search_span(_selector) do
+    %Tempo.Duration{time: [year: 1]}
+  end
+
+  # One recurrence-set member's occurrences: an interval member (a recurrence, or
+  # a concrete interval) carries its metadata onto each occurrence; a plain
+  # `%Tempo{}` member is a concrete value, materialised to its span. A nested
+  # recurrence set is one member (a holiday and its observed days): its own
+  # metadata tags every occurrence its members produce. Anything else is not a
+  # member, so it is an error rather than a raise.
+  defp recurrence_set_member(%module{metadata: metadata} = member, options)
+       when module in [Tempo.Interval, Tempo.RecurrenceSet] do
+    with {:ok, materialised} <- to_interval(member, options) do
+      occurrences =
+        materialised
+        |> recurrence_set_occurrences()
+        |> Enum.map(&merge_member_metadata(&1, metadata))
+
+      {:ok, occurrences}
+    end
+  end
+
+  defp recurrence_set_member(%Tempo{} = member, options) do
+    with {:ok, materialised} <- to_interval(member, options) do
+      {:ok, recurrence_set_occurrences(materialised)}
+    end
+  end
+
+  defp recurrence_set_member(member, _options) do
+    {:error, ConversionError.exception(value: member, reason: :recurrence_set_member)}
+  end
+
+  defp recurrence_set_occurrences(%Tempo.Interval{} = interval) do
+    [interval]
+  end
+
+  defp recurrence_set_occurrences(%Tempo.IntervalSet{} = set) do
+    IntervalSet.members(set)
+  end
+
+  # A value's metadata onto the interval, or each interval, it materialised to.
+  defp with_value_metadata(%Tempo.Interval{} = interval, metadata) do
+    merge_member_metadata(interval, metadata)
+  end
+
+  defp with_value_metadata(%IntervalSet{} = set, metadata) do
+    labelled = IntervalSet.map(set, &merge_member_metadata(&1, metadata))
+
+    case IntervalSet.new(labelled, metadata: IntervalSet.metadata(set)) do
+      {:ok, labelled_set} -> labelled_set
+      {:error, _} -> set
+    end
+  end
+
+  # Carry a recurrence-set member's metadata (e.g. a holiday name) onto each
+  # occurrence it produces; an occurrence's own metadata wins any conflict. The
+  # member's span directives have already shaped each occurrence's extent, so —
+  # as when a recurrence emits its occurrences — they are not copied onto them.
+  defp merge_member_metadata(interval, metadata) when map_size(metadata) == 0 do
+    interval
+  end
+
+  defp merge_member_metadata(%Tempo.Interval{metadata: existing} = interval, metadata) do
+    %{interval | metadata: Map.merge(strip_span_directives(metadata), existing)}
+  end
+
+  @doc """
+  Convert any Tempo value to a `t:Tempo.IntervalSet.t/0`.
+
+  Unlike `to_interval/1` (which may return either a single
+  interval or an IntervalSet), `to_interval_set/1` always returns
+  an IntervalSet — wrapping a single interval in a one-element
+  set if needed. This is the convenient form when the caller
+  wants a uniform shape (e.g. to pipe into set operations).
+
+  ### Arguments
+
+  * `value` is a `t:#{__MODULE__}.t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.IntervalSet.t/0`, `t:Tempo.Set.t/0`, or a
+    `t:Tempo.RecurrenceSet.t/0`.
+
+  ### Options
+
+  * `:within` is the window whose occurrences you want. Every recurrence (or a `t:Tempo.RecurrenceSet.t/0` of them) keeps the occurrences that overlap it — one already in progress when the window opens, and one that runs past its end. A window of several spans is the one stretch from its first start to its last end. An open-ended window (`~o"2026-09-28/.."`) keeps those from its start on, lazily for a value with no end of its own. See `to_interval/2`.
+
+  ### Returns
+
+  * `{:ok, interval_set}` on success, or `{:error, reason}` for
+    the same cases that `to_interval/2` errors on.
+
+  ### Examples
+
+      iex> {:ok, tempo} = Tempo.from_iso8601("2026-01")
+      iex> {:ok, set} = Tempo.to_interval_set(tempo)
+      iex> Tempo.IntervalSet.count(set)
+      1
+
+  """
+  @spec to_interval_set(
+          Tempo.t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.Duration.t()
+          | Tempo.RecurrenceSet.t(),
+          keyword()
+        ) ::
+          {:ok, Tempo.IntervalSet.t()} | {:error, error_reason()}
+  def to_interval_set(value, options \\ []) do
+    case to_interval(value, options) do
+      {:ok, %Tempo.IntervalSet{} = set} -> {:ok, set}
+      {:ok, %Tempo.Interval{} = interval} -> IntervalSet.new([interval])
+      {:error, _} = err -> err
+    end
+  end
+
+  @doc """
+  Raising version of `to_interval_set/1`.
+
+  ### Arguments
+
+  * `value` is any value `to_interval_set/1` accepts.
+
+  ### Returns
+
+  * The `t:Tempo.IntervalSet.t/0`.
+
+  ### Examples
+
+      iex> Tempo.to_interval_set!(~o"2026-06")
+      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y6M/7M" unit: day>]>
+
+  """
+  @spec to_interval_set!(
+          Tempo.t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.Duration.t()
+        ) :: Tempo.IntervalSet.t()
+  def to_interval_set!(value) do
+    case to_interval_set(value) do
+      {:ok, set} -> set
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
+    end
+  end
+
+  @doc """
+  Map `fun` over an enumerable of Tempo values, collecting the results into
+  a `t:Tempo.IntervalSet.t/0`.
+
+  The Tempo analogue of `Enum.map/2`: it walks any enumerable Tempo value
+  (a `t:Tempo.IntervalSet.t/0`, a `t:Tempo.Set.t/0`, a plain list of
+  values, …), applies `fun` to each element, and gathers the results into
+  an interval set instead of a list. Each result is converted with
+  `Tempo.to_interval/1`, so `fun` may return either a `t:t/0` — a day
+  becomes its `[day, next_day)` span — or an interval. Members are kept
+  distinct (no coalescing); apply `Tempo.IntervalSet.coalesce/1` afterward
+  if you want touching spans merged.
+
+  Raises if a mapped value cannot be converted to a bounded interval.
+  Use `try_map/2` for the error-returning form.
+
+  ### Arguments
+
+  * `enumerable` is any enumerable of Tempo values.
+
+  * `fun` is a one-arity function applied to each element.
+
+  ### Returns
+
+  * a `t:Tempo.IntervalSet.t/0` of the mapped, converted values.
+
+  ### Examples
+
+      iex> [~o"2025-07-04", ~o"2026-07-04", ~o"2027-07-04"]
+      ...> |> Tempo.map(&Tempo.nearest_workday(&1, :US))
+      ...> |> Tempo.IntervalSet.count()
+      3
+
+  """
+  @spec map(Enumerable.t(), (term() -> term())) :: Tempo.IntervalSet.t()
+  def map(enumerable, fun) when is_function(fun, 1) do
+    case try_map(enumerable, fun) do
+      {:ok, set} ->
+        set
+
+      {:error, exception} when is_exception(exception) ->
+        raise exception
+
+      {:error, reason} ->
+        raise ArgumentError, "Tempo.map/2 could not build the set: #{Calendars.inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Like `map/2`, but returns `{:ok, interval_set}` or halts at the first
+  value that cannot be converted, returning its `{:error, reason}`.
+
+  This is the "traverse" form — map every element, or stop at the first
+  failure and report it — analogous to Gleam's `list.try_map` or a Rust
+  `collect::<Result<_, _>>()`. `fun` returns a plain Tempo value (exactly
+  as for `map/2`); the error is the first result that `Tempo.to_interval/1`
+  rejects (an unbounded, unanchored or otherwise unconvertible
+  value), so a partially-resolvable set never yields a partial result.
+
+  ### Arguments
+
+  * `enumerable` is any enumerable of Tempo values.
+
+  * `fun` is a one-arity function applied to each element.
+
+  ### Returns
+
+  * `{:ok, interval_set}` when every mapped value converts, or
+
+  * `{:error, reason}` for the first that does not.
+
+  ### Examples
+
+      iex> {:ok, set} = Tempo.try_map([~o"2025-07-04", ~o"2026-07-04"], &Tempo.nearest_workday(&1, :US))
+      iex> Tempo.IntervalSet.count(set)
+      2
+
+      iex> match?({:error, _}, Tempo.try_map([~o"P1D"], & &1))
+      true
+
+  """
+  @spec try_map(Enumerable.t(), (term() -> term())) ::
+          {:ok, Tempo.IntervalSet.t()} | {:error, error_reason()}
+  def try_map(enumerable, fun) when is_function(fun, 1) do
+    gathered =
+      enumerable
+      |> Enum.reduce_while([], fn element, acc ->
+        case to_interval(fun.(element)) do
+          {:ok, interval} -> {:cont, [interval | acc]}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+
+    case gathered do
+      {:error, _} = error -> error
+      intervals -> IntervalSet.new(Enum.reverse(intervals))
+    end
+  end
+
+  defp materialisation_error(tempo, reason) do
+    ConversionError.exception(value: tempo, reason: reason)
+  end
+
+  # What a function of one date or time value says of anything else: an
+  # interval, a duration, a set, a recurrence, or a term that is no Tempo
+  # value at all.
+  defp not_one_value(function, value) do
+    ArgumentError.exception(
+      "Tempo.#{function} takes one date or time value, and #{Calendars.inspect(value)} is not one."
+    )
+  end
+
+  # An unspecified year on its own (`X*Y`) is a year no one has named, with
+  # no place on the time line and no cycle to lie on.
+  defp materialise_value(%Tempo{time: [{:year, :any}]} = tempo) do
+    {:error, UnanchoredError.exception(value: tempo)}
+  end
+
+  defp materialise_value(%Tempo{} = tempo) do
+    # `X*Y2M28D` is "28 February of an unspecified year", and whether the
+    # next day is the 29th or 1 March depends on which year. The stepper
+    # reports that as `{:error, :unanchored}`; name the value here,
+    # where it is still in scope.
+    case do_to_interval(tempo) do
+      {:error, :unanchored} -> {:error, UnanchoredError.exception(value: tempo)}
+      {:error, :grouped_component} -> {:error, materialisation_error(tempo, :grouped_component)}
+      other -> other
+    end
+  end
+
+  # A concrete value with a selection (ISO 8601-2 §12.11): the units before the
+  # selection are its context — `2018Y9M` in `2018Y9ML1K1IN`, "the first Monday
+  # of September 2018" — and the units after it apply to every date it selects
+  # (§12.11.2). Each period of the context (a year, or a month of a year)
+  # resolves the selection once, so a set or mask of years
+  # (`XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN`, US Election Day) costs one
+  # selection per year it names. A `:within` window keeps the dates that overlap
+  # it and narrows the years before any is resolved; a context without a year
+  # takes its years from the window, so it needs one.
+  defp materialise_selection(%Tempo{} = tempo, context, selection, trailing, options) do
+    rule = %{tempo | time: [selection: selection]}
+    cadence = %Tempo.Duration{time: [{selection_cadence_unit(context), 1}]}
+    finer_context = Keyword.delete(context, :year)
+
+    with {:ok, window} <- within_window(options),
+         {:ok, years} <- selection_years(tempo, Keyword.get(context, :year), window),
+         {:ok, members} <- selection_members(tempo, years, finer_context) do
+      members
+      |> members_selection(rule, cadence, points_as(options), tempo)
+      |> keep_occurrences_in_window(window)
+      |> with_trailing_units(trailing, tempo)
+    end
+  end
+
+  # Each period of the context the selection resolves in: a year, or a month
+  # of a year, of each year the context names. They are listed as a value's
+  # values are, no more than `@spans_at_once` of them.
+  defp selection_members(tempo, years, finer_context) do
+    gathered =
+      years
+      |> Stream.flat_map(&context_members(%{tempo | time: [{:year, &1} | finer_context]}))
+      |> Enum.reduce_while({[], 0}, fn
+        {:error, _exception} = error, _listed -> {:halt, error}
+        _period, {_periods, @spans_at_once} -> {:halt, {:error, too_many_spans_error(tempo)}}
+        period, {periods, count} -> {:cont, {[period | periods], count + 1}}
+      end)
+
+    case gathered do
+      {:error, _exception} = error -> error
+      {periods, _count} -> {:ok, Enum.reverse(periods)}
+    end
+  end
+
+  # The dates the selection picks in every period, as one set, or the error
+  # of the first period it has no answer for.
+  defp members_selection(members, rule, cadence, points_as, value) do
+    members
+    |> Stream.map(&selected_in_period(&1, rule, cadence, points_as, value))
+    |> gathered_at_once(value)
+  end
+
+  # A period that gives more than every period together may
+  # (`@spans_at_once`) is refused as the count of them all is, and the
+  # resolver is told the most so that it makes no more to find it out:
+  # `2026YL{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}SN` names 29 million
+  # seconds.
+  defp selected_in_period(member, rule, cadence, points_as, value) do
+    case member_selection(member, rule, cadence, points_as) do
+      {:error, {:more_than, _most}} -> {:error, too_many_spans_error(value)}
+      {:error, _reason} = error -> error
+      selected -> {:ok, selected}
+    end
+  end
+
+  # The dates the selection picks in one period of the context: the period,
+  # filled down to the grain the selection names, as the one candidate the
+  # selection resolves in.
+  defp member_selection(%Tempo{} = member, rule, cadence, points_as) do
+    {start, recurrence} =
+      fill_selection_start(member, %Tempo.Interval{from: member, repeat_rule: rule})
+
+    candidate = %Tempo.Interval{from: start, to: Math.add(start, cadence)}
+    freq = freq_of(cadence)
+
+    # A selection that only keeps or drops its period keeps it whole, as a
+    # recurrence's does: week 25, selected in week 25, is the week.
+    options = [origin_day: origin_day_of(recurrence), at_most: @spans_at_once]
+
+    case Selection.apply(candidate, rule, freq, options) do
+      {:error, _reason} = error -> error
+      occurrences -> sized(occurrences, Selection.expands?(rule, freq), points_as)
+    end
+  end
+
+  # How a point a selection makes is given: as the span a unit of its
+  # resolution long, as an occurrence of a recurrence is, or as the value
+  # it is, which `Tempo.select/2` asks for (`selected_in/1`).
+  defp points_as(options) do
+    Keyword.get(options, :points_as, :spans)
+  end
+
+  defp sized(occurrences, true, :values) do
+    Enum.map(occurrences, &point_as_its_value/1)
+  end
+
+  defp sized(occurrences, expands?, _points_as) do
+    resize_selected_occurrences(occurrences, expands?)
+  end
+
+  # A point as the value it is: the span from its start to that value's own
+  # end, with the unit `to_interval/1` has the value walked by. It is where
+  # the resolver's own resizing ends it, a unit of its resolution on, but
+  # where the clock of its zone skips the start: there a step is counted
+  # from the reading the clock comes out on, and the value still ends where
+  # it does. The hour 02:00 on the night Lord Howe's clocks go from 02:00 to
+  # 02:30 ends at 03:00, the half of it the clock shows.
+  defp point_as_its_value(%Tempo.Interval{metadata: %{windowed: true} = metadata} = occurrence) do
+    %{occurrence | metadata: Map.delete(metadata, :windowed)}
+  end
+
+  defp point_as_its_value(%Tempo.Interval{from: %Tempo{} = from} = occurrence) do
+    case Interval.do_next_unit_boundary(from) do
+      {:ok, {lower, upper}, unit} -> %{occurrence | from: lower, to: upper, unit: unit}
+      {:error, _reason} -> resize_to_resolution(occurrence)
+    end
+  end
+
+  defp point_as_its_value(occurrence) do
+    occurrence
+  end
+
+  @doc false
+  # What a value selects with the selection written after its units
+  # (`2026Y6ML15DN`), as `to_interval/1` converts it, with each point the
+  # selection makes given as the value it is: a day with its own span and
+  # walked by its hours. `Tempo.select/2` selects by it, so that a day it
+  # selects by a constraint and by a selection is the same value.
+  @spec selected_in(t()) :: {:ok, Tempo.IntervalSet.t() | Tempo.Interval.t()} | {:error, term()}
+  def selected_in(%Tempo{} = value) do
+    to_interval(value, points_as: :values)
+  end
+
+  # The years a context names — a year, a list of years and ranges, a mask
+  # (`202XY`, `XXX{0,2,4,6,8}Y`) standing for the years it matches — narrowed
+  # to a bound's years, which are also the years of a context that names none.
+  defp selection_years(tempo, year, :none) when year in [nil, :any] do
+    {:error,
+     UnboundedRecurrenceError.exception(
+       reason:
+         "#{Calendars.inspect(tempo)} selects in every year, so it needs a :within window — " <>
+           "any Tempo value that limits the years."
+     )}
+  end
+
+  defp selection_years(%Tempo{} = tempo, year, :none) do
+    context_years(tempo, year)
+  end
+
+  # An open-ended window keeps the named years from its start on.
+  defp selection_years(%Tempo{calendar: calendar} = tempo, year, {%Tempo{} = window_from, nil})
+       when year not in [nil, :any] do
+    with {:ok, first} <- year_in_calendar(window_from, calendar),
+         {:ok, years} <- context_years(tempo, year) do
+      {:ok, Stream.filter(years, &(&1 >= first))}
+    end
+  end
+
+  defp selection_years(%Tempo{calendar: calendar}, year, window) do
+    with {:ok, window_years} <- window_years(window, calendar) do
+      {:ok, Enum.filter(window_years, &year_named?(&1, year))}
+    end
+  end
+
+  defp context_years(_tempo, year) when is_integer(year) do
+    {:ok, [year]}
+  end
+
+  # A mask that stands for more years than are listed at once is refused,
+  # as the value is.
+  defp context_years(%Tempo{calendar: calendar} = tempo, {:mask, mask}) do
+    with {:error, reason} <- Mask.valid_values(:year, mask, [], calendar),
+         do: {:error, Mask.error(tempo, reason)}
+  end
+
+  # The years of a set are taken as they are asked for: a range of them is
+  # not listed, since no more than `@spans_at_once` are read.
+  defp context_years(_tempo, years) when is_list(years) do
+    {:ok, Stream.flat_map(years, &years_of/1)}
+  end
+
+  defp years_of(%Range{} = range) do
+    range
+  end
+
+  defp years_of(years) when is_list(years) do
+    Stream.flat_map(years, &years_of/1)
+  end
+
+  defp years_of(year) do
+    [year]
+  end
+
+  defp year_named?(_year, year) when year in [nil, :any] do
+    true
+  end
+
+  defp year_named?(year, named) do
+    Selection.year_selected?(year, named)
+  end
+
+  # The years of `calendar` a bound's window meets: from the year its start
+  # falls in to the year its end does.
+  defp window_years({%Tempo{} = bound_from, %Tempo{} = bound_to}, calendar) do
+    with {:ok, first} <- year_in_calendar(bound_from, calendar),
+         {:ok, last} <- year_in_calendar(bound_to, calendar) do
+      {:ok, Enum.to_list(first..last//1)}
+    end
+  end
+
+  defp window_years(_window, _calendar) do
+    {:error, empty_bound_error()}
+  end
+
+  defp year_in_calendar(%Tempo{calendar: calendar, time: time}, calendar) do
+    case Keyword.get(time, :year) do
+      year when is_integer(year) -> {:ok, year}
+      _no_year -> {:error, empty_bound_error()}
+    end
+  end
+
+  defp year_in_calendar(%Tempo{} = endpoint, calendar) do
+    with %Tempo{} = day <- at_resolution(endpoint, :day),
+         {:ok, %Tempo{} = converted} <- to_calendar(day, calendar) do
+      year_in_calendar(converted, calendar)
+    end
+  end
+
+  # Each member of a context with a set of finer values (`2018Y{3,9}M`) is its
+  # own period.
+  defp context_members(%Tempo{} = member) do
+    case multi_tempo?(member) and expand_members(member) do
+      false -> [member]
+      {:ok, members} -> members
+      # A year that holds more periods than are listed at once is refused,
+      # as the value is.
+      {:error, %ConversionError{reason: :too_many_values}} = error -> [error]
+      # A context is expanded with its year, which bounds every range in
+      # it; one that cannot be listed names no period.
+      {:error, _exception} -> []
+    end
+  end
+
+  # The recurrence steps by the context's finest unit, so each period is one
+  # member of the context.
+  defp selection_cadence_unit([]) do
+    :year
+  end
+
+  defp selection_cadence_unit(context) do
+    case List.last(context) do
+      {:day_of_year, _value} -> :day
+      {unit, _value} when unit in [:year, :month, :week, :day, :hour, :minute] -> unit
+      _other -> :year
+    end
+  end
+
+  # An interval that starts or ends on a selection (ISO 8601-2 §12.11.3):
+  # `2018Y9ML1K1IN/P5D` is the five days from the first Monday of September
+  # 2018, one span for each date the selection gives.
+  defp selected_spans(%Tempo{} = endpoint, span_of, metadata, options) do
+    with {:ok, %IntervalSet{} = selected} <- to_interval(endpoint, options) do
+      selected
+      |> IntervalSet.members()
+      |> Enum.map(fn %Tempo.Interval{from: date} ->
+        {from, to} = span_of.(date)
+        %Tempo.Interval{from: from, to: to, metadata: metadata}
+      end)
+      |> IntervalSet.new()
+    end
+  end
+
+  # The units after a selection apply to every date it selects (ISO 8601-2
+  # §12.11.2): `2018YL{1,2,5}KNT10H0M0S` is each of those days at 10:00:00.
+  defp with_trailing_units(result, [], _value) do
+    result
+  end
+
+  # A date the units do not make (`2026YL{1,2}MN30D` has no 30 February) is
+  # passed over, as a selection passes over a value its period lacks.
+  defp with_trailing_units({:ok, %IntervalSet{} = set}, trailing, value) do
+    set
+    |> IntervalSet.members()
+    |> Stream.map(fn %Tempo.Interval{from: %Tempo{} = from} ->
+      from
+      |> selected_with_units(trailing)
+      |> as_selected_spans()
+    end)
+    |> gathered_at_once(value, :dropped)
+  end
+
+  defp with_trailing_units({:error, _reason} = error, _trailing, _value) do
+    error
+  end
+
+  defp as_selected_spans({:error, _reason} = error) do
+    error
+  end
+
+  defp as_selected_spans(converted) do
+    {:ok, Enum.map(member_intervals(converted), &selected_span/1)}
+  end
+
+  # A date the selection picked with the units after it, read as the same
+  # text is: a unit counted from the end (`2026YL6MN-1D`) is counted in the
+  # date picked, which the text before the selection could not give it.
+  defp selected_with_units(%Tempo{time: time, calendar: calendar} = selected, trailing) do
+    with_units = %{selected | time: Keyword.merge(time, trailing)}
+
+    with {:ok, %Tempo{} = read} <-
+           Validation.validate(with_units, calendar) do
+      to_interval(read)
+    end
+  end
+
+  # A span a selection picks is walked as the span it is, as the dates it
+  # picks are: the unit a value's own span is walked by, which
+  # `to_interval/1` gave it, is not the selection's.
+  defp selected_span(%Tempo.Interval{} = interval) do
+    %{interval | unit: nil}
+  end
+
+  # A value of whole numbers alone names its own one span, and nothing a
+  # shape is read by applies to it, so it is converted at once: most values
+  # converted are such, each member of a set among them.
+  defp do_to_interval(%Tempo{time: time} = tempo) do
+    if whole_numbers?(time) do
+      single_span(tempo)
+    else
+      shaped_interval(tempo)
+    end
+  end
+
+  # A group with a unit after it (`2026Y2G4WU3K`, the Wednesday of each of
+  # four weeks) is the spans its walk names, since what the unit after a
+  # group counts in is the walk's to read (`Tempo.Enumeration`): it is not
+  # the one span a group with nothing after it is.
+  defp shaped_interval(%Tempo{} = tempo) do
+    with {:ok, %Tempo{time: time} = tempo} <- crisp_reading(tempo) do
+      cond do
+        group_of_set?(time) -> spans_of_each_group(tempo)
+        group_before_unit?(time) -> materialise_multi(tempo)
+        true -> ungrouped_interval(tempo)
+      end
+    end
+  end
+
+  # A group of a set (`2026Y{1,2}G3MU`, the first and the second groups of
+  # three months) names a span in each of its groups, and each is converted
+  # as the group it is, a unit after it counted from that group's start. A
+  # group its container lacks is passed over, as a set drops a member its
+  # context cannot hold. One of several groups (`[1,2]G3MU`) is no one
+  # span, as a one-of set is none.
+  defp spans_of_each_group(%Tempo{time: time, calendar: calendar} = tempo) do
+    {prefix, [{unit, {:group, {kind, members}}, size} | rest]} =
+      Enum.split_while(time, &(not match?({_unit, {:group, _members}, _size}, &1)))
+
+    with :all <- kind,
+         {:ok, groups} <- Group.groups_of_set(unit, members, size, prefix, calendar) do
+      groups
+      |> Enum.map(&%{tempo | time: prefix ++ [{unit, {:group, &1}} | rest]})
+      |> Stream.map(&group_spans(&1, calendar))
+      |> gathered_at_once(tempo, :the_answer_if_alone)
+    else
+      :one -> {:error, materialisation_error(tempo, :one_of_set)}
+      {:error, {:unresolved, unit}} -> {:error, uncounted_group_error(tempo, unit)}
+    end
+  end
+
+  defp group_spans(%Tempo{} = group, calendar) do
+    with {:ok, %Tempo{} = read} <- Validation.validate(group, calendar), do: to_interval(read)
+  end
+
+  defp uncounted_group_error(%Tempo{} = tempo, unit) do
+    if anchored?(tempo) do
+      ConversionError.exception(
+        value: tempo,
+        reason:
+          "Cannot convert #{Calendars.inspect(tempo)}: its #{unit} group counts from the end of a " <>
+            "span the units before it do not fix."
+      )
+    else
+      UnanchoredError.exception(value: tempo)
+    end
+  end
+
+  # Whether every unit is one whole number: a year of either sign, and a
+  # unit after it that is not counted from the end.
+  defp whole_numbers?([{:year, year} | rest]) when is_integer(year) do
+    whole_after_year?(rest)
+  end
+
+  defp whole_numbers?(time) do
+    whole_after_year?(time)
+  end
+
+  defp whole_after_year?([{_unit, value} | rest]) when is_integer(value) and value >= 0 do
+    whole_after_year?(rest)
+  end
+
+  defp whole_after_year?([{:microsecond, {value, precision}}])
+       when is_integer(value) and is_integer(precision) do
+    true
+  end
+
+  defp whole_after_year?([]) do
+    true
+  end
+
+  defp whole_after_year?(_shaped) do
+    false
+  end
+
+  # A value is converted as the walk yields it. A margin of error is dropped
+  # (`2026±2Y` spans 2026), and what could not be read beside it when the
+  # value was written is read now: a count from the end (`2026±2Y-1M`), a
+  # group (`2026±2Y2G3MU`). Significant digits are the mask they are
+  # equivalent to (`1950S2Y1XM` is `19XXY1XM`), so that a unit after them is
+  # read in each year of the block and not once for the block, and they are
+  # the value itself where every digit is significant (`1950S4` is 1950).
+  defp crisp_reading(%Tempo{time: time, calendar: calendar} = tempo) do
+    masked =
+      time
+      |> Compare.drop_margin_of_error()
+      |> Interval.significant_digits_as_mask()
+
+    case masked do
+      ^time -> {:ok, tempo}
+      crisp -> Validation.validate(%{tempo | time: crisp}, calendar)
+    end
+  end
+
+  # A group of a set (`2026Y{1,2}G3MU15D`) names a span in each of its
+  # groups. It is taken apart into its groups before anything reads the
+  # units around it, which a mask after it would (`{1,2}G3MUXD`).
+  defp group_of_set?(time) do
+    Enum.any?(time, &match?({_unit, {:group, _members}, _size}, &1))
+  end
+
+  defp ungrouped_interval(%Tempo{} = tempo) do
+    case mask_context_members(tempo) do
+      {:ok, members} -> materialise_mask_members(members, tempo)
+      {:error, _exception} = error -> error
+      :none -> narrowed_interval(tempo)
+    end
+  end
+
+  defp group_before_unit?([{_unit, {:group, %Range{}}}, _finer | _rest]) do
+    true
+  end
+
+  defp group_before_unit?([_component | rest]) do
+    group_before_unit?(rest)
+  end
+
+  defp group_before_unit?([]) do
+    false
+  end
+
+  # A set before a value's first mask (`2026-{6,7}-1X`): each member of the set
+  # is a context of its own, in which the mask narrows.
+  defp mask_context_members(%Tempo{time: time} = tempo) do
+    time
+    |> Enum.split_while(&(not masked?(&1)))
+    |> context_members(tempo)
+  end
+
+  defp context_members({[_ | _] = context, [_ | _] = masked}, tempo) do
+    case Enumeration.expand(%{tempo | time: context}) do
+      {:ok, members} -> {:ok, Enum.map(members, &%{&1 | time: &1.time ++ masked})}
+      {:error, _exception} = error -> error
+      :not_expandable -> :none
+    end
+  end
+
+  defp context_members(_split, _tempo) do
+    :none
+  end
+
+  defp narrowed_interval(%Tempo{} = tempo) do
+    # Step 1: narrow any mask to the values it allows (see
+    # `expand_non_contiguous_mask/1`): replaced by its candidates when
+    # they are disjoint spans (`1985-XX-15`), by values of their own when
+    # a later mask narrows within each (`2026-XX-1X`), or the span from
+    # the first to the last when they are consecutive (`2026-06-1X`).
+    case expand_non_contiguous_mask(tempo) do
+      {:ok, tempo} -> materialise_expanded(tempo)
+      {:span, first, last} -> masked_span(first, last)
+      {:members, members} -> materialise_mask_members(members, tempo)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  # The span of a mask's consecutive candidates: from the start of the first to
+  # the end of the last. It walks the masked unit, as the mask does and as a
+  # year mask's span walks its years. Each end is a raw candidate, so it is
+  # read as a member is: a day of the year (`2026Y3XO`, or a day written
+  # straight after its year, `2026Y3XD`) is its month and day, and the span
+  # runs from 30 January to 9 February.
+  defp masked_span(%Tempo{} = first, %Tempo{} = last) do
+    with {:ok, first} <- normalise_member(first),
+         {:ok, last} <- normalise_member(last),
+         {:ok, {lower, _upper}, _unit} <- Interval.do_next_unit_boundary(first),
+         {:ok, {_lower, upper}, _unit} <- Interval.do_next_unit_boundary(last) do
+      {:ok, %Tempo.Interval{from: lower, to: upper}}
+    end
+  end
+
+  defp materialise_expanded(%Tempo{} = tempo) do
+    # Step 2: detect whether the resulting Tempo expands to
+    # multiple intervals. A "multi" shape is any time slot whose
+    # value is a list containing more than one candidate (ranges,
+    # multi-element lists). Masks, scalars, and single-element
+    # lists use the existing single-interval path in
+    # `next_unit_boundary/1`.
+    case span_shape(tempo.time, :single) do
+      :single -> single_span(tempo)
+      :multi -> materialise_multi(tempo)
+      :group_of_set -> {:error, materialisation_error(tempo, :grouped_component)}
+    end
+  end
+
+  # Whether a value names one span or several, read in one pass. A group of
+  # a set (`2026Y{1,2}G3MU15D`, the first and the second groups of three
+  # months) names a span in each of its groups, and nothing expands it to
+  # them, so it is no one span.
+  defp span_shape([], shape) do
+    shape
+  end
+
+  defp span_shape([{_unit, {:group, _members}, _size} | _rest], _shape) do
+    :group_of_set
+  end
+
+  # Significant digits with a unit after them (`1950S2Y6M`, the June of each
+  # year of the 1900s) name a span in each value of the block, as the walk
+  # yields them. With nothing after them they are the one span of the block.
+  defp span_shape([{_unit, {_value, [significant_digits: _digits]}}, _finer | rest], _shape) do
+    span_shape(rest, :multi)
+  end
+
+  defp span_shape([slot | rest], shape) do
+    span_shape(
+      rest,
+      if multi_slot?(slot) do
+        :multi
+      else
+        shape
+      end
+    )
+  end
+
+  # The bounds keep the value's own resolution; the iteration granularity of
+  # the implicit span travels on `:unit` (see
+  # `Tempo.Interval.do_next_unit_boundary/1`).
+  defp single_span(tempo) do
+    case Interval.do_next_unit_boundary(tempo) do
+      {:ok, {lower, upper}, unit} -> {:ok, %Tempo.Interval{from: lower, to: upper, unit: unit}}
+      {:error, _} = err -> err
+    end
+  end
+
+  @doc """
+  Raising version of `to_interval/1`.
+
+  ### Arguments
+
+  * `value` is a `t:#{__MODULE__}.t/0`, `t:Tempo.Interval.t/0`,
+    `t:Tempo.IntervalSet.t/0`, `t:Tempo.RecurrenceSet.t/0`, or
+    `t:Tempo.Set.t/0`.
+
+  ### Returns
+
+  * The converted `t:Tempo.Interval.t/0` or
+    `t:Tempo.IntervalSet.t/0`.
+
+  ### Raises
+
+  * `ArgumentError` when the input cannot be converted. See
+    `to_interval/1` for the error cases.
+
+  ### Examples
+
+      iex> {:ok, tempo} = Tempo.from_iso8601("2026")
+      iex> interval = Tempo.to_interval!(tempo)
+      iex> {interval.from.time, interval.to.time}
+      {[year: 2026], [year: 2027]}
+
+  """
+  @spec to_interval!(
+          Tempo.t()
+          | Tempo.Interval.t()
+          | Tempo.IntervalSet.t()
+          | Tempo.Set.t()
+          | Tempo.RecurrenceSet.t()
+          | Tempo.Duration.t()
+        ) ::
+          Tempo.Interval.t() | Tempo.IntervalSet.t()
+  def to_interval!(value) do
+    case to_interval(value) do
+      {:ok, result} -> result
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Union of two values: every member of either operand, kept as a distinct interval with its original metadata.
+
+  Members are preserved, so two operands that cover the same time give **two** members in the result, not one. For the canonical instant-set form, with touching members merged, call `Tempo.IntervalSet.coalesce/1` on the result.
+
+  ### Arguments
+
+  * `a` is any Tempo value that converts to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `b` is such a value, or a list of them, united with `a` from left to right.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
+  ### Examples
+
+      iex> {:ok, either} = Tempo.union(~o"2026-01", ~o"2026-03")
+      iex> either
+      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y1M/2M" unit: day>, #Tempo.Interval<~o"2026Y3M/4M" unit: day>]>
+
+  Members stay distinct even when they touch, and `Tempo.IntervalSet.coalesce/1` merges them:
+
+      iex> {:ok, both} = Tempo.union(~o"2026-01", ~o"2026-02")
+      iex> Tempo.IntervalSet.count(both)
+      2
+      iex> both
+      ...> |> Tempo.IntervalSet.coalesce()
+      ...> |> Tempo.IntervalSet.count()
+      1
+
+  """
+  def union(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        union(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.do_union(a, b, options)
+    end
+  end
+
+  @doc """
+  Intersection of two values: every instant present in both operands, returned as one or more trimmed intervals.
+
+  There is one result interval for each pair of members that overlap: the `a` member trimmed to its overlap with the `b` member. So a member of `a` gives several intervals when several members of `b` overlap it, and where the members of an operand overlap each other so do the results (two bookings of one room, each within the opening hours, are two results). Call `Tempo.IntervalSet.coalesce/1` for the time they cover.
+
+  This is the set-theoretic intersection, `A ∩ B`. Use it when the question is about *covered time*: "the parts of my meetings that fall inside business hours", "the overlap between two date ranges". For the member-preserving filter, which returns whole `a` members that overlap any `b` member, use `members_overlapping/3`.
+
+  ### Arguments
+
+  * `a` is any Tempo value that converts to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `b` is such a value, or a list of them, intersected with `a` from left to right, so *"when are all of these free at once?"* is one expression. An empty list is the identity: `a` alone.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  * `:metadata` decides what a result interval carries when both operands have metadata. `:left`, the default, keeps the `a` member's metadata and drops `b`'s. `:merge` merges the two maps, `b` winning on a conflicting key. `{:merge, fun}` calls `fun.(a_metadata, b_metadata)` and uses the result.
+
+  Reach for `{:merge, fun}` whenever the question is *which operands produced this window*. A plain `:merge` cannot answer it: merging `%{resource: "Alice"}` with `%{resource: "Bob"}` keeps only Bob, silently. A function that accumulates keeps both.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
+  ### Examples
+
+      iex> {:ok, both} = Tempo.intersection(~o"2026-06-15T09/2026-06-15T17", ~o"2026-06-15T14/2026-06-15T20")
+      iex> both
+      #Tempo.IntervalSet<[~o"2026Y6M15DT14H/T17H"]>
+
+  A list of operands is intersected from left to right:
+
+      iex> alice = ~o"2026-06-15T09:00:00/2026-06-15T12:00:00"
+      iex> bob = ~o"2026-06-15T10:00:00/2026-06-15T17:00:00"
+      iex> room = ~o"2026-06-15T11:00:00/2026-06-15T15:00:00"
+      iex> {:ok, mutual} = Tempo.intersection(alice, [bob, room])
+      iex> Tempo.IntervalSet.members(mutual)
+      [~o"2026Y6M15DT11H0M0S/T12H0M0S"]
+
+  A function given as `:metadata` says who is free in each window:
+
+      iex> alice = Tempo.Interval.new!(
+      ...>   from: ~o"2026-06-15T09:00:00", to: ~o"2026-06-15T12:00:00",
+      ...>   metadata: %{free: ["Alice"]})
+      iex> bob = Tempo.Interval.new!(
+      ...>   from: ~o"2026-06-15T10:00:00", to: ~o"2026-06-15T17:00:00",
+      ...>   metadata: %{free: ["Bob"]})
+      iex> accumulate = fn a, b -> Map.merge(a, b, fn _key, x, y -> x ++ y end) end
+      iex> {:ok, both} = Tempo.intersection(alice, bob, metadata: {:merge, accumulate})
+      iex> both
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.Interval.metadata/1)
+      [%{free: ["Alice", "Bob"]}]
+
+  """
+  def intersection(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        intersection(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.do_intersection(a, b, options)
+    end
+  end
+
+  @doc """
+  Complement of a value within a window: the instants of the `:within` window that no member of `set` covers.
+
+  Unlike `difference/3`, which trims each member of its first operand, `complement/2` returns the instant-set form: one member for each gap in what `set` covers. This is the right question for "find all the free time in the workday".
+
+  ### Arguments
+
+  * `set` is any Tempo value that converts to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is the window to complement within, any Tempo value. Required: a complement with no window is infinite, and Tempo does not pick one implicitly.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0` with one member for each gap.
+
+  * `{:error, reason}` when no `:within` window is given, a `:bound` option is given where `:within` is meant, or the operands cannot be aligned.
+
+  ### Examples
+
+      iex> meeting = ~o"2026-06-15T10:00/2026-06-15T11:00"
+      iex> {:ok, free} = Tempo.complement(meeting, within: ~o"2026-06-15T09:00/2026-06-15T17:00")
+      iex> free
+      #Tempo.IntervalSet<[~o"2026Y6M15DT9H0M/T10H0M", ~o"2026Y6M15DT11H0M/T17H0M"]>
+
+  """
+  def complement(set, options) do
+    if Calendars.outside?([set, options]) do
+      Calendars.outside(complement(Calendars.inside(set), Calendars.inside(options)))
+    else
+      Operations.do_complement(set, options)
+    end
+  end
+
+  @doc """
+  Difference `a \\ b`: every instant in `a` that is not in `b`, returned as one or more trimmed intervals.
+
+  Each member of `a` is trimmed to the parts of it that no member of `b` overlaps. One member of `a` splits into several intervals when `b` covers only its middle, and each of them carries that member's metadata.
+
+  This is the set-theoretic difference, `A ∖ B`. Use it when the question is about *covered time*: "the parts of the workday that aren't lunch", "free time around a busy schedule". For the member-preserving filter, which keeps whole `a` members that no `b` member overlaps and drops the rest, use `members_outside/3`.
+
+  ### Arguments
+
+  * `a` is any Tempo value that converts to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `b` is such a value, or a list of them, subtracted from `a` from left to right, so *"the workday minus everything already booked"* is one expression. An empty list is the identity: nothing is booked, so all of `a` remains.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
+  ### Examples
+
+      iex> workday = ~o"2026-06-15T09/2026-06-15T17"
+      iex> lunch = ~o"2026-06-15T12/2026-06-15T13"
+      iex> {:ok, working} = Tempo.difference(workday, lunch)
+      iex> working
+      #Tempo.IntervalSet<[~o"2026Y6M15DT9H/T12H", ~o"2026Y6M15DT13H/T17H"]>
+
+  A list of operands is subtracted from left to right, and an empty list leaves `a` as it is:
+
+      iex> work = ~o"2026-06-15T09:00:00/2026-06-15T17:00:00"
+      iex> standup = ~o"2026-06-15T09:00:00/2026-06-15T09:30:00"
+      iex> lunch = ~o"2026-06-15T12:00:00/2026-06-15T13:00:00"
+      iex> {:ok, free} = Tempo.difference(work, [standup, lunch])
+      iex> Tempo.IntervalSet.count(free)
+      2
+
+      iex> work = ~o"2026-06-15T09:00:00/2026-06-15T17:00:00"
+      iex> {:ok, free} = Tempo.difference(work, [])
+      iex> Tempo.IntervalSet.count(free)
+      1
+
+  """
+  def difference(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        difference(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.do_difference(a, b, options)
+    end
+  end
+
+  @doc """
+  Symmetric difference `a △ b`: every instant in exactly one of the two operands, returned as trimmed intervals. It is `(a \\ b) ∪ (b \\ a)`, each by `difference/3`.
+
+  Use it when the question is about *covered time*: "the hours that one of us has free but the other doesn't". For the member-preserving filter, which keeps whole members of either operand that no member of the other overlaps, use `members_in_exactly_one/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
+  ### Examples
+
+      iex> {:ok, exactly_one} = Tempo.symmetric_difference(~o"2026-06-15T09/2026-06-15T13", ~o"2026-06-15T11/2026-06-15T17")
+      iex> exactly_one
+      #Tempo.IntervalSet<[~o"2026Y6M15DT9H/T11H", ~o"2026Y6M15DT13H/T17H"]>
+
+      iex> {:ok, either} = Tempo.symmetric_difference(~o"2026-01/2026-04", ~o"2026-03/2026-06")
+      iex> Tempo.IntervalSet.members(either)
+      [~o"2026Y1M/3M", ~o"2026Y4M/6M"]
+
+  """
+  def symmetric_difference(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        symmetric_difference(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.do_symmetric_difference(a, b, options)
+    end
+  end
+
+  @doc """
+  Member-preserving overlap filter: the **members of `a`** that overlap any member of `b`, kept as distinct intervals with their original metadata.
+
+  This is the "which of these bookings hit the query window?" question. Each member that survives is a whole member of `a`, not a trimmed part of one. For the instant-level intersection, each survivor trimmed to its overlap with `b`, use `intersection/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0` of whole members of `a`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
+  ### Examples
+
+      iex> busy = Tempo.IntervalSet.new!([
+      ...>   Tempo.to_interval!(~o"2026-06-15T10:00/2026-06-15T11:00"),
+      ...>   Tempo.to_interval!(~o"2026-06-16T14:00/2026-06-16T15:00")
+      ...> ])
+      iex> {:ok, monday_events} = Tempo.members_overlapping(busy, ~o"2026-06-15")
+      iex> monday_events
+      #Tempo.IntervalSet<[~o"2026Y6M15DT10H0M/T11H0M"]>
+
+      iex> bookings = Tempo.IntervalSet.new!([~o"2026-01-05/2026-01-06", ~o"2026-01-20/2026-01-21"])
+      iex> {:ok, hits} = Tempo.members_overlapping(bookings, ~o"2026-01-01/2026-01-10")
+      iex> Tempo.IntervalSet.members(hits)
+      [~o"2026Y1M5D/6D"]
+
+  """
+  def members_overlapping(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        members_overlapping(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.do_members_overlapping(a, b, options)
+    end
+  end
+
+  @doc """
+  Member-preserving anti-overlap filter: the **members of `a`** that no member of `b` overlaps, kept whole with their original metadata.
+
+  This is the "which workdays aren't holidays?" question. A member of `a` is dropped entirely when any member of `b` overlaps it, even in part. For the instant-level difference, each member of `a` trimmed to the parts `b` leaves and split where it must be, use `difference/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0` of whole members of `a`.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
+  ### Examples
+
+      iex> busy = Tempo.IntervalSet.new!([
+      ...>   Tempo.to_interval!(~o"2026-06-15T10:00/2026-06-15T11:00"),
+      ...>   Tempo.to_interval!(~o"2026-06-16T14:00/2026-06-16T15:00")
+      ...> ])
+      iex> {:ok, not_monday} = Tempo.members_outside(busy, ~o"2026-06-15")
+      iex> not_monday
+      #Tempo.IntervalSet<[~o"2026Y6M16DT14H0M/T15H0M"]>
+
+      iex> bookings = Tempo.IntervalSet.new!([~o"2026-01-05/2026-01-06", ~o"2026-01-20/2026-01-21"])
+      iex> {:ok, missed} = Tempo.members_outside(bookings, ~o"2026-01-01/2026-01-10")
+      iex> Tempo.IntervalSet.members(missed)
+      [~o"2026Y1M20D/21D"]
+
+  """
+  def members_outside(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        members_outside(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+      )
+    else
+      Operations.do_members_outside(a, b, options)
+    end
+  end
+
+  @doc """
+  Member-preserving symmetric-difference filter: the members of either operand that no member of the other overlaps, kept whole with their original metadata. It is `members_outside(a, b)` united with `members_outside(b, a)`.
+
+  This is the "which events appear on exactly one calendar?" question. For the instant-level form, use `symmetric_difference/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the operation works within: a time-of-day operand is placed on every day of it, inside the window, and a `t:Tempo.RecurrenceSet.t/0` operand gives the occurrences that overlap it (the other operand, by default). Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0` of whole members of either operand.
+
+  * `{:error, reason}` when the operands cannot be aligned: one is a duration or a one-of set, one is anchored and the other not with no `:within` window, or a `:bound` option is given where `:within` is meant.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line.
+
+  ### Examples
+
+      iex> busy = Tempo.IntervalSet.new!([
+      ...>   Tempo.to_interval!(~o"2026-06-15T10:00/2026-06-15T11:00"),
+      ...>   Tempo.to_interval!(~o"2026-06-16T14:00/2026-06-16T15:00")
+      ...> ])
+      iex> monday_only = Tempo.IntervalSet.new!([Tempo.to_interval!(~o"2026-06-15T10:00/2026-06-15T11:00")])
+      iex> {:ok, unshared} = Tempo.members_in_exactly_one(busy, monday_only)
+      iex> unshared
+      #Tempo.IntervalSet<[~o"2026Y6M16DT14H0M/T15H0M"]>
+
+      iex> mine = Tempo.IntervalSet.new!([~o"2026-01-05/2026-01-06", ~o"2026-01-20/2026-01-21"])
+      iex> yours = Tempo.IntervalSet.new!([~o"2026-01-20/2026-01-21", ~o"2026-01-25/2026-01-26"])
+      iex> {:ok, unshared} = Tempo.members_in_exactly_one(mine, yours)
+      iex> Tempo.IntervalSet.members(unshared)
+      [~o"2026Y1M5D/6D", ~o"2026Y1M25D/26D"]
+
+  """
+  def members_in_exactly_one(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      Calendars.outside(
+        members_in_exactly_one(
+          Calendars.inside(a),
+          Calendars.inside(b),
+          Calendars.inside(options)
+        )
+      )
+    else
+      Operations.do_members_in_exactly_one(a, b, options)
+    end
+  end
+
+  @doc """
+  `true` when `a` and `b` share no instant: no member of `a` overlaps any member of `b`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `intersection/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `intersection/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
+
+  ### Examples
+
+      iex> Tempo.disjoint?(~o"2026-01", ~o"2026-03")
+      true
+
+      iex> Tempo.disjoint?(~o"2026-01", ~o"2026-01-15")
+      false
+
+  """
+  def disjoint?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      disjoint?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.do_disjoint?(a, b, options)
+    end
+  end
+
+  @doc """
+  `true` when `a` and `b` share at least one instant.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `intersection/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `intersection/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
+
+  ### Examples
+
+      iex> Tempo.overlaps?(~o"2026-06-15T10/2026-06-15T12", ~o"2026-06-15T11/2026-06-15T14")
+      true
+
+      iex> Tempo.overlaps?(~o"2026-01", ~o"2026-03")
+      false
+
+  """
+  def overlaps?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      overlaps?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.do_overlaps?(a, b, options)
+    end
+  end
+
+  @doc """
+  `true` when every instant of `b` is also in `a`: the mirror of `within?/3`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `difference/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `difference/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
+
+  ### Examples
+
+      iex> Tempo.contains?(~o"2026-06", ~o"2026-06-15")
+      true
+
+      iex> Tempo.contains?(~o"2026-06-15", ~o"2026-06")
+      false
+
+  """
+  def contains?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      contains?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.do_contains?(a, b, options)
+    end
+  end
+
+  @doc """
+  `true` when `a` and `b` cover the same instants. Which members cover them, and what metadata they carry, is ignored: only the covered instants count.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `intersection/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `intersection/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
+
+  ### Examples
+
+      iex> Tempo.equal?(~o"2026-06", ~o"2026-06-01/2026-07-01")
+      true
+
+      iex> Tempo.equal?(~o"2026-06", ~o"2026-07")
+      false
+
+  """
+  def equal?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      equal?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.do_equal?(a, b, options)
+    end
+  end
+
+  @doc """
+  Classify the Allen interval-algebra relation between two interval-like values.
+
+  Returns one of 13 mutually exclusive relations: a richer answer than the ternary `:lt | :eq | :gt` of `compare/3`, which reduces an interval to where it starts and loses the containment and overlap that the interval algebra keeps. Hence the name `relation` and not `compare`.
+
+  For intervals `X = [x₁, x₂)` and `Y = [y₁, y₂)` under Tempo's half-open convention:
+
+  | Relation | Shape (X relative to Y) | Condition |
+  |---|---|---|
+  | `:precedes` | X ends strictly before Y starts | `x₂ < y₁` |
+  | `:meets` | X ends exactly at Y's start | `x₂ = y₁` |
+  | `:overlaps` | X starts before Y, ends inside | `x₁ < y₁ < x₂ < y₂` |
+  | `:finished_by` | X contains Y, shared end | `x₁ < y₁ ∧ x₂ = y₂` |
+  | `:contains` | X strictly contains Y | `x₁ < y₁ ∧ x₂ > y₂` |
+  | `:starts` | Shared start, X ends earlier | `x₁ = y₁ ∧ x₂ < y₂` |
+  | `:equals` | Identical endpoints | `x₁ = y₁ ∧ x₂ = y₂` |
+  | `:started_by` | Shared start, X ends later | `x₁ = y₁ ∧ x₂ > y₂` |
+  | `:during` | X strictly inside Y | `x₁ > y₁ ∧ x₂ < y₂` |
+  | `:finishes` | X starts after Y, shared end | `x₁ > y₁ ∧ x₂ = y₂` |
+  | `:overlapped_by` | Y starts before X, ends inside X | `y₁ < x₁ < y₂ < x₂` |
+  | `:met_by` | X starts exactly at Y's end | `x₁ = y₂` |
+  | `:preceded_by` | X starts strictly after Y's end | `x₁ > y₂` |
+
+  Every pair of non-empty bounded intervals stands in exactly one of these relations. `Tempo.Allen` has a predicate for each, and the inverse (`Tempo.Allen.inverse/1`) and composition (`Tempo.Allen.compose/2`) of relations.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0`, which is taken as the span it names, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * One of the 13 relation atoms.
+
+  * `{:error, reason}` when an operand cannot be reduced to a single bounded interval: a set of several members, an open-ended interval, a recurrence. For sets of several members use `Tempo.IntervalSet.relation_matrix/2`.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one operand has a zone or an offset and the other none: a value with no zone has no place on the universal time line to relate from.
+
+  * `{:error, %Tempo.UnanchoredError{}}` when one operand has a year and the other none, or neither has and they lead with different units: they share no line to be related on.
+
+  ### Examples
+
+      iex> Tempo.relation(~o"2026-06-15", ~o"2026-06-16")
+      :meets
+
+      iex> a = Tempo.Interval.new!(from: ~o"2026-06-01", to: ~o"2026-06-10")
+      iex> b = Tempo.Interval.new!(from: ~o"2026-06-05", to: ~o"2026-06-15")
+      iex> Tempo.relation(a, b)
+      :overlaps
+
+      iex> Tempo.relation(~o"2026Y", ~o"2026-06-15")
+      :contains
+
+  """
+  def relation(a, b) do
+    if Calendars.outside?([a, b]) do
+      relation(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_relation(a, b)
+    end
+  end
+
+  @doc """
+  Compare two Tempo values, returning the standard library's ternary `:lt | :eq | :gt`.
+
+  This is the sorter-module callback Elixir's `Enum` and `List` functions look for, so `Tempo` can be passed wherever `Date`, `Time`, or `DateTime` would be:
+
+      Enum.sort_by(sessions, & &1.starts_at, Tempo)
+      Enum.max_by(bookings, & &1.window.from, Tempo)
+
+  Use `relation/2` when the question is *how* two intervals relate: this function reduces Allen's 13 relations to a total order, which is what sorting needs and reasoning does not.
+
+  A value that names more than one moment (a mask, a group, a set, significant digits) compares as the moment its span starts at, the start of what `to_interval/1` gives it.
+
+  A total order cannot express doubt, so uncertainty is dropped before comparing: `~o"1984?"` and `~o"1984"` compare `:eq`, and a margin of error is discarded in the same way. When the uncertainty is the point, reach for `certainly_before?/2` or `possibly_before?/2`.
+
+  ### Arguments
+
+  * `a` and `b` are two values of the same kind: both `t:t/0`, both `t:Tempo.Duration.t/0`, or both `t:Tempo.Interval.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:relative_to` is a `t:t/0` used to resolve calendar-dependent durations. `P1M` has no fixed length, so comparing it needs a date to measure that month from.
+
+  ### Returns
+
+  * `:lt`, `:eq`, or `:gt`.
+
+  * Raises `ArgumentError` when the two values are of different kinds, or when a duration cannot be resolved to a fixed length and no `:relative_to` is given.
+
+  * Raises `Tempo.FloatingTempoError` when one value has a zone or an offset and the other none, and `Tempo.UnanchoredError` when one has a year and the other none: neither pair has an order.
+
+  * Raises `Tempo.ConversionError` where a value's start cannot be found without listing more than 10,000 values: a mask that stands for more years than that (`~o"XXXXXY6M"`).
+
+  ### Examples
+
+  Tempo values compare as the moments they start at:
+
+      iex> Tempo.compare(~o"2026-06-15", ~o"2026-06-16")
+      :lt
+
+      iex> Tempo.compare(~o"2026Y", ~o"2026-06")
+      :lt
+
+  Zones are resolved, so the same instant compares equal:
+
+      iex> Tempo.compare(~o"2026-06-15T09:00:00Z", ~o"2026-06-15T10:00:00+01:00")
+      :eq
+
+  Which makes `Tempo` a sorter:
+
+      iex> [~o"2026-06-16", ~o"2026-06-15"]
+      ...> |> Enum.sort(Tempo)
+      [~o"2026Y6M15D", ~o"2026Y6M16D"]
+
+  Durations compare by length:
+
+      iex> Tempo.compare(~o"PT1H", ~o"PT90M")
+      :lt
+
+  Intervals compare by start, ties broken by end:
+
+      iex> morning = Tempo.Interval.new!(from: ~o"2026-06-15T09:00", to: ~o"2026-06-15T10:00")
+      iex> longer = Tempo.Interval.new!(from: ~o"2026-06-15T09:00", to: ~o"2026-06-15T11:00")
+      iex> Tempo.compare(morning, longer)
+      :lt
+
+  """
+  def compare(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      compare(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Compare.do_compare(a, b, options)
+    end
+  end
+
+  @doc """
+  Return the length of an interval or of the span a value names, or
+  the time an interval set covers, as a `%Tempo.Duration{}`.
+
+  A length is counted in the unit its endpoints are written in: two
+  days are a number of days apart, two times of day a number of hours
+  or minutes — see `Tempo.Interval.duration/1`. A value is the span it
+  names, so June is a month long. A set's duration counts time that
+  two members share once — see `Tempo.IntervalSet.duration/1`.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`,
+    a `t:Tempo.t/0` or a `t:Tempo.Set.t/0`, measured as the span or the
+    spans it names.
+
+  ### Returns
+
+  * A `t:Tempo.Duration.t/0` in the endpoints' unit, or `:infinity`
+    for an interval with an open end.
+
+  * `{:error, %Tempo.UnanchoredError{}}` for a value or an interval
+    without a year whose length is its year's: a month, or a span of
+    months and days. A time of day and a day of the week are as long on
+    any day and in any week, and are measured.
+
+  * `{:error, %Tempo.ConversionError{}}` for a recurrence, whose
+    length is its occurrences' (convert it with `to_interval_set/2`
+    first), and `{:error, reason}` for a value that is not a Tempo
+    value.
+
+  ### Examples
+
+      iex> Tempo.duration(~o"2026-06-15T09:00/2026-06-15T10:30")
+      ~o"PT90M"
+
+      iex> Tempo.duration(~o"2026-06")
+      ~o"P1M"
+
+      iex> Tempo.duration(~o"T22/T02")
+      ~o"PT4H"
+
+      iex> bookings = Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
+      iex> Tempo.duration(bookings)
+      ~o"PT3H"
+
+  """
+  @spec duration(t() | Interval.t() | IntervalSet.t() | Tempo.Set.t()) ::
+          Duration.t() | :infinity | {:error, Exception.t()}
+  def duration(value) when is_outside(value) do
+    duration(Calendars.inside(value))
+  end
+
+  def duration(%IntervalSet{} = set) do
+    IntervalSet.duration(set)
+  end
+
+  # A value with no year is measured where its span has a length on any
+  # day: an hour, or a day of the week (`Tempo.Interval.Cycle`).
+  def duration(%__MODULE__{} = value) do
+    case to_interval(value) do
+      {:ok, span} ->
+        span
+        |> duration()
+        |> unmeasured(value, anchored?(value))
+
+      {:error, _reason} = error ->
+        unmeasured(error, value, anchored?(value))
+    end
+  end
+
+  def duration(%Interval{} = interval) do
+    Interval.duration(interval)
+  end
+
+  # A set written as its members (`{2026Y,2028Y}`) is measured as the same
+  # set written in one value is (`{2026,2028}Y`): by the spans it converts to.
+  def duration(%Tempo.Set{} = set) do
+    with {:ok, spans} <- to_interval(set), do: duration(spans)
+  end
+
+  def duration(value) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.duration/1 takes a Tempo value, got #{Calendars.inspect(value)}"
+     )}
+  end
+
+  # A value with no year that has no length (a month, whose days are its
+  # year's) is refused for having no year, which is what there is to be done
+  # about it.
+  defp unmeasured({:error, _reason}, value, false) do
+    {:error, UnanchoredError.exception(operation: :duration, value: value)}
+  end
+
+  defp unmeasured(measured, _value, _anchored?) do
+    measured
+  end
+
+  @doc """
+  Return the duration between two endpoints as a `%Tempo.Duration{}`.
+
+  A convenience that builds the interval `[from, to)` internally and
+  measures it — `Tempo.duration(today, election_day)` instead of
+  constructing a `t:Tempo.Interval.t/0` first. The length is counted
+  in the endpoints' unit, as `Tempo.Interval.duration/1` counts it:
+  days between two days, and elapsed hours between two hours, so
+  midnight to midnight across a daylight-saving change is 23 or 25
+  hours.
+
+  Unlike `duration/1`, whose interval argument is valid by
+  construction, this takes raw endpoints that may not form a
+  measurable interval, so it returns a tagged tuple. Use
+  `duration!/2` when the endpoints are known-good.
+
+  ### Arguments
+
+  * `from` is the start `t:Tempo.t/0` — must be anchored (carry a
+    year).
+
+  * `to` is the end `t:Tempo.t/0` — anchored, and strictly later
+    than `from`.
+
+  ### Returns
+
+  * `{:ok, duration}` where `duration` is a `t:Tempo.Duration.t/0`.
+
+  * `{:error, reason}` when an endpoint is unanchored, the
+    endpoints are of incompatible calendars, or `from` is not
+    strictly earlier than `to`.
+
+  * `{:error, %Tempo.FloatingTempoError{}}` when one endpoint is
+    zoned and the other floating: they are on different time lines,
+    and `relation/2` refuses the same pair.
+
+  ### Examples
+
+      iex> {:ok, duration} = Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
+      iex> duration
+      ~o"P36D"
+
+      iex> {:ok, duration} = Tempo.duration(~o"2026-06-15T09", ~o"2026-06-15T17")
+      iex> duration
+      ~o"PT8H"
+
+      iex> match?({:error, _reason}, Tempo.duration(~o"2026-06-15T17", ~o"2026-06-15T09"))
+      true
+
+  """
+  @spec duration(t(), t()) :: {:ok, Duration.t()} | {:error, Exception.t()}
+  def duration(from, to) when is_outside(from) or is_outside(to) do
+    duration(Calendars.inside(from), Calendars.inside(to))
+  end
+
+  def duration(%__MODULE__{} = from, %__MODULE__{} = to) do
+    cond do
+      not anchored?(from) ->
+        {:error, UnanchoredError.exception(operation: :duration, value: from)}
+
+      not anchored?(to) ->
+        {:error, UnanchoredError.exception(operation: :duration, value: to)}
+
+      floating?(from) != floating?(to) ->
+        floating =
+          if floating?(from) do
+            from
+          else
+            to
+          end
+
+        {:error, FloatingTempoError.exception(operation: :measure, value: floating)}
+
+      # Two values of different calendars are no two ends of one interval.
+      from.calendar != to.calendar ->
+        {:error, Interval.different_calendars_error(from, to, :duration)}
+
+      true ->
+        measured_between(from, to)
+    end
+  end
+
+  def duration(%__MODULE__{}, to) do
+    {:error, not_one_value("duration/2", to)}
+  end
+
+  def duration(from, _to) do
+    {:error, not_one_value("duration/2", from)}
+  end
+
+  # The interval from `from` to `to`, measured as `Interval.duration/2`
+  # measures it.
+  defp measured_between(from, to) do
+    with {:ok, interval} <- Interval.new(from, to) do
+      case Interval.duration(interval) do
+        %Duration{} = duration -> {:ok, duration}
+        {:error, _reason} = error -> error
+      end
+    end
+  end
+
+  @doc """
+  Bang variant of `duration/2`. Raises on invalid endpoints and
+  returns the `%Tempo.Duration{}` directly.
+
+  ### Examples
+
+      iex> Tempo.duration!(~o"2026-06-15T09", ~o"2026-06-15T17")
+      ~o"PT8H"
+
+  """
+  @spec duration!(t(), t()) :: Duration.t()
+  def duration!(from, to) do
+    case duration(from, to) do
+      {:ok, duration} ->
+        duration
+
+      {:error, exception} when is_exception(exception) ->
+        raise exception
+
+      {:error, reason} ->
+        raise ArgumentError, "Tempo.duration!/2 failed: #{Calendars.inspect(reason)}"
+    end
+  end
+
+  @doc """
+  `true` when a value is at least as long as the given duration.
+
+  An interval, or the span a value names, is measured between its
+  endpoints; an interval set by the time it covers, from its first
+  instant, as `duration/1` measures it.
+  An unbounded interval or set is longer than any duration.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
+  ### Examples
+
+      iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
+      iex> Tempo.at_least?(meeting, ~o"PT1H")
+      true
+      iex> Tempo.at_least?(meeting, ~o"PT2H")
+      false
+
+      iex> {:ok, weekends} = Tempo.select(~o"2026-06", Tempo.weekends(:AU))
+      iex> Tempo.at_least?(weekends, ~o"P8D")
+      true
+
+  """
+  @spec at_least?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def at_least?(value, duration) do
+    if Calendars.outside?(value) do
+      at_least?(Calendars.inside(value), duration)
+    else
+      do_at_least?(value, duration)
+    end
+  end
+
+  defp do_at_least?(value, duration) do
+    length_holds?(value, duration, &Interval.do_at_least?/2, [:gt, :eq])
+  end
+
+  @doc """
+  `true` when a value is at most as long as the given duration,
+  measured as `at_least?/2` measures it.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
+  ### Examples
+
+      iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
+      iex> Tempo.at_most?(meeting, ~o"PT2H")
+      true
+      iex> Tempo.at_most?(meeting, ~o"PT1H")
+      false
+
+  """
+  @spec at_most?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def at_most?(value, duration) do
+    if Calendars.outside?(value) do
+      at_most?(Calendars.inside(value), duration)
+    else
+      do_at_most?(value, duration)
+    end
+  end
+
+  defp do_at_most?(value, duration) do
+    length_holds?(value, duration, &Interval.do_at_most?/2, [:lt, :eq])
+  end
+
+  @doc """
+  `true` when a value's length equals the given duration, measured as
+  `at_least?/2` measures it.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
+  ### Examples
+
+      iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
+      iex> Tempo.exactly?(meeting, ~o"PT90M")
+      true
+      iex> Tempo.exactly?(meeting, ~o"PT1H")
+      false
+
+      iex> Tempo.exactly?(~o"2026-02", ~o"P28D")
+      true
+
+  """
+  @spec exactly?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def exactly?(value, duration) do
+    if Calendars.outside?(value) do
+      exactly?(Calendars.inside(value), duration)
+    else
+      do_exactly?(value, duration)
+    end
+  end
+
+  defp do_exactly?(value, duration) do
+    length_holds?(value, duration, &Interval.do_exactly?/2, [:eq])
+  end
+
+  @doc """
+  `true` when a value is strictly longer than the given duration,
+  measured as `at_least?/2` measures it.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
+  ### Examples
+
+      iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
+      iex> Tempo.longer_than?(meeting, ~o"PT1H")
+      true
+      iex> Tempo.longer_than?(meeting, ~o"PT90M")
+      false
+
+  """
+  @spec longer_than?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def longer_than?(value, duration) do
+    if Calendars.outside?(value) do
+      longer_than?(Calendars.inside(value), duration)
+    else
+      do_longer_than?(value, duration)
+    end
+  end
+
+  defp do_longer_than?(value, duration) do
+    length_holds?(value, duration, &Interval.do_longer_than?/2, [:gt])
+  end
+
+  @doc """
+  `true` when a value is strictly shorter than the given duration,
+  measured as `at_least?/2` measures it.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or
+    a `t:t/0`.
+
+  * `duration` is a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises
+    its error.
+
+  ### Examples
+
+      iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
+      iex> Tempo.shorter_than?(meeting, ~o"PT2H")
+      true
+      iex> Tempo.shorter_than?(meeting, ~o"PT90M")
+      false
+
+  A week of workdays is shorter than a week:
+
+      iex> {:ok, workdays} = Tempo.select(~o"2026-06-15/2026-06-22", Tempo.workdays(:AU))
+      iex> Tempo.shorter_than?(workdays, ~o"P1W")
+      true
+
+  """
+  @spec shorter_than?(t() | Interval.t() | IntervalSet.t(), Duration.t()) :: boolean()
+  def shorter_than?(value, duration) do
+    if Calendars.outside?(value) do
+      shorter_than?(Calendars.inside(value), duration)
+    else
+      do_shorter_than?(value, duration)
+    end
+  end
+
+  defp do_shorter_than?(value, duration) do
+    length_holds?(value, duration, &Interval.do_shorter_than?/2, [:lt])
+  end
+
+  # Whether a value's length stands in one of `orders` to `duration`. An
+  # interval set's length is the time it covers, compared from its first
+  # instant; an unbounded set is longer than any duration and an empty one
+  # has none. A value's length is that of the span it names, and an
+  # interval's is measured between its endpoints by `interval_predicate`.
+  defp length_holds?(%IntervalSet{} = set, duration, _interval_predicate, orders) do
+    set_length_order(set, duration) in orders
+  end
+
+  defp length_holds?(%Interval{} = interval, duration, interval_predicate, _orders) do
+    interval_predicate.(interval, duration)
+  end
+
+  defp length_holds?(value, duration, interval_predicate, orders) do
+    length_holds?(span!(value), duration, interval_predicate, orders)
+  end
+
+  defp set_length_order(set, duration) do
+    if IntervalSet.do_bounded?(set) do
+      covered_length_order(IntervalSet.first(set), set, duration)
+    else
+      :gt
+    end
+  end
+
+  defp covered_length_order(nil, _set, duration) do
+    zero_length_order(duration)
+  end
+
+  defp covered_length_order(%Interval{} = first, set, duration) do
+    case IntervalSet.duration(set) do
+      %Duration{} = covered ->
+        Duration.compare(covered, duration, relative_to: Interval.from(first))
+
+      {:error, exception} ->
+        raise exception
+    end
+  end
+
+  # Nothing against `duration`: the signs of its components decide, as they
+  # agree in a duration as it is written.
+  defp zero_length_order(%Duration{time: time} = duration) do
+    signs =
+      time
+      |> Enum.map(&component_sign/1)
+      |> Enum.uniq()
+      |> List.delete(0)
+
+    case signs do
+      [] -> :eq
+      [1] -> :lt
+      [-1] -> :gt
+      _mixed -> Duration.compare(%Duration{time: [second: 0]}, duration)
+    end
+  end
+
+  defp component_sign({_unit, {value, _precision}}) do
+    amount_sign(value)
+  end
+
+  defp component_sign({_unit, value}) do
+    amount_sign(value)
+  end
+
+  defp amount_sign(value) when value > 0 do
+    1
+  end
+
+  defp amount_sign(value) when value < 0 do
+    -1
+  end
+
+  defp amount_sign(_zero) do
+    0
+  end
+
+  @doc """
+  `true` when a value has both a start and an end: neither end of the interval, of the span a value names or of a set is open.
+
+  ### Arguments
+
+  * `value` is a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0` or a `t:t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A value `to_interval/1` cannot give a span raises its error.
+
+  ### Examples
+
+      iex> Tempo.bounded?(Tempo.to_interval!(~o"2026-06-15"))
+      true
+
+      iex> {:ok, onwards} = Tempo.to_interval(~o"2026-01-15/..")
+      iex> Tempo.bounded?(onwards)
+      false
+
+  """
+  @spec bounded?(t() | Interval.t() | IntervalSet.t()) :: boolean()
+  def bounded?(value) when is_outside(value) do
+    bounded?(Calendars.inside(value))
+  end
+
+  def bounded?(%Interval{} = interval) do
+    Interval.do_bounded?(interval)
+  end
+
+  def bounded?(%IntervalSet{} = set) do
+    IntervalSet.do_bounded?(set)
+  end
+
+  def bounded?(value) do
+    value
+    |> span!()
+    |> bounded?()
+  end
+
+  # The interval or the interval set a value spans, for a predicate, which
+  # has only true and false to give: a value with no span raises its error.
+  defp span!(value) do
+    case to_interval(value) do
+      {:ok, span} -> span
+      {:error, exception} when is_exception(exception) -> raise exception
+    end
+  end
+
+  @doc """
+  `true` when the interval has zero length. See
+  `Tempo.Interval.empty?/1`.
+  ### Examples
+
+      iex> Tempo.empty?(Tempo.to_interval!(~o"2026-06-15"))
+      false
+
+  """
+  @spec empty?(t() | Interval.t() | IntervalSet.t()) :: boolean()
+  def empty?(value) when is_outside(value) do
+    empty?(Calendars.inside(value))
+  end
+
+  def empty?(%Interval{} = interval) do
+    Interval.empty?(interval)
+  end
+
+  def empty?(%IntervalSet{} = set) do
+    IntervalSet.do_empty?(set)
+  end
+
+  def empty?(value) do
+    value
+    |> span!()
+    |> empty?()
+  end
+
+  @doc """
+  `true` when `a` ends at or before `b` starts: the two share no instant and `a` is earlier.
+
+  This is the everyday sense: an 11:00 to 12:00 meeting is before a 12:00 lunch, since under the half-open convention the meeting ends as lunch begins. Allen's `:precedes` also needs a gap between the two, and `Tempo.Allen.precedes?/2` tests for it.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation/2` returns when an operand is not a single bounded interval: a set of several members, an open or recurring interval, a one-of set.
+
+  ### Examples
+
+      iex> Tempo.before?(~o"2026-01", ~o"2026-03")
+      true
+
+  Adjacent months share no instant, so January is before February:
+
+      iex> Tempo.before?(~o"2026-01", ~o"2026-02")
+      true
+
+      iex> meeting = ~o"2026-06-15T11/2026-06-15T12"
+      iex> Tempo.before?(meeting, ~o"2026-06-15T11:30/2026-06-15T13")
+      false
+
+  """
+  def before?(a, b) do
+    if Calendars.outside?([a, b]) do
+      before?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_before?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when `a` starts at or after `b` ends: the two share no instant and `a` is later.
+
+  The mirror of `before?/2`. Allen's `:preceded_by` also needs a gap between the two, and `Tempo.Allen.preceded_by?/2` tests for it.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation/2` returns when an operand is not a single bounded interval: a set of several members, an open or recurring interval, a one-of set.
+
+  ### Examples
+
+      iex> Tempo.after?(~o"2026-03", ~o"2026-01")
+      true
+
+      iex> Tempo.after?(~o"2026-01", ~o"2026-03")
+      false
+
+  """
+  def after?(a, b) do
+    if Calendars.outside?([a, b]) do
+      after?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_after?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when the two intervals touch at a single boundary: either ends exactly where the other starts. This is Allen's `:meets` or `:met_by`, and `Tempo.Allen.meets?/2` tests the one direction.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation/2` returns when an operand is not a single bounded interval: a set of several members, an open or recurring interval, a one-of set.
+
+  ### Examples
+
+      iex> Tempo.adjacent?(~o"2026-02", ~o"2026-01")
+      true
+
+      iex> Tempo.adjacent?(~o"2026-01", ~o"2026-03")
+      false
+
+  """
+  def adjacent?(a, b) do
+    if Calendars.outside?([a, b]) do
+      adjacent?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_adjacent?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when every instant of `a` is also in `b`: `a` fits inside `b`, shared ends included. The "does this fit inside that window?" predicate, for single values and sets alike: it compares the instants each operand covers, not member with member.
+
+  `within?/3` asks about the whole of `a`. The `:within` option of `to_interval_set/2` and the set operations is looser: it keeps every occurrence that overlaps its window, one already in progress when the window opens included. Allen's strict `:during` is `Tempo.Allen.during?/2`.
+
+  ### Arguments
+
+  * `a` and `b` are any Tempo values that convert to an interval set: a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.IntervalSet.t/0`, an all-of `t:Tempo.Set.t/0` or a `t:Tempo.RecurrenceSet.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a Tempo value, the window the two are compared within, as `difference/3` takes it. Required when one operand is anchored, having a year, and the other is not.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `difference/3` returns when the operands cannot be aligned, a `Tempo.FloatingTempoError` among them when one operand has a zone or an offset and the other none.
+
+  ### Examples
+
+      iex> Tempo.within?(~o"2026-06-01/2026-06-15", ~o"2026-06")
+      true
+
+      iex> Tempo.within?(~o"2026-06", ~o"2026-06")
+      true
+
+      iex> Tempo.within?(~o"2026-06", ~o"2026-06-15")
+      false
+
+  """
+  def within?(a, b, options \\ []) do
+    if Calendars.outside?([a, b, options]) do
+      within?(Calendars.inside(a), Calendars.inside(b), Calendars.inside(options))
+    else
+      Operations.do_within?(a, b, options)
+    end
+  end
+
+  @doc """
+  The three-valued certainty that `a` and `b` intersect, given their `±` margins.
+
+  The three-valued counterpart of `overlaps?/3`. Each endpoint that has a margin is widened into a range, and the result says whether the two intersect for every consistent placement (`:certain`), for some (`:possible`), or for none (`:impossible`). Operands with no uncertainty answer as `overlaps?/3` does: only `:certain` and `:impossible` occur.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `:certain`, `:possible`, or `:impossible`.
+
+  * `{:error, reason}` when either operand is open-ended or a set of several members.
+
+  ### Examples
+
+      iex> Tempo.overlap_certainty(~o"2026-06", ~o"2026-06-15")
+      :certain
+
+      iex> Tempo.overlap_certainty(~o"2000±1Y", ~o"2001±1Y")
+      :possible
+
+      iex> Tempo.overlap_certainty(~o"2000±1Y", ~o"2010±1Y")
+      :impossible
+
+  """
+  def overlap_certainty(a, b) do
+    if Calendars.outside?([a, b]) do
+      overlap_certainty(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_overlap_certainty(a, b)
+    end
+  end
+
+  @doc """
+  The three-valued certainty that `a` falls within `b`, given any uncertainty in either.
+
+  The three-valued counterpart of `within?/3`. Uncertainty may be a `±` margin or underspecification: a value with unspecified digits (`~o"20XX"`) is read over every year its mask admits, so `:possible` says that some of them fall within `b` and some do not. Operands with no uncertainty answer as `within?/3` does.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `:certain`, `:possible`, or `:impossible`.
+
+  * `{:error, reason}` when either operand is open-ended or a set of several members.
+
+  * `{:error, %Tempo.UnanchoredError{}}` when an operand with no year is compared with one that leads with another unit.
+
+  ### Examples
+
+      iex> Tempo.within_certainty(~o"20XX", ~o"2000Y/2100Y")
+      :certain
+
+  One of the years the mask admits, 2000, is outside a span that starts at 2001, so within is only possible:
+
+      iex> Tempo.within_certainty(~o"20XX", ~o"2001Y/2101Y")
+      :possible
+
+      iex> Tempo.within_certainty(~o"2000±1Y", ~o"2000Y")
+      :possible
+
+  """
+  def within_certainty(a, b) do
+    if Calendars.outside?([a, b]) do
+      within_certainty(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_within_certainty(a, b)
+    end
+  end
+
+  @doc """
+  The three-valued certainty that `relation(a, b)` is `target`, or one of the relations of `target`.
+
+  It is `:certain` when every relation the two could stand in is in `target`, `:possible` when some are and `:impossible` when none is. The relations they could stand in account for any `±` margin and for underspecification: an operand with unspecified digits (`~o"20XX"`) is read over every value its mask admits.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  * `target` is an Allen relation atom such as `:during`, or a list of them.
+
+  ### Returns
+
+  * `:certain`, `:possible`, or `:impossible`.
+
+  * `{:error, reason}` when either operand is open-ended or a set of several members.
+
+  * `{:error, %Tempo.UnanchoredError{}}` when an operand with no year is compared with one that leads with another unit.
+
+  ### Examples
+
+      iex> Tempo.relation_certainty(~o"20XX", ~o"2200", :precedes)
+      :certain
+
+  Some year from 2000 to 2099 may come before 2050, and some may follow it:
+
+      iex> Tempo.relation_certainty(~o"20XX", ~o"2050", :precedes)
+      :possible
+
+      iex> Tempo.relation_certainty(~o"2000±1Y", ~o"2010±1Y", :precedes)
+      :certain
+
+  """
+  def relation_certainty(a, b, target) do
+    if Calendars.outside?([a, b]) do
+      relation_certainty(Calendars.inside(a), Calendars.inside(b), target)
+    else
+      Interval.do_relation_certainty(a, b, target)
+    end
+  end
+
+  @doc """
+  `true` when `a` and `b` intersect for *every* placement of their `±` margins: `overlap_certainty/2` is `:certain`. With no uncertainty it is `overlaps?/3`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `overlap_certainty/2` returns for an operand that is open-ended or a set of several members.
+
+  ### Examples
+
+      iex> Tempo.certainly_overlaps?(~o"2000±1Y", ~o"2001±1Y")
+      false
+
+      iex> Tempo.certainly_overlaps?(~o"2026-06", ~o"2026-06-15")
+      true
+
+  """
+  def certainly_overlaps?(a, b) do
+    if Calendars.outside?([a, b]) do
+      certainly_overlaps?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_certainly_overlaps?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when `a` and `b` *could* intersect for some placement of their `±` margins: `overlap_certainty/2` is `:certain` or `:possible`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `overlap_certainty/2` returns for an operand that is open-ended or a set of several members.
+
+  ### Examples
+
+      iex> Tempo.possibly_overlaps?(~o"2000±1Y", ~o"2001±1Y")
+      true
+
+      iex> Tempo.possibly_overlaps?(~o"2000±1Y", ~o"2010±1Y")
+      false
+
+  """
+  def possibly_overlaps?(a, b) do
+    if Calendars.outside?([a, b]) do
+      possibly_overlaps?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_possibly_overlaps?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when `a` falls within `b` for *every* placement of their `±` margins: `within_certainty/2` is `:certain`. With no uncertainty it is `within?/3`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `within_certainty/2` returns for an operand that is open-ended or a set of several members.
+
+  ### Examples
+
+      iex> Tempo.certainly_within?(~o"2000±1Y", ~o"1990Y/2010Y")
+      true
+
+      iex> Tempo.certainly_within?(~o"2000±1Y", ~o"2000Y")
+      false
+
+  """
+  def certainly_within?(a, b) do
+    if Calendars.outside?([a, b]) do
+      certainly_within?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_certainly_within?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when `a` *could* fall within `b` for some placement of their `±` margins: `within_certainty/2` is `:certain` or `:possible`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `within_certainty/2` returns for an operand that is open-ended or a set of several members.
+
+  ### Examples
+
+      iex> Tempo.possibly_within?(~o"2000±1Y", ~o"2000Y")
+      true
+
+  """
+  def possibly_within?(a, b) do
+    if Calendars.outside?([a, b]) do
+      possibly_within?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_possibly_within?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when `a` ends at or before `b` starts, the two sharing no instant and `a` the earlier, for *every* placement of their `±` margins. With no uncertainty it is `before?/2`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation_certainty/3` returns for an operand that is open-ended or a set of several members.
+
+  ### Examples
+
+      iex> Tempo.certainly_before?(~o"2000±1Y", ~o"2010")
+      true
+
+      iex> Tempo.certainly_before?(~o"2000±1Y", ~o"2001")
+      false
+
+  """
+  def certainly_before?(a, b) do
+    if Calendars.outside?([a, b]) do
+      certainly_before?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_certainly_before?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when `a` *could* end at or before `b` starts for some placement of their `±` margins.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation_certainty/3` returns for an operand that is open-ended or a set of several members.
+
+  ### Examples
+
+      iex> Tempo.possibly_before?(~o"2000±1Y", ~o"2001")
+      true
+
+  """
+  def possibly_before?(a, b) do
+    if Calendars.outside?([a, b]) do
+      possibly_before?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_possibly_before?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when `a` starts at or after `b` ends, the two sharing no instant and `a` the later, for *every* placement of their `±` margins. With no uncertainty it is `after?/2`.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation_certainty/3` returns for an operand that is open-ended or a set of several members.
+
+  ### Examples
+
+      iex> Tempo.certainly_after?(~o"2010±1Y", ~o"2000")
+      true
+
+      iex> Tempo.certainly_after?(~o"2001±1Y", ~o"2000")
+      false
+
+  """
+  def certainly_after?(a, b) do
+    if Calendars.outside?([a, b]) do
+      certainly_after?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_certainly_after?(a, b)
+    end
+  end
+
+  @doc """
+  `true` when `a` *could* start at or after `b` ends for some placement of their `±` margins.
+
+  ### Arguments
+
+  * `a` and `b` are each a bounded `t:t/0`, a `t:Tempo.Interval.t/0`, or a `t:Tempo.IntervalSet.t/0` with exactly one member.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * Raises the error `relation_certainty/3` returns for an operand that is open-ended or a set of several members.
+
+  ### Examples
+
+      iex> Tempo.possibly_after?(~o"2001±1Y", ~o"2000")
+      true
+
+  """
+  def possibly_after?(a, b) do
+    if Calendars.outside?([a, b]) do
+      possibly_after?(Calendars.inside(a), Calendars.inside(b))
+    else
+      Interval.do_possibly_after?(a, b)
+    end
+  end
+
+  @doc """
+  Narrow a Tempo span by a selector, returning what it selects as a `t:Tempo.IntervalSet.t/0`: the composition primitive for "workdays of June", "the 15th of every month", and similar questions. `Tempo.Select` has the whole vocabulary of selectors.
+
+  `Tempo.select/2` is a **pure function**: the selector is a value, not an ambient configuration. Locale-dependent constraints are constructed by `Tempo.workdays/1` and `Tempo.weekends/1` and composed in at the call site.
+
+  A span is selected period by period at its start's resolution, so the Christmases of `~o"2026/2029"` are three and the quarter `~o"2026Y3Q"` selects in July, August and September. An open-ended span (`~o"2026-06-15/.."`) gives a lazy set, walked as far as it is taken.
+
+  What is selected keeps the metadata of what it is selected from: each school day of a term tagged `%{term: 3}` is tagged `%{term: 3}` too, and a set's own metadata stays with the set.
+
+  In a named zone, what is selected is what the zone's clock shows of it. A time of day the clock skips on some day is not selected on that day, nor is a day the zone left out: `~o"T02"` selects nothing on the night New York's clocks go from 02:00 to 03:00. A window is the part of it the clock shows, so `~o"T02/T04"` is 03:00 to 04:00 on that night, and one written with a duration (`~o"T02/PT2H"`) runs that long from 03:00.
+
+  A computed event is selected from the year, the month or the week it falls in (`Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` is 5 April). One with no date where it is asked for, a year it is not computed for or a name no resolver knows, is `{:error, %Tempo.EventError{}}`.
+
+  ### Arguments
+
+  * `base` is any Tempo value that converts to an interval or an interval set. A group or a mask is resolved to the span it names before the selector is applied, so every ISO 8601-2 shape composes with every selector.
+
+  * `selector` is a list or a range of integers, a `t:t/0`, a `t:Tempo.Interval.t/0`, a `t:Tempo.Workdays.t/0`, a recurrence, a list of these, or a function of the period that returns one. `Tempo.Select` describes each.
+
+  The shapes `base` may take:
+
+  | Base shape | Example | Converts to |
+  |---|---|---|
+  | A value | `~o"2026-06"` | One interval |
+  | An interval | `~o"2026-07/2026-10"` | One interval |
+  | An interval set | What `union/3` returns | Each of its members |
+  | A quarter | `~o"2026Y3Q"` | One interval, the group resolved |
+  | A season (25 to 32) | `~o"2026Y26M"` | The interval between its equinox and solstice |
+  | A range in a unit | `~o"2026Y{6..8}M"` | An interval set of three members |
+  | A stepped range | `~o"2026Y{1..-1//3}M"` | An interval set of disjoint members |
+  | A set of intervals | `~o"{2026-01-05/2026-01-12,2026-02-02/2026-02-09}"` | Each of its members |
+  | A mask | `~o"156X"` | The decade it names |
+  | An open-ended span | `~o"2026-06-15/.."` | A lazy interval set, selected as it is walked |
+  | A duration form or a recurrence | `~o"2026-06-15/P14D"` | The span or the occurrences it converts to |
+
+  ### Returns
+
+  * `{:ok, interval_set}`, a `t:Tempo.IntervalSet.t/0`.
+
+  * `{:error, reason}` when the selector cannot be applied: a span with an open start has no first period to select from, and a selector that names a month or a day of another calendar than the base's selects nothing from it. A selector that is itself an error, as `Tempo.workdays/1` returns for a territory it cannot resolve, is returned as it is.
+
+  * `{:error, %Tempo.EventError{}}` for a computed event with no date where it is asked for.
+
+  ### Examples
+
+      iex> {:ok, set} = Tempo.select(~o"2026-02", [1, 15])
+      iex> set
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [1, 15]
+
+      iex> {:ok, set} = Tempo.select(~o"2026", ~o"12-25")
+      iex> [xmas] = Tempo.IntervalSet.members(set)
+      iex> from = Tempo.Interval.from(xmas)
+      iex> {Tempo.year(from), Tempo.month(from), Tempo.day(from)}
+      {2026, 12, 25}
+
+  The tenth day of the year, and each Friday of June:
+
+      iex> {:ok, set} = Tempo.select(~o"2026", ~o"10O")
+      iex> [day10] = Tempo.IntervalSet.members(set)
+      iex> from = Tempo.Interval.from(day10)
+      iex> {Tempo.month(from), Tempo.day(from)}
+      {1, 10}
+
+      iex> {:ok, set} = Tempo.select(~o"2026-06", ~o"5K")
+      iex> set
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [5, 12, 19, 26]
+
+      iex> {:ok, set} = Tempo.select(~o"2026-02", Tempo.workdays(:US))
+      iex> Tempo.IntervalSet.count(set)
+      20
+
+  A span is selected period by period, and an open-ended one lazily:
+
+      iex> {:ok, set} = Tempo.select(~o"2026/2029", ~o"12-25")
+      iex> set
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.year(Tempo.Interval.from(&1)))
+      [2026, 2027, 2028]
+
+      iex> {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:US))
+      iex> weekends
+      ...> |> Tempo.IntervalSet.walk()
+      ...> |> Enum.take(2)
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [20, 21]
+
+  The school days of a term are tagged with the term:
+
+      iex> {:ok, term} = Tempo.Interval.new(from: ~o"2027-07-19", to: ~o"2027-07-21", metadata: %{term: 3})
+      iex> {:ok, days} = Tempo.select(term, Tempo.workdays(:AU))
+      iex> days
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.metadata/1)
+      [%{term: 3}, %{term: 3}]
+
+  On the night New York's clocks go forward, 02:00 is not on the clock:
+
+      iex> clocks_go_forward = ~o"2024-03-10[America/New_York]"
+      iex> {:ok, skipped} = Tempo.select(clocks_go_forward, ~o"T02")
+      iex> Tempo.IntervalSet.count(skipped)
+      0
+      iex> {:ok, quiet_hours} = Tempo.select(clocks_go_forward, ~o"T02/T04")
+      iex> Tempo.IntervalSet.members(quiet_hours)
+      [~o"2024Y3M10DT3H/T4H[America/New_York]"]
+
+  """
+  def select(base, selector) do
+    if Calendars.outside?([base, selector]) do
+      base
+      |> Calendars.inside()
+      |> select(Calendars.inside_selector(selector))
+      |> Calendars.outside()
+    else
+      Select.do_select(base, selector)
+    end
+  end
+
+  @doc """
+  Raising version of `select/2`.
+
+  ### Arguments
+
+  * `base` and `selector` — see `select/2`.
+
+  ### Returns
+
+  * The selected `t:Tempo.IntervalSet.t/0`.
+
+  ### Examples
+
+      iex> Tempo.select!(~o"2026-06", [15])
+      #Tempo.IntervalSet<[#Tempo.Interval<~o"2026Y6M15D/16D" unit: hour>]>
+
+  """
+  @spec select!(
+          t() | Tempo.Interval.t() | Tempo.IntervalSet.t(),
+          Tempo.Select.selector()
+        ) :: Tempo.IntervalSet.t()
+  def select!(base, selector) do
+    case select(base, selector) do
+      {:ok, set} -> set
+      {:error, exception} when is_exception(exception) -> raise exception
+      {:error, reason} -> raise ArgumentError, Calendars.inspect(reason)
+    end
+  end
+
+  @doc """
+  Return a selector for the workdays of a territory: the days of the
+  week outside its weekend, less any holidays.
+
+  Together `workdays/1` and `weekends/1` partition the week. In the
+  United States the workdays are Monday to Friday and the weekends
+  Saturday and Sunday; in Saudi Arabia the workdays are Sunday to
+  Thursday. With `:except`, the workdays leave out a set of holidays
+  too: a territory's public holidays make its business days, a
+  school's its school days.
+
+  ### Arguments
+
+  * `territory` is an atom, string, locale, or `%Localize.LanguageTag{}`
+    resolved through `Tempo.Territory.resolve/1`. The default, `nil`,
+    walks the territory-resolution chain (app config, then ambient
+    locale). The options may be given in its place, for the territory
+    that chain gives.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:except` is the holidays the workdays leave out: anything
+    `Tempo.to_interval_set/2` converts, such as a
+    `t:Tempo.RecurrenceSet.t/0` of recurring holidays, an interval set
+    or a single day.
+
+  ### Returns
+
+  * A `t:Tempo.t/0` value naming the workdays by day of week, to pass
+    to `Tempo.select/2`.
+
+  * With `:except`, a `t:Tempo.Workdays.t/0`, which `Tempo.select/2`
+    and the workday functions (`add_workdays/3`, `next_workday/2`,
+    `previous_workday/2`, `nearest_workday/2`, `roll_to_workday/3`,
+    `count_workdays/2`, `workday?/2`) take in place of a territory.
+
+  * `{:error, reason}` when the territory cannot be resolved or an
+    option is not one this takes. `Tempo.select/2` returns such an
+    error as it is, so a pipeline reports it.
+
+  ### Examples
+
+      iex> {:ok, workdays} = Tempo.select(~o"2026-02", Tempo.workdays(:US))
+      iex> Tempo.IntervalSet.count(workdays)
+      20
+
+      iex> {:ok, workdays} = Tempo.select(~o"2026-06-15/2026-06-22", Tempo.workdays(:SA))
+      iex> workdays
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [15, 16, 17, 18, 21]
+
+  Leaving out the King's Birthday, June 2026 has 21 Australian
+  workdays, one fewer than its weekdays:
+
+      iex> business_days = Tempo.workdays(:AU, except: ~o"2026-06-08")
+      iex> Tempo.count_workdays(~o"2026-06", business_days)
+      21
+
+  """
+  @spec workdays(Tempo.Territory.input() | keyword(), keyword()) ::
+          t() | Tempo.Workdays.t() | {:error, error_reason()}
+  def workdays(territory \\ nil, options \\ [])
+
+  def workdays(options, []) when is_list(options) do
+    workdays(nil, options)
+  end
+
+  def workdays(territory, options) do
+    with {:ok, resolved} <- Territory.resolve(territory),
+         {:ok, except} <- workdays_except(Calendars.inside(options)) do
+      resolved
+      |> workdays_of(except)
+      |> Calendars.outside()
+    end
+  end
+
+  defp workdays_of(resolved, nil) do
+    day_of_week_tempo(Localize.Calendar.weekdays(resolved))
+  end
+
+  defp workdays_of(resolved, except) do
+    %Tempo.Workdays{
+      weekdays: Localize.Calendar.weekdays(resolved),
+      weekend: Localize.Calendar.weekend(resolved),
+      except: except
+    }
+  end
+
+  defp workdays_except(options) do
+    with true <- Keyword.keyword?(options),
+         [] <- Keyword.keys(options) -- [:except],
+         except = Keyword.get(options, :except),
+         true <- holiday_set?(except) do
+      {:ok, except}
+    else
+      _invalid ->
+        {:error,
+         ArgumentError.exception(
+           "Tempo.workdays/2 takes one option, :except, a Tempo value, interval, " <>
+             "interval set or recurrence set, not #{Calendars.inspect(options)}."
+         )}
+    end
+  end
+
+  defp holiday_set?(nil) do
+    true
+  end
+
+  defp holiday_set?(%struct{})
+       when struct in [__MODULE__, Interval, IntervalSet, Tempo.RecurrenceSet] do
+    true
+  end
+
+  defp holiday_set?(_other) do
+    false
+  end
+
+  @doc """
+  Return a selector for the weekends of a territory.
+
+  Territories take their weekend on different days: the United States
+  on Saturday and Sunday, Saudi Arabia on Friday and Saturday, India on
+  Sunday. `weekends/1` reads a territory's weekend from CLDR through
+  Localize and returns it as a selector for `Tempo.select/2`.
+
+  ### Arguments
+
+  * `territory` is an atom, string, locale, or `%Localize.LanguageTag{}`
+    resolved through `Tempo.Territory.resolve/1`. The default, `nil`,
+    walks the territory-resolution chain.
+
+  ### Returns
+
+  * A `t:Tempo.t/0` value naming the weekend by day of week, to pass to
+    `Tempo.select/2`.
+
+  * `{:error, reason}` when the territory cannot be resolved.
+    `Tempo.select/2` returns such an error as it is.
+
+  ### Examples
+
+      iex> {:ok, weekends} = Tempo.select(~o"2026-02", Tempo.weekends(:US))
+      iex> weekends
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [1, 7, 8, 14, 15, 21, 22, 28]
+
+      iex> {:ok, weekends} = Tempo.select(~o"2026-02", Tempo.weekends(:SA))
+      iex> weekends
+      ...> |> Tempo.IntervalSet.members()
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [6, 7, 13, 14, 20, 21, 27, 28]
+
+  From a date on, the weekends are a lazy set that walks only as far as
+  it is taken. Three days of machine time from Thursday at 16:00, with
+  the weekends skipped, run to Tuesday at 16:00:
+
+      iex> {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:US))
+      iex> weekends
+      ...> |> Tempo.IntervalSet.walk()
+      ...> |> Enum.take(3)
+      ...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
+      [20, 21, 27]
+      iex> Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
+      ~o"2026Y6M23DT16H0M0S"
+
+  """
+  @spec weekends(Tempo.Territory.input()) :: t() | {:error, error_reason()}
+  def weekends(territory \\ nil) do
+    with {:ok, resolved} <- Territory.resolve(territory) do
+      resolved
+      |> Localize.Calendar.weekend()
+      |> day_of_week_tempo()
+      |> Calendars.outside()
+    end
+  end
+
+  defp day_of_week_tempo(days) when is_list(days) do
+    %Tempo{time: [day_of_week: days], calendar: Calendars.default()}
+  end
+
+  @doc """
+  Return `true` when `tempo` falls on a weekend day in the given
+  territory.
+
+  Different territories weekend on different days — the United States
+  on `[Saturday, Sunday]`, Saudi Arabia on `[Friday, Saturday]`, India
+  on `[Sunday]` — read from CLDR via Localize. The value's date is
+  converted to `Calendar.ISO` first and the day of week read as ISO
+  (`1` = Monday … `7` = Sunday), so a non-Gregorian value (Japanese,
+  Islamic, Hebrew, …) is classified by the correct weekday regardless
+  of its calendar's own weekday numbering — Hebrew and Islamic weeks
+  number from Sunday and Persian from Saturday, while CLDR's weekend
+  data is ISO-numbered.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a single day — a date or
+    datetime, including the day-of-year and week-date forms.
+
+  * `territory` is an atom, string, locale, or `%Localize.LanguageTag{}`
+    resolved through `Tempo.Territory.resolve/1`. Defaults to `nil`,
+    which walks the territory-resolution chain (app config, then
+    ambient locale).
+
+  ### Returns
+
+  * `true` when the value's day of week is one of the territory's
+    weekend days, `false` otherwise.
+
+  * Raises when `tempo` does not denote a day (a year or a month, or a
+    value without a year) or the territory cannot be resolved. The
+    workday functions, such as `add_workdays/3`, return these errors
+    instead.
+
+  ### Examples
+
+      iex> Tempo.weekend?(~o"2026-06-13", :US)
+      true
+
+      iex> Tempo.weekend?(~o"2026-06-15", :US)
+      false
+
+      iex> # The same Friday: a weekend in Saudi Arabia, a workday in the US.
+      iex> Tempo.weekend?(~o"2026-06-12", :SA)
+      true
+      iex> Tempo.weekend?(~o"2026-06-12", :US)
+      false
+
+  """
+  @spec weekend?(t(), Tempo.Territory.input() | Tempo.Workdays.t()) :: boolean()
+  def weekend?(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      weekend?(Calendars.inside(tempo), Calendars.inside(territory))
+    else
+      do_weekend?(tempo, territory)
+    end
+  end
+
+  defp do_weekend?(%Tempo{} = tempo, territory) do
+    on_weekend?(tempo, territory, :weekend?)
+  end
+
+  defp do_weekend?(value, _territory) do
+    raise(not_one_value("weekend?/2", value))
+  end
+
+  @doc """
+  Return `true` when `tempo` falls on a workday — a day that is *not*
+  in the territory's weekend, nor one of the holidays of the workdays
+  `workdays/2` builds with `:except`.
+
+  Given a territory, the complement of `weekend?/2`: together they
+  partition the week.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a single day.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1`, as for
+    `weekend?/2`, or is a `t:Tempo.Workdays.t/0` from `workdays/2`.
+
+  ### Returns
+
+  * `true` when the value's day of week is not a weekend day in the
+    territory, `false` otherwise.
+
+  * Raises as `weekend?/2` does.
+
+  ### Examples
+
+      iex> Tempo.workday?(~o"2026-06-15", :US)
+      true
+
+      iex> Tempo.workday?(~o"2026-06-13", :US)
+      false
+
+  """
+  @spec workday?(t(), Tempo.Territory.input() | Tempo.Workdays.t()) :: boolean()
+  def workday?(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      workday?(Calendars.inside(tempo), Calendars.inside(territory))
+    else
+      do_workday?(tempo, territory)
+    end
+  end
+
+  defp do_workday?(%Tempo{} = tempo, territory) do
+    answer = with {:ok, days_off} <- days_off(territory), do: day_off?(tempo, days_off, :workday?)
+    not predicate_answer!(answer)
+  end
+
+  defp do_workday?(value, _territory) do
+    raise(not_one_value("workday?/2", value))
+  end
+
+  # Whether `tempo` falls on the territory's weekend.
+  defp on_weekend?(tempo, territory, function) do
+    answer =
+      with {:ok, day_of_week, weekend} <- weekday_and_weekend(tempo, territory, function),
+           do: {:ok, day_of_week in weekend}
+
+    predicate_answer!(answer)
+  end
+
+  # A predicate has only true and false to give, so a question with no
+  # answer raises.
+  defp predicate_answer!({:ok, answer}) do
+    answer
+  end
+
+  defp predicate_answer!({:error, exception}) when is_exception(exception) do
+    raise(exception)
+  end
+
+  defp predicate_answer!({:error, reason}) do
+    raise(ArgumentError, Calendars.inspect(reason))
+  end
+
+  @doc """
+  Shift `tempo` by `count` workdays, stepping over the territory's
+  weekend.
+
+  A positive `count` moves forward, a negative one backward, and `0`
+  returns the value unchanged. Each step lands on a workday, so one
+  workday after a Friday is the following Monday where the weekend is
+  Saturday and Sunday. The time of day, calendar and zone are kept.
+  Given the workdays `workdays/2` builds with `:except`, it steps over
+  their holidays too.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a day: a date or a datetime.
+
+  * `count` is the number of workdays to add, negative to go back.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1`, as for
+    `weekend?/2`, or is a `t:Tempo.Workdays.t/0` from `workdays/2`.
+
+  ### Returns
+
+  * The `t:t/0` that is `count` workdays from `tempo`.
+
+  * `{:error, reason}` when `tempo` does not denote a day (a
+    `Tempo.ResolutionError` for a year or a month, a
+    `Tempo.UnanchoredError` for a value without a year), the territory
+    cannot be resolved, the holidays cannot be converted around a day,
+    or more than a thousand days off fall in a row.
+
+  ### Examples
+
+      iex> Tempo.add_workdays(~o"2026-06-12", 1, :US)
+      ~o"2026Y6M15D"
+
+      iex> Tempo.add_workdays(~o"2026-06-15", -1, :US)
+      ~o"2026Y6M12D"
+
+      iex> # Five workdays on from a Monday is the next Monday.
+      iex> Tempo.add_workdays(~o"2026-06-15", 5, :US)
+      ~o"2026Y6M22D"
+
+      iex> # The weekend differs by territory (Saudi Arabia: Friday and Saturday).
+      iex> Tempo.add_workdays(~o"2026-06-11", 1, :SA)
+      ~o"2026Y6M14D"
+
+  """
+  @spec add_workdays(t(), integer(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
+          t() | {:error, error_reason()}
+  def add_workdays(tempo, count, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      Calendars.outside(add_workdays(Calendars.inside(tempo), count, Calendars.inside(territory)))
+    else
+      do_add_workdays(tempo, count, territory)
+    end
+  end
+
+  defp do_add_workdays(tempo, count, territory) do
+    workdays_from(tempo, count, territory, :add_workdays)
+  end
+
+  @doc """
+  The next workday after `tempo` in the territory.
+
+  The same as `add_workdays(tempo, 1, territory)`.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a day.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1`, or is a
+    `t:Tempo.Workdays.t/0` from `workdays/2`.
+
+  ### Returns
+
+  * The next workday, or `{:error, reason}` as for `add_workdays/3`.
+
+  ### Examples
+
+      iex> Tempo.next_workday(~o"2026-06-12", :US)
+      ~o"2026Y6M15D"
+
+  With Monday 26 April a holiday, the next workday after Friday 23 April
+  2027 is the Tuesday:
+
+      iex> business_days = Tempo.workdays(:AU, except: ~o"2027-04-26")
+      iex> Tempo.next_workday(~o"2027-04-23", business_days)
+      ~o"2027Y4M27D"
+
+  """
+  @spec next_workday(t(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
+          t() | {:error, error_reason()}
+  def next_workday(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      Calendars.outside(next_workday(Calendars.inside(tempo), Calendars.inside(territory)))
+    else
+      do_next_workday(tempo, territory)
+    end
+  end
+
+  defp do_next_workday(tempo, territory) do
+    workdays_from(tempo, 1, territory, :next_workday)
+  end
+
+  @doc """
+  The workday before `tempo` in the territory.
+
+  The same as `add_workdays(tempo, -1, territory)`.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a day.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1`, or is a
+    `t:Tempo.Workdays.t/0` from `workdays/2`.
+
+  ### Returns
+
+  * The previous workday, or `{:error, reason}` as for `add_workdays/3`.
+
+  ### Examples
+
+      iex> Tempo.previous_workday(~o"2026-06-15", :US)
+      ~o"2026Y6M12D"
+
+  """
+  @spec previous_workday(t(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
+          t() | {:error, error_reason()}
+  def previous_workday(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      Calendars.outside(previous_workday(Calendars.inside(tempo), Calendars.inside(territory)))
+    else
+      do_previous_workday(tempo, territory)
+    end
+  end
+
+  defp do_previous_workday(tempo, territory) do
+    workdays_from(tempo, -1, territory, :previous_workday)
+  end
+
+  @doc """
+  The workday nearest to `tempo` in the territory: `tempo` itself when
+  it is a workday, otherwise the closest day outside the territory's
+  weekend.
+
+  The nearer workday wins, and a tie goes to the day before. For a
+  two-day weekend this is the common observed-holiday rule — a Saturday
+  moves back to Friday, a Sunday forward to Monday — which is how a
+  fixed-date holiday such as US Independence Day is observed when it
+  falls on a weekend.
+
+  Given the workdays `workdays/2` builds with `:except`, a holiday is
+  stepped over too, so Good Friday's nearest school day is the Thursday,
+  and a day in the school holidays finds the nearer end of the break.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a day.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1` and
+    sets which days are the weekend, or is a `t:Tempo.Workdays.t/0`
+    from `workdays/2`.
+
+  ### Returns
+
+  * `tempo` when it is a workday, otherwise the nearest workday.
+
+  * `{:error, reason}` as for `add_workdays/3`.
+
+  ### Examples
+
+      iex> Tempo.nearest_workday(~o"2026-07-04", :US)
+      ~o"2026Y7M3D"
+
+      iex> Tempo.nearest_workday(~o"2027-07-04", :US)
+      ~o"2027Y7M5D"
+
+      iex> Tempo.nearest_workday(~o"2025-07-04", :US)
+      ~o"2025Y7M4D"
+
+  """
+  @spec nearest_workday(t(), Tempo.Territory.input() | Tempo.Workdays.t()) ::
+          t() | {:error, error_reason()}
+  def nearest_workday(tempo, territory \\ nil) do
+    if Calendars.outside?([tempo, territory]) do
+      Calendars.outside(nearest_workday(Calendars.inside(tempo), Calendars.inside(territory)))
+    else
+      do_nearest_workday(tempo, territory)
+    end
+  end
+
+  defp do_nearest_workday(%Tempo{} = tempo, territory) do
+    with :ok <- one_value(tempo),
+         {:ok, days_off} <- days_off(territory),
+         {:ok, off?} <- day_off?(tempo, days_off, :nearest_workday) do
+      if off? do
+        nearest_workday_from(tempo, days_off, 1)
+      else
+        tempo
+      end
+    end
+  end
+
+  defp do_nearest_workday(value, _territory) do
+    {:error, not_a_day(value, :nearest_workday)}
+  end
+
+  @doc """
+  Roll `tempo` to a workday of the territory: `tempo` itself when it is a workday, otherwise the workday the `:roll` convention names.
+
+  These are the business day conventions of financial contracts. Following takes the first workday after a day off, and preceding the first before it. The modified forms stay in the month: modified following takes the first workday after unless that one is in the next month, when it takes the first before, and modified preceding is its mirror. The time of day, calendar and zone are kept. Given the workdays `workdays/2` builds with `:except`, a holiday is a day off too.
+
+  `nearest_workday/2` is another rule, the closer of the two sides, and `next_workday/2` always moves.
+
+  ### Arguments
+
+  * `tempo` is a `t:t/0` that denotes a day: a date or a datetime.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1` and sets which days are the weekend, or is a `t:Tempo.Workdays.t/0` from `workdays/2`. The options may be given in its place, for the territory the resolution chain gives.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:roll` is the convention a day off is rolled by: `:following`, `:preceding`, `:modified_following` or `:modified_preceding`. The default is `:following`.
+
+  ### Returns
+
+  * `tempo` when it is a workday, otherwise the workday it rolls to.
+
+  * `{:error, reason}` as for `add_workdays/3`, and for an option this does not take.
+
+  ### Examples
+
+  Saturday 30 May 2026 rolls forward to Monday 1 June, which is in another month, so the modified roll turns back to Friday 29 May:
+
+      iex> Tempo.roll_to_workday(~o"2026-05-30", :US)
+      ~o"2026Y6M1D"
+
+      iex> Tempo.roll_to_workday(~o"2026-05-30", :US, roll: :modified_following)
+      ~o"2026Y5M29D"
+
+      iex> Tempo.roll_to_workday(~o"2026-05-30", :US, roll: :preceding)
+      ~o"2026Y5M29D"
+
+  Sunday 1 November 2026 rolls back into October, so the modified roll goes forward to the Monday:
+
+      iex> Tempo.roll_to_workday(~o"2026-11-01", :US, roll: :modified_preceding)
+      ~o"2026Y11M2D"
+
+  With Friday 3 July 2026 a holiday, Saturday 4 July rolls back to the Thursday:
+
+      iex> business_days = Tempo.workdays(:US, except: ~o"2026-07-03")
+      iex> Tempo.roll_to_workday(~o"2026-07-04", business_days, roll: :preceding)
+      ~o"2026Y7M2D"
+
+  """
+  @spec roll_to_workday(
+          t(),
+          Tempo.Territory.input() | Tempo.Workdays.t() | keyword(),
+          keyword()
+        ) :: t() | {:error, error_reason()}
+  def roll_to_workday(tempo, territory \\ nil, options \\ []) do
+    if Calendars.outside?([tempo, territory, options]) do
+      Calendars.outside(
+        roll_to_workday(
+          Calendars.inside(tempo),
+          Calendars.inside(territory),
+          Calendars.inside(options)
+        )
+      )
+    else
+      do_roll_to_workday(tempo, territory, options)
+    end
+  end
+
+  defp do_roll_to_workday(tempo, options, []) when is_list(options) do
+    roll_to_workday(tempo, nil, options)
+  end
+
+  defp do_roll_to_workday(%Tempo{} = tempo, territory, options) do
+    with {:ok, roll} <- roll_convention(options),
+         :ok <- one_value(tempo),
+         {:ok, days_off} <- days_off(territory),
+         {:ok, off?} <- day_off?(tempo, days_off, :roll_to_workday),
+         :ok <- a_month_to_stay_in(tempo, roll) do
+      if off? do
+        rolled(tempo, roll, days_off)
+      else
+        tempo
+      end
+    end
+  end
+
+  defp do_roll_to_workday(value, _territory, _options) do
+    {:error, not_a_day(value, :roll_to_workday)}
+  end
+
+  @rolls [:following, :preceding, :modified_following, :modified_preceding]
+
+  defp roll_convention(options) do
+    with true <- Keyword.keyword?(options),
+         [] <- Keyword.keys(options) -- [:roll],
+         roll when roll in @rolls <- Keyword.get(options, :roll, :following) do
+      {:ok, roll}
+    else
+      _invalid ->
+        {:error,
+         ArgumentError.exception(
+           "Tempo.roll_to_workday/3 takes one option, :roll, one of " <>
+             "#{Enum.map_join(@rolls, ", ", &Calendars.inspect/1)}, not #{Calendars.inspect(options)}."
+         )}
+    end
+  end
+
+  # The workday a day off rolls to: the first after it or the first before
+  # it, and by a modified convention the first the other way where the one
+  # it rolls to is in another month.
+  defp rolled(tempo, :following, days_off) do
+    first_workday(tempo, 1, days_off)
+  end
+
+  defp rolled(tempo, :preceding, days_off) do
+    first_workday(tempo, -1, days_off)
+  end
+
+  defp rolled(tempo, :modified_following, days_off) do
+    rolled_in_its_month(tempo, 1, days_off)
+  end
+
+  defp rolled(tempo, :modified_preceding, days_off) do
+    rolled_in_its_month(tempo, -1, days_off)
+  end
+
+  defp rolled_in_its_month(tempo, step, days_off) do
+    with %Tempo{} = workday <- first_workday(tempo, step, days_off),
+         {:ok, month} <- month_of(tempo),
+         {:ok, month_rolled_to} <- month_of(workday) do
+      if month_rolled_to == month do
+        workday
+      else
+        first_workday(tempo, -step, days_off)
+      end
+    end
+  end
+
+  defp first_workday(tempo, step, days_off) do
+    workday_after(tempo, step, days_off, :roll_to_workday, 1)
+  end
+
+  # A modified convention keeps a day in its month, so it takes only a day
+  # that has one, whether or not that day is a workday.
+  defp a_month_to_stay_in(tempo, roll) when roll in [:modified_following, :modified_preceding] do
+    with {:ok, _month} <- month_of(tempo), do: :ok
+  end
+
+  defp a_month_to_stay_in(_tempo, _roll) do
+    :ok
+  end
+
+  # The month a day is of: the one its calendar counts it in, as `trunc/2`
+  # gives it.
+  defp month_of(day) do
+    case trunc(day, :month) do
+      %Tempo{time: month} ->
+        {:ok, month}
+
+      {:error, _no_month} ->
+        {:error,
+         ResolutionError.exception(
+           operation: :roll_to_workday,
+           current:
+             day
+             |> resolution()
+             |> elem(0),
+           target: :month,
+           calendar: day.calendar,
+           reason:
+             "A modified roll keeps a day in its month, and #{Calendars.inspect(day)} is in a calendar " <>
+               "of weeks, which has none. Roll it with `roll: :following` or `roll: :preceding`."
+         )}
+    end
+  end
+
+  @doc """
+  Count the workdays of a span: its days outside the territory's
+  weekend.
+
+  The span is half-open, so the day it ends on is not counted. Given
+  the workdays `workdays/2` builds with `:except`, their holidays are
+  left out too.
+
+  ### Arguments
+
+  * `value` is anything `Tempo.select/2` selects from: a `t:t/0`, a
+    `t:Tempo.Interval.t/0` or a `t:Tempo.IntervalSet.t/0`.
+
+  * `territory` is resolved through `Tempo.Territory.resolve/1`, or is a
+    `t:Tempo.Workdays.t/0` from `workdays/2`.
+
+  ### Returns
+
+  * The number of workdays in `value`.
+
+  * `{:error, reason}` when the territory cannot be resolved, `value`
+    cannot be selected from, or it has no end to count to (a
+    `Tempo.UnboundedSetError`).
+
+  ### Examples
+
+      iex> Tempo.count_workdays(~o"2026-06", :US)
+      22
+
+      iex> Tempo.count_workdays(~o"2026-06-15/2026-06-22", :SA)
+      5
+
+  """
+  @spec count_workdays(
+          t() | Tempo.Interval.t() | IntervalSet.t(),
+          Tempo.Territory.input() | Tempo.Workdays.t()
+        ) :: non_neg_integer() | {:error, error_reason()}
+  def count_workdays(value, territory \\ nil) do
+    if Calendars.outside?([value, territory]) do
+      count_workdays(Calendars.inside(value), Calendars.inside(territory))
+    else
+      do_count_workdays(value, territory)
+    end
+  end
+
+  defp do_count_workdays(value, territory) do
+    with {:ok, selector} <- workday_selector(territory),
+         {:ok, %IntervalSet{} = selected} <-
+           value
+           |> whole_days()
+           |> select(selector) do
+      count_selected(selected)
+    end
+  end
+
+  # Workdays are counted by whole days: a span written to a time of day by
+  # the days from the one it starts on up to, not including, the one it ends
+  # on, as a span of days is, so an hour of a workday holds none. A weekday
+  # selects the hours of such a span that are on it (`Tempo.select/2`), and
+  # they are no count of days.
+  defp whole_days(%__MODULE__{} = value) do
+    if time_of_day?(value) do
+      no_days()
+    else
+      value
+    end
+  end
+
+  # An interval written with a duration, and a recurrence, are the span or
+  # spans they convert to. One that has no end is left for the selection to
+  # refuse.
+  defp whole_days(%Interval{} = written) do
+    case to_interval(written) do
+      {:ok, %Interval{from: %__MODULE__{}, to: %__MODULE__{}} = span} -> whole_days_of_span(span)
+      {:ok, %IntervalSet{} = spans} -> whole_days(spans)
+      _no_end_or_no_span -> written
+    end
+  end
+
+  defp whole_days(%IntervalSet{} = set) do
+    if IntervalSet.do_bounded?(set) do
+      set
+      |> IntervalSet.members()
+      |> Enum.flat_map(&days_of_member/1)
+      |> IntervalSet.new!()
+    else
+      set
+    end
+  end
+
+  defp whole_days(other) do
+    other
+  end
+
+  defp whole_days_of_span(%Interval{from: from, to: to} = span) do
+    if time_of_day?(from) or time_of_day?(to) do
+      days_started(trunc(from, :day), trunc(to, :day))
+    else
+      span
+    end
+  end
+
+  defp days_of_member(%Interval{} = member) do
+    case whole_days_of_span(member) do
+      %Interval{} = days -> [days]
+      %IntervalSet{} = none -> IntervalSet.members(none)
+    end
+  end
+
+  # The days from the one a span starts on up to the one it ends on, which
+  # are none where the two are one day.
+  defp days_started(%__MODULE__{} = first, %__MODULE__{} = ends_on) do
+    case Interval.new(from: first, to: ends_on) do
+      {:ok, %Interval{} = days} -> days
+      {:error, _no_whole_day} -> no_days()
+    end
+  end
+
+  defp days_started(_first, _ends_on) do
+    no_days()
+  end
+
+  defp no_days do
+    IntervalSet.new!([])
+  end
+
+  defp time_of_day?(%__MODULE__{time: time}) when is_list(time) do
+    Enum.any?(time, &time_of_day_unit?/1)
+  end
+
+  defp workday_selector(%Tempo.Workdays{} = workdays) do
+    {:ok, workdays}
+  end
+
+  # The territory's working days of the week, as `workdays/2` answers a
+  # caller with them.
+  defp workday_selector(territory) do
+    with {:ok, resolved} <- Territory.resolve(territory) do
+      {:ok, workdays_of(resolved, nil)}
+    end
+  end
+
+  defp count_selected(selected) do
+    if IntervalSet.do_bounded?(selected) do
+      IntervalSet.count(selected)
+    else
+      {:error, UnboundedSetError.exception(operation: "Tempo.count_workdays/2", set: selected)}
+    end
+  end
+
+  defp time_of_day_unit?({unit, _value}) do
+    unit in [:hour, :minute, :second, :microsecond]
+  end
+
+  defp time_of_day_unit?(_group_or_selection) do
+    false
+  end
+
+  defp workdays_from(%Tempo{} = tempo, count, territory, function) when is_integer(count) do
+    with {:ok, days_off} <- days_off(territory),
+         {:ok, _day_of_week} <- iso_day_of_week(tempo, function) do
+      step_workdays(tempo, count, days_off, function)
+    end
+  end
+
+  defp workdays_from(%Tempo{}, count, _territory, function) do
+    {:error,
+     ArgumentError.exception(
+       "`#{function}` counts whole workdays, not #{Calendars.inspect(count)}."
+     )}
+  end
+
+  defp workdays_from(value, _count, _territory, function) do
+    {:error, not_a_day(value, function)}
+  end
+
+  # Step `count` workdays from `tempo`, one day at a time.
+  defp step_workdays(tempo, 0, _days_off, _function) do
+    tempo
+  end
+
+  defp step_workdays(tempo, count, days_off, function) do
+    step =
+      if count < 0 do
+        -1
+      else
+        1
+      end
+
+    Enum.reduce_while(1..abs(count), tempo, fn _workday, day ->
+      case workday_after(day, step, days_off, function, 1) do
+        %Tempo{} = next -> {:cont, next}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  # The most days off in a row a step passes before it gives up, so a
+  # holiday set that never ends cannot hold it forever.
+  @most_days_off_in_a_row Tempo.Limit.days_off_in_a_row()
+
+  # The first workday `step` days on from `tempo` (a step of -1 goes back).
+  defp workday_after(tempo, _step, _days_off, _function, run)
+       when run > @most_days_off_in_a_row do
+    {:error,
+     ArgumentError.exception(
+       "No workday follows #{Calendars.inspect(tempo)} within #{@most_days_off_in_a_row} days off."
+     )}
+  end
+
+  defp workday_after(tempo, step, days_off, function, run) do
+    next = shift(tempo, day: step)
+
+    with {:ok, off?} <- day_off?(next, days_off, function) do
+      if off? do
+        workday_after(next, step, days_off, function, run + 1)
+      else
+        next
+      end
+    end
+  end
+
+  # The workday `distance` days before `tempo`, else the one `distance`
+  # days after, else one day further out each way.
+  defp nearest_workday_from(tempo, days_off, distance)
+       when distance <= @most_days_off_in_a_row do
+    preceding = shift(tempo, day: -distance)
+    following = shift(tempo, day: distance)
+
+    with {:ok, preceding_off?} <- day_off?(preceding, days_off, :nearest_workday),
+         {:ok, following_off?} <- day_off?(following, days_off, :nearest_workday) do
+      cond do
+        not preceding_off? -> preceding
+        not following_off? -> following
+        true -> nearest_workday_from(tempo, days_off, distance + 1)
+      end
+    end
+  end
+
+  defp nearest_workday_from(tempo, _days_off, _distance) do
+    {:error,
+     ArgumentError.exception(
+       "No workday falls within #{@most_days_off_in_a_row} days of #{Calendars.inspect(tempo)}."
+     )}
+  end
+
+  # The ISO day of week (1 = Monday … 7 = Sunday) of the day `tempo`
+  # denotes, and the ISO days of the territory's weekend.
+  defp weekday_and_weekend(tempo, territory, function) do
+    with {:ok, {weekend, _except}} <- days_off(territory),
+         {:ok, day_of_week} <- iso_day_of_week(tempo, function) do
+      {:ok, day_of_week, weekend}
+    end
+  end
+
+  # The days a territory, or a `Tempo.Workdays`, has off: its weekend and
+  # any holidays.
+  defp days_off(%Tempo.Workdays{weekend: weekend, except: except}) do
+    {:ok, {weekend, except}}
+  end
+
+  defp days_off(territory) do
+    with {:ok, resolved} <- Territory.resolve(territory),
+         do: {:ok, {Localize.Calendar.weekend(resolved), nil}}
+  end
+
+  # Whether a day is off: on the weekend or on a holiday.
+  defp day_off?(day, {weekend, except}, function) do
+    with {:ok, day_of_week} <- iso_day_of_week(day, function) do
+      if day_of_week in weekend do
+        {:ok, true}
+      else
+        on_holiday?(day, except)
+      end
+    end
+  end
+
+  defp on_holiday?(_day, nil) do
+    {:ok, false}
+  end
+
+  # The holidays converted around the day, as a recurrence needs a window;
+  # a concrete holiday is what it is, so the day asks which overlap it.
+  defp on_holiday?(day, except) do
+    with {:ok, %IntervalSet{} = holidays} <- to_interval_set(except, within: day),
+         {:ok, %IntervalSet{} = on_the_day} <- members_overlapping(holidays, day),
+         do: {:ok, IntervalSet.count(on_the_day) > 0}
+  end
+
+  # ISO day of week (1 = Monday … 7 = Sunday) of the day a value
+  # denotes. The day of week is the same in every calendar, and a
+  # calendar date carries year/month/day in *its own* calendar, so the
+  # date is built in that calendar, which is asked for its day of the week
+  # counted from Monday. The ordinal (day-of-year) and ISO week-date forms
+  # resolve through `to_date/1`.
+  defp iso_day_of_week(%Tempo{} = tempo, function) do
+    case day_date(tempo) do
+      {:ok, %Date{} = date} -> {:ok, Date.day_of_week(date, :monday)}
+      _no_single_day -> {:error, not_a_day(tempo, function)}
+    end
+  end
+
+  defp iso_day_of_week({:error, _reason} = error, _function) do
+    error
+  end
+
+  defp iso_day_of_week(value, function) do
+    {:error, not_a_day(value, function)}
+  end
+
+  defp day_date(%Tempo{time: time} = tempo) do
+    case {whole_unit(time, :year), whole_unit(time, :month), whole_unit(time, :day)} do
+      {year, month, day} when is_integer(year) and is_integer(month) and is_integer(day) ->
+        Date.new(year, month, day, tempo.calendar)
+
+      # A day of the year or of a week, with or without a time of day.
+      _ordinal_or_week_date ->
+        tempo
+        |> trunc(:day)
+        |> to_date()
+    end
+  end
+
+  # A unit as the one whole number it is, or `nil` for one that is absent or
+  # holds several values. A group of a set is a three-element entry, which
+  # `Keyword.get/2` cannot read.
+  defp whole_unit(time, unit) do
+    case List.keyfind(time, unit, 0) do
+      {^unit, value} when is_integer(value) -> value
+      _absent_or_several -> nil
+    end
+  end
+
+  defp not_a_day(%Tempo{} = tempo, function) do
+    if anchored?(tempo) do
+      ResolutionError.exception(
+        operation: function,
+        current:
+          tempo
+          |> resolution()
+          |> elem(0),
+        target: :day,
+        reason:
+          "`#{function}` needs a value that denotes a day, such as a date or a datetime; " <>
+            "#{Calendars.inspect(tempo)} does not."
+      )
+    else
+      UnanchoredError.exception(operation: function, value: tempo)
+    end
+  end
+
+  defp not_a_day(value, function) do
+    ArgumentError.exception(
+      "`#{function}` needs a Tempo value that denotes a day, not #{Calendars.inspect(value)}."
+    )
+  end
+
+  @doc """
+  Return a multi-line prose explanation of any Tempo value — what it is, what it spans, and how to work with it.
+
+  For structured output that renderers can style (ANSI, HTML), use `Tempo.Explain.explain/1` directly and pick a formatter. A recurrence set is described member by member, each led by its name; a week by its number, with the day it starts on; a month by the name its calendar gives it; and a value holding a set or a group by each value it names.
+
+  ### Arguments
+
+  * `value` is any Tempo value: a `t:Tempo.t/0`, an interval, a set, a duration or a recurrence set. Anything else is described as a value Tempo does not know.
+
+  An end of a span is written as far as the value is written, and no further: a year is `1984` and a month `1984-06`, so `~o"1984/1986"` runs from 1984 to 1986. Where that does not say which day it starts on, the day is told beside it: a week (`2026-W25 (starts on 2026-06-15)`), and a year or a month of a calendar whose year does not begin on the first day of its first month.
+
+  ### Returns
+
+  * A plain multi-line string, suitable for iex.
+
+  ### Examples
+
+      iex> Tempo.explain(~o"2026-06")
+      ...> |> String.split("\\n")
+      ...> |> hd()
+      "June 2026."
+
+      iex> Tempo.explain(~o"1984/1986")
+      ...> |> String.split("\\n")
+      ["A closed interval.", "From: 1984.", "To:   1986 (exclusive — half-open `[from, to)`)."]
+
+      iex> Tempo.explain(~o"2026-W25")
+      ...> |> String.split("\\n")
+      ...> |> Enum.take(3)
+      ["Week 25 of 2026.", "Span: [2026-W25, 2026-W26).", "Starts on 2026-06-15."]
+
+  """
+  @spec explain(term()) :: String.t()
+  def explain(value) do
+    value
+    |> Explain.explain()
+    |> Explain.to_string()
+  end
+
+  @valid_units Unit.units()
+
+  defp validate_unit(unit) when unit in @valid_units do
+    {:ok, unit}
+  end
+
+  defp validate_unit(unit) do
+    {:error, InvalidUnitError.exception(unit: unit, valid_units: @valid_units)}
+  end
+end

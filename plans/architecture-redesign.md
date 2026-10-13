@@ -1,6 +1,6 @@
-# Tempo 3.0: architecture review and redesign
+# Tempo: architecture review and redesign
 
-**Status:** proposal, 2026-10-13. Written against `main` at `a43b944` (Calendrical `3a85c80`, Localize `0d89acb6`). Answers the brief in [architecture_review.md](architecture_review.md).
+**Status:** accepted, 2026-10-13: the user agreed to all eighteen decisions and asked for phase 0 on the `redesign` branch. The release's version is undecided; it may replace the unreleased 2.0 work. Section 4.2, on written ends, was added at the user's request the same day. Written against `main` at `a43b944` (Calendrical `3a85c80`, Localize `0d89acb6`). Answers the brief in [architecture_review.md](architecture_review.md).
 
 ## 1. Summary
 
@@ -197,9 +197,9 @@ What remains against the principle that Tempo never introspects a calendar:
 * **The networks** (`Tempo.Network`, `Schedule`, `RelationNetwork`, `Qualitative`, 4,462 lines) depend one way on `Compare.to_utc_seconds`, `Compare.offset_seconds`, `Math.add` and `Tempo.to_date`, and nothing in the core depends on them.
 * **The test corpus is the asset.** The operation matrix (`test/tempo/matrix_test.exs`, generated and checked against the code), the reference tests (`reference_test.exs`, answers worked out from `Date`, `NaiveDateTime` and a calendar's own functions), the calendar census (`calendar_census_test.exs`, 22 calendars, 579 full forms, 520 selections), the EDTF corpus and the RFC 5545 conformance tests are independent of the implementation and are the oracle for any rewrite.
 
-## 4. The model: eight laws
+## 4. The model: nine laws
 
-The redesign begins by stating what the current code leaves implicit. Every module in section 5 is written to these laws and nothing else; a behaviour not derivable from them is not Tempo's.
+The redesign begins by stating what the current code leaves implicit. Every module in section 5 is written to these laws and nothing else; a behaviour not derivable from them is not Tempo's. The ninth law, on written ends, is in section 4.2.
 
 1. **Denotation.** An *expression* is a value (`2026-06`), an interval (`2026-06-01/2026-07-01`), a recurrence (`R5/2026-06-15/P1D`), an all-of set (`{2026-06,2026-08}`) or a one-of set (`[2026,2027]`). Every expression *denotes* an ordered sequence of half-open spans, `spans(E)`, possibly empty, possibly infinite. A duration denotes a length and is not an expression. Every operation on an expression is defined on `spans(E)`.
 
@@ -226,6 +226,42 @@ The redesign begins by stating what the current code leaves implicit. Every modu
 * **The walk has one rule.** A span is walked at a unit by stepping on the scale that unit lives on: calendar units (year, month, week, day) on the day scale, through the calendar's period spans; clock units (hour, minute, second, fraction) on the tick scale, shown as wall readings through the zone. Daylight saving falls out: a day in Paris has 23 or 25 hours because its two ends are 23 or 25 hours apart, with nothing skipped or doubled by hand.
 
 * **Materialising changes the form, and so the walk.** `to_interval(~o"2026-06-15")` is the interval `2026-06-15/2026-06-16`, which walks days (one of them), where the value walks hours. There is no `:unit` field to keep them in parity, because by law 3 they are different expressions with the same extent. A caller who wants an extent walked at a unit says so: `Tempo.walk(expression, :hour)`.
+
+### 4.2 Written ends
+
+The user raised this on 2026-10-13: `~o"2026Y{1,3}M"` is two months and `~o"2026Y{1..3}M"` three, but `~o"2026/2028"` has been two years, `[2026, 2027]`, where anyone reading it expects three. The two conventions have to be reconciled without giving up the half-open model.
+
+**The reading.** A date names a period of the calendar: "2026 to 2028" and "1 to 3 June" include their last day, in speech, in EDTF (`1964/2008` is "beginning sometime in 1964 and ending sometime in 2008") and in ISO 8601-2 Annex A. A time of day names a reading of the clock, and a reading is a boundary: "nine to five" ends when the clock shows five, not a minute later. The convention differs because what is named differs, not because the model does. So:
+
+9. **Written ends.** A written interval `a/b` runs from the start of `a`. It runs to the *end* of `b` when `b` is written to a calendar unit (a year, a month, a week, a date), and to the *start* of `b` when `b` is written to a clock unit (a time of day). The struct holds the half-open span that results, every operation is defined on it as before, and the writer writes a span back as it was read, so that text round-trips.
+
+| Written | Denotes | Walks as |
+|---|---|---|
+| `2026/2028` | `[2026-01-01, 2029-01-01)` | 2026, 2027, 2028 |
+| `2026-06-01/2026-06-03` | `[06-01, 06-04)` | three days |
+| `2026-W25/2026-W27` | three weeks | W25, W26, W27 |
+| `2026/2026-03` | January to March inclusive | Jan, Feb, Mar |
+| `T09/T17` | `[09:00, 17:00)` | eight hours |
+| `2026-06-15T10:30/2026-06-15T10:45` | fifteen minutes | |
+| `2026-06-15/2026-06-15T17` | `[06-15T00:00, 06-15T17:00)` | seventeen hours |
+| `2026-06-15T10/2026-06-16` | from 10:00 on the 15th through the 16th | thirty-eight hours |
+| `P1M/2026-07` | the month ending when July ends: July | |
+| `R3/2026-01-01/2026-01-08` | eight-day occurrences | |
+| `{2026,2027}Y/2030Y` | each through 2030 | |
+
+The rule is Tempo's own to apply: it decides by `Tempo.Unit.calendar?/1` against `clock?/1`, which is the classification every other module already uses, and asks nothing of a calendar. Ranges inside a unit (`{1..3}M`) were already inclusive; sets of values (`{2026,2027}Y`) list members; both stay as they are, and all three written forms now agree with how they are read aloud.
+
+**What follows.**
+
+* The reader moves a calendar-resolution end forward by one unit of its resolution to make the half-open bound (`2028` becomes `2029`, `2026-06-03` becomes `2026-06-04`), through `Tempo.Expand.children/3`'s successor; the writer moves it back. A clock-resolution end is kept as written. `to_iso8601/1` of what `from_iso8601/2` read is the original text.
+
+* `Tempo.Interval.new/1` keeps `:to` as the half-open bound and `:through` as the included last period, as today. `Tempo.Interval.to/1` answers the half-open bound; a new `Tempo.Interval.through/1` answers the last period included, for an end written to a calendar unit. The two words are the two readings.
+
+* A materialised month, `to_interval(~o"2026-06")`, is the span `{:span, 2026-06, 2026-07}` and is written `2026-06/2026-06`: June through June. It is correct under the rule and reads oddly at first; the alternative, a marker for an exclusive end, is not in ISO 8601, and the user's rule that what cannot be written is an error settles it. `inspect/1` shows a span whose two written ends are one period as that period: `~o"2026Y6M"` with a note that it is an interval.
+
+* The migration guide lists the change under written ends. The golden files tag every cell whose input has a written calendar-resolution end (`written_end`), so the diff on this decision is one filter. In this repository about 1,425 written intervals change meaning (counted in `plans/interval-end-inclusive.md`); the guides are re-run as part of phase 7 and each is read for which reading it meant.
+
+* Mixed resolutions follow the rule as written: `2026-06-15T10/2026-06-16` is thirty-eight hours, where today it is fourteen. The current guide uses this example; it will be rewritten as `2026-06-15T10/2026-06-16T00` for the fourteen hours.
 
 ## 5. The architecture
 
@@ -1189,17 +1225,17 @@ Numbered to match sections 9.2 and 9.3 where they correspond. Each carries the r
 | 11 | One `Tempo.Limit`. | Yes. |
 | 12 | Merge exceptions by cause, about ten remaining. | Yes. |
 | 13 | **Weeks.** One week system per calendar, the calendar's own, which for `Calendar.ISO` is ISO 8601's; `W` on a value of another calendar means that calendar's weeks; the Gregorian ISO week of a Hebrew date is a conversion (`to_calendar/2`), not a second numbering. The `w` designator goes. | Yes. It removes three numberings and the one place that still decides by module (`select.ex:2459`). This changes what `~o"5786Y10W"` means for a Hebrew value. |
-| 14 | **Whether a written end to a date includes that date** (`plans/interval-end-inclusive.md`). | Orthogonal to the architecture; the reader can map either way. Recommend keeping the written form half-open as today, so that `2026-06-01/2026-07-01` stays a month and no operation needs to know which rule a span was read under. |
+| 14 | **Written ends** (section 4.2): an interval written to a date runs through that date; one written to a time of day runs to that reading; the struct stays half-open and the writer writes a span back as it was read. | Decided by the user on 2026-10-13 after review: yes. `~o"2026/2028"` is three years. |
 | 15 | The border adapter `Tempo.Calendar` with `Calendar.ISO → Localize.Calendar.ISO` as configuration, replacing `inside`/`outside`. | Yes. |
 | 16 | The calendar contract of 8.3 and the laws of 8.4, with the Calendrical changes of 8.5. | Yes. Calendrical work is small: three additions, two signature changes, a law test. |
 | 17 | A hand-written reader over a written ABNF, replacing NimbleParsec, with generator tests. | Yes. The fast path already proves the approach; the grammar becomes a document a reader can hold the code to. |
-| 18 | Build as Tempo 3.0 on a branch, with 2.0's answers as golden files (section 11.1). | Yes. |
+| 18 | Build the redesign on a branch, with the current library's answers as golden files (section 11.1). | Yes. |
 
 ## 11. Delivery
 
 ### 11.1 The oracle comes first
 
-Before any core code changes, the current library's answers are frozen as data. A script over a generated corpus (every form in the operation matrix, the calendar census's 579 full forms and 520 selections, the EDTF corpus, the RFC 5545 conformance rules, the guides' examples, and random pairs for the set operations and relations) writes, for each input, what 2.0 answers: `to_iso8601/1`, the ends of `to_interval/2`, the first fifty of `Enum.to_list/1`, `relation/2` for pairs, each set operation for pairs, `shift/2` for a table of durations, `select/2` for the census's selections. The 3.0 tests read these files; a difference is either a defect in 3.0 or a change decided in section 10, and nothing else. The matrix's "total, consistent, right" checks and the reference tests, which compute answers independently of either implementation, are ported as they stand.
+Before any core code changes, the current library's answers are frozen as data. A script over a generated corpus (every form in the operation matrix, the calendar census's 579 full forms and 520 selections, the EDTF corpus, the RFC 5545 conformance rules, the guides' examples, and random pairs for the set operations and relations) writes, for each input, what the current library answers: `to_iso8601/1`, the ends of `to_interval/2`, the first fifty of `Enum.to_list/1`, `relation/2` for pairs, each set operation for pairs, `shift/2` for a table of durations, `select/2` for the census's selections. The redesign's tests read these files; a difference is either a defect in the new code or a change decided in section 10, and nothing else. The matrix's "total, consistent, right" checks and the reference tests, which compute answers independently of either implementation, are ported as they stand.
 
 ### 11.2 Phases
 
@@ -1215,7 +1251,7 @@ Each phase ends with its slice of the oracle green, the six gates clean (format,
 | 5 | `Tempo.Shift`; `shift/3`, `trunc`, `round`, `at_resolution`, `at/on`, durations between values | The stepping, shift-of-sets and shift-of-masks tests; the matrix's Shift and Measure columns | 500 |
 | 6 | `Tempo.Select`; `Tempo.RRule`, `Cron`, `ICal`, `JSCalendar`; `Tempo.Event`; workdays | The census's selections; RFC 5545 conformance; the cron, iCal and JSCalendar tests; the holidays guides | 2,800 |
 | 7 | `Tempo.Format`, `Tempo.Explain`, `Inspect`, `to_string/2` | The format and explain tests; every guide and livebook re-run | 2,500 |
-| 8 | `tempo_network`; the migration guide; the changelog; 3.0.0 | The chronological-networks and scheduling guides; `mix docs --warnings-as-errors` | moved |
+| 8 | `tempo_network`; the migration guide; the changelog; the release | The chronological-networks and scheduling guides; `mix docs --warnings-as-errors` | moved |
 
 Phases 4 and 5 can proceed in parallel with 6 once 3 is done; 7 waits on all of them.
 
@@ -1231,7 +1267,7 @@ Phases 4 and 5 can proceed in parallel with 6 once 3 is done; 7 waits on all of 
 
 ### 11.4 What done looks like
 
-Tempo 3.0 reads and writes every text 2.0 does, answers every cell of the operation matrix with an answer or a named error, agrees with 2.0 on every golden file except where section 10 decided otherwise, passes the laws of 8.4 against every Calendrical calendar, holds every line budget of 5.3, and has one implementation of each concept in section 2.2.
+The redesign reads and writes every text the current library does, answers every cell of the operation matrix with an answer or a named error, agrees with 2.0 on every golden file except where section 10 decided otherwise, passes the laws of 8.4 against every Calendrical calendar, holds every line budget of 5.3, and has one implementation of each concept in section 2.2.
 
 ## Appendix A. Where today's lines go
 
@@ -1248,3 +1284,48 @@ Tempo 3.0 reads and writes every text 2.0 does, answers every cell of the operat
 | Text (4 files) | 7,375 | about 2,500 |
 | Interop and exceptions (34 files) | 4,290 | about 1,500 |
 | **Total** | **82,875** | **about 15,000** |
+
+## 12. Phase 0, as built (2026-10-13)
+
+On the `redesign` branch, from `07f96f3`.
+
+* **The golden files.** `Tempo.Golden` (`test/support/golden.ex`) runs every entry of the matrix's corpus (`Tempo.Matrix.Corpus.entries/0`: the written core, extended and open classes, every generated shape and every generated selection) through forty-eight one-value operations in six groups (read, convert, walk, measure, parts, arithmetic, format), six selectors over the core periods, and twenty-six two-value operations in two groups (compare, combine) against the corpus's partners (every partner in both orders for a core value, one partner for a generated one), and writes one gzipped JSON Lines file per group under `test/golden/`: 152,274 cells, 1.1 MB. Each cell carries its operation, input text, calendar, argument, the tags `written_end` and `plural` of section 11.1, and the answer as data (ISO 8601 text, a list of texts, a plain value, `{"error", "reason"}`, `{"raised"}` or `{"timeout"}`). `mix test --include golden` compares the library with the files (`test/tempo/golden_test.exs`, 14 seconds); `GOLDEN=write` rewrites them. Two consecutive runs agree cell for cell. The matrix's own consistency and reference checks are not duplicated here; they are ported as they stand in phase 3.
+
+* **The grammar.** `guides/iso8601-grammar.md`: the ABNF of ISO 8601-1 §5, ISO 8601-2 §4 to §13 and RFC 9557 §4.1, each production with its clause, Tempo's extensions in a marked section, the reading rules for the basic format's digit runs, and the test plan of section 7.6. Listed under Reference in the docs. The precedence duration of ISO 8601-2 §11.3.3 and the `A` season designator are recorded as not read.
+
+* **The standards.** `standards/iso8601/` holds the two ISO PDFs (moved from `iso8601/`; git-ignored as before) and `standards/rfc/` the texts of RFCs 3339, 5234, 5545, 7529, 8984 and 9557, with `standards/README.md` saying what each is for. `CLAUDE.md` pointed at `papers/iso8601_specs/`, which did not exist, and at the IXDTF draft; both now point here, and the library's and guides' citations of the draft name RFC 9557.
+
+* **Calendrical.** The additions of 8.5 and the law test of 8.4 are being made in `~/Development/localize/calendrical` (uncommitted; see the session's report for what the laws found).
+
+* **Decision 14** was taken by the user after the review in section 4.2; the golden files' `written_end` tag marks the 22 corpus texts whose last end is written to a calendar unit, and the 8,818 cells on them, that the decision changes. Shaped values at an interval's ends are in the matrix's exhaustive corpus, which the golden files do not yet include; phase 2 adds them.
+
+## 13. Phase 1, as built (2026-10-13)
+
+* **The border.** `Tempo.Calendar` (`lib/tempo/core/calendar.ex`) is the adapter of section 5.4: one map, `%{Calendar.ISO => Localize.Calendar.ISO}` (configurable as `:calendar_implementations`), one private `impl/1`, and the questions of section 8.3 as functions that take the calendar first. Answers are day numbers, `{year, month, day}` tuples, half-open spans of days and labels, never a date of the answering module, so a value's calendar is what the caller gave throughout and nothing is rewritten at the border. `first_day/2` and `span_of/2` derive a week date's day and a day of the year from the week's and the year's spans on the day scale, which `date_from_week_date/3` and `date_from_day_of_year/2` answered before. `calendar?/1` accepts the implementations' keys and any module that declares Calendrical's behaviour.
+
+* **The contract is complete on both sides.** The user ruled on 2026-10-13 that `Localize.Calendar.ISO` fully complies with the `Calendar` and `Calendrical` behaviours: the five callbacks of 8.5 are now required in Calendrical (no `@optional_callbacks` for them) and `Localize.Calendar.ISO` answers them (`weeks_of_month/2`, `traditional_month/2`, `month_from_traditional/2`, `months_in_year_bounds/0`, `days_in_month_bounds/1`, about forty lines, each a one-line fact of the Gregorian calendar or a map over its existing `month_week/3`). It answers all 52 required Calendrical callbacks. Both changes are uncommitted in `~/Development/localize/localize` and `~/Development/localize/calendrical`; this branch reads both as path dependencies until they are pushed, when `mix.exs` returns to the pinned GitHub dependencies.
+
+* **The laws.** Calendrical carries `Calendrical.Laws` and `test/calendrical/laws_test.exs` (300 tests over 30 calendars). Tempo holds the same laws through the adapter in `test/tempo/core/calendar_test.exs` for `Calendar.ISO` and the 22 calendars of the census: round trip and order on the day scale, months tiling the year by the walk of section 6.5, a day in the week its `week_of_year/3` names, the weekday cycling over seven days, errors for periods a calendar lacks, and the weeks of a month contiguous and holding its middle (TR35 lets a month's first or last day fall in no week of it, so "cover" was the wrong law and is corrected here). One finding for the user from Calendrical's run: law 6 as written ("a value within the fewest exists in every year") does not hold for `Reform.England`, whose 1751 lacks months 1 and 2 while `months_in_year_bounds/0` is `{10, 13}`; the law conflates a count with a numbering and needs rewording to "the fewest and the most a year counts", which the bounds callbacks already answer.
+
+* **Units, zones and positions.** `Tempo.Unit` (section 6.1, with the cycle chains and minima a value with no year runs through), `Tempo.Zone` (section 6.4, over the existing `Tempo.TimeZoneDatabase` reads: the offsets a wall reading has, one, two or a gap's before-and-after; the offset at a UTC tick; a value placed by its shift, else the first offset, else the clock before a change) and `Tempo.Scale` (section 6.3: frames; the extent of concrete units as ticks on the UTC or floating line, a calendar-resolution end read on its own clock and a clock-resolution end one unit of elapsed time on; cycle positions as tuples). `test/tempo/core/scale_test.exs` holds the start of every concrete anchored corpus value to the second `Tempo.Compare.to_utc_seconds/1` places it at, and the end to the end `Tempo.to_interval/1` writes, through the whole corpus; the four location-independent seasons are the only values skipped, having no dates.
+
+* **Not yet.** `Tempo.Duration` keeps its 2.0 struct until phase 2 renames `time` to `units` with the one struct; `Tempo.Limit` stays as it is. `Tempo.Zone.changes/3` (the clock's changes in a range, for the walk) waits for phase 3.
+
+## 14. Phase 2, as built (2026-10-13)
+
+* **The one struct.** `%Tempo{form, calendar, zone, shift, qualifications, metadata}` (`lib/tempo.ex`) with the six forms of section 5.1, and `%Tempo.Duration{units}` as the one companion. The 2.0 `lib/` and `test/` trees are in `attic/` for reference until phase 7 and are not compiled.
+
+* **The reader.** `Tempo.Reader` and its five parts (`Reader.Number`, `.Value`, `.Implied`, `.Duration`, `.Selection`, `.Suffix`; 1,900 lines) read the grammar of `guides/iso8601-grammar.md` one function per production. A text is split at its structural places first (the RFC 9557 suffix, a leading `R`, the `/` of an interval outside braces, the braces of a set), the explicit form is tried before the implied, and where both read a prefix the one that uses the text up wins, so `2026W25` is a year and a week and `0934,9` a time. What is written is what is held: a week date, an ordinal date, a season, a group, a count from the end, a set `{6,7}` and a century stay as written, where 2.0 resolved each to a Gregorian date, a range or a group. An abbreviated end inherits the start's units down the chain of years, months, days and the clock up to the unit it begins with (`Tempo.Unit.inherited/2`, with `follows?/2` saying which unit may follow which), and inherits the start's qualification marks with them. A zero shift in any spelling is `[hour: 0]`, written `Z`. The `u-ca` identifier is resolved through `Tempo.Calendar.from_type/1`, which knows CLDR's names and Calendrical's own (`iso-week`, `julian`), and a zone name is checked against the database as it is read.
+
+* **The validator.** `Tempo.Validate` checks what the reader builds once: every whole number and every member and range end of a set against the bounds the calendar gives it through the adapter (`months_in_year/2`, `days_in_month/3`, `weeks_in_year/2`, `days_in_year/2`, `days_in_week/1`, and the `_bounds` callbacks where the year or month is not a number), hour 0 to 23 and second 0 to 59 as the grammar guide says, a shift below a day, and an interval's two ends in order where both have a place on the scale (`Tempo.Scale.extent/4`) or are two seasons of one numbering. A mask, `X*`, a group and a selection are shapes and have no number to check.
+
+* **The writer.** `Tempo.Writer` writes the explicit form of ISO 8601-2 for every expression, as 2.0 did: `2026Y6M15DT10H30M`, `Z2H0M`, qualifiers in their three placements, `L…N`, `R`, sets with `^` and a filter letter, a range member as `2020Y..2022Y`, and one suffix after the whole expression. An end is abbreviated along the child chain only, when the two ends agree on their shift and their marks and go on in the same unit after what they share (`2026Y6M15DT10H/16D`, but `2026Y25W/2026Y7M1D`), which is what 2.0 did and what the reader gives back. A calendar is written by `Tempo.Calendar.identifier/1`; one with no name is a `Tempo.Iso8601EncodeError`.
+
+* **The public API.** `Tempo.from_iso8601/2` (a calendar or options as the second argument), `from_iso8601!/2`, `to_iso8601/1`, `to_iso8601!/1`, `new/1` (units in any order, ordered by `Tempo.Unit.ordered/1`, with `:calendar`, `:zone`, `:shift`, `:metadata`), `new!/1`; `Tempo.Interval.new/1,2,3`, `new!/1`, `from/1`, `to/1`, `endpoints/1`; `Tempo.IntervalSet.new/2`, `members/1`, `count/1`, `first/1`, `last/1`; `Tempo.Duration.new/1`, `new!/1`; `Tempo.Sigils.sigil_o` in value context (read at compile time) and match context (a prefix pattern on a value's units, exact on the other forms, no other field constrained). `Tempo.Unit` and `Tempo.Zone` are public, since their types are in the public signatures. Every function carries the documented examples and the doctests run.
+
+* **The tests.** 255 tests pass: 54 doctests; the phase 1 core tests, with the scale test now asserting that every plain anchored corpus value has an extent (the 2.0 oracle it compared seconds with is gone); the EDTF validation corpus, every level 0, 1 and 2 date and interval read and round-tripped and every invalid text refused but for seven that ISO 8601 or RFC 3339 read (named in the test); the three data files of ijmacd's RFC 3339/ISO 8601 table, every text read and round-tripped but for the underscore separator, which Tempo does not read; and the grammar's property tests (`test/support/grammar/`: a generator of 37 production families and a mutator), 925 generated texts read and round-tripped, every broken text refused, every varied text answered without a raise. The golden `read` group (`test/golden_test.exs`, `mix test --include golden`) answers 1,002 of 1,206 cells as 2.0 did; the 204 that differ each read back as the same value as the input (the classifier's test) and are grouped by what is kept: counts from the end 92, sets as written 42, groups 19, weeks and ordinal dates 18, a time under a period 13, weeks of another calendar 11 (decision 13), seasons 3, centuries and decades 3, a range of values 1, and 2 texts 2.0 refused that are now read (`2GT6HU30M`, a clock group with no `T`). None differs with no decision to account for it.
+
+* **For the user, from this phase.** (1) The as-written forms above are the canonical text now: `2026Y6M-1D` is written back as itself where 2.0 wrote `2026Y6M30D`; `Tempo.at_resolution/2` or a phase 3 `resolve` is where a caller asks for the resolved form. (2) `2026YT17H` and `2026-06T17` are kept with their gap, where 2.0 filled `1M1D`; what a time under a period means (the hour of each day, or of the first) is a phase 3 decision and the grammar guide lists the form as Tempo's own. (3) ISO 8601-1:2019 §5.3.2 refuses `24:00`, so `T24:00` is a `Tempo.InvalidDateError`; 2.0 read it. (4) `Y` prefixes a year of more than four digits or one with an exponent, `+2006` is refused as an expanded year of too few digits and `-0000` as no year, all per EDTF's corpus and ISO 8601-1 §5.2.2.3. (5) RFC 3339's space, lower-case `t` and `z`, and ISO 8601's Unicode hyphen and minus are read as the ASCII forms; the underscore separator ijmacd's table lists is not. (6) `Calendrical.ISOWeek` has no CLDR type; its values are written `2026Y25W3K[u-ca=iso-week]` by Calendrical's own name for it, where 2.0 converted them to a date of its months. (7) The six gates pass on the mise toolchain; Dialyzer's one earlier finding (a spec that promised an `:error` no clause returned) is fixed.
+
+* **Not yet.** `Tempo.Scale.extent/4` places plain values only; a count from the end, a group, a margin, a century and a decade wait for phase 3's expansion, which is why `Tempo.Validate` orders an interval's ends only where both are plain. `Tempo.Limit` is not written. Interval sets of two calendars are refused rather than converted (`to_calendar/2` is phase 4). The `w` designator is not read (decision 13). The golden groups other than `read` run as their phases land.
+

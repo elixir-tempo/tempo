@@ -3,7 +3,7 @@ defmodule Tempo.Iso8601.Tokenizer.Extended do
 
   # Tokenizer combinators and post-processing for the
   # Internet Extended Date/Time Format (IXDTF) defined in
-  # [draft-ietf-sedate-datetime-extended-09](https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html).
+  # [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557).
   #
   # An IXDTF suffix follows a normal RFC 3339 / ISO 8601 date-time
   # and consists of:

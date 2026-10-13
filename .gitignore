@@ -40,7 +40,7 @@ mise.toml
 ical_apple_example_export.ics
 
 # Copyrighted ISO 8601 standard PDFs — reference only, never distributed
-/papers/iso8601_specs/
+/standards/iso8601/
 
 # Copyrighted reference paper — not distributed
 /papers/Levy-et-al-ChronoNetworks-JAS.pdf
@@ -50,8 +50,6 @@ ical_apple_example_export.ics
 /scripts/feriados_anbima.ics
 /scripts/feriados_nacionais.xls
 
-# ISO8601 standards
-/iso8601/
 papers/**/*.aux
 papers/**/*.log
 papers/**/*.out
