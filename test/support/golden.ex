@@ -50,6 +50,9 @@ defmodule Tempo.Golden do
 
   @type difference :: %{was: cell(), is: cell(), decision: atom() | nil}
 
+  # How many members of a set with no end a cell records.
+  @lazy_members 20
+
   @doc """
   Runs the golden cells again and compares them with the files.
 
@@ -316,7 +319,13 @@ defmodule Tempo.Golden do
 
   defp answer(value), do: %{"value" => data(value)}
 
-  defp data(%Tempo{form: {:all, members}}), do: %{"set" => Enum.map(members, &data/1)}
+  defp data(%Tempo{form: {:all, members}}) when is_list(members),
+    do: %{"set" => Enum.map(members, &data/1)}
+
+  # A set with no end (a selection over a span with none) is its first members.
+  defp data(%Tempo{form: {:all, members}}),
+    do: %{"lazy_set" => members |> Enum.take(@lazy_members) |> Enum.map(&data/1)}
+
   defp data(%Tempo{} = value), do: written(value)
   defp data(%Tempo.Duration{} = duration), do: written(duration)
   defp data(list) when is_list(list), do: Enum.map(list, &data/1)

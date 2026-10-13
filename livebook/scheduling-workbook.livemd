@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.6"},
+  {:ex_tempo, "~> 3.0"},
   {:tz, "~> 0.28"}
 ])
 
@@ -19,14 +19,14 @@ work = ~o"2026-06-15T09:00:00/2026-06-15T17:00:00"
 
 alice_busy =
   Tempo.IntervalSet.new!([
-    Tempo.to_interval!(~o"2026-06-15T10:00:00/2026-06-15T11:00:00"),
-    Tempo.to_interval!(~o"2026-06-15T14:00:00/2026-06-15T15:00:00")
+    ~o"2026-06-15T10:00:00/2026-06-15T11:00:00",
+    ~o"2026-06-15T14:00:00/2026-06-15T15:00:00"
   ])
 
 bob_busy =
   Tempo.IntervalSet.new!([
-    Tempo.to_interval!(~o"2026-06-15T09:30:00/2026-06-15T10:30:00"),
-    Tempo.to_interval!(~o"2026-06-15T16:00:00/2026-06-15T17:00:00")
+    ~o"2026-06-15T09:30:00/2026-06-15T10:30:00",
+    ~o"2026-06-15T16:00:00/2026-06-15T17:00:00"
   ])
 
 {:ok, alice_free} = Tempo.difference(work, alice_busy)
@@ -39,13 +39,11 @@ mutual
 
 ## From regions to bookable slots
 
-Free time gives the *regions* where a meeting could go. A booking page offers discrete slots — cut the regions with `slots/2` and keep only the windows long enough to book:
+Free time gives the *regions* where a meeting could go. A booking page offers discrete slots — cut the regions into hours with `slots/3`, which leaves out a window too short to hold one:
 
 ```elixir
-mutual
-|> Tempo.IntervalSet.slots(~o"PT1H")
-|> Tempo.IntervalSet.members()
-|> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
+{:ok, slots} = Tempo.IntervalSet.slots(mutual, ~o"PT1H")
+Tempo.IntervalSet.members(slots)
 ```
 
 ## When will it be done? — shifting through free time
@@ -96,7 +94,7 @@ An unbounded recurrence (`FREQ=WEEKLY` with no `COUNT`/`UNTIL`) refuses to list 
 
 ```elixir
 {:ok, weekly} = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=FR", from: ~o"2026-06-01")
-{:ok, fridays} = Tempo.to_interval(weekly, bound: ~o"2026-07")
+{:ok, fridays} = Tempo.to_interval(weekly, within: ~o"2026-07")
 Tempo.IntervalSet.count(fridays)
 ```
 
@@ -115,6 +113,6 @@ early_june
 
 ## Where next
 
-* The [scheduling guide](https://hexdocs.pm/ex_tempo/scheduling.html) adds floating-vs-zoned events, zone-rule-proof future dates, and critical-path scheduling over `Tempo.Network`.
+* The [scheduling guide](https://hexdocs.pm/ex_tempo/scheduling.html) adds floating-vs-zoned events, zone-rule-proof future dates, and bounded recurrence. Critical-path scheduling is in the companion package `tempo_network`.
 * The [workdays and weekends](https://hexdocs.pm/ex_tempo/workdays-and-weekends.html) and [holidays](https://hexdocs.pm/ex_tempo/holidays.html) cookbooks cover observed-holiday rules.
 * The [iCal integration guide](https://hexdocs.pm/ex_tempo/ical-integration.html) imports real calendars into this same algebra.

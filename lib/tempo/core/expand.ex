@@ -84,13 +84,20 @@ defmodule Tempo.Expand do
         :group
       ]
 
+  # A day of the year written after a month is a label of that month's
+  # days: `3M80O` is the eightieth day of the year, if it is in March.
   defp contains?(unit, _held, child) when unit in [:month, :traditional_month, :quarter],
-    do: child in [:day, :week, :day_of_week, :group]
+    do: child in [:day, :week, :day_of_week, :day_of_year, :group]
 
   defp contains?(:week, _held, child), do: child in [:day_of_week, :group]
 
-  defp contains?(unit, _held, child) when unit in [:day, :day_of_week, :day_of_year],
-    do: child in [:hour, :group]
+  # A day of the week or of the year written after a day is that day's
+  # label, with no gap between them to fill: `13D5K` is a thirteenth that is
+  # a Friday.
+  defp contains?(:day, _held, child), do: child in [:hour, :group, :day_of_week, :day_of_year]
+  defp contains?(:day_of_year, _held, child), do: child in [:hour, :group, :day_of_week]
+
+  defp contains?(:day_of_week, _held, child), do: child in [:hour, :group]
 
   defp contains?(:hour, _held, child), do: child in [:minute, :group]
   defp contains?(:minute, _held, child), do: child in [:second, :group]
@@ -462,9 +469,18 @@ defmodule Tempo.Expand do
 
       true ->
         with {:ok, span} <- day_span(frame.calendar, Unit.date_units(prefix)),
-             do: day_children(span, prefix, unit, frame.calendar)
+             {:ok, children} <- day_children(span, prefix, unit, frame.calendar),
+             do: {:ok, shown(children, unit, frame)}
     end
   end
+
+  # A day the zone's clock leaves out is no child of its month, week or year.
+  defp shown(children, unit, %{zone: %Zone{name: name} = zone, shift: nil})
+       when unit in [:day, :day_of_week, :day_of_year] and is_binary(name) do
+    Enum.reject(children, fn {_value, {day, _next}} -> Zone.day_skipped?(zone, nil, day) end)
+  end
+
+  defp shown(children, _unit, _frame), do: children
 
   # Calendar units and labels, over the days of the prefix's span.
   defp day_children({lo, hi}, _prefix, :year, calendar) do

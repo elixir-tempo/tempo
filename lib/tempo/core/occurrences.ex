@@ -120,6 +120,6 @@ defmodule Tempo.Occurrences do
   def within(spans, nil), do: {:ok, spans}
 
   def within(spans, %Tempo{} = window) do
-    {:ok, Enum.filter(spans, &(Tempo.overlaps?(&1, window) == true))}
+    {:ok, Enum.filter(spans, &(Tempo.overlaps?(&1, Spans.window_in(window, &1)) == true))}
   end
 end

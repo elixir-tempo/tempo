@@ -66,7 +66,7 @@ defmodule Tempo.Territory do
 
   defp not_a_territory(value) do
     ArgumentError.exception(
-      "#{inspect(value)} names no territory: give a territory (:US, \"SA\"), a locale (\"en-GB\") or nil"
+      "#{inspect(value)} names no territory: give a territory such as :US, a locale such as en-GB, or nil"
     )
   end
 end

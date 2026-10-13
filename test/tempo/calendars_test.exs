@@ -3,6 +3,7 @@ defmodule Tempo.CalendarsTest do
 
   import Tempo.Sigils
 
+  alias Calendrical.FiscalYear
   alias Tempo.{ICal, IntervalSet, JSCalendar, RecurrenceSet}
 
   # iCalendar, JSCalendar and recurrence sets read through the one
@@ -63,6 +64,58 @@ defmodule Tempo.CalendarsTest do
       assert {:error, %Tempo.ConversionError{reason: :unbounded}} = ICal.parse(ics(lines))
       {:ok, set} = ICal.parse(ics(lines), within: ~o"2026-06-01T00Z/2026-06-16T00Z")
       assert IntervalSet.map(set, &Tempo.day/1) == [1, 8, 15]
+    end
+
+    test "a window with no zone is read on each event's clock" do
+      lines = [
+        "DTSTART;TZID=Europe/London:20260601T093000",
+        "DTEND;TZID=Europe/London:20260601T094500",
+        "RRULE:FREQ=DAILY"
+      ]
+
+      {:ok, set} = ICal.parse(ics(lines), within: ~o"2026-06-01/2026-06-02")
+
+      assert texts({:ok, set}) == [
+               "2026Y6M1DT9H30M0S/T45M0S[Europe/London]",
+               "2026Y6M2DT9H30M0S/T45M0S[Europe/London]"
+             ]
+    end
+
+    test "events in several zones are one set in the first's, and one with no zone is placed there" do
+      text = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      PRODID:-//Test//Test//EN
+      BEGIN:VEVENT
+      UID:london
+      DTSTAMP:20260101T000000Z
+      DTSTART;TZID=Europe/London:20260601T093000
+      DTEND;TZID=Europe/London:20260601T094500
+      SUMMARY:London
+      END:VEVENT
+      BEGIN:VEVENT
+      UID:new-york
+      DTSTAMP:20260101T000000Z
+      DTSTART;TZID=America/New_York:20260601T093000
+      DTEND;TZID=America/New_York:20260601T094500
+      SUMMARY:New York
+      END:VEVENT
+      BEGIN:VEVENT
+      UID:lunch
+      DTSTAMP:20260101T000000Z
+      DTSTART:20260601T120000
+      DTEND:20260601T130000
+      SUMMARY:Lunch
+      END:VEVENT
+      END:VCALENDAR
+      """
+
+      {:ok, set} = ICal.parse(text)
+
+      assert Tempo.to_iso8601!(set) ==
+               "{2026Y6M1DT9H30M0S/T45M0S,2026Y6M1DT12H0M0S/T13H0M0S,2026Y6M1DT14H30M0S/T45M0S}[Europe/London]"
+
+      assert IntervalSet.map(set, &Tempo.metadata(&1).summary) == ["London", "Lunch", "New York"]
     end
 
     test "events are busy time that availability is cut by" do
@@ -132,6 +185,23 @@ defmodule Tempo.CalendarsTest do
         RecurrenceSet.new([Tempo.put_metadata(~o"2026-09-21", %{type: :public}), bridge])
 
       assert IntervalSet.map(elem(Tempo.to_interval(lone), 1), &Tempo.day/1) == [21]
+    end
+  end
+
+  describe "a calendar no name reads back to" do
+    test "has no text, where its CLDR type names another calendar" do
+      {:ok, fiscal} = FiscalYear.calendar_for(:AU)
+      {:ok, quarter} = Tempo.from_elixir(fiscal.quarter(2027, 1))
+
+      assert quarter.calendar == fiscal
+
+      assert {:error, %Tempo.Iso8601EncodeError{reason: {:calendar, ^fiscal}}} =
+               Tempo.to_iso8601(quarter)
+
+      assert inspect(quarter) =~ "%Tempo{"
+
+      assert Tempo.to_calendar(quarter, Calendrical.Gregorian) ==
+               {:ok, ~o"2026-07-01/2026-09-30[u-ca=gregorian]"}
     end
   end
 end

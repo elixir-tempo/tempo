@@ -16,7 +16,10 @@ defmodule TempoTest do
   doctest Tempo.Explain
   doctest Tempo.Clock
   doctest Tempo.Workdays
+  doctest Tempo.Territory
   doctest Tempo.Sigils
+  doctest Tempo.Allen
+  doctest Tempo.LeapSeconds
   doctest Tempo.Unit
   doctest Tempo.Calendar
 end

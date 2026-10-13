@@ -1,6 +1,6 @@
 # Enumeration semantics
 
-Tempo implements the `Enumerable` protocol for `%Tempo{}`, `%Tempo.Set{}`, and `%Tempo.Interval{}`. This document explains what each value can and cannot be iterated over, and why.
+Every Tempo expression implements `Enumerable`, so `Enum` and `Stream` work on all of them. What a walk gives follows from two rules, and this guide is those two rules and their consequences.
 
 ## Setup — required for every example
 
@@ -10,435 +10,211 @@ Every code example in this guide uses the `~o` sigil from `Tempo.Sigils`. Before
 import Tempo.Sigils
 ```
 
-The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; no helper functions leak in.
+The import adds only `sigil_o/2` to the caller's namespace; no helper functions leak in.
 
-## 1. The two kinds of iteration
+## 1. The two rules
 
-Tempo values are **bounded intervals on the time line**, not instants. That informs two distinct iteration modes, each produced by a different shape of value:
+**An expression that names one span is walked at the unit below the one it is written to.** A year gives its months, a month its days, a day its hours.
 
-* **Implicit enumeration — "drill into this span."** A single `%Tempo{}` at some resolution yields its sub-units. `Enum.take(~o"2022Y", 3)` yields `[2022Y1M, 2022Y2M, 2022Y3M]` — the year span is walked one month at a time. Implicit enumeration is the default when the value is a single resolved point at a coarser-than-finest resolution.
+**An expression that names several spans is walked member by member.** A set gives its members, a recurrence its occurrences, a value that holds a list of days each of those days.
 
-* **Forward-stepping — "walk across this interval."** A `%Tempo.Interval{}` yields each resolution-unit along the span. `Enum.take(Tempo.Interval.new!(from: ~o"1985Y", to: :undefined), 3)` yields `[1985Y, 1986Y, 1987Y]` — successive years at the endpoint's own resolution.
+There is no third case, and no setting that changes which applies. To walk at another unit, say the unit with `Tempo.walk/2` (section 4).
 
-Iteration always honours the **half-open `[from, to)` convention**: the lower bound is inclusive, the upper bound is exclusive. This makes adjacent intervals concatenate cleanly without overlap or gap.
-
-`Tempo.to_interval/1` converts between the two forms: it takes any implicit-span `%Tempo{}` and returns the equivalent `%Tempo.Interval{}` with concrete `from` and `to` endpoints. Iteration on the explicit form is guaranteed to yield the same sequence as iteration on the implicit source (for every shape where both are defined — see §5.6 for the edge cases). `to_interval/1` is idempotent on values that are already intervals.
-
-## 2. Enumerable — what you can iterate
-
-### 2.1. Single `%Tempo{}` values
-
-Every resolved Tempo at coarser-than-finest resolution is enumerable via implicit enumeration. The iteration unit is the next-finer unit that isn't already specified.
-
-| Construct | Example | Yields |
-|---|---|---|
-| Year | `2022Y` | 12 months |
-| Year-month | `2022-06` | days of June |
-| Year-month-day | `2022-06-15` | 24 hours |
-| Hour | `2022-06-15T10` | 60 minutes |
-| Minute | `2022-06-15T10:30` | 60 seconds |
-| Week | `2022-W24` | its 7 days, the dates 13 to 19 June |
-| Ordinal date | `2022-166` | 24 hours |
-
-A week's days are the dates they name: `Enum.to_list(~o"2026-W25")` is `~o"2026-06-15"` to `~o"2026-06-21"`, the values a week date is read as (`2026-W25-2` is `~o"2026-06-16"`), so `~o"2026-06-16" in ~o"2026-W25"` is true. A step of days or hours from a week lands on a date too (`Tempo.shift(~o"2026-W25", day: 1)` is `~o"2026-06-16"`), and a step of whole weeks on a week. The interval a week converts to says so: `Tempo.to_interval(~o"2026-W25")` is `#Tempo.Interval<~o"2026Y25W/26W" unit: day>`, walked by days. A week of a calendar of weeks is walked the same way, by the dates of that calendar's own months (`~o"2026Y25W"W` yields `~o"2026Y6M15D"W` first), and a week with no year, which names no date, keeps its day of the week (`25W2K`).
-
-A day of the year is the date it names in the same way. One alone is read as its date (`2026Y100O` is `~o"2026-04-10"`), and a value that holds several is walked by their dates: `Enum.to_list(~o"2026Y{100,200}O")` is `~o"2026-04-10"` and `~o"2026-07-19"`, so `~o"2026-04-10" in ~o"2026Y{100,200}O"` is true. A step reaches each of those dates, and they are written again as days of the year where one value holds them: a day on is `~o"2026Y{101,201}O"`, a month on `~o"2026Y{130,231}O"`, and two days that land in two years are an interval set. With no year a day of the year is walked as it is written.
-
-A calendar whose year begins on another day than 1 January (Calendrical's Julian `March25`, `March1`, `Sept1` and `Dec25`) counts the year's months from that day, and a date's fields are those months and their days. The first month of a `March25` year is the seven days from 25 March and its thirteenth the twenty-four before the next, so `1750Y1M` is walked by seven dates, `1750Y13M` by twenty-four, and `1750Y1M1D` is 25 March 1750, which `Tempo.to_string/2` and `Tempo.explain/1` name as it is called.
-
-A month of a composite calendar has the days its calendar has: September 1752 in `Calendrical.Reform.England`, the month England adopted the Gregorian calendar, is walked by the 1st, the 2nd and the 14th to the 30th, the day after the 2nd is the 14th, and `1752Y9M3D` is no date. Its years to 1750 began on 25 March and count their months from that day, as `March25` does. Its 1751 began on 25 March and ended on 31 December: the year has the months March to December as they are numbered, its March is the seven days from the 25th, and `1751Y` starts on that day, as `1751Y3M` does.
-
-### 2.2. Explicit ranges and sets
-
-Any component may carry a range, a range with step, a set of values, or a cartesian product of the above.
-
-| Construct | Example | Iterates over |
-|---|---|---|
-| Inclusive range | `{1..3}M` | months 1, 2, 3 |
-| Stepped range | `2022Y{1..-1//2}W` | every second week of 2022 |
-| All-of set | `{2021,2022}Y` | 2021, then 2022 |
-| One-of set | `[1984,1986,1988]` | exactly those three years |
-| Cartesian product | `2022Y{1..2}M{1..2}D` | Jan 1, Jan 2, Feb 1, Feb 2 |
-| A range in each of a set | `{2026,2027}Y{1..-1}W` | the 53 weeks of 2026, then the 52 of 2027 |
-
-Each component is read after the values before it, so a count from the end (`-1`, the last) is the last of each: `{2026,2027}Y-1D` is 31 December of each year, and `2026Y{1..-1}M{1..-1}D` every day of 2026. A value its context cannot hold is passed over, as RFC 5545 passes over a date that does not exist: `{2023,2024}Y2M29D` is 29 February 2024 alone. The walk is lazy, so `Enum.take/2` of a large set reads only the values it takes.
-
-An interval written with a duration from a value that holds a set is the span from each value, as a recurrence from it is the occurrences from each: `2026Y6M{1,15}D/P1D` is a day from the 1st and a day from the 15th, and `P1D/2026Y6M{1,15}D` the day to each. Written with two ends, one of which holds a set, it is the span from each value to the other end: `2026Y6M{1,15}D/2026Y6M20D` runs from the 1st to the 20th and from the 15th to the 20th, two spans that overlap and are kept apart unless `coalesce: true` is asked. A set at each end names no one span for any value, and is a `Tempo.IntervalEndpointsError`.
-
-### 2.3. Recurring intervals
-
-A *bounded* recurring interval enumerates exactly as its converted occurrences do — the walk delegates to `Tempo.to_interval/1`'s `IntervalSet`, yielding the sub-points of every occurrence. `Enum.count(~o"R5/2022-01-01/P1M")` is `151` (the days of January through May), identical to counting the converted set; for the *occurrence* count use `to_interval!/1` and `Tempo.IntervalSet.count/1`. A recurrence written with a start and an end (`R3/2022-01-01/2022-01-08`, whose first occurrence is that week) or a duration and an end (`R3/P1W/2022-01-22`, whose last occurrence ends there) walks the same way. An *unbounded* recurrence (`R/…`) raises `Tempo.UnboundedRecurrenceError` — convert it with `Tempo.to_interval(r, within: …)` first — matching how `relation/2` and `duration/1` refuse recurrences.
-
-### 2.4. Missing / unknown digits (EDTF masks)
-
-A digit marked `X` means "any value in this position", and `X*` an unspecified unit — any value the unit can take. Tempo walks the values the digits allow where the unit stands, after the year, the month or the week before it, so the value is just as enumerable as an explicit set of the same values.
-
-| Construct | Example | Walks |
-|---|---|---|
-| Last digit unknown (year) | `156X` | `1560..1569` |
-| Positive century masked | `1XXX` | `1000..1999` |
-| Negative century masked | `-1XXX` | `-1999..-1000`, earliest first |
-| Fully unspecified year | `XXXX` | `1000..9999` |
-| Month-day masked | `1985-XX-XX` | the 365 days of 1985 |
-| Month only masked | `1985-XX-15` | the 15th of each month |
-| A day some months lack | `1985-XX-31` | the 31st of the seven months with one |
-| Week masked | `2026-W2X` | weeks 20 to 29 of 2026 |
-| Day of the week masked | `2026-W25-X` | the seven days of week 25, 15 to 21 June |
-| Day of the year masked | `2026Y1XXO` | days 100 to 199 of 2026, 10 April to 18 July |
-| Hour masked | `T1XH` | hours 10 to 19 |
-| Unspecified month | `2026YX*M` | the 12 months of 2026 |
-| Unspecified hour | `TX*H` | hours 0 to 23 |
-| Counted from the end | `2026Y-XM` | the last nine months, April to December |
-
-A mask is read in each context it lands in: `1985-XX-3X` is the 30th and 31st of January, then of March, and no day of February. A value none of whose candidates fits (`1985-02-3X`) names no date, as a set none of whose values exists does (`2026Y{2,6}M31D`, where `2026Y{1,2}M31D` is 31 January), and a unit whose values depend on a year the value does not have (`X*W`, the weeks of no year) cannot be listed; walking any of them raises a named error (§3.6). An unspecified year (`X*Y`) is some year and no year in particular, so the units after it are walked as they are with no year written (`X*Y12M28D` is the hours of 28 December, each still of an unspecified year), and on its own it names nothing to list.
-
-### 2.5. EDTF long-year shapes
-
-| Construct | Example | Notes |
-|---|---|---|
-| `Y`-prefix short year | `Y2022` | same as `2022`; 12 months |
-| `Y`-prefix long year | `Y12345` | single anchored year; 12 months |
-| Exponent long year | `Y17E8` | 1 700 000 000; single anchored year |
-| Significant-digits year | `1950S2` | block `1900..1999`; 100 × 12 months |
-| Significant-digits long | `Y171010000S8` | block of 10 candidates |
-
-Significant-digits blocks are capped at **10 000 candidates**. Larger blocks (e.g. `Y171010000S3`, which would be 10⁶ candidates) raise a clear `ArgumentError` — the parsed value is still usable as a data value, you just cannot iterate it. A mask of years is such a block too, and one that stands for more than 10 000 years (`XXXXXY6M`, five unspecified digits) is refused alike (§3.5).
-
-### 2.6. Groups and selections
-
-| Construct | Example | Behaviour |
-|---|---|---|
-| Group | `2022Y5G2MU` | "5th group of 2 months": months 9 and 10 |
-| Group in a set | `2022Y{2,6}M3G11DU` | days 23 to 28 of February, then 23 to 30 of June |
-| Selection | `2022YL1MN` | "the 1st month of 2022": January 2022 |
-| Selection of days | `2026Y6ML2KN` | the five Tuesdays of June 2026 |
-
-A group is bounded by what holds it, so the last group of eleven days in February stops at the 28th. A value that holds a selection is walked as the spans `Tempo.to_interval/2` gives it. A group of a set (`2022Y{1,2}G3MU`, the first and the second groups of three months) is walked group by group, its six months in turn, and a unit after it is counted from the start of each group.
-
-### 2.7. Qualifications (EDTF Level 1 and Level 2)
-
-Qualifications describe epistemic state (`?` uncertain, `~` approximate, `%` both) and never affect whether a value is enumerable. A qualifier is held per component (ISO 8601-2 §8), one written after a whole value being each component's, so each yielded value keeps the qualifiers of the components it was walked from, and the unit the walk adds is not qualified.
-
-| Construct | Example | Each yielded value carries |
-|---|---|---|
-| Whole value | `2022Y?` | an uncertain year (`2022?Y1M`) |
-| Leading | `?2022-06-15` | an uncertain year |
-| Approximate | `~2022` | an approximate year |
-| Component-level | `2022-?06-15` | an uncertain month |
-| Mixed components | `2022?-?06-%15` | each component's own |
-
-### 2.8. IXDTF metadata
-
-Time zone and tagged suffixes attach to the `:extended` field, and a calendar suffix names the value's `:calendar`. Each flows through enumeration unchanged.
-
-| Construct | Example |
-|---|---|
-| Zone only | `2022-06-15T10:30[Europe/Paris]` |
-| Calendar only | `2022-06-15T10:30[u-ca=hebrew]` |
-| Zone + offset + calendar | `2022-06-15T10:30[+05:30][u-ca=hebrew]` |
-| After an interval, for both its endpoints | `2022-06-15T10:00/2022-06-15T12:00[Europe/Paris]` |
-
-The endpoint iteration starts from (`from`) provides the metadata carried on each yielded value.
-
-### 2.9. Intervals — closed and forward-open
-
-| Shape | Example | Iteration |
-|---|---|---|
-| Closed day | `1985-01-01/1985-01-04` | Jan 1, 2, 3 (half-open) |
-| Closed month | `1985-12/1986-02` | Dec 1985, Jan 1986 |
-| Closed week | `2022-W05/2022-W08` | W5, W6, W7 |
-| Ends of two resolutions | `1985/1986-06` | Jan 1985 to May 1986, by the finer end's unit |
-| Ends on two axes | `2026-W25/2026-07-01` | the sixteen days from 15 June, as dates |
-| Open upper | `1985/..` | 1985, 1986, 1987, … (use `Enum.take/2`) |
-| Open upper, hour | `1985-01-01T10/..` | 10:00, 11:00, 12:00, … |
-| No year, round the clock | `T22H/T2H` | 22:00, 23:00, 00:00, 01:00 |
-| No year, round the week | `7K/3K` | Sunday, Monday, Tuesday |
-| No year, round the year | `12M/2M` | December, January |
-| Per-endpoint qualifier | `1984?/2004~` | 1984 through 2003, each carrying its endpoint's qualifier where applicable |
-
-An interval is walked at the highest resolution its boundaries are written to: the finer of its two ends' units, unless it carries a `:unit` of its own. The start is filled down to that unit, and the walk stops at the end, so the values it yields are the interval and none runs past it: `2026/2026-03` is January and February, and `2026-06-15T10/2026-06-16` the fourteen hours to midnight. An interval written with a duration (`2026-06-15/PT36H`) is walked to the end the duration gives, by the finer of the two.
-
-Ends written to different resolutions are compared as their concrete start-moments: missing trailing units fill with their unit minimum (`:month` / `:day` / `:week` from 1, everything else from 0). Ends on different axes (a week and a date), in different zones or in different calendars are compared as the moments they are.
-
-A span with no year lies on an axis that comes round again — the hours of a day, the days of a week, the months of a year — so one that ends before it starts runs off the end of the axis and on to its end. A walk takes a step only when it goes on, so `Enum.take(~o"2M27D/..", 2)` is 27 and 28 February, and the third value, which depends on the year, is an error only when it is asked for.
-
-A walk steps from one point and stops at another. An interval whose start or end holds several values (`{2026,2027}Y/2030Y`, `2026Y/202XY`) cannot be walked (§3.6), and one whose end holds a selection (`2026Y6ML2KN/P1D`) is walked as the spans `Tempo.to_interval/2` gives it.
-
-An interval with no end (`1985/..`) is walked as far as it is asked: `Enum.take/2`, `Enum.take_while/2`, `Enum.find/2` and the `Stream` functions read what they need and stop. It has no count, so `Enum.count/1` raises a `Tempo.IntervalEndpointsError` (§3.6) rather than walk for ever, and so do the functions a slice answers (`Enum.at/2`, `Enum.fetch/2`, `Enum.empty?/1`, `Enum.random/1`, `Enum.slice/2`), which cannot tell a question about the start from one that needs the last value: `Tempo.Interval.empty?/1` says whether it is empty, and `Enum.take/2` gives its first values. A lazy interval set refuses the same. `Enum.member?/2` is answered without the whole walk where the start has a year — `~o"2030Y" in ~o"1985/.."` is true and `~o"1980Y" in ~o"1985/.."` false — and refused, with the same error, where it has none: `T10H/..` comes round the clock for ever and has no order to stop a search by. What walks every value (`Enum.to_list/1`, `Enum.reverse/1`) never returns, as for any stream with no end.
-
-### 2.10. Implicit-to-explicit conversion (`Tempo.to_interval/1`)
-
-Every enumerable `%Tempo{}` has an explicit equivalent — either a single `%Tempo.Interval{}` (contiguous span) or a `%Tempo.IntervalSet{}` (sorted, member-preserving list of intervals). `Tempo.to_interval/1` converts to the appropriate form under the half-open `[from, to)` convention. The conversion preserves every piece of source metadata (`:qualifications`, `:extended`, `:shift`, `:calendar`) on both endpoints.
-
-The bounds keep the **value's own resolution** — *resolution = meaning*, so a day converts to `[day, day+1)`, not as drilled `T0H` endpoints. The iteration granularity of the implicit span (the next-finer unit) travels separately on the interval's **`:unit` field**, and the walk fills its anchor down to that unit at iteration time. So the converted interval enumerates exactly like its implicit twin (`Enum.count` of both `~o"2026-01-15"` and its interval is 24 hours) while its endpoints state only what the source stated. An interval whose `:unit` is set inspects with a decoration — `#Tempo.Interval<~o"2026-01-15/2026-01-16" unit: hour>` — because the unit is non-syntactic state the bare sigil would not round-trip.
-
-Call `Tempo.to_interval_set/1` if you always want the IntervalSet form (a single interval is wrapped in a one-element set).
-
-| Input | `from.time` | `to.time` | `unit` |
-|---|---|---|---|
-| `2026` | `[year: 2026]` | `[year: 2027]` | `:month` |
-| `2026-01` | `[year: 2026, month: 1]` | `[year: 2026, month: 2]` | `:day` |
-| `2026-01-15` | `[year: 2026, month: 1, day: 15]` | `[year: 2026, month: 1, day: 16]` | `:hour` |
-| `2026-01-15T10` | `[…, hour: 10]` | `[…, hour: 11]` | `:minute` |
-| `156X` | `[year: 1560]` | `[year: 1570]` | `nil` (walks years) |
-| `-1XXX` | `[year: -1999]` | `[year: -999]` | `nil` |
-| `1985-XX-XX` | `[year: 1985]` | `[year: 1986]` | `nil` |
-| `1985-06-XX` | `[year: 1985, month: 6]` | `[year: 1985, month: 7]` | `nil` |
-| `1985-06-1X` | `[year: 1985, month: 6, day: 10]` | `[year: 1985, month: 6, day: 20]` | `nil` (walks days) |
-
-A `nil` unit means the walk derives its step from the endpoint resolution — the default for user-written explicit intervals (`~o"2026-01-01/2026-02-01"` iterates days) and for masked/grouped values whose widened bounds already sit at the iteration resolution. You can also set the unit yourself: `Tempo.Interval.new(from: ~o"2025-07-04", to: ~o"2025-07-05", unit: :hour)` walks a day-resolution extent at hour granularity.
-
-Mask rules:
-
-* A **year mask** (`156X`, `-1XXX`) translates directly to a year range. The signed half-open upper bound is computed as `-magnitude_min + 1` for negative masks.
-
-* A **finer-unit mask** narrows to the values its digits allow in the calendar: `1985-06-1X` is the 10th to the 19th of June, `[1985-06-10, 1985-06-20)`, and `1985-06-3X` the 30th alone. A fully masked unit allows every value, so `1985-XX-XX` is the year and `1985-06-XX` the month, and a mask walks its own unit, as `156X` walks years. An unspecified unit other than the year (`1985Y6MX*D`) is read as a fully masked one: the month. A masked day of the year, written `O` or as a day straight after its year, is the dates it names: `2026Y3XO` and `2026Y3XD` are 30 January to 8 February, `[2026-01-30, 2026-02-09)`.
-
-* Candidates that are not consecutive (`1985-06-X5`, the 5th, 15th and 25th), or a mask with a narrower unit after it (`1985-XX-15`, the 15th of each month; `1985-XX-1X`, the 10th to the 19th of each), are an `IntervalSet` of a span each. A candidate the calendar has no room for drops out, as a set's does (`1985-XX-31` has no February), and a mask none of whose candidates fits (`1985-02-3X`) is an error.
-
-`to_interval/1` is idempotent on existing intervals and interval sets. Multi-valued AST shapes (ranges, stepped ranges, iterated groups, all-of sets) convert to `%Tempo.IntervalSet{}` with each expanded member distinct. One-of sets (`[a,b,c]`) are *epistemic* (the value is one of these, we don't know which) and return an error from `to_interval/1` — flattening them would assert all members happened, which is semantically wrong. Bare `%Tempo.Duration{}` values also return an error (no anchor on the time line).
-
-| Input shape | Result |
-|---|---|
-| Scalar `~o"2022Y"` | `%Tempo.Interval{}` |
-| Contiguous range `~o"2022Y{1..3}M"` | `%Tempo.IntervalSet{}` with 3 members (one per month) |
-| Stepped range `~o"2022Y{1..-1//3}M"` | `%Tempo.IntervalSet{}` with N disjoint members |
-| All-of set `~o"{2020,2021,2022}Y"` | `%Tempo.IntervalSet{}` with 3 members (one per year) |
-| One-of set `~o"[2020Y,2021Y,2022Y]"` | `{:error, "... epistemic disjunction ..."}` |
-| Bare Duration `~o"P3M"` | `{:error, "... no place on the time line"}` |
-
-A value is converted to at most **10 000 spans** at once, as a recurrence gives at most 10 000 occurrences. One that names more is a `Tempo.ConversionError` (`:too_many_values`), returned at once: the sets of a value, the candidates of its masks, a range of values, the dates a selection picks, and the spans `Tempo.shift/3` and `Tempo.select/2` give for such a value. `Enum` and `Stream` take a value's values one at a time, and have no such end.
+## 2. One span: the unit below
 
 ```elixir
-iex> every_minute = ~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M"
-iex> {:error, %Tempo.ConversionError{reason: :too_many_values}} = Tempo.to_interval(every_minute)
-iex> Enum.take(every_minute, 2)
-[~o"2026Y1M1DT0H0M", ~o"2026Y1M1DT0H1M"]
+iex> Enum.take(~o"2022Y", 3)
+[~o"2022Y1M", ~o"2022Y2M", ~o"2022Y3M"]
+
+iex> Enum.count(~o"2026-06")
+30
+
+iex> Enum.take(~o"2026-06-15", 2)
+[~o"2026Y6M15DT0H", ~o"2026Y6M15DT1H"]
+
+iex> Enum.to_list(~o"2026-W25")
+[~o"2026Y6M15D", ~o"2026Y6M16D", ~o"2026Y6M17D", ~o"2026Y6M18D", ~o"2026Y6M19D", ~o"2026Y6M20D", ~o"2026Y6M21D"]
 ```
 
-> *"Every minute of the first twenty-eight days of each month of 2026 is 483,840 minutes: **too many to convert at once**, and **taken two at a time** they are the first two minutes of the year."*
+> *"The first three months of 2022. June has thirty days. The first two hours of the fifteenth. The seven days of week twenty-five."*
 
-For the canonical instant-set form (touching members merged into one span), pipe the result through `Tempo.IntervalSet.coalesce/1`.
+Each value a walk gives is itself an expression, a span one unit long, so it can be walked in turn, compared, or passed to a set operation. A second is walked as its tenths, and a value written to the microsecond has nothing finer and gives nothing.
 
-### 2.11. `%Tempo.IntervalSet{}` — multi-interval values
-
-`%Tempo.IntervalSet{intervals: [%Tempo.Interval{}, ...]}` holds a sorted list of member intervals. By default the constructor preserves member identity — each interval stays a distinct member with its own metadata. `Tempo.IntervalSet.new/1` sorts by `from` endpoint; it does NOT coalesce adjacent or overlapping intervals unless called as `new(intervals, coalesce: true)` or passed through `Tempo.IntervalSet.coalesce/1`.
+A value with no year is walked the same way, on its own cycle:
 
 ```elixir
-iex> {:ok, tempo} = Tempo.from_iso8601("2022Y{1..-1//3}M")
-iex> {:ok, set} = Tempo.to_interval(tempo)
-iex> Tempo.IntervalSet.count(set)
-4
+iex> Enum.take(~o"6M", 3)
+[~o"6M1D", ~o"6M2D", ~o"6M3D"]
+
+iex> Enum.take(~o"T10", 3)
+[~o"T10H0M", ~o"T10H1M", ~o"T10H2M"]
 ```
 
-Enumeration walks each interval in time order, crossing interval boundaries seamlessly: `Enum.to_list(set)` on four month-sized intervals yields every day in each month, one interval at a time.
+A duration has no place on the time line and is not enumerable.
 
-IntervalSet is the form used by set operations — `Tempo.union/2`, `Tempo.intersection/2`, `Tempo.complement/2`, `Tempo.difference/2`, and predicates. See `guides/set-operations.md` for the full treatment. Any call that needs a uniform-shape input can use `Tempo.to_interval_set/1`.
+### An interval is walked at the unit it is written to
 
-### 2.12. Seasons
-
-The parser expands the season of a hemisphere into an interval before enumeration sees it.
-
-| Code | Example | Expands to |
-|---|---|---|
-| Astronomical (25–32) | `2022-25` | March equinox to June solstice (computed via `Astro`) |
-
-A season of 21 to 24 is "independent of location": spring, summer, autumn or winter wherever it is read. It is kept as it is written and has no dates to walk, so its walk raises a `Tempo.AbstractSeasonError`. Give it a hemisphere first, and it is walked by its months.
+An interval names one span too, and its ends say the unit. It is walked at the finer of the units its two ends are written to, from its first end to its last. A date end is read through (`2026/2028` is three years); a clock end is the reading the span runs to (nine to twelve is three hours).
 
 ```elixir
-{:ok, spring} = Tempo.in_territory(~o"2026-21", :AU)
+iex> Enum.to_list(~o"2026/2028")
+[~o"2026Y", ~o"2027Y", ~o"2028Y"]
 
-Enum.to_list(spring)
-#=> [~o"2026Y9M", ~o"2026Y10M", ~o"2026Y11M"]
+iex> Enum.to_list(~o"2026-06-01/2026-06-03")
+[~o"2026Y6M1D", ~o"2026Y6M2D", ~o"2026Y6M3D"]
+
+iex> Enum.to_list(~o"2026-06-15T09/2026-06-15T12")
+[~o"2026Y6M15DT9H", ~o"2026Y6M15DT10H", ~o"2026Y6M15DT11H"]
 ```
 
-| In | `2026-21` | `2026-24` |
-|---|---|---|
-| A territory north of the equator | March to May | December 2026 to February 2027 |
-| A territory south of it | September to November | June to August |
+> *"The years 2026 through 2028. The first three days of June. The hours from nine to twelve."*
 
-A winter in the north and a summer in the south are of the year they start in.
+This is the difference between a value and the interval of the same extent: `~o"2026-06"` is walked as its days, and `~o"2026-06/2026-06"` as the one month its ends name. Both cover the same time, and `Tempo.equal?/2` says so.
 
-## 3. Not enumerable by design
+### An interval with no end is walked lazily
 
-These constructs *cannot* be enumerated, and no amount of future implementation will change that. They raise `ArgumentError` with a clear message (§3.1 to §3.5) or a named Tempo exception (§3.6), or the protocol falls back to `{:error, Enumerable.<Module>}` for calls like `Enum.count/1`.
-
-### 3.1. Bare `%Tempo.Duration{}` values
-
-A duration is a **length**, not a sequence. `P3M` means "three months" with no place on the time line. Iterating it would be nonsensical — three months starting *when*?
-
-| Construct | Example |
-|---|---|
-| Pure duration | `P3M`, `P1Y2M3D`, `PT30M` |
-
-A duration that *participates* in an interval (`1985-01/P3M`) is not a bare duration — see §4.1 for that case.
-
-No `Enumerable` instance is defined for `Tempo.Duration`. Calls like `Enum.take(~o"P3M", 3)` raise `Protocol.UndefinedError`.
-
-### 3.2. Fully open intervals
-
-`../..` has no endpoints at all. There is nowhere to start and nowhere to stop.
+An interval with an open end has a first value and no last, so it is a stream. Take what you need:
 
 ```elixir
-iex> {:ok, interval} = Tempo.from_iso8601("../..")
-iex> Enum.take(interval, 3)
-** (ArgumentError) Cannot enumerate a fully open interval `../..` — no start to iterate from.
+iex> Enum.take(~o"1985/..", 3)
+[~o"1985Y", ~o"1986Y", ~o"1987Y"]
 ```
 
-### 3.3. Open-lower intervals
+An interval with an open *start* has nowhere to begin, and walking it raises a `Tempo.ConversionError` whose reason is `:open`.
 
-`../1985` has an end but no start. `Enumerable` iterates forward by protocol convention, which requires a lower bound. Iterating backwards from the upper bound would be surprising and would invert the half-open semantics.
+## 3. Several spans: member by member
 
 ```elixir
-iex> {:ok, interval} = Tempo.from_iso8601("../1985-12-31")
-iex> Enum.take(interval, 3)
-** (ArgumentError) Cannot enumerate an interval with an open lower bound `../to` — Enumerable iterates forward from the lower bound, which is not defined.
+iex> Enum.to_list(~o"{2026-01,2026-03}")
+[~o"2026Y1M", ~o"2026Y3M"]
+
+iex> Enum.to_list(~o"2026Y6M{1,15}D")
+[~o"2026Y6M1D", ~o"2026Y6M15D"]
+
+iex> Enum.to_list(~o"R3/2026-06-01/P1D")
+[~o"2026Y6M1D/2026Y6M1D", ~o"2026Y6M2D/2026Y6M2D", ~o"2026Y6M3D/2026Y6M3D"]
+
+iex> Enum.to_list(~o"2026Y6ML5KN")
+[~o"2026Y6M5D", ~o"2026Y6M12D", ~o"2026Y6M19D", ~o"2026Y6M26D"]
 ```
 
-### 3.4. Microsecond values at maximum precision
+> *"January and March. The first and the fifteenth of June. Three daily occurrences from the first of June. The Fridays of June."*
 
-Sub-second resolution drills one decimal place at a time: a second iterates into ten tenths, a tenth into ten hundredths, and so on down to microsecond precision (six digits). This is the intended design — a stated resolution is always enumerable by stepping into the next-finer decimal place. The single exception is a value *already* at microsecond precision 6: it has no finer unit to drill into, so it is the one clock resolution that cannot be enumerated.
+`Enum.count/1` of a plural expression is therefore how many spans it names: a set's members, a recurrence's occurrences. A recurrence with no end is a stream, as an open interval is:
 
 ```elixir
-iex> {:ok, value} = Tempo.from_iso8601("2022-06-15T10:30:00.000000Z")
-iex> Enum.take(value, 1)
-** (ArgumentError) Cannot enumerate a Tempo at microsecond precision 6 — that is the finest representable ulp. …
+iex> Enum.take(~o"R/2026-06-01/P1W", 2)
+[~o"2026Y6M1D/7D", ~o"2026Y6M8D/14D"]
 ```
 
-A second-resolution value, by contrast, *is* enumerable — it drills into ten deciseconds:
+A value with unspecified digits and a one-of set are walked through the values they may be:
 
 ```elixir
-iex> Enum.take(~o"2026-01-15T10:30:00", 3)
-[~o"2026Y1M15DT10H30M0.0S", ~o"2026Y1M15DT10H30M0.1S", ~o"2026Y1M15DT10H30M0.2S"]
+iex> Enum.take(~o"156X", 3)
+[~o"1560Y", ~o"1561Y", ~o"1562Y"]
+
+iex> Enum.to_list(~o"[2026-06-15,2026-07-04]")
+[~o"2026Y6M15D", ~o"2026Y7M4D"]
 ```
 
-### 3.5. Significant-digits blocks and year masks larger than 10 000
+`Tempo.members/2` gives the same members as a list in a tagged tuple, and takes a `:within` window for an expression with no year or no end.
 
-`Y171010000S3` would expand to `171010000..171019999` — a million candidate years. Tempo refuses to iterate a block that large rather than hang or consume unbounded memory. A mask of years that stands for more than 10 000 of them is the same block written another way, and walking one (`XXXXXY6M`, the June of each of ninety thousand years) raises a `Tempo.ConversionError`.
+## 4. Walking at a unit you choose
+
+`Tempo.walk/2` walks every span of an expression at the unit asked, and answers a stream:
 
 ```elixir
-iex> {:ok, value} = Tempo.from_iso8601("Y171010000S3")
-iex> Enum.take(value, 3)
-** (ArgumentError) Cannot enumerate a significant-digits block of 1000000 candidates (limit: 10000). …
+iex> {:ok, weeks} = Tempo.walk(~o"2026-06", :week)
+iex> Enum.to_list(weeks)
+[~o"2026Y23W", ~o"2026Y24W", ~o"2026Y25W", ~o"2026Y26W", ~o"2026Y27W"]
+
+iex> {:ok, minutes} = Tempo.walk(~o"2026-06-15", :minute)
+iex> Enum.count(minutes)
+1440
+
+iex> {:ok, months} = Tempo.union(~o"2022Y1M", ~o"2022Y3M")
+iex> {:ok, days} = Tempo.walk(months, :day)
+iex> Enum.count(days)
+62
 ```
 
-The parsed value itself is usable for comparison, equality, and round-trip serialisation; only iteration is refused.
+> *"The weeks that begin in June. The minutes of the fifteenth. The days of January and of March."*
 
-### 3.6. Values with nothing to walk
+A calendar unit gives the periods that begin within the span, and a clock unit the readings one unit apart from its start to its end.
 
-A value can parse and still name nothing a walk could yield. `Enumerable.reduce/3` has no error to return, so walking one raises a named exception, where `Tempo.to_interval/2` returns one for a value it cannot convert.
+## 5. Membership is cover
 
-| Reason | Example | Raises |
-|---|---|---|
-| A unit that needs a year the value lacks | `X*W`, `{1..-1}W`, `2MXXD`, `2MX*D` | `Tempo.UnanchoredError` |
-| A mask no value matches | `1985-02-3X` | `Tempo.InvalidDateError` |
-| A group that starts beyond what holds it | `{2026,2027}Y5G3MU` | `Tempo.InvalidDateError` |
-| A group of a set counted from the end of no year | `{1..-1}G3MU` | `Tempo.UnanchoredError` |
-| An interval start with several values | `{2026,2027}Y/2030Y` | `Tempo.ConversionError` |
-| An interval end that is no one point | `2026Y/202XY`, `1M/-1M` | `Tempo.IntervalEndpointsError` |
-| A step that depends on a missing year | `2M28D/P1D` | `Tempo.UnanchoredError` |
-| An unbounded recurrence | `R/2022-01-01/P1M` | `Tempo.UnboundedRecurrenceError` |
-| The count of an interval with no end | `Enum.count(~o"2026Y/..")` | `Tempo.IntervalEndpointsError` |
-| A slice of an interval with no end | `Enum.at(~o"2026Y/..", 3)`, `Enum.empty?(~o"2026Y/..")` | `Tempo.IntervalEndpointsError` |
-| A search of an interval with no end and no year | `Enum.member?(~o"T10H/..", ~o"T12H")` | `Tempo.IntervalEndpointsError` |
+`in` asks whether an expression covers a value, not whether the value is one of the things a walk happens to give:
 
 ```elixir
-iex> Enum.take(~o"X*W", 1)
-** (Tempo.UnanchoredError) This needs a value with a year: ~o"X*W" has none. Place the value on a date first with `Tempo.at/2` or `Tempo.on/2`.
-```
-
-## 4. `count/1`, `member?/2`, `slice/1` — fast paths
-
-`Enum.count/1`, `Enum.member?/2`, and `Enum.slice/2` (with `Enum.at/2`) have O(1) implementations for `%Tempo{}` and `%Tempo.Interval{}`. They are calendar-aware (a Coptic year counts 13 months, not 12) and DST-aware (a spring-forward day counts 23 hours, a fall-back day 25), and they agree element-for-element with the `reduce/3` walk (§5.6 lists the one divergence).
-
-Values that don't convert to a single interval — groups, selections, ranges, sets, masks — return `{:error, …}` and let `Enum` fall back to the `reduce/3` walk, which handles them.
-
-### 4.1. Still pending: `%Tempo.Set{}`
-
-`count/1` and `member?/2` on `%Tempo.Set{}` return `{:error, Enumerable.Tempo.Set}` today, so `Enum` falls back to `reduce/3`. A direct implementation would sum the members' counts; it is tracked with the broader set-operations work.
-
-## 5. Semantic edge cases
-
-### 5.1. "Missing" versus "unknown" versus "qualified"
-
-Three similar-sounding situations have distinct enumeration meanings:
-
-* **Missing (not specified).** `2022Y` simply omits finer units. The value is the *interval* of all of 2022 (§2.1) and implicit enumeration walks its months. **Fully enumerable.**
-
-* **Unknown digit (`X` mask).** `156X` declares "this position is any valid digit." The mask expands to a **range** of candidate values (§2.4). **Fully enumerable.**
-
-* **Qualified (`?`, `~`, `%`).** `2022Y?` is a concrete, fully-specified value — the year 2022 — annotated with uncertainty about the source. The qualification is held beside the value's components; it does not change what is iterated (§2.7). **Fully enumerable.**
-
-These three are semantically distinct and should not be conflated:
-
-| Description | Syntax | What's iterated |
-|---|---|---|
-| "Some year in the 1560s" | `156X` | each year 1560..1569 |
-| "All of the year 1560" | `1560` | each month of 1560 |
-| "The year 1560, uncertainly" | `1560?` | each month of 1560, the year of every yielded value flagged uncertain |
-
-### 5.2. Qualification propagation on intervals
-
-Per-endpoint qualifiers attach to that endpoint's value, not to the interior values.
-
-```elixir
-iex> {:ok, interval} = Tempo.from_iso8601("1984?/2004~")
-iex> interval
-...> |> Tempo.Interval.from()
-...> |> Tempo.qualification()
-:uncertain
-iex> interval
-...> |> Tempo.Interval.to()
-...> |> Tempo.qualification()
-:approximate
-```
-
-When the interval is enumerated forward from its start, each yielded value keeps the start's qualifiers. The end's qualifier is a property of the boundary, not the interior.
-
-### 5.3. IXDTF metadata propagation on intervals
-
-An IXDTF suffix (`[Europe/Paris]`, `[u-ca=hebrew]`, a tag) is written once, after the whole interval, and is the zone and the calendar of both its endpoints: an interval is in one zone and one calendar. A suffix written on an endpoint is a `Tempo.ParseError`, and `Tempo.Interval.new/1` returns an error for two endpoints in different zones or calendars; convert one with `Tempo.shift_zone/2` or `Tempo.to_calendar/2` first. A time shift (`+02:00`, `Z`) is each endpoint's own. Iteration walks forward from `:from`, so yielded values carry the interval's zone and calendar, and `:from`'s offset.
-
-### 5.4. Calendar-aware increment
-
-Forward-stepping through an interval uses `calendar.months_in_year/1`, `calendar.days_in_month/2`, `calendar.weeks_in_year/1`, and `calendar.days_in_week/0` for carry. Iterating an interval whose endpoint's calendar is Hebrew, Islamic, or any other supported calendar Just Works — the carry boundaries change to match.
-
-### 5.5. DST transitions
-
-A zoned value is walked on the wall clock of its zone, and each value the walk yields is a wall time the zone shows.
-
-* **The hour a clock skips** when it goes forward is not yielded: `2026-03-29[Europe/Paris]` is 23 hours, and `Tempo.extend/2` writes the day by them, `2026Y3M29DT{0..1,3..23}H`.
-
-* **A set that names a reading the clock skips** is refused when it is read, as the reading alone is: `2026Y3M{28,29}DT2H30M[Europe/Paris]` names 02:30 on the 29th, and `2026Y3M29DT{1..3}H[Europe/Paris]` the hour from 02:00, and each is a `Tempo.ZoneGapError`. Unspecified digits stand for the values the clock has, so `2026Y3M2XDT2H30M[Europe/Paris]` is some day from the 20th to the 28th.
-
-* **The hour a clock shows twice** when it goes back is yielded twice, each with the offset that tells it from the other (`T2HZ2H`, then `T2HZ1H`): `2026-10-25[Europe/Paris]` is 25 hours.
-
-* **A value in the hour shown twice** (`2026-10-25T02:30[Europe/Paris]`) names the first time the clock shows it, or the one the offset written with it names. Its walk yields that occurrence, the reading `Enum.count/1`, `Tempo.to_interval/2` and comparison give it.
-
-### 5.6. Parity between implicit and explicit iteration
-
-For every `%Tempo{}` where both implicit and explicit iteration are defined, the two produce identical sequences:
-
-```elixir
-iex> {:ok, tempo} = Tempo.from_iso8601("2026-01")
-iex> implicit = Enum.to_list(tempo)
-iex> {:ok, interval} = Tempo.to_interval(tempo)
-iex> explicit = Enum.to_list(interval)
-iex> implicit == explicit
+iex> ~o"2026-06-15" in ~o"2026"
 true
+
+iex> ~o"2026-06-15T10" in ~o"2026-06-01/2026-06-20"
+true
+
+iex> ~o"2027" in ~o"2026"
+false
 ```
 
-Known divergences:
+> *"The fifteenth of June is in 2026. Ten o'clock on the fifteenth is in the first twenty days of June. 2027 is not in 2026."*
 
-* **Second-resolution values.** `to_interval/1` converts it to a one-second span (`~o"2026-01-15T10:30:00"` → `[10:30:00, 10:30:01)`), but implicit iteration drills one unit finer into sub-second tenths — so `Enum.to_list(~o"2026-01-15T10:30:00")` yields ten deciseconds (`.0`–`.9`) while the interval forward-steps as a single second. Coarser resolutions don't diverge because their converted interval carries the drill unit on `:unit` (a day walks hours); the second case deliberately carries none (a clean `[t, t+1s)` span for set operations).
+It is `Tempo.contains?/2` with its arguments the other way round, and takes any expression that has spans on either side.
 
-* **Masked values.** The implicit walk of a masked value yields each value its digits allow (`1985-XX-XX` is the 365 days of 1985), where `to_interval/1` gives the span or spans they cover, walked at their own resolution (`[1985, 1986)`, one year). Prefer the explicit form for set operations on masked values.
+## 6. The clock is the zone's
 
-## 6. Summary table
+A walk at a clock unit gives the readings the zone's clock shows. On the day the clocks of Paris go forward there is no two o'clock, and on the day they go back there are two:
 
-| Category | Examples |
-|---|---|
-| **Enumerable** | every standard ISO 8601 / EDTF value with a concrete start — single values, ranges, sets, masks, long years, qualified values, IXDTF-tagged values, closed intervals, open-upper intervals, seasons of a hemisphere, mixed-resolution intervals |
-| **Not enumerable by design** | bare `%Tempo.Duration{}`, fully open intervals `../..`, open-lower intervals `../to`, microsecond values at precision 6 (the finest resolution), significant-digits blocks > 10 000 candidates, values with nothing to walk (§3.6) |
-| **O(1) fast paths** | `count/1`, `member?/2`, `slice/1` on `%Tempo{}` and `%Tempo.Interval{}` (calendar- and DST-aware) |
-| **Deferred** | `count/1` / `member?/2` on `%Tempo.Set{}` (falls back to `reduce/3`) |
+```elixir
+iex> Enum.count(~o"2026-03-29[Europe/Paris]")
+23
+
+iex> Enum.count(~o"2026-10-25[Europe/Paris]")
+25
+```
+
+So count a walk to know how many readings there are, and ask `Tempo.duration/1` to know how long a span is.
+
+## 7. The calendar is the value's
+
+The units a walk gives are the value's own calendar's. The Hebrew year 5786 has twelve months, and a leap year thirteen:
+
+```elixir
+iex> ~o"5786[u-ca=hebrew]" |> Enum.count()
+12
+```
+
+## 8. Bounds on work
+
+A walk is lazy: it gives one value at a time and holds none, so `Enum.take/2` on a stream with no end returns at once. Functions that need every value at once (`Enum.count/1`, `Enum.to_list/1`, `Tempo.to_interval/2`, the set operations) stop at `Tempo.Limit.values/0`, ten thousand unless the application sets another, with a `Tempo.ConversionError` whose reason is `:too_many_values`:
+
+```elixir
+iex> Enum.count(~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S")
+** (Tempo.ConversionError)
+```
+
+That value names twenty-nine million seconds, and `Enum.take/2` still gives the first few.
+
+## 9. Qualifications ride along
+
+An uncertain or approximate value is walked as the value it is written as, and each end of an interval keeps its own qualification:
+
+```elixir
+iex> interval = ~o"1984?/2004~"
+iex> interval |> Tempo.Interval.from() |> Tempo.qualification()
+%{year: :uncertain}
+
+iex> interval |> Tempo.Interval.to() |> Tempo.qualification(:year)
+:approximate
+
+iex> Enum.count(interval)
+21
+```
+
+## Related reading
+
+* [Set operations](./set-operations.md) — what walking a result gives.
+
+* [Workdays and weekends](./workdays-and-weekends.md) — selecting from a span with no end.
+
+* [ISO 8601 conformance](./iso8601-conformance.md) — the forms that name several spans.

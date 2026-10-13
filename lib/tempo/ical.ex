@@ -24,7 +24,16 @@ if Code.ensure_loaded?(ICal) do
 
     """
 
-    alias Tempo.{ConversionError, Duration, Interval, IntervalSet, Occurrences, Spans}
+    alias Tempo.{
+      Algebra,
+      ConversionError,
+      Duration,
+      Interval,
+      IntervalSet,
+      Occurrences,
+      Options,
+      Spans
+    }
 
     @frequencies %{
       secondly: :second,
@@ -135,9 +144,14 @@ if Code.ensure_loaded?(ICal) do
     """
     @spec from_ical(ICal.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
     def from_ical(%ICal{events: events} = calendar, options \\ []) do
-      with {:ok, spans} <- each_event(events, options),
+      with :ok <- Options.check(options, [:within], "Tempo.ICal.parse/2"),
+           {:ok, spans} <- each_event(events, options),
            {:ok, kept} <- Occurrences.within(spans, options[:within]) do
-        {:ok, set(kept, calendar_metadata(calendar))}
+        Algebra.gathered(kept,
+          metadata: calendar_metadata(calendar),
+          floating: :place,
+          sorted: true
+        )
       end
     end
 
@@ -191,11 +205,15 @@ if Code.ensure_loaded?(ICal) do
     def available(ics, options) when is_binary(ics), do: available(ICal.from_ics(ics), options)
 
     def available(%ICal{availabilities: availabilities}, options) do
-      case options[:within] do
-        %Tempo{} = window -> offered(Enum.sort_by(availabilities, &rank/1), window, options)
-        _ -> {:error, ConversionError.exception(value: :availability, reason: :unbounded)}
-      end
+      with :ok <- Options.check(options, [:within], "Tempo.ICal.available/2"),
+           do: available_in(availabilities, options[:within], options)
     end
+
+    defp available_in(availabilities, %Tempo{} = window, options),
+      do: offered(Enum.sort_by(availabilities, &rank/1), window, options)
+
+    defp available_in(_availabilities, _no_window, _options),
+      do: {:error, ConversionError.exception(value: :availability, reason: :unbounded)}
 
     # 1 is the highest priority and 9 the lowest; 0 or none ranks below all.
     defp rank(%{priority: priority}) when priority in 1..9, do: priority
@@ -279,11 +297,7 @@ if Code.ensure_loaded?(ICal) do
           {:error, _} = error -> {:halt, error}
         end
       end)
-      |> sorted()
     end
-
-    defp sorted({:ok, spans}), do: {:ok, Enum.sort(spans, Tempo)}
-    defp sorted(error), do: error
 
     defp occurrences(%ICal.Event{dtstart: nil}, _options), do: {:ok, []}
 
@@ -421,6 +435,7 @@ if Code.ensure_loaded?(ICal) do
 
     defp named(nil), do: nil
     defp named(%{cname: name}) when is_binary(name), do: name
+    defp named(text) when is_binary(text), do: text
     defp named(other), do: inspect(other)
 
     defp set([], metadata),

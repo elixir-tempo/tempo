@@ -11,16 +11,14 @@ This conceptual shift — *time as interval, not instant* — removes a surprisi
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 2.0"},
+    {:ex_tempo, "~> 3.0"},
     # Optional but recommended - needed for iCalendar import.
     {:ical, "~> 3.2"}
   ]
 end
 ```
 
-> #### Requires Erlang/OTP 27 or later {: .warning}
->
-> Tempo requires **OTP 27+**; **OTP 26 is not supported**. Tempo's ISO 8601 tokenizer is compiled with the Erlang optimiser disabled — a deliberate trade that roughly halves build time — and this trips a code-generation bug in OTP 26's compiler that miscompiles the parser and crashes at runtime. Elixir 1.17 and later are supported, on OTP 27 or newer.
+Tempo is tested on Elixir 1.17 and later, on Erlang/OTP 27 and later.
 
 ## Why intervals, not instants
 
@@ -252,7 +250,7 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 
 ## Guides
 
-* [Migrating to Tempo 2.0](https://hexdocs.pm/ex_tempo/migration.html) — each 1.x name that changed, with its 2.0 form.
+* [Migrating from Tempo 1.6 to 3.0](https://hexdocs.pm/ex_tempo/migration.html) — each change, with its 1.6 form and its 3.0 form.
 
 * [Tutorial: build a booking-availability service](https://hexdocs.pm/ex_tempo/tutorial-booking-availability.html) — the journey-shaped introduction: one small system, every core concept.
 
@@ -265,8 +263,6 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 * [Scheduling](https://hexdocs.pm/ex_tempo/scheduling.html) — recurrence, free-busy availability, and dependency (critical-path) scheduling.
 
 * [Workdays and weekends](https://hexdocs.pm/ex_tempo/workdays-and-weekends.html) — territory-aware business-day arithmetic.
-
-* [Chronological networks](https://hexdocs.pm/ex_tempo/chronological-networks.html) — constraint reasoning over partially-known dates (the ChronoLog scheme).
 
 * [Holidays](https://hexdocs.pm/ex_tempo/holidays.html) — composing a real holiday calendar with workday logic.
 
@@ -281,8 +277,6 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 * [ISO 8601 conformance](https://hexdocs.pm/ex_tempo/iso8601-conformance.html) — what's supported from the standards.
 
 * [Glossary](https://hexdocs.pm/ex_tempo/glossary.html) — every word Tempo's API and documentation use, with the one meaning each has.
-
-* [What each operation gives each value](https://hexdocs.pm/ex_tempo/operation-matrix.html) — every class of value against every kind of operation, generated from the code and checked by the tests.
 
 * [RFC 5545 RRULE conformance](https://hexdocs.pm/ex_tempo/rfc5545_rrule_conformance.html) — recurrence-rule coverage, property by property.
 

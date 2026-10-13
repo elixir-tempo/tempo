@@ -255,4 +255,68 @@ defmodule Tempo.ShiftTest do
       assert {:error, %ConversionError{}} = Tempo.split(~o"2026-06-15/2026-06-16")
     end
   end
+
+  describe "a change of the clock" do
+    test "the clock part of a duration is elapsed time, the date part the wall clock's" do
+      noon = ~o"2024-03-09T12:00[America/New_York]"
+
+      assert Tempo.shift(noon, ~o"P1D") == {:ok, ~o"2024-03-10T12:00[America/New_York]"}
+      assert Tempo.shift(noon, ~o"PT24H") == {:ok, ~o"2024-03-10T13:00[America/New_York]"}
+      assert Tempo.shift(noon, hour: 24) == {:ok, ~o"2024-03-10T13:00[America/New_York]"}
+      assert Tempo.shift(noon, ~o"P1DT1H") == {:ok, ~o"2024-03-10T13:00[America/New_York]"}
+
+      assert Tempo.shift(~o"2024-03-10T13:00[America/New_York]", ~o"-PT24H") == {:ok, noon}
+
+      assert Tempo.shift(~o"2024-11-02T12:00[America/New_York]", ~o"PT24H") ==
+               {:ok, ~o"2024-11-03T11:00[America/New_York]"}
+    end
+
+    test "a floating value has no change of the clock to cross" do
+      assert Tempo.shift(~o"2024-03-09T12:00", ~o"PT24H") == {:ok, ~o"2024-03-10T12:00"}
+    end
+  end
+
+  describe "a recurring interval (ISO 8601-1 3.1.1.11)" do
+    test "its occurrences are consecutive across the end of a short month" do
+      assert Tempo.to_interval(~o"R3/2026-01-31/P1M") ==
+               {:ok, ~o"{2026-01-31/2026-02-27,2026-02-28/2026-03-30,2026-03-31/2026-04-29}"}
+
+      assert Tempo.to_interval(~o"R3/2026-01-31T10/P1M") ==
+               {:ok,
+                ~o"{2026-01-31T10/2026-02-28T10,2026-02-28T10/2026-03-31T10,2026-03-31T10/2026-04-30T10}"}
+    end
+
+    test "counted back from its end" do
+      assert Tempo.to_interval(~o"R3/P1M/2026-05-31") ==
+               {:ok, ~o"{2026-03-01/2026-03-31,2026-04-01/2026-04-30,2026-05-01/2026-05-31}"}
+    end
+
+    test "each is a day long on the clock of a zone that changes" do
+      assert Tempo.to_interval(~o"R2/2026-03-07T10/P1D[America/New_York]") ==
+               {:ok,
+                ~o"{2026-03-07T10/2026-03-08T10,2026-03-08T10/2026-03-09T10}[America/New_York]"}
+    end
+  end
+
+  describe "a value with a gap or several groups" do
+    test "is shifted member by member, and written as it was where that says the same" do
+      assert Tempo.shift(~o"2026-06T17", month: 1) == {:ok, ~o"2026Y7M{1..30}DT17H"}
+      assert Tempo.shift(~o"2026-07T17", month: 1) == {:ok, ~o"2026-08T17"}
+      assert Tempo.shift(~o"2026-06T17", hour: 1) == {:ok, ~o"2026-06T18"}
+      assert Tempo.shift(~o"2026YT17H", year: 1) == {:ok, ~o"2027YT17H"}
+
+      assert {:ok, moved} = Tempo.shift(~o"2026-06T17", day: 1)
+      assert {:ok, members} = Tempo.members(moved)
+      assert Enum.count(members) == 30
+      assert hd(members) == ~o"2026-06-02T17"
+      assert List.last(members) == ~o"2026-07-01T17"
+    end
+
+    test "several groups are extended each, as a set" do
+      assert Tempo.extend(~o"2026Y{1,2}G3MU") ==
+               {:ok, %{~o"2026Y{1,2}G3MU" | form: {:all, [~o"2026Y{1..3}M", ~o"2026Y{4..6}M"]}}}
+
+      assert {:error, %ConversionError{reason: :several}} = Tempo.extend(~o"{1,2}G3MU")
+    end
+  end
 end

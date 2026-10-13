@@ -2,11 +2,11 @@
 
 ## Setup — required for every example
 
-The cell below installs Tempo, pulls in Kino for rich output, and — critically — `import`s `Tempo.Sigils` so the `~o` sigil used throughout this notebook is in scope. Run it first; every subsequent cell depends on it. The import brings only `sigil_o/2` and `sigil_TEMPO/2` into the caller's namespace — no helper functions leak in.
+The cell below installs Tempo, pulls in Kino for rich output, and — critically — `import`s `Tempo.Sigils` so the `~o` sigil used throughout this notebook is in scope. Run it first; every subsequent cell depends on it. The import brings only `sigil_o/2` into the caller's namespace — no helper functions leak in.
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.6"},
+  {:ex_tempo, "~> 3.0"},
   {:kino, "~> 0.14"}
 ])
 
@@ -32,7 +32,7 @@ Now see its bounds:
 Tempo.Interval.endpoints(interval)
 ```
 
-The span is `[2026-06-15 00:00, 2026-06-16 00:00)` — half-open, so adjacent days concatenate cleanly (`[a, b) ++ [b, c) == [a, c)`). No off-by-one. No ambiguity.
+The span is `[2026-06-15 00:00, 2026-06-16 00:00)` — half-open, so adjacent days join with no gap and no overlap. Written as an interval, a day runs from itself *through* itself: an end that is a date is read through, and an end that is a time of day is the reading the span runs to.
 
 The same rule applies at every resolution:
 
@@ -45,7 +45,7 @@ end
 |> Kino.DataTable.new()
 ```
 
-A year implicitly spans one year. A month spans one month. An hour spans one hour. The next-finer unit sets the span — there's no guessing.
+A year is a year long, a month a month, an hour an hour: the unit a value is written to is its span.
 
 ## Explaining a value
 
@@ -59,16 +59,15 @@ Tempo.explain(~o"156X")
 Tempo.explain(~o"1984?/2004~")
 ```
 
-For richer UI surfaces (HTML, coloured terminals) use `Tempo.Explain.explain/1` — it returns a `%Tempo.Explanation{}` with tagged parts that `to_string/1`, `to_ansi/1`, or `to_iodata/1` render differently:
+`Tempo.Explain.lines/1` gives the same explanation as a list of its sentences, for a surface that lays them out itself:
 
 ```elixir
-explanation = Tempo.Explain.explain(~o"156X")
-explanation.parts
+Tempo.Explain.lines(~o"156X")
 ```
 
 ## Iteration
 
-Every Tempo value is enumerable. The iteration unit is "the next-higher-resolution below what's stated" — a year yields months, a month yields days, etc.
+Every Tempo value is enumerable. A walk gives the unit below the one the value is written to — a year its months, a month its days.
 
 ```elixir
 Enum.take(~o"2026Y", 12)
@@ -78,7 +77,7 @@ Enum.take(~o"2026Y", 12)
 Enum.take(~o"2026-06", 5)
 ```
 
-Masks iterate over the values they represent. The 1560s:
+A value with unspecified digits names several values, and a walk gives each. The 1560s:
 
 ```elixir
 Enum.take(~o"156X", 10)
@@ -110,14 +109,13 @@ Once every value is a bounded interval, the set-theoretic operations follow natu
 Tempo.IntervalSet.members(both)
 ```
 
-> The **union** of `a` and `b` keeps both intervals as distinct members — `union/2` is member-preserving so identity and metadata survive.
+> The **union** of `a` and `b` keeps both intervals as members, each with its metadata.
 
-For the merged "one continuous window" form, coalesce explicitly:
+For the one continuous window they cover between them, coalesce:
 
 ```elixir
-both
-|> Tempo.IntervalSet.coalesce()
-|> Tempo.IntervalSet.members()
+{:ok, merged} = Tempo.IntervalSet.coalesce(both)
+Tempo.IntervalSet.members(merged)
 ```
 
 > One continuous window — June 1 through June 20 — after coalescing.
@@ -145,11 +143,11 @@ Tempo.IntervalSet.members(free)
 
 Two free intervals: 09:00-12:00 and 13:00-17:00.
 
-## Selecting sub-spans — `Tempo.select/2`
+## Selecting — `Tempo.select/3`
 
-`Tempo.select/2` is a composition primitive: it narrows a base span by a **selector** and returns the matched sub-spans as an `IntervalSet`. The selector vocabulary covers territory-aware queries (via `Tempo.workdays/1` and `Tempo.weekends/1`), integer indices applied at the next-finer unit, projection of a Tempo or Interval onto a larger base, and arbitrary functions.
+`Tempo.select/3` picks, from a base, the values a **selector** names, and answers a set of them. A selector is the workdays or the weekend of a territory (`Tempo.workdays/2`, `Tempo.weekends/1`), whole numbers for days of the month, or a value with no year: a date, a weekday, a time of day.
 
-`Tempo.select/2` is a **pure function**. Locale-dependent constraints are constructed by `Tempo.workdays/1` and `Tempo.weekends/1` and composed in at the call site.
+A selector that depends on a territory is made by `Tempo.workdays/2` or `Tempo.weekends/1` and given to `select/3`, which itself asks nothing of the locale.
 
 ### Workdays of a month
 
@@ -158,7 +156,7 @@ Two free intervals: 09:00-12:00 and 13:00-17:00.
 Tempo.IntervalSet.members(workdays) |> length()
 ```
 
-> **Workdays** of **June 2026** in the **United States** are Monday through Friday — 22 day-resolution intervals.
+> The **workdays** of **June 2026** in the **United States** are Monday to Friday: 22 days.
 
 ### Pick specific days inside a month
 
@@ -167,16 +165,16 @@ Tempo.IntervalSet.members(workdays) |> length()
 Tempo.IntervalSet.map(paydays, &Tempo.day/1)
 ```
 
-> **Integer selectors** apply at the **next-finer unit** below the base's resolution — on a month base that's day.
+> Whole numbers select **days of the month**, in each month of the base.
 
 ### Project a date pattern onto a larger base
 
 ```elixir
-{:ok, holidays} = Tempo.select(~o"2026", [~o"07-04", ~o"12-25"])
+{:ok, holidays} = Tempo.select(~o"2026", [~o"7M4D", ~o"12M25D"])
 Tempo.IntervalSet.map(holidays, &{Tempo.month(&1), Tempo.day(&1)})
 ```
 
-> **Project** the constraint months/days `07-04` and `12-25` onto the base year — July 4 and Dec 25 of 2026.
+> A value with no year, such as `7M4D`, selects that date in each year of the base: the 4th of July and the 25th of December 2026.
 
 ### Different territory, different weekend
 
@@ -190,25 +188,25 @@ Tempo.IntervalSet.map(holidays, &{Tempo.month(&1), Tempo.day(&1)})
 }
 ```
 
-> The US weekend is Sat+Sun, the Saudi weekend is Fri+Sat. `Tempo.weekends/1` and `Tempo.workdays/1` accept a territory atom, a territory string, a locale string (`"ar-SA"`), or a `%Localize.LanguageTag{}`. With no argument they walk the ambient chain: `Application.get_env(:ex_tempo, :default_territory)` → `Localize.get_locale()`.
+> The US weekend is Sat+Sun, the Saudi weekend is Fri+Sat. `Tempo.weekends/1` and `Tempo.workdays/2` take a territory atom, a territory string, a locale string (`"ar-SA"`), or a `%Localize.LanguageTag{}`. With no argument they use `Application.get_env(:ex_tempo, :default_territory)` → `Localize.get_locale()`.
 
 ### Compose with set operations
 
 ```elixir
 {:ok, june_workdays} = Tempo.select(~o"2026-06", Tempo.workdays(:US))
-{:ok, vacation}      = Tempo.to_interval_set(~o"2026-06-15/2026-06-20")
-{:ok, available}     = Tempo.difference(june_workdays, vacation)
+vacation = ~o"2026-06-15/2026-06-20"
+{:ok, available} = Tempo.members_outside(june_workdays, vacation)
 
 Tempo.IntervalSet.members(available)
 ```
 
-> **Workdays** of June **minus** my **vacation** yields the days I'm **available**. Because `select/3` returns an IntervalSet, it drops straight into `union/2`, `intersection/2`, `difference/2`, and `symmetric_difference/2`.
+> The **workdays** of June **outside** my **vacation** are the days I am **available**. A selection is a set, so it goes straight into the set operations.
 
 ## Recurring events
 
-Tempo implements the full RFC 5545 RRULE vocabulary. Everything from `FREQ=DAILY;COUNT=10` to `"4th Thursday of November, every year"` goes through the same interpreter.
+Tempo reads RFC 5545's RRULE into the same recurrence ISO 8601-2 writes, so `FREQ=DAILY;COUNT=10` and "the fourth Thursday of November, every year" go through one engine.
 
-Each example reads a rule with `Tempo.RRule.parse/2`, starting at its `DTSTART`, and lists its occurrences with `Tempo.to_interval_set/1`.
+Each example reads a rule with `Tempo.RRule.parse/2`, starting at its `DTSTART`, and lists its occurrences with `Tempo.to_interval/2`.
 
 ### Every Monday for 10 weeks
 
@@ -219,7 +217,7 @@ start_date = fn interval ->
 end
 
 {:ok, mondays} = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO;COUNT=10", from: ~o"2026-06-01")
-{:ok, occurrences} = Tempo.to_interval_set(mondays)
+{:ok, occurrences} = Tempo.to_interval(mondays)
 
 occurrences
 |> Tempo.IntervalSet.members()
@@ -231,7 +229,7 @@ occurrences
 
 ```elixir
 {:ok, rule} = Tempo.RRule.parse("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH;COUNT=5", from: ~o"2022-11-24")
-{:ok, thanksgivings} = Tempo.to_interval_set(rule)
+{:ok, thanksgivings} = Tempo.to_interval(rule)
 
 thanksgivings |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 ```
@@ -246,7 +244,7 @@ thanksgivings |> Tempo.IntervalSet.members() |> Enum.map(start_date)
     from: ~o"1996-11-05"
   )
 
-{:ok, elections} = Tempo.to_interval_set(rule)
+{:ok, elections} = Tempo.to_interval(rule)
 
 elections |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 ```
@@ -255,7 +253,7 @@ elections |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 
 ```elixir
 {:ok, rule} = Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13;COUNT=10", from: ~o"1998-02-13")
-{:ok, f13s} = Tempo.to_interval_set(rule)
+{:ok, f13s} = Tempo.to_interval(rule)
 
 f13s |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 ```
@@ -266,7 +264,7 @@ f13s |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 {:ok, rule} =
   Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=6", from: ~o"2026-06-01")
 
-{:ok, last_weekdays} = Tempo.to_interval_set(rule)
+{:ok, last_weekdays} = Tempo.to_interval(rule)
 
 last_weekdays |> Tempo.IntervalSet.members() |> Enum.map(start_date)
 ```
@@ -275,31 +273,31 @@ BYSETPOS applies last, picking the Nth element of each month's candidate set.
 
 ## Cross-calendar comparison
 
-Tempo values are calendar-aware. The IXDTF `[u-ca=NAME]` suffix attaches a calendar to any value at parse time — Hebrew, Islamic, Persian, Buddhist, and the rest resolve to their `Calendrical.*` modules automatically:
+An expression is in a calendar. The RFC 9557 suffix `[u-ca=NAME]` says which — Hebrew, Islamic, Persian, Buddhist and the rest of CLDR's:
 
 ```elixir
 {:ok, hebrew} = Tempo.from_iso8601("5786-09-30[u-ca=hebrew]")
 Tempo.overlaps?(hebrew, ~o"2026-06-15")
 ```
 
-Tempo converts via `Date.convert!/2` internally, so the operation is calendar-neutral. See `Calendrical.supported_cldr_calendar_types/0` for the full list of recognised CLDR calendar identifiers.
+Two expressions in different calendars are compared on the one time line they share.
 
 ## Cross-timezone comparison
 
 ```elixir
-paris = Tempo.from_elixir(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))
+paris = Tempo.from_datetime(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))
 utc_window = ~o"2026-06-15T07Z/2026-06-15T09Z"
 
 Tempo.overlaps?(paris, utc_window)
 ```
 
-Both values are *zoned* — the Paris time by its zone, the window by `Z`. Comparing a zoned value with a floating one (no zone or offset) raises `Tempo.FloatingTempoError` rather than silently assuming UTC; place the floating side in a zone first with `Tempo.in_zone/2`.
+Both values are *zoned* — the Paris time by its zone, the window by `Z`. Comparing a zoned value with a floating one (no zone or offset) raises a `Tempo.FrameError` rather than assuming UTC; place the floating side in a zone first with `Tempo.in_zone/2`.
 
-Paris 10:00 CEST is UTC 08:00 — inside the UTC 07:00-09:00 window. Tempo projects to UTC via `Tzdata` per-call; the wall-clock representation is preserved on the struct.
+Paris 10:00 CEST is UTC 08:00 — inside the UTC 07:00-09:00 window. Tempo asks the configured time zone database at each call; the value keeps the reading it was written with.
 
 ## Archaeological and approximate dates
 
-EDTF (ISO 8601-2) gives us qualifiers for vague historical references.
+ISO 8601-2 has marks for the vague dates of historical records.
 
 ### "Sometime in the 1560s"
 
@@ -315,12 +313,12 @@ value = ~o"2022~"
 
 %{
   value: inspect(value),
-  qualification: value.qualification,
-  span: Tempo.Interval.endpoints(iv)
+  qualification: Tempo.qualification(value, :year),
+  span: iv
 }
 ```
 
-The qualifier decorates the value but doesn't shift its bounds — this is still the year 2022, just with a note that the author wasn't certain.
+The mark is information about the value and changes nothing of its span — this is still the year 2022, with a note that it is approximate.
 
 ### Open-ended intervals
 
@@ -333,7 +331,7 @@ end)
 |> Kino.DataTable.new()
 ```
 
-`:undefined` is the parsed shape for an open endpoint. Ranges and intervals with one open side are legal; both open (`../..`) is the "entire time line" identity.
+An open end is `:open`. An interval may be open at either end, or at both (`../..`, the whole time line).
 
 ## Non-contiguous mask expansion
 
@@ -347,7 +345,7 @@ set
 |> Kino.DataTable.new()
 ```
 
-Twelve distinct day-intervals. The masked `XX` month expands to each valid value (1..12); the concrete day-15 pins each resulting interval.
+Twelve days: the unspecified month is each month of the year, and the 15th is that day of each.
 
 ## Interval relations — Allen's algebra
 
@@ -449,7 +447,7 @@ Two of the three candidates fit inside a mutual-free window. The 11:00-12:00 one
 
 ## What to read next
 
-* [Tempo cookbook](https://hexdocs.pm/ex_tempo/cookbook.html) — 65+ task-oriented recipes
+* [Tempo cookbook](https://hexdocs.pm/ex_tempo/cookbook.html) — task-oriented recipes
 * [Set operations guide](https://hexdocs.pm/ex_tempo/set-operations.html)
 * [iCalendar integration](https://hexdocs.pm/ex_tempo/ical-integration.html) — import `.ics` with full RRULE/RDATE/EXDATE
 * [ISO 8601 conformance](https://hexdocs.pm/ex_tempo/iso8601-conformance.html) — what parts of the standard are covered

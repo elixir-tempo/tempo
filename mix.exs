@@ -1,19 +1,7 @@
 defmodule Tempo.MixProject do
   use Mix.Project
 
-  # OTP 26 is not supported. The tokenizer is compiled with the Erlang optimiser
-  # disabled (the `@compile` flags in the tokenizer modules roughly halve build
-  # time), and OTP 26's compiler miscompiles that unoptimised binary-matching
-  # path — it crashes at runtime with a bogus multi-terabyte allocation. Fail
-  # fast here with a clear message rather than let a consumer hit the crash.
-  if String.to_integer(System.otp_release()) < 27 do
-    Mix.raise(
-      "ex_tempo requires Erlang/OTP 27 or later — OTP #{System.otp_release()} detected. " <>
-        "See the README for details."
-    )
-  end
-
-  @version "2.0.0-dev"
+  @version "3.0.0-dev"
 
   def project do
     [
@@ -28,29 +16,17 @@ defmodule Tempo.MixProject do
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      # Excluded from coverage:
-      #  * `~r/Error$/` — exception structs, whose uncovered lines are
-      #    `message/1` formatting on rare error paths, not logic.
-      #  * the tokenizer grammar modules — their functions are NimbleParsec
-      #    combinator builders that run at *compile* time to assemble the
-      #    parser, so runtime line-coverage cannot see them execute.
-      #  * the modules of `test/support` — the measures the library is held
-      #    to, which are compiled with the tests and are not the library.
-      #    The lines of theirs a run leaves are the exhaustive tier's.
+      # Excluded from coverage: exception structs, whose uncovered lines are
+      # `message/1` formatting on rare error paths, and the modules of
+      # `test/support`, which are the measures the library is held to and
+      # are compiled with the tests.
       test_coverage: [
         ignore_modules: [
           ~r/Error$/,
-          Tempo.Iso8601.Tokenizer.Numbers,
-          Tempo.Iso8601.Tokenizer.Grammar,
-          Tempo.Iso8601.Tokenizer.Helpers,
           ~r/^Tempo\.Matrix\./,
-          Tempo.BesideAGap,
-          Tempo.ChangeOfTheClock,
-          Tempo.GeneratedSets,
-          Tempo.GeneratedSets.Check,
-          Tempo.GregorianEasterTest,
-          Tempo.Iso8601.Edtf.Corpus,
-          Tempo.Network.ChronoLog
+          ~r/^Tempo\.Grammar\./,
+          Tempo.Golden,
+          Tempo.Iso
         ]
       ],
       dialyzer: [
@@ -66,9 +42,9 @@ defmodule Tempo.MixProject do
   end
 
   def description do
-    "Time as an interval, not an instant — ISO 8601 / IXDTF date, time, " <>
-      "interval, duration, recurrence, set-algebra, scheduling, and " <>
-      "constraint-network library for Elixir. Calendar- and timezone-aware."
+    "Time as an interval, not an instant: ISO 8601 and IXDTF dates, times, " <>
+      "intervals, durations, recurrences and sets, with Allen's relations and " <>
+      "set algebra over them. Calendar- and time zone-aware."
   end
 
   def package do
@@ -115,12 +91,8 @@ defmodule Tempo.MixProject do
       formatters: ["html", "markdown"],
       groups_for_modules: groups_for_modules(),
       groups_for_extras: groups_for_extras(),
-      # The README's references resolve again as the redesign's phases land.
-      skip_undefined_reference_warnings_on:
-        [
-          "CHANGELOG.md",
-          "README.md"
-        ] ++ Path.wildcard("guides/*.md") ++ livebooks()
+      # The two pages that name what Tempo 1 had and 3.0 does not.
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md", "guides/migration.md"]
     ]
   end
 
@@ -133,23 +105,11 @@ defmodule Tempo.MixProject do
 
   def groups_for_modules do
     [
-      Core:
-        ~r/^Tempo(?:\.(Interval|IntervalSet|Duration|Set|RecurrenceSet|RecurrenceSet\.Conditional))?$/,
-      "Clock and current time": ~r/^Tempo\.Clock(\.|$)/,
-      "Set algebra and comparison":
-        ~r/^Tempo\.(Allen|Select|Territory|Workdays)$|^Tempo\.Interval\.(Relations|RelationNetwork)$/,
-      "Interval set backends": ~r/^Tempo\.IntervalSet\.Backend(\.|$)/,
-      "Recurrence rules": ~r/^Tempo\.(RRule|Cron)$/,
-      "Computed events": ~r/^Tempo\.Event(\.|$)/,
-      "Calendar formats": ~r/^Tempo\.(ICal|JSCalendar)$/,
-      "Networks and scheduling":
-        ~r/^Tempo\.(Network|Schedule)$|^Tempo\.Network\.(Qualitative|Relation|Solver|TimePeriod)$|^Tempo\.Schedule\.ScheduledTask$/,
-      "Time zones and leap seconds": ~r/^Tempo\.(TimeZoneDatabase|LeapSeconds)$/,
-      # `Tempo.Range` is the ISO 8601-2 set-member range element, not a
-      # core algebra type — see its moduledoc.
-      "ISO 8601 and IXDTF": ~r/^Tempo\.(Range|Sigils)$/,
-      Enumeration: ~r/^Tempo\.Enumeration$|^Enumerable\.Tempo/,
-      "Explanation and inspection": ~r/^Tempo\.(Explain|Explanation|Format)$/,
+      Core: ~r/^Tempo(?:\.(Interval|IntervalSet|RecurrenceSet|Duration|Sigils))?$/,
+      "Relations and selection": ~r/^Tempo\.(Allen|Workdays|Territory|Event|Event\.Resolver)$/,
+      "Recurrence rules and calendar formats": ~r/^Tempo\.(RRule|Cron|ICal|JSCalendar)$/,
+      "Clock, zones and leap seconds": ~r/^Tempo\.(Clock|Clock\.System|Zone|LeapSeconds)$/,
+      "Units and limits": ~r/^Tempo\.(Unit|Scale|Limit|Explain)$/,
       Exceptions: ~r/^Tempo\.\w+Error$/
     ]
   end
@@ -185,12 +145,10 @@ defmodule Tempo.MixProject do
         "guides/enumeration-semantics.md",
         "guides/pattern-matching-with-sigils.md",
         "guides/ical-integration.md",
-        "guides/chronological-networks.md",
         "guides/falsehoods.md"
       ],
       Reference: [
         "guides/glossary.md",
-        "guides/operation-matrix.md",
         "guides/iso8601-conformance.md",
         "guides/iso8601-grammar.md",
         "guides/rfc5545_rrule_conformance.md",
@@ -211,16 +169,11 @@ defmodule Tempo.MixProject do
 
   defp deps do
     [
-      {:nimble_parsec, "~> 1.0"},
       {:localize, github: "elixir-localize/localize", branch: "main", override: true},
       {:calendrical, github: "elixir-localize/calendrical", branch: "main", override: true},
       {:astro, "~> 2.7"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},
-      # Optional: `Table.Reader` for `Tempo.IntervalSet`, so Livebook's
-      # `Kino.DataTable` and anything else that reads tables shows a set's
-      # members and their metadata as rows.
-      {:table, "~> 0.1.2", optional: true},
       {:ex_doc, "~> 0.38", only: [:dev, :test, :release], optional: true, runtime: false},
       {:benchee, "~> 1.3", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
@@ -228,23 +181,11 @@ defmodule Tempo.MixProject do
       {:ex_slop, "~> 0.1", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.0", only: [:dev, :test], runtime: false},
       {:tz, "~> 0.28", only: [:dev, :test]}
-    ] ++ maybe_json_polyfill()
-  end
-
-  defp maybe_json_polyfill do
-    if Code.ensure_loaded?(:json) do
-      []
-    else
-      [{:json_polyfill, "~> 0.2 or ~> 1.0"}]
-    end
+    ]
   end
 
   defp elixirc_paths(:test) do
-    ["lib", "mix", "test", "test/support"]
-  end
-
-  defp elixirc_paths(:dev) do
-    ["lib", "mix"]
+    ["lib", "test/support"]
   end
 
   defp elixirc_paths(_) do

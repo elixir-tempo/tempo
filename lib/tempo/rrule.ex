@@ -20,7 +20,7 @@ defmodule Tempo.RRule do
 
   import Kernel, except: [to_string: 1]
 
-  alias Tempo.{ConversionError, Duration, Unit, Validate}
+  alias Tempo.{ConversionError, Duration, Options, Unit, Validate}
 
   @weekdays %{"MO" => 1, "TU" => 2, "WE" => 3, "TH" => 4, "FR" => 5, "SA" => 6, "SU" => 7}
   @weekday_codes Map.new(@weekdays, fn {code, n} -> {n, code} end)
@@ -34,6 +34,11 @@ defmodule Tempo.RRule do
     "YEARLY" => :year
   }
   @frequency_names Map.new(@frequencies, fn {name, unit} -> {unit, name} end)
+
+  # What a calendar counts in its own way: a cadence of these, or a part of
+  # those, is of the recurrence's calendar and no other.
+  @calendar_cadences [:year, :month]
+  @calendar_parts [:year, :month, :traditional_month, :week, :day, :day_of_year]
   @by_parts %{
     "BYMONTH" => :bymonth,
     "BYMONTHDAY" => :bymonthday,
@@ -126,7 +131,9 @@ defmodule Tempo.RRule do
   def parse("RRULE:" <> rest, options), do: parse(rest, options)
 
   def parse(text, options) when is_binary(text) do
-    with {:ok, rule} <- rule_of(text), do: from_rule(rule, options)
+    with :ok <- Options.check(options, [:from, :duration, :metadata], "Tempo.RRule.parse/2"),
+         {:ok, rule} <- rule_of(text),
+         do: from_rule(rule, options)
   end
 
   def parse(other, _options), do: {:error, argument("an RRULE is text, not #{inspect(other)}")}
@@ -378,15 +385,15 @@ defmodule Tempo.RRule do
       |> push_years(rule)
       |> push(rule, :bymonth)
       |> push(rule, :byweekno)
-      |> push(rule, :byyearday)
       |> push(rule, :bymonthday)
+      |> push(rule, :byyearday)
       |> push_byday(rule, numbered)
       |> push(rule, :byhour)
       |> push(rule, :byminute)
       |> push(rule, :bysecond)
       |> push_instance(rule, numbered)
-      |> push_window(duration)
       |> Enum.reverse()
+      |> windowed(duration)
 
     cond do
       Keyword.has_key?(parts, :unsupported) ->
@@ -445,8 +452,15 @@ defmodule Tempo.RRule do
   defp push_instance(acc, _rule, {_day, n}), do: [{:instance, n} | acc]
   defp push_instance(acc, _rule, nil), do: acc
 
-  defp push_window(acc, nil), do: acc
-  defp push_window(acc, %Duration{} = duration), do: [{:window, duration} | acc]
+  # An occurrence's length is a window from each element the parts select,
+  # ISO 8601-2 §12.10's `L…N/PT1H`.
+  defp windowed(parts, nil), do: parts
+
+  defp windowed(parts, %Duration{} = duration) do
+    if Keyword.has_key?(parts, :unsupported),
+      do: parts,
+      else: [selection: parts, window: duration]
+  end
 
   defp one_or_list([one]), do: one
   defp one_or_list(list), do: list
@@ -468,8 +482,16 @@ defmodule Tempo.RRule do
   * `{:ok, text}`.
 
   * `{:error, %Tempo.ConversionError{reason: {:no_rrule, what}}}` for a
-    cadence of several units, a selection with a window, an event or a
-    nested selection, or an expression that is no recurrence.
+    cadence of several units, an event or a selection within a window, or
+    an expression that is no recurrence. It is also the error for a
+    recurrence RFC 5545 would read as another: one of a calendar other than
+    the Gregorian that counts in months, years or their days (`{:calendar,
+    module}`), and one with no rule that steps by months from the 29th, 30th
+    or 31st, or by years from the 29th of February (`:month_end`).
+
+  An occurrence's length (the `:duration` of `parse/2`) is no part of an
+  `RRULE` and is not written: iCalendar carries it beside the rule, as
+  `DURATION` or `DTEND`.
 
   ### Examples
 
@@ -484,8 +506,11 @@ defmodule Tempo.RRule do
 
   """
   @spec to_string(Tempo.t()) :: {:ok, String.t()} | {:error, Exception.t()}
-  def to_string(%Tempo{form: {:every, %Tempo{form: {:span, _from, cadence}}, bound, parts}} = r) do
-    with {:ok, frequency} <- frequency_part(cadence, r),
+  def to_string(%Tempo{form: {:every, %Tempo{form: {:span, from, cadence}}, bound, parts}} = r) do
+    with :ok <- no_domain(from, r),
+         :ok <- gregorian(r, cadence, parts || []),
+         :ok <- in_every_period(from, cadence, parts, r),
+         {:ok, frequency} <- frequency_part(cadence, r),
          {:ok, by_parts} <- by_parts(parts || [], r) do
       {:ok,
        Enum.join([frequency | Enum.reject([bound_part(bound) | by_parts], &(&1 == ""))], ";")}
@@ -511,6 +536,45 @@ defmodule Tempo.RRule do
     end
   end
 
+  # RFC 5545 counts months, years and their days in the Gregorian calendar,
+  # so a recurrence of another calendar is an RRULE only where it reads there
+  # as itself: stepping by weeks, days or the clock, selecting by weekday and
+  # time of day. (RFC 7529's RSCALE, which names another calendar, is not written.)
+  defp gregorian(%Tempo{calendar: calendar}, _cadence, _parts)
+       when calendar in [Calendrical.Gregorian, Calendar.ISO],
+       do: :ok
+
+  defp gregorian(r, %Duration{units: units}, parts) do
+    if Enum.any?(Keyword.keys(units), &(&1 in @calendar_cadences)) or
+         Enum.any?(Keyword.keys(picked(parts)), &(&1 in @calendar_parts)),
+       do: {:error, no_rrule(r, {:calendar, r.calendar})},
+       else: :ok
+  end
+
+  # A domain says which periods a rule recurs in, and RFC 5545 has no part for it.
+  defp no_domain(%Tempo{form: form}, r) when elem(form, 0) in [:all, :one, :when],
+    do: {:error, no_rrule(r, :domain)}
+
+  defp no_domain(_from, _r), do: :ok
+
+  defp picked(selection: parts, window: %Duration{}), do: parts
+  defp picked(parts), do: parts
+
+  # A recurrence with no rule steps from its start by its cadence, and lands
+  # on the last day of a month that lacks the start's day. RFC 5545 passes
+  # such a month over, so the two are different recurrences and no one rule
+  # says the first.
+  defp in_every_period(%Tempo{form: {:value, units}}, %Duration{units: [{unit, _}]}, nil, r)
+       when unit in [:month, :year] do
+    case {unit, Keyword.get(units, :month), Keyword.get(units, :day)} do
+      {:month, _month, day} when is_integer(day) and day > 28 -> {:error, no_rrule(r, :month_end)}
+      {:year, 2, 29} -> {:error, no_rrule(r, :month_end)}
+      _in_every_period -> :ok
+    end
+  end
+
+  defp in_every_period(_from, _cadence, _parts, _r), do: :ok
+
   defp frequency_part(%Duration{units: [{unit, 1}]}, _r) when is_map_key(@frequency_names, unit),
     do: {:ok, "FREQ=#{@frequency_names[unit]}"}
 
@@ -533,15 +597,58 @@ defmodule Tempo.RRule do
 
   defp padded(n, width), do: String.pad_leading(Integer.to_string(n), width, "0")
 
+  defp by_parts([selection: parts, window: %Duration{}], r), do: by_parts(parts, r)
+
   defp by_parts(parts, r) do
+    frequency = frequency_of(r)
     {weekday, parts} = Keyword.pop(parts, :day_of_week)
     {instance, parts} = Keyword.pop(parts, :instance)
 
-    with :ok <- expressible(parts, r) do
+    with :ok <- expressible(parts, r),
+         :ok <- allowed(parts, frequency, r),
+         :ok <- positioned(weekday, instance, parts, frequency, r) do
       named = Enum.map(parts, fn {unit, held} -> "#{by_name(unit)}=#{listed(held)}" end)
       {:ok, named ++ byday_parts(weekday, instance)}
     end
   end
+
+  defp frequency_of(%Tempo{
+         form: {:every, %Tempo{form: {:span, _, %Duration{units: [{unit, _}]}}}, _, _}
+       }),
+       do: unit
+
+  defp frequency_of(_recurrence), do: nil
+
+  # RFC 5545 §3.3.10 gives each frequency the parts it may have: no day of
+  # the month in a weekly rule, no day of the year in a daily, weekly or
+  # monthly one, a week of the year in a yearly one alone.
+  defp allowed(parts, frequency, r) do
+    forbidden =
+      Enum.find(Keyword.keys(parts), fn part ->
+        {part, frequency} in [
+          {:day, :week},
+          {:day_of_year, :day},
+          {:day_of_year, :week},
+          {:day_of_year, :month}
+        ] or (part == :week and frequency != :year)
+      end)
+
+    if forbidden, do: {:error, no_rrule(r, {:part_at, forbidden, frequency})}, else: :ok
+  end
+
+  # A numbered weekday is of a monthly rule, or a yearly one with no week of
+  # the year; a position alone, with no part to count among, is of none.
+  defp positioned(nil, instance, [], frequency, r) when instance != nil,
+    do: {:error, no_rrule(r, {:part_at, :instance, frequency})}
+
+  defp positioned(weekday, instance, parts, frequency, r)
+       when is_integer(weekday) and instance != nil do
+    if frequency == :month or (frequency == :year and not Keyword.has_key?(parts, :week)),
+      do: :ok,
+      else: {:error, no_rrule(r, {:part_at, :instance, frequency})}
+  end
+
+  defp positioned(_weekday, _instance, _parts, _frequency, _r), do: :ok
 
   defp expressible(parts, r) do
     units = Keyword.values(@part_units)

@@ -44,7 +44,9 @@ defmodule Tempo.ConversionError do
     do: "has no year, and cannot be placed without one or a :within window"
 
   defp describe(:unbounded), do: "has no end; give a :within window to bound it"
-  defp describe(:open), do: "has an open start, which no walk can begin from"
+
+  defp describe(:open),
+    do: "has an open end, which has no place to walk from, relate or combine; give it both ends"
 
   defp describe(:too_many_values),
     do: "names more values than Tempo.Limit.values/0 allows at once"
@@ -52,20 +54,42 @@ defmodule Tempo.ConversionError do
   defp describe(:season), do: "is a season, whose dates no calendar Tempo asks yet gives"
 
   defp describe(:selection),
-    do: "holds a selection, which is read in a later phase of the redesign"
+    do:
+      "holds a selection, which names several values; list them with Tempo.to_interval/2 and ask of each"
 
-  defp describe(:exclusion),
-    do: "holds an exclusion, which is read in a later phase of the redesign"
-
-  defp describe(:repeat_rule),
-    do: "has a repeat rule, which is read in a later phase of the redesign"
+  defp describe(:exclusion), do: "holds an exclusion, which this operation does not apply"
+  defp describe(:repeat_rule), do: "has a repeat rule, which this operation does not apply"
 
   defp describe(:no_such_value), do: "names a value its calendar has no room for"
   defp describe(:group), do: "holds a group, which names a span of values and none to count from"
   defp describe(:several), do: "names several spans, where one is asked for"
 
   defp describe(:conditions),
-    do: "has conditions, which are read in a later phase of the redesign"
+    do:
+      "has conditions on its members, which this operation does not apply; list its members with Tempo.to_interval/2 first"
+
+  defp describe({:no_rrule, :not_a_recurrence}), do: "is no recurrence, and has no RRULE"
+
+  defp describe({:no_rrule, {:cadence, cadence}}),
+    do: "steps by #{inspect(cadence)}, which RFC 5545 has no FREQ for"
+
+  defp describe({:no_rrule, {:part, part}}),
+    do: "selects by #{inspect(part)}, which RFC 5545 has no BY part for"
+
+  defp describe({:no_rrule, {:part_at, part, frequency}}),
+    do:
+      "selects by #{inspect(part)} in a rule that steps by the #{frequency}, which RFC 5545 does not allow"
+
+  defp describe({:no_rrule, {:calendar, calendar}}),
+    do:
+      "counts in #{inspect(calendar)}, where RFC 5545 would read its months and years as Gregorian"
+
+  defp describe({:no_rrule, :domain}),
+    do: "recurs in the periods of a domain, which RFC 5545 has no part for"
+
+  defp describe({:no_rrule, :month_end}),
+    do:
+      "steps to the last day of a month that lacks its start's day, where RFC 5545 would pass the month over"
 
   defp describe(reason) when is_binary(reason), do: reason
   defp describe(reason), do: inspect(reason)

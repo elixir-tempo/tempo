@@ -1,159 +1,275 @@
 # RFC 5545 RRULE Conformance
 
-Tempo treats RFC 5545 RRULE as a first-class recurrence vocabulary. Every rule that [section 3.3.10 of the standard](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10) defines can be parsed into a recurring `%Tempo.Interval{}`, converted to a `%Tempo.IntervalSet{}` of occurrences within any window, and composed with the rest of Tempo's set algebra — `union`, `intersection`, `difference`, and friends. This guide catalogues precisely what that means, what's supported, and what isn't.
+Tempo reads the recurrence rule of [RFC 5545 §3.3.10](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10) into a recurrence — the same `%Tempo{}` an ISO 8601-2 repeating interval reads to — which is walked, listed within a window, and combined with the rest of Tempo's set algebra. This guide says precisely what is read, how each part is taken, and what is not.
 
-Tempo's RRULE parsing is its own implementation; it does not delegate to a third-party library for the string-to-AST step. For full iCalendar (`.ics`) files with events, RDATEs, and EXDATEs, Tempo delegates to the excellent [`ical`](https://hex.pm/packages/ical) library and converts its `%ICal.Recurrence{}` into the same Tempo AST — giving you a single conversion path regardless of whether the rule came from a hand-written string or a parsed iCalendar feed.
+`Tempo.RRule.parse/2` is Tempo's own reader of the rule's text. For whole iCalendar files, with their events, `RDATE`s and `EXDATE`s, Tempo hands the file to the [`ical`](https://hex.pm/packages/ical) library and gives what it finds to the same engine, so a rule means the same whether it came from a hand-written string or a calendar feed.
 
-The reference is [RFC 5545 §3.3.10](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10). A companion extension, RFC 7529, adds `RSCALE`, the calendar a rule counts in, and `SKIP`, what it does with a date that does not exist. Tempo reads both and reports what it does not build; a rule is counted in the calendar its `RSCALE` names, or with none in the calendar of its start (see below).
+## Setup — required for every example
 
-## What Tempo guarantees
+```elixir
+import Tempo.Sigils
+```
 
-Given an RRULE, Tempo will:
+## What Tempo does with a rule
 
-* **Parse** the string into a recurring `%Tempo.Interval{}` via `Tempo.RRule.parse/2` — its recurrence is described by the rule parts catalogued below.
+* **Reads** it with `Tempo.RRule.parse/2`, given its `DTSTART` as `:from`.
 
-* **Expand** that recurring interval into an explicit `%Tempo.IntervalSet{}` of occurrences via `Tempo.to_interval/2`.
+* **Walks** it with `Enum` and `Stream`, lazily, whether or not it has an end.
 
-* **Apply set operations**: occurrences compose with every operation (`Tempo.union/2`, `Tempo.intersection/2`, `Tempo.difference/2`, `Tempo.symmetric_difference/2`, `Tempo.complement/2`, `Tempo.members_overlapping/2`, `Tempo.members_outside/2`, `Tempo.members_in_exactly_one/2`) and with the predicates (`overlaps?/2`, `disjoint?/2`, `contains?/2`, `equal?/2`, `within?/2`).
+* **Lists** its occurrences with `Tempo.to_interval/2`, bounded by its `COUNT` or `UNTIL`, or by a `:within` window.
 
-* **Iterate** via `Enum` — `Enum.to_list/1`, `Stream.take/2`, etc. — when the rule is bounded or a `:within` window is supplied.
+* **Combines** them with every set operation and predicate.
 
-* **Re-encode** back to an RRULE string via `Tempo.RRule.to_string/1` for values that originated as RRULEs.
+* **Writes** it back with `Tempo.RRule.to_string/1`, and as ISO 8601-2 with `Tempo.to_iso8601/1`.
 
-## Property-by-property support
+```elixir
+iex> rule = Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=-1FR;COUNT=3", from: ~o"2026-01-01")
+iex> Enum.map(rule, &Tempo.Interval.from/1)
+[~o"2026Y1M30D", ~o"2026Y2M27D", ~o"2026Y3M27D"]
 
-Every property defined by RFC 5545 §3.3.10, with Tempo's handling:
+iex> Tempo.RRule.to_string(rule)
+{:ok, "FREQ=MONTHLY;COUNT=3;BYDAY=-1FR"}
 
-| Property | Supported | AST field | Notes |
-| -------- | :-------: | --------- | ----- |
-| `FREQ` | ✓ | `:freq` | All seven values: `:second`, `:minute`, `:hour`, `:day`, `:week`, `:month`, `:year`. |
-| `INTERVAL` | ✓ | `:interval` | Positive integer; defaults to `1`. |
-| `COUNT` | ✓ | `:count` | Mutually exclusive with `UNTIL` per §3.3.10. |
-| `UNTIL` | ✓ | `:until` | `%Tempo{}` endpoint. |
-| `WKST` | ✓ | `:wkst` | Integer 1–7, default Monday. Affects `BYWEEKNO` calculations. |
-| `BYSECOND` | ✓ | `:bysecond` | Integer list 0–60. |
-| `BYMINUTE` | ✓ | `:byminute` | Integer list 0–59. |
-| `BYHOUR` | ✓ | `:byhour` | Integer list 0–23. |
-| `BYDAY` | ✓ | `:byday` | List of `{ordinal_or_nil, weekday_1_to_7}` tuples. Ordinals (`1MO`, `-1FR`) honoured under `FREQ=MONTHLY`/`YEARLY`; ignored as filters under other FREQs per RFC. |
-| `BYMONTHDAY` | ✓ | `:bymonthday` | Integer list -31..31; negatives count from end of month (`-1` = last day). |
-| `BYYEARDAY` | ✓ | `:byyearday` | Integer list -366..366. |
-| `BYWEEKNO` | ✓ | `:byweekno` | Integer list -53..53; `FREQ=YEARLY` only, per RFC. |
-| `BYMONTH` | ✓ | `:bymonth` | Integer list 1–12. |
-| `BYSETPOS` | ✓ | `:bysetpos` | Integer list; applied **last** to pick the Nth candidate of the per-period set, per RFC. |
+iex> Tempo.to_iso8601(rule)
+{:ok, "R3/2026Y1M1D/P1M/FL5K-1IN"}
+```
 
-### BY-rule EXPAND vs LIMIT semantics
+> *"The **last Friday** of each month, **three** times."*
 
-RFC 5545 defines each BY-rule as either **EXPAND** (generates additional candidates inside a period) or **LIMIT** (filters the candidate set) depending on the outer `FREQ`. Tempo implements the full table from the RFC:
+## Part by part
 
-* `BYMONTH` expands when `FREQ=YEARLY`; limits under finer FREQs.
+| Part | Read | Notes |
+|---|:---:|---|
+| `FREQ` | ✓ | `SECONDLY`, `MINUTELY`, `HOURLY`, `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`. |
+| `INTERVAL` | ✓ | A positive whole number; 1 where none is written. |
+| `COUNT` | ✓ | Not beside `UNTIL`. Counts from the rule's start. |
+| `UNTIL` | ✓ | A date or a date and time; the last occurrence may begin on it. |
+| `BYSECOND`, `BYMINUTE`, `BYHOUR` | ✓ | |
+| `BYDAY` | ✓ | Weekdays, and one weekday with numbers (`2MO`, `-1FR`, `1MO,3MO`). Numbered weekdays of several days (`2MO,2WE`) are not read. |
+| `BYMONTHDAY` | ✓ | From 1, or from -1 back from the end of the month. |
+| `BYYEARDAY` | ✓ | From 1, or from -1 back from the end of the year. |
+| `BYWEEKNO` | ✓ | ISO 8601 weeks; from -1 back from the year's last. |
+| `BYMONTH` | ✓ | |
+| `BYSETPOS` | ✓ | Applied last, to what the other parts select in each period. |
+| `WKST` | `MO` only | A week begins on Monday, as ISO 8601's do. Another day is an error. |
 
-* `BYMONTHDAY` expands when `FREQ=MONTHLY`/`YEARLY`; limits under finer FREQs.
+### Parts coarser and finer than the frequency
 
-* `BYYEARDAY` expands when `FREQ=YEARLY`; limits otherwise.
+RFC 5545 has each `BY…` part either add occurrences within a period of the frequency or keep some of the periods, by whether the part is finer or coarser than the frequency. Tempo's engine does the same from one rule: the parts are selected in each period, and a period that lies within what a coarser part names is kept whole.
 
-* `BYWEEKNO` expands when `FREQ=YEARLY`; limits otherwise. Its weeks start on `WKST`, and week 1 holds the year's fourth day, so with the default Monday they are ISO 8601's weeks, the `W` of the ISO form. A YEARLY rule with `BYWEEKNO` and no `BYYEARDAY`, `BYMONTHDAY` or `BYDAY` takes DTSTART's weekday, as ISO 8601-2 Annex C.3 reads RFC 5545: `FREQ=YEARLY;BYWEEKNO=20` from Monday 1997-05-12 is the Monday of week 20 each year.
+```elixir
+iex> first = fn rule, from, count ->
+...>   rule |> Tempo.RRule.parse!(from: from) |> Enum.take(count) |> Enum.map(&Tempo.Interval.from/1)
+...> end
+iex> first.("FREQ=YEARLY;BYMONTH=3,6", ~o"2026-01-15", 3)
+[~o"2026Y3M15D", ~o"2026Y6M15D", ~o"2027Y3M15D"]
 
-* `BYDAY`'s role depends on `FREQ` and whether `BYWEEKNO` or `BYMONTH` is also present — Tempo follows the RFC's §3.3.10 decision table.
+iex> first.("FREQ=DAILY;BYMONTH=1", ~o"2026-12-30", 3)
+[~o"2027Y1M1D", ~o"2027Y1M2D", ~o"2027Y1M3D"]
 
-* `BYHOUR`/`BYMINUTE`/`BYSECOND` expand when `FREQ` is coarser than the unit; limit when finer. §3.3.10 has them ignored where DTSTART is a `DATE`, so `Tempo.ICal.parse/2` reads an all-day event's `FREQ=DAILY;BYHOUR=9` as `FREQ=DAILY`, each occurrence the whole day. `Tempo.RRule.parse/2` is given a Tempo value and no `DATE`, and from a date it picks the hour of each day.
+iex> first.("FREQ=DAILY;BYDAY=MO", ~o"2026-01-01", 3)
+[~o"2026Y1M5D", ~o"2026Y1M12D", ~o"2026Y1M19D"]
+```
 
-* `BYSETPOS` is always applied last as a LIMIT across the candidate set.
+> *"Yearly in **March and June**, on the start's 15th. Daily in **January**: every day of it. Daily on **Mondays**."*
 
-In a `YEARLY` rule the parts that name a day hold at once, so the days selected are those that satisfy every one of them: `BYMONTH=3;BYYEARDAY=100` selects nothing, day 100 being 10 April, `BYMONTH=3,4;BYYEARDAY=80,100` is 21 March and 10 April, each once, and `BYMONTHDAY=15;BYYEARDAY=74` is 15 March in the years whose 74th day it is.
+Parts that name a day hold at once, so the days selected are those every one of them names:
 
-### What the writer allows a frequency
+```elixir
+iex> first.("FREQ=YEARLY;BYMONTH=3,4;BYYEARDAY=80,100", ~o"2026-01-01", 2)
+[~o"2026Y3M21D", ~o"2026Y4M10D"]
 
-RFC 5545 §3.3.10 forbids some parts at some frequencies: `BYMONTHDAY` in a `WEEKLY` rule, `BYYEARDAY` in a `DAILY`, `WEEKLY` or `MONTHLY` one, `BYWEEKNO` in any but a `YEARLY` one, a numbered `BYDAY` outside a `MONTHLY` rule and a `YEARLY` rule with no `BYWEEKNO`, and a `BYSETPOS` with no other `BY` part. `Tempo.RRule.parse/2` reads such a rule, as many calendars write them, and `Tempo.RRule.to_string/1` does not write one: a numbered weekday is written as the weekday and its position where the number is not allowed (`FREQ=WEEKLY;BYDAY=WE;BYSETPOS=2`), and every other forbidden part is a `Tempo.ConversionError` that names the part and the frequency.
+iex> first.("FREQ=MONTHLY;BYMONTHDAY=13;BYDAY=FR", ~o"1998-02-13", 3)
+[~o"1998Y2M13D", ~o"1998Y3M13D", ~o"1998Y11M13D"]
+```
 
-`BYWEEKNO` counts the weeks of a year, which a rule is asked of each day from a start that is a date. With no such start a rule is resolved in its period, where a week beside a month, or in a rule that steps by months, is a week of that month, which an RRULE cannot say: `FREQ=YEARLY;BYMONTH=6;BYWEEKNO=24` and `FREQ=MONTHLY;BYWEEKNO=2` read with no `:from`, or with one written to its year, are `{:error, {:byweekno_without_a_date, weeks}}`. `FREQ=YEARLY;BYWEEKNO=24` with no start is read, as the 24th week of each year.
+> *"The 80th and 100th days of the year that are in **March or April**. A **13th** that is a **Friday**."*
+
+A day of the month in a yearly rule with no `BYMONTH` is that day of every month, the part adding to the year as RFC 5545's table has it:
+
+```elixir
+iex> first.("FREQ=YEARLY;BYMONTHDAY=15", ~o"2026-03-10", 3)
+[~o"2026Y3M15D", ~o"2026Y4M15D", ~o"2026Y5M15D"]
+```
 
 ### What a rule takes from DTSTART
 
-A rule takes from DTSTART what it does not say, as ISO 8601-2 Annex C.3 lists it: a `WEEKLY` rule with no `BYDAY` its weekday, a `MONTHLY` rule with no `BYMONTHDAY` and no `BYDAY` its day of the month, and a `YEARLY` rule its month and its day, so `FREQ=YEARLY;BYMONTHDAY=15` is the 15th of DTSTART's month. A rule read with a start states each part, as Annex C.4 has a conversion do: `FREQ=MONTHLY` from 31 January is `~o"R/2026-01-31/P1M/FL31DN"`, and `Tempo.RRule.to_string/1` writes it `FREQ=MONTHLY;BYMONTHDAY=31`, which RFC 5545 reads as the rule it was.
-
-A rule read with no start has nothing to take a month from, and is the rule its ISO 8601 form says: `FREQ=YEARLY;BYMONTHDAY=-1` with no `:from` is `~o"R/../P1Y/FL-1DN"`, whose day with no month is a day of the year, 31 December. The writer keeps the two apart for a reader of RFC 5545: the ISO 8601 rule `~o"R/2026/P1Y/FL45DN"`, the 45th day of each year, is written `FREQ=YEARLY;BYYEARDAY=45`, and `BYMONTHDAY` is written where the rule or its start names the month.
-
-A day so stated is passed over where a month or a year lacks it, as RFC 5545 §3.3.10 says of an instance with an invalid date: that rule lists the months of 31 days, and `FREQ=YEARLY` from 29 February the leap years. An occurrence is as long as its start is precise, a day for a date, which is the length RFC 5545 gives an event with no `DTEND`, and an hour for a time written to the hour: `FREQ=DAILY` from 10:00 is the hour from 10:00 of each day, as `FREQ=WEEKLY` from it is that hour of each week. A start as coarse as the rule steps, or coarser, gives occurrences as long as a step (`FREQ=HOURLY` from a date is each hour from its midnight), and an event's `DTEND` or `DURATION` sets the length otherwise.
-
-A time of day a rule picks that the zone's clock skips on some day is passed over there too, and is not counted, as §3.3.10 says of an instance on a nonexistent local time: `FREQ=DAILY;BYHOUR=2;BYMINUTE=30` in `America/New_York` has no occurrence on the night the clocks go from 02:00 to 03:00, and neither has a day of the month the zone left out, as Samoa left out 30 December 2011. An hour the clock skips part of is the part it shows: `FREQ=DAILY;BYHOUR=2` in `Australia/Lord_Howe` is the half hour from 02:30 to 03:00 on the morning the clocks go from 02:00 to 02:30, as the hour `T2H` is there. A time of day the rule takes from DTSTART is another matter. The same section has the computed start of an instance that does not exist read as §3.3.5 reads a date and time, with the offset before the gap, so `FREQ=DAILY` from 02:30 has its occurrence that night at 03:30.
-
-An ISO 8601 recurrence is not a rule of RFC 5545. `~o"R/2026-01-31/P1M"` selects nothing: it is its start and n months on, 28 February and 30 April among them, each occurrence a month long. `Tempo.RRule.to_string/1` writes it as the rule that lists those days for a reader of RFC 5545, `FREQ=MONTHLY;BYMONTHDAY=-1`, the last day of each month; one from the 30th is the last of the days up to it, `BYMONTHDAY=28,29,30;BYSETPOS=-1`, and one from 29 February `FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=-1`. Where no one rule says it, the recurrence holding a position or several times of day already, or naming months of different lengths in a year, the writer returns a `Tempo.ConversionError`.
-
-### RDATE and EXDATE
-
-These are VEVENT-level properties rather than RRULE-level, but they compose with RRULE expansion through `Tempo.ICal.parse/2`:
-
-* **`RDATE`** contributes additional occurrences beyond the RRULE expansion. Tempo implements this as a `union` of the RRULE expansion with an `%Tempo.IntervalSet{}` of the RDATEs (each RDATE carries the event's original `DTEND - DTSTART` span; metadata is preserved).
-
-* **`EXDATE`** removes matching occurrences from the expansion. Tempo implements this as a member-filter difference — an occurrence is removed if its `.from` moment matches an EXDATE via RFC-compliant endpoint comparison.
-
-The end-to-end formula: **`occurrences = (expand(rrule) ∪ rdates) − exdates`**.
-
-## Calendar awareness
-
-RFC 5545 is implicitly Gregorian. RFC 7529 defines a separate `RSCALE` part that names the calendar a rule counts in, and Tempo reads it: `RSCALE=HEBREW;FREQ=YEARLY` from 2 April 2026 recurs on 15 Nisan, the rule's start being brought into the Hebrew calendar where the rule is read, and a `BYMONTH` there is the month RFC 7529 numbers (Nisan is month 7 of every year). A leap month is the number of the month it follows and an `L`: `BYMONTH=5L` is Adar I. A name that is no calendar's is `{:error, {:unsupported_rscale, name}}`. With no `RSCALE`, **Tempo's RRULE expansion is calendar-aware through the rule's DTSTART**. Parse a DTSTART in the Hebrew calendar (`5786-09-30[u-ca=hebrew]`) and expand an RRULE against it, and the expansion iterates in Hebrew months. The same rule string yields different occurrences depending on which calendar the DTSTART is in.
-
-Occurrence selection dispatches to the calendar module (`days_in_month/2`, `day_of_year/3`, `day_of_week/4`) and steps through Calendrical, so BYMONTH/BYMONTHDAY/BYYEARDAY respect calendar-specific month and year lengths, and BYWEEKNO numbers the weeks of the calendar's own year from `WKST`.
-
-Writing is narrower than reading. `Tempo.RRule.to_string/1` writes a rule for an RFC 5545 reader, who counts months, years and weeks of the year in the Gregorian calendar, so a recurrence of another calendar is written only where that reader finds the same days: one that steps by weeks, days or less and selects by weekday and time of day. Its `UNTIL` is the Gregorian date its end is, and in a calendar whose weeks begin on another day than Monday its `WKST` is that day (`WKST=SU` in `Calendrical.NRF`). One that steps or selects by a month, a year, a week of the year or a day of one returns a `Tempo.ConversionError` whose `:reason` is `:not_built`, since only `RSCALE` could say which calendar counts them.
-
-## Unbounded rules require a window
-
-A rule with `FREQ` but no `COUNT`, no `UNTIL`, and no `:within` window is infinite — Tempo cannot list its occurrences. Attempting to do so returns:
+A rule takes from its start what it does not say: a weekly rule with no `BYDAY` its weekday, a monthly rule with neither `BYMONTHDAY` nor `BYDAY` its day of the month, a yearly rule its month and day, a rule that names a week and no day its day of the week. The recurrence read states each, as ISO 8601-2's Annex C.4 has a conversion do, so `Tempo.RRule.to_string/1` writes `FREQ=MONTHLY` from the 31st back as `FREQ=MONTHLY;BYMONTHDAY=31`, which RFC 5545 reads as the rule it was.
 
 ```elixir
-{:error, %Tempo.UnboundedRecurrenceError{reason: ...}}
+iex> Tempo.RRule.parse!("FREQ=YEARLY;BYWEEKNO=20", from: ~o"2026-05-11") |> Enum.take(2)
+[~o"2026Y20W1K/20W1K", ~o"2027Y20W1K/20W1K"]
 ```
 
-The error message points callers at the `:within` option. This is a deliberate design choice (see the [scheduling guide](./scheduling.md)) — infinite recurrences are rule-shaped, not set-shaped, and Tempo refuses to silently iterate without a stop condition.
+> *"The **Monday of week 20**, the start being a Monday."*
 
-## A walk is bounded
+A time of day in the start is kept by every occurrence. A rule with no start (`:from` not given) is read, written and listed within a window, taking nothing from a start: `FREQ=YEARLY;BYWEEKNO=24` is week 24 of each year.
 
-A rule's occurrences are found by walking the periods of its frequency. A walk makes at most 10,000 periods and gives at most 10,000 occurrences at once, and a rule that has not come to its `COUNT`, its `UNTIL` or the end of its window by then returns a `Tempo.UnboundedRecurrenceError` and none of what it found, which would not be all of it. A period of a rule gives at most 10,000 occurrences, whatever its `COUNT` or its window, and a `BYSETPOS` picks among at most as many candidates: a rule whose period has more is a `Tempo.ConversionError`, and is written with a finer `FREQ`. The 10,000 is the application's `:max_values_at_once`, read when Tempo is compiled.
+### How long an occurrence is
 
-A rule whose parts leave its occurrences far apart for its frequency is not asked of every period. Where a period selects nothing, the walk goes on from the next value named by the part that dropped it — a `BYMONTH`, `BYMONTHDAY`, `BYYEARDAY` or `BYDAY`, a `BYHOUR`, `BYMINUTE` or `BYSECOND` — so `FREQ=MINUTELY;BYHOUR=9;BYMINUTE=0;COUNT=30` is thirty mornings in a few periods a day, and `FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO` comes to each 29 February that is a Monday, decades apart. A `BYWEEKNO` is asked of each period, a week running across a month and a year.
+An occurrence is as long as its start is precise: a day for a date, which is the length RFC 5545 gives an event with no `DTEND`, and an hour for a time written to the hour. An event's `DTEND` or `DURATION` is given as `:duration` and sets the length otherwise.
 
-A rule that has no occurrence has none, and returns the empty set: the 31st of April (`FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31`), an April from a start on 31 January, the 29 February of every fourth year from 2026. A rule of years or months is told so once it has selected nothing in the periods of the years its calendar comes round in (four hundred, in the Gregorian calendar), and a rule of a finer frequency from the dates its parts name. One of days, hours, minutes or seconds is told so too where it steps past every value its parts name: every seventh day from a Tuesday is a Tuesday, so `FREQ=DAILY;INTERVAL=7;BYDAY=MO` from one has no occurrence, and nor has `FREQ=HOURLY;INTERVAL=12;BYHOUR=9` from 10:00. A zone's clock changes the hour a step comes to, and a rule in a zone is told so from its steps with what its clock does. One that steps by days stops on the day stepped to or, where the clock skips its time until past midnight, the day after, so every seventh day from a Tuesday at 10:00 in any zone has no Monday. One that steps by hours, minutes or seconds stops where it steps to, moved by each offset the zone's clock is at for as long as the walk can run: every twenty-fourth hour from 10:00 in Paris is 10:00 or 09:00, so a rule for three o'clock there has no occurrence. A walk that could cover more than thirty years, and a zone whose clock changes by other than whole units of the step (the half hour of Lord Howe, in a walk of hours), is not asked, and is walked. A position no period has (`FREQ=DAILY;BYSETPOS=2`, the second of each day's one) is no occurrence either. A rule in a calendar whose years come round in no cycle (the Hebrew, the Chinese, the Persian) is told so from its steps alone, and either is otherwise cut short as any long walk is.
+```elixir
+iex> Tempo.RRule.parse!("FREQ=DAILY", from: ~o"2026-06-01") |> Enum.take(1)
+[~o"2026Y6M1D/2026Y6M1D"]
 
-## Not supported
+iex> Tempo.RRule.parse!("FREQ=DAILY", from: ~o"2026-06-01T10") |> Enum.take(1)
+[~o"2026Y6M1DT10H/T11H"]
 
-A small list of features outside Tempo's current RRULE scope:
+iex> Tempo.RRule.parse!("FREQ=DAILY", from: ~o"2026-06-01T10:00", duration: ~o"PT45M") |> Enum.take(1)
+[~o"2026Y6M1DT10H0M/T45M"]
+```
 
-* **`EXRULE`** — deprecated by RFC 5545 Errata in favour of EXDATE. Not exposed by the underlying `ical` library and not implemented in Tempo. EXDATE covers every use case.
+### Dates that do not exist
 
-* **Duration-only VEVENT** (DURATION without DTEND) — not yet supported in `Tempo.ICal.parse/2`. The iCal library parses it; Tempo's conversion doesn't handle it. Raises `Tempo.ConversionError`.
+RFC 5545 §3.3.10 has a rule's instances on a date that does not exist ignored, and not counted. A day a month lacks is passed over, and so is a time of day a zone's clock skips, and a day a zone left out:
 
-* **Sub-second `FREQ` or `BY*`** — Tempo's resolution ladder currently stops at `:second`. Sub-second recurrence isn't meaningful within Tempo's AST.
+```elixir
+iex> first.("FREQ=MONTHLY", ~o"2026-01-31", 3)
+[~o"2026Y1M31D", ~o"2026Y3M31D", ~o"2026Y5M31D"]
 
-* **RFC 7529 `RSCALE` and `SKIP`** — read in an RRULE string, and neither is written. `RSCALE` names the calendar the rule is counted in, by its CLDR name in any case, and the rule's start is brought into it. `SKIP=OMIT`, the default and RFC 5545's rule, passes over a date that does not exist, `SKIP=BACKWARD` keeps the last day of a month or a year without its start's day (`RSCALE=GREGORIAN;FREQ=MONTHLY;SKIP=BACKWARD` from 31 January lists 28 February) and `SKIP=FORWARD` takes the first day of the month after, each occurrence as long as the start is precise. A day counted from the end that a month lacks (`BYMONTHDAY=-31` in a month of thirty days), which neither RFC places, is read as the day before the month's first: `FORWARD` takes the first, and `BACKWARD` the last day of the month before. Each month is asked its own days, so the sixth day of an Ethiopic year's thirteenth month is moved in a year that gives it five; JSCalendar's `rscale` and `skip` are read the same way. Reported as `{:error, reason}` rather than read as another: an `RSCALE` that names no calendar (`:unsupported_rscale`), a rule of another calendar with no start and no part that selects (`:rscale_without_a_start`), a `SKIP` that is none of the three (`:unsupported_skip`), a `SKIP` with no `RSCALE`, which RFC 7529 §4.1 forbids (`:skip_without_rscale`), a leap month in a rule that names no calendar (`:leap_month_without_rscale`) or a calendar that has none (`:calendar_has_no_leap_month`), and `FORWARD` beside a leap month after a year's last month. Writing refuses what only `RSCALE` could say, described above.
+iex> first.("FREQ=DAILY;BYHOUR=2;BYMINUTE=30", ~o"2024-03-09T00:00[America/New_York]", 2)
+[~o"2024Y3M9DT2H30M[America/New_York]", ~o"2024Y3M11DT2H30M[America/New_York]"]
 
-* **A leap month, RFC 7529's `BYMONTH=5L`** — read in an RRULE string and in JSCalendar's `byMonth` (`"5L"`), as the leap month after the fifth: Adar I of a Hebrew year. A year that has no such month has no such date, and `SKIP` says what becomes of it: `OMIT` passes over the year, `BACKWARD` takes the month before, the one the leap month follows, and `FORWARD` the month after, a day that month lacks being moved in its turn. `RSCALE=HEBREW;FREQ=YEARLY;BYMONTH=5L;BYMONTHDAY=8;SKIP=FORWARD` from 8 February 2014 is the dates RFC 7529 §4.3.3 lists: 27 February 2015, 17 February 2016, 6 March 2017. A yearly rule whose start is in a leap month takes that month from it, so with no `SKIP` it recurs in the years that have one.
+iex> first.("FREQ=MONTHLY;BYMONTHDAY=30", ~o"2011-11-30[Pacific/Apia]", 2)
+[~o"2011Y11M30D[Pacific/Apia]", ~o"2012Y1M30D[Pacific/Apia]"]
+```
+
+> *"Monthly on the **31st** passes February over. Half past two in New York has no occurrence on the night the clocks go from two to three. The **30th of December 2011** never came in Samoa."*
+
+## A rule with no end needs a bound to be listed
+
+A rule with no `COUNT` and no `UNTIL` has no last occurrence. It is walked as far as it is taken, and listed within a window:
+
+```elixir
+iex> daily = Tempo.RRule.parse!("FREQ=DAILY", from: ~o"2026-06-01")
+iex> {:error, %Tempo.ConversionError{reason: :unbounded}} = Tempo.to_interval(daily)
+iex> {:ok, june} = Tempo.to_interval(daily, within: ~o"2026-06")
+iex> Tempo.IntervalSet.count(june)
+30
+```
+
+A window keeps the occurrences that overlap it, and never changes which they are: a `COUNT` counts from the rule's start, so the first three days of 2000 are none of them in 2026.
+
+```elixir
+iex> long_ago = Tempo.RRule.parse!("FREQ=DAILY;COUNT=3", from: ~o"2000-01-01")
+iex> Tempo.to_interval(long_ago, within: ~o"2026")
+{:ok, ~o"{}"}
+```
+
+A window with no zone, beside a rule in one, is read on the rule's clock: June is the June of the rule's zone.
+
+Listing answers at most 10,000 occurrences at once (the application's `:max_values_at_once`), and more than that is a `Tempo.ConversionError` with the reason `:too_many_values`, rather than some of them.
+
+## Rules far between, and rules with nothing
+
+A rule whose parts leave its occurrences far apart for its frequency is not asked of every period. Where a period selects nothing, the walk goes on from the next value the parts name:
+
+```elixir
+iex> first.("FREQ=SECONDLY;BYHOUR=9", ~o"2026-01-01T00:00:00", 2)
+[~o"2026Y1M1DT9H0M0S", ~o"2026Y1M1DT9H0M1S"]
+
+iex> first.("FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO", ~o"2026-01-01", 2)
+[~o"2044Y2M29D", ~o"2072Y2M29D"]
+```
+
+> *"Every second of the **nine o'clock hour**, reached without counting the seconds before it. Each **29th of February that is a Monday**, decades apart."*
+
+A rule that has no occurrence has none, and its walk ends:
+
+```elixir
+iex> first.("FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31;COUNT=2", ~o"2026-01-01", 2)
+[]
+
+iex> first.("FREQ=DAILY;INTERVAL=7;BYDAY=MO", ~o"2026-01-06", 1)
+[]
+
+iex> first.("FREQ=DAILY;BYSETPOS=2", ~o"2026-01-01", 1)
+[]
+```
+
+> *"The **31st of April**. Every seventh day from a Tuesday that is a **Monday**. The **second** of a day's one."*
+
+A rule is given up once it has selected nothing in a whole cycle of its calendar's years — four hundred in the Gregorian calendar, in which every date and weekday it could name comes round — or in a thousand years in a calendar with no such cycle. A rule that names times of day alone is given up after two years.
+
+## Other calendars
+
+RFC 5545 is Gregorian. A rule is counted in the calendar of its start, so the same text from a start in another calendar steps by that calendar's months and years:
+
+```elixir
+iex> passover = Tempo.RRule.parse!("FREQ=YEARLY;COUNT=3", from: ~o"5786-07-15[u-ca=hebrew]")
+iex> Enum.map(passover, fn occurrence ->
+...>   Tempo.to_calendar!(Tempo.Interval.from(occurrence), Calendrical.Gregorian)
+...> end)
+[~o"2026Y4M2D[u-ca=gregorian]", ~o"2027Y3M24D[u-ca=gregorian]", ~o"2028Y4M11D[u-ca=gregorian]"]
+```
+
+> *"**Every year** from the 15th of the seventh Hebrew month: the 2nd of April 2026, the 24th of March 2027, the 11th of April 2028."*
+
+Writing is narrower than reading. `Tempo.RRule.to_string/1` writes for a reader of RFC 5545, who counts months and years in the Gregorian calendar, so a recurrence of another calendar that counts in them is a `Tempo.ConversionError` (`{:no_rrule, {:calendar, module}}`), and one that steps by weeks, days or the clock and selects by weekday and time of day is written. Its ISO 8601 text, with its suffix, always reads back: `~o"R/5786-07-15/P1Y[u-ca=hebrew]"`.
+
+## What is written, and what is refused
+
+`Tempo.RRule.to_string/1` writes a recurrence only as a rule RFC 5545 reads as that recurrence. Each of these is a `Tempo.ConversionError` whose reason is `{:no_rrule, what}`:
+
+```elixir
+iex> refused = fn expression ->
+...>   {:error, %Tempo.ConversionError{reason: {:no_rrule, what}}} = Tempo.RRule.to_string(expression)
+...>   what
+...> end
+iex> refused.(~o"R/2026-01-01/P1W/FL15DN")
+{:part_at, :day, :week}
+
+iex> refused.(~o"R/2026-01-01/P1M/FL20WN")
+{:part_at, :week, :month}
+
+iex> refused.(~o"R/2026-01-31/P1M")
+:month_end
+
+iex> refused.(~o"R/2026-01-01/P1Y/FL(easter)eN")
+{:part, :event}
+```
+
+* **A part RFC 5545 forbids the frequency**: a day of the month in a weekly rule, a day of the year in a daily, weekly or monthly one, a week of the year in any but a yearly one, a numbered weekday outside a monthly rule and a yearly rule with no `BYWEEKNO`, a `BYSETPOS` with no other part.
+
+* **A recurrence with no rule that lands on a month's last day.** `R/2026-01-31/P1M` goes to the 28th of February where `FREQ=MONTHLY` from the 31st passes February over, so no one rule says it.
+
+* **A part with no `BY…`**: an event the calendar computes, a traditional month, a selection within the window of another.
+
+* **A cadence of several units**, and a recurrence of another calendar, as above.
+
+An occurrence's length is no part of an RRULE and is not written; iCalendar carries it beside the rule.
+
+## Not read
+
+`Tempo.RRule.parse/2` returns `{:error, %ArgumentError{}}` that names what it does not read, rather than a rule that is nearly it:
+
+* **`WKST` other than `MO`.**
+
+* **Numbered weekdays of several days in one `BYDAY`** (`BYDAY=2MO,2WE`).
+
+* **RFC 7529's `RSCALE` and `SKIP`.** A rule in another calendar is read by giving it a start in that calendar, as above.
+
+* **`EXRULE`**, which RFC 5545 deprecated in favour of `EXDATE`.
+
+`RDATE` and `EXDATE` are properties of an event rather than parts of a rule. `Tempo.ICal.parse/2` adds the one and removes the other, and `Tempo.RecurrenceSet` holds rules and dates together for the same purpose in code.
 
 ## Test coverage
 
-Tempo's RRULE conformance is covered by six test files:
-
-* `test/tempo/rrule_test.exs` — parse/round-trip behaviour at the string level.
-* `test/tempo/rrule/expander_test.exs` — AST expansion across FREQ values.
-* `test/tempo/rrule/selection_test.exs` — the RFC 5545 §3.8.5.3 worked examples (Thanksgiving, Election Day, Friday-the-13th, last-weekday-of-month, etc.).
-* `test/tempo/rrule/rfc5545_conformance_test.exs` — broad conformance suite.
-* `test/tempo/rrule/rdate_exdate_test.exs` — RDATE/EXDATE integration.
-* `test/tempo/rrule/wkst_and_edges_test.exs` — WKST and boundary edge cases.
-
-These sit on top of the broader suite that exercises the AST and set-algebra pipelines the RRULE machinery depends on.
+`test/tempo/rrule_test.exs` holds the worked examples of RFC 5545 §3.8.5.3 — Thanksgiving, US election day, Friday the 13th, the last weekday of a month and the rest — each asserted as its occurrences, as the ISO 8601-2 text it writes, and as the rule read back from that text. `test/tempo/calendars_test.exs` holds events with `RDATE` and `EXDATE` read from iCalendar and JSCalendar.
 
 ## Acknowledgement
 
-Tempo's iCalendar integration (event parsing, VTIMEZONE, RDATE/EXDATE collection, RRULE string tokenisation used as one of our input paths) relies on the excellent [`ical`](https://hex.pm/packages/ical) library, which claims full RFC 5545 compliance at the iCalendar object-graph level. The division of labour is clean: `ical` handles the iCalendar wire format; Tempo takes the parsed structures and turns them into something you can iterate, operate on, and compose with the rest of the time line. Without `ical`'s work, Tempo's iCal integration would have been a much larger undertaking.
+Tempo's reading of iCalendar files relies on the excellent [`ical`](https://hex.pm/packages/ical) library. The division of labour is clean: `ical` reads the wire format, and Tempo makes of what it finds something to walk, relate and combine.
 
 ## Related reading
 
-* [Scheduling](./scheduling.md) — bounded enumeration, the `:within` option, wall-clock-vs-UTC authority, floating vs zoned events.
+* [One form for ISO 8601 and RRULE](./shared-ast-iso8601-and-rrule.md) — how a rule and an ISO 8601-2 recurrence are one value.
 
-* [iCalendar integration](./ical-integration.md) — full details on `Tempo.ICal.parse/2` and round-tripping `.ics` files.
+* [Scheduling](./scheduling.md) — bounding a recurrence, wall-clock time and zones.
 
-* [Set operations](./set-operations.md) — the member-preserving set algebra that RRULE expansions compose into.
+* [iCalendar integration](./ical-integration.md) — `Tempo.ICal.parse/2` and what an event becomes.
 
-* [Cookbook](./cookbook.md) — practical scheduling examples built on RRULE.
+* [Set operations](./set-operations.md) — what occurrences are combined with.
 
 * [RFC 5545 §3.3.10](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10) — the standard itself.

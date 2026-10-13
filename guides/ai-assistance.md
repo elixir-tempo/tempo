@@ -10,10 +10,10 @@ Give it a sentence like any of these and it will represent and solve it:
 
 * *"Do these two delivery windows clash?"* → Allen relations (`overlaps?`, `relation/2`).
 * *"When is everyone free for an hour on Monday?"* → set algebra (`difference`, `intersection`) and bookable `slots/3`.
-* *"List the second Monday of every month next year."* → recurrence (`RRule.parse!` → `to_interval`).
-* *"Given these radiocarbon dates ±, which finds could be contemporary?"* → graded relations (`overlap_certainty`, `certainly_before?`).
-* *"Order these dependent tasks and find the critical path."* → `Tempo.Schedule`.
-* *"These reigns and strata only have relative dates — are they consistent, and what do they pin down?"* → `Tempo.Network` + the STP solver.
+* *"List the second Monday of every month next year."* → recurrence (`Tempo.RRule.parse!/2`, then `Tempo.to_interval/2`).
+* *"Given these radiocarbon dates ±, which finds could be contemporary?"* → relations that answer in three values (`Tempo.certainty/3`, `Tempo.certainly?/3`, `Tempo.possibly?/3`).
+* *"Order these dependent tasks and find the critical path."* → the companion package `tempo_network`.
+* *"These reigns and strata only have relative dates — are they consistent, and what do they pin down?"* → `tempo_network`'s constraint networks.
 
 Because ISO 8601-2 is easy to get subtly wrong (`2004-06~-11` and `2004-?06-11` mean different things), the skill's first rule is to **never present a value it hasn't validated** — it parses every representation and echoes its meaning back with `Tempo.explain/1` before building on it.
 
@@ -43,7 +43,7 @@ Just describe the problem. You don't need to name a function or know the syntax:
 
 > *"I have a hearth carbon-dated to about 1200 ± 60 years and a midden to about 1240 ± 40. Could they be from the same generation?"*
 
-The assistant will represent each as `~o"1200±60Y"` / `~o"1240±40Y"` (validating them), reach for `Tempo.overlap_certainty/2`, and answer: *"They might be contemporary, but the dates aren't tight enough to be sure."* Ask it to "show the Elixir" if you want the code.
+The assistant will represent each as `~o"1200±60Y"` and `~o"1240±40Y"` (validating them), ask `Tempo.certainty(:overlaps, hearth, midden)`, which answers `:possible`, and say: *"They might be contemporary, but the dates aren't tight enough to be sure."* Ask it to "show the Elixir" if you want the code.
 
 ## Coming next: the Tempo MCP
 

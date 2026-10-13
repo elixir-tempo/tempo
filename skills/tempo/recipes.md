@@ -10,7 +10,7 @@ Few-shot templates, one per layer, in the pipeline-prose shape: **named bindings
 Tempo.explain(~o"2004-06~-11")
 ```
 
-> *"June 2004, approximately, on the 11th — the year and month are the fuzzy part, the day is firm."* Use `explain/1` to confirm you've represented the user's intent before building on it.
+> *"The 11th of June 2004; its month and its year are approximate, the day is firm."* `explain/1` says what a value covers, which of its parts are qualified, whether it is floating or zoned, and what walking it gives. Use it to confirm you've represented the user's intent before building on it; `Tempo.qualification/1` gives the qualifiers as data.
 
 ---
 
@@ -24,7 +24,7 @@ Tempo.overlaps?(delivery, holiday)   #=> true
 Tempo.relation(delivery, holiday)    #=> :contains
 ```
 
-> *"The delivery window **contains** the holiday, so yes — they clash."* `relation/2` gives the precise Allen relation; the `?` predicates give the yes/no.
+> *"The delivery window, the fifteenth through the twentieth, **contains** the holiday, so yes — they clash."* `relation/2` gives the precise Allen relation; the `?` predicates give the yes/no. An interval written to dates includes its last date.
 
 ---
 
@@ -37,11 +37,9 @@ work = ~o"2026-06-15T09/2026-06-15T17"
   ~o"2026-06-15T14/2026-06-15T15"
 )
 
-{:ok, free} = Tempo.difference(work, busy)
-bookable =
-  free
-  |> Tempo.IntervalSet.slots(~o"PT1H")
-  |> Tempo.IntervalSet.members()   #=> six one-hour openings
+{:ok, free}  = Tempo.difference(work, busy)
+{:ok, slots} = Tempo.IntervalSet.slots(free, ~o"PT1H")
+Tempo.IntervalSet.members(slots)   #=> six one-hour openings
 ```
 
 > *"Free time is the workday **minus** the busy blocks; **bookable** slots are those gaps cut into one-hour pieces."* `difference`/`intersection`/`union` produce new intervals; `slots/3` discretises a free region into fixed-length openings.
@@ -52,12 +50,13 @@ bookable =
 
 ```elixir
 rule = Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=2MO", from: ~o"2025-01-01")
-Tempo.explain(rule)                 #=> "An unbounded recurrence. … Selects: on the 2nd Monday. …"
+rule                                #=> ~o"R/2025Y1M1D/P1M/FL1K2IN"
 {:ok, months} = Tempo.to_interval(rule, within: ~o"2025")
-Tempo.IntervalSet.members(months)   #=> the 12 second-Mondays
+Tempo.IntervalSet.count(months)     #=> 12
+Tempo.IntervalSet.members(months)   #=> 13 January, 10 February, 10 March, …
 ```
 
-> *"Parse the calendar rule into a recurring interval — `explain/1` reads it back in plain English so you can confirm the pattern — then **convert** it to its occurrences within 2025."* For a simple period (no BY-rules) skip RRULE entirely: `Tempo.Interval.new!(from: dtstart, duration: ~o"P1W", recurrence: :infinity)`. RRULE and `Cron.parse!/2` are convenient front-doors; each compiles to a native ISO 8601 recurring interval — `inspect/1` shows the canonical `~o"R/…/FL…N"` form, which parses straight back.
+> *"Parse the calendar rule into a recurrence — inspecting it shows the ISO 8601-2 selection it is, the second (`2I`) Monday (`1K`) of each month — then **convert** it to its occurrences within 2025."* For a simple period (no BY-rules) skip RRULE entirely and write it: `~o"R/2026-06-01/P1W"`. RRULE and `Cron.parse!/2` are convenient front doors; each compiles to a native selection, and `Tempo.RRule.to_string/1` writes one back.
 
 ---
 
@@ -65,12 +64,11 @@ Tempo.IntervalSet.members(months)   #=> the 12 second-Mondays
 
 ```elixir
 rule = Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1", from: ~o"2025-01-01")
-Tempo.explain(rule)              #=> "… Selects: on a weekday [1..5], keeping the last occurrence. …"
 {:ok, days} = Tempo.to_interval(rule, within: ~o"2025")
-Tempo.IntervalSet.members(days)  #=> Jan 31, Feb 28, Mar 31, … (last weekday of each month)
+Tempo.IntervalSet.members(days)  #=> 31 January, 28 February, 31 March, … (last weekday of each month)
 ```
 
-> *"The last **weekday** of the month — not the last Friday."* `BYSETPOS` is ISO 8601-2's position designator `I`, applied last over the whole resolved set: `~o"R/../P1M/FL{1..5}K-1IN"` ranks each month's Mon–Fri candidates and keeps the last, where `BYDAY=-1FR` (`5K-1I`) would pick the last *Friday*, a different date. For cross-system interchange, write the rule as RFC 5545 with `Tempo.RRule.to_string/1`. See `guides/iso8601-conformance.md` §5.
+> *"The last **weekday** of the month — not the last Friday."* `BYSETPOS` is ISO 8601-2's position designator `I`, applied last over everything the rule selects in a period: `~o"R/../P1M/FL{1..5}K-1IN"` ranks each month's Monday-to-Friday candidates and keeps the last, where `BYDAY=-1FR` (`5K-1I`) would pick the last *Friday*, a different date. To hand the rule to another system, `Tempo.RRule.to_string/1` writes it as RFC 5545.
 
 ---
 
@@ -81,7 +79,7 @@ Enum.to_list(~o"2026Y")     #=> [~o"2026Y1M", …, ~o"2026Y12M"]
 Enum.take(~o"2026-06", 5)   #=> first five days of June
 ```
 
-> *"A year value **is** an enumerable sequence of its months; a month, of its days."* Iteration drills to the next-finer unit.
+> *"A year **is** an enumerable sequence of its months; a month, of its days."* One span walks the unit below it; a set or a recurrence gives its members. To walk at another unit, say it: `Tempo.walk(~o"2026-06", :week)`.
 
 ---
 
@@ -92,52 +90,39 @@ hearth = ~o"1200±60Y"
 midden = ~o"1240±40Y"
 wall   = ~o"1500±20Y"
 
-Tempo.possibly_overlaps?(hearth, midden)               #=> true
-Tempo.certainly_overlaps?(hearth, midden)              #=> false
-Tempo.relation_certainty(hearth, wall, :precedes)      #=> :certain
+Tempo.possibly?(:overlaps, hearth, midden)    #=> true
+Tempo.certainly?(:overlaps, hearth, midden)   #=> false
+Tempo.certainty(:before, hearth, wall)        #=> :certain
 ```
 
-> *"The hearth and midden **might** be contemporary but we can't be sure; the hearth is **certainly** earlier than the wall."* The `*_certainty` functions read `±` margins and answer three-valued; they collapse to the plain predicates on crisp dates.
+> *"The hearth and midden **might** be contemporary but we can't be sure; the hearth is **certainly** before the wall."* `certainty/3` reads `±` margins, qualifiers and masks and answers `:certain`, `:possible` or `:impossible` for any predicate or Allen relation; `certainly?/3` and `possibly?/3` are its booleans. They agree with the plain predicates on crisp dates.
 
 ---
 
-### "Order these dependent tasks and find the critical path" — Scheduling
+### "Five working days after the contract is signed" — Workdays
 
 ```elixir
-{:ok, plan} =
-  Tempo.Schedule.new()
-  |> Tempo.Schedule.task(:design, duration: ~o"P2D", start: ~o"2026-06-01")
-  |> Tempo.Schedule.task(:build,  duration: ~o"P3D", after: :design)
-  |> Tempo.Schedule.task(:docs,   duration: ~o"P1D", after: :design)
-  |> Tempo.Schedule.task(:ship,   duration: ~o"P2D", after: [:build, :docs], deadline: ~o"2026-06-08")
-  |> Tempo.Schedule.solve()
-
-plan[:ship].early                    #=> ~o"2026Y6M6D/8D"
-plan[:docs].critical?                #=> false   (docs has slack)
-Tempo.Schedule.critical_path(plan)   #=> [:design, :build, :ship]
+{:ok, working} = Tempo.workdays(:US, except: ~o"2026-07-03")
+Tempo.add_workdays(~o"2026-07-02", 1, working)   #=> {:ok, ~o"2026Y7M6D"}
+Tempo.count_workdays(~o"2026-06", :US)           #=> {:ok, 22}
 ```
 
-> *"Design, then build and docs in parallel, then ship — due the 8th. Ship runs from the 6th to the 8th; docs has slack; the critical path is design → build → ship."*
+> *"The **workdays** of the United States, **except** the Friday holiday: one workday after Thursday the second is Monday the sixth."* A territory gives the weekend; `:except` takes the days off, as a date, a set or a recurrence.
 
 ---
 
-### "Which reign overlaps which stratum, given only relative dates?" — Constraint network
+### "What time is that in New York?" — Zones
 
 ```elixir
-alias Tempo.Network
-
-net =
-  Network.new()
-  |> Network.add_period(:k1, from: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
-  |> Network.add_period(:k2, to: {:not_after, ~o"1300Y"}, duration: {:at_least, ~o"P35Y"})
-  |> Network.add_period(:s1, duration: {~o"P20Y", ~o"P100Y"})
-  |> Network.add_sequence([:k1, :k2])
-  |> Network.add_relation(:starts_during, :s1, :k1)
-
-Tempo.Network.Solver.consistent?(net)               #=> true
-Tempo.Network.Solver.contemporaneity(net, :k1, :s1) #=> :certain  (S1 starts during K1's reign)
-{:ok, solved} = Tempo.Network.Solver.propagate(net)
-solved.periods[:s1].earliest_start                  #=> a derived Tempo value
+paris = ~o"2026-06-15T10[Europe/Paris]"
+Tempo.shift_zone(paris, "America/New_York")   #=> {:ok, ~o"2026Y6M15DT4H[America/New_York]"}
+Tempo.in_zone(~o"2026-06-15T10", "Europe/Paris")   #=> {:ok, ~o"2026Y6M15DT10H[Europe/Paris]"}
 ```
 
-> *"The kings reign in succession; stratum S1 starts during King K1. Do they overlap, is it jointly possible, and what does it pin down?"* `contemporaneity/3` answers "could these two have coexisted?" three-valued — `:certain`, `:possible`, or `:impossible` — read in constant time from the propagated network; `propagate/1` derives the narrowest start/end/duration for every period, even ones given no dates at all.
+> *"Ten in Paris is four in New York."* `shift_zone/2` shows the same moment on another clock; `in_zone/2` says which zone a floating reading is in. A floating value and a zoned one are never compared or combined: place the floating one first.
+
+---
+
+### Dependency scheduling and constraint networks
+
+Tasks with durations and dependencies (`Tempo.Schedule`) and relative, possibly undated constraints (`Tempo.Network`) are in the companion package `tempo_network`. If it is in the project, its own guide has the recipes; if not, say so rather than reaching for functions that are not there.

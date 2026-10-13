@@ -91,13 +91,19 @@ defmodule Tempo.Allen do
 
   ### Arguments
 
-  * `a` and `b` are each a `t:span/0` of two positions on one frame.
+  * `a` and `b` are each a `t:Tempo.t/0` that names one span, or each a
+    `t:span/0` of two positions on one frame.
 
   ### Returns
 
-  * One of the thirteen `t:relation/0` atoms.
+  * One of the thirteen `t:relation/0` atoms. For two expressions it is
+    what `Tempo.relation/2` answers, and the error that would return is
+    raised.
 
   ### Examples
+
+      iex> Tempo.Allen.relation(~o"2026-01", ~o"2026-02")
+      :meets
 
       iex> Tempo.Allen.relation({1, 3}, {3, 5})
       :meets
@@ -109,7 +115,14 @@ defmodule Tempo.Allen do
       :during
 
   """
-  @spec relation(span(), span()) :: relation()
+  @spec relation(span() | Tempo.t(), span() | Tempo.t()) :: relation()
+  def relation(%Tempo{} = a, %Tempo{} = b) do
+    case Tempo.relation(a, b) do
+      {:error, exception} -> raise exception
+      relation -> relation
+    end
+  end
+
   def relation(a, b), do: Classifier.relation(a, b)
 
   @doc """
@@ -204,12 +217,12 @@ defmodule Tempo.Allen do
       false
 
   """
-  @spec holds?(predicate() | relation(), span(), span()) :: boolean()
+  @spec holds?(predicate() | relation(), span() | Tempo.t(), span() | Tempo.t()) :: boolean()
   def holds?(name, a, b), do: relation(a, b) in predicate(name)
 
   for relation <- @relations do
     @doc "Whether the first span `#{relation}` the second."
-    @spec unquote(:"#{relation}?")(span(), span()) :: boolean()
+    @spec unquote(:"#{relation}?")(span() | Tempo.t(), span() | Tempo.t()) :: boolean()
     def unquote(:"#{relation}?")(a, b), do: relation(a, b) == unquote(relation)
   end
 end

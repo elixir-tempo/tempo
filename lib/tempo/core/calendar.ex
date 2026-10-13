@@ -55,6 +55,25 @@ defmodule Tempo.Calendar do
 
   # ── The day scale ─────────────────────────────────────────────────────
 
+  @doc """
+  The years after which a calendar's dates and weekdays come round again:
+  four hundred in the Gregorian calendar. Nil for a calendar with no such
+  cycle.
+  """
+  @spec years_in_cycle(module()) :: pos_integer() | nil
+  def years_in_cycle(calendar) do
+    implementation = impl(calendar)
+
+    with true <- function_exported?(implementation, :years_in_cycle, 0),
+         years when is_integer(years) <- implementation.years_in_cycle() do
+      years
+    end
+    |> cycle_or_none()
+  end
+
+  defp cycle_or_none(years) when is_integer(years), do: years
+  defp cycle_or_none(_none), do: nil
+
   @doc "The day number of a date."
   @spec iso_days(module(), Calendar.year(), Calendar.month(), Calendar.day()) :: integer()
   def iso_days(calendar, year, month, day), do: impl(calendar).date_to_iso_days(year, month, day)
@@ -183,7 +202,8 @@ defmodule Tempo.Calendar do
   @doc """
   The IXDTF `u-ca` identifier that names a calendar: Calendrical's own name
   for one of its additional calendars (`iso-week`, `julian`), else the
-  calendar's CLDR type (`hebrew`). `Calendar.ISO` needs none.
+  calendar's CLDR type (`hebrew`). `Calendar.ISO` needs none. A calendar no
+  name reads back to, such as a fiscal calendar, has none and is an error.
 
   ### Examples
 
@@ -209,8 +229,17 @@ defmodule Tempo.Calendar do
     case {additional, type(calendar)} do
       {name, _type} when is_binary(name) -> {:ok, name}
       {nil, :generic} -> {:error, InvalidCalendarError.exception(calendar: calendar)}
-      {nil, type} -> {:ok, type |> Atom.to_string() |> String.replace("_", "-")}
+      {nil, type} -> named(calendar, type)
     end
+  end
+
+  # A CLDR type names a calendar only when it reads back to it: a fiscal
+  # calendar's type is `gregorian`, which names another calendar, so it has
+  # no identifier and a value in it no text.
+  defp named(calendar, type) do
+    if from_type(type) == {:ok, calendar},
+      do: {:ok, type |> Atom.to_string() |> String.replace("_", "-")},
+      else: {:error, InvalidCalendarError.exception(calendar: calendar)}
   end
 
   @doc "The calendar an IXDTF `u-ca` name or a CLDR type names; `iso8601` is `Calendar.ISO`."

@@ -45,11 +45,24 @@ defmodule Tempo.Writer do
       do: {:error, Iso8601EncodeError.exception(value: expression, reason: :lazy_set)}
 
   def to_iso8601(%Tempo{} = expression) do
-    with :ok <- one_frame(expression),
+    with :ok <- written_conditions(expression),
+         :ok <- one_frame(expression),
          {:ok, identifier} <- calendar_identifier(expression) do
       {:ok, IO.iodata_to_binary([body(expression), suffix(expression, identifier)])}
     end
   end
+
+  # A condition that reads the other members of a set (`keep_when`,
+  # `move_when`) has no text; a filter of years has.
+  defp written_conditions(expression) do
+    if Enum.any?([expression | parts(expression)], &unwritten_condition?/1),
+      do: {:error, Iso8601EncodeError.exception(value: expression, reason: :conditions)},
+      else: :ok
+  end
+
+  defp unwritten_condition?(%Tempo{form: {:when, _member, [years: _filter]}}), do: false
+  defp unwritten_condition?(%Tempo{form: {:when, _member, _conditions}}), do: true
+  defp unwritten_condition?(_part), do: false
 
   defp calendar_identifier(%Tempo{calendar: calendar} = expression) do
     case Tempo.Calendar.identifier(calendar) do
@@ -139,10 +152,28 @@ defmodule Tempo.Writer do
 
   defp value(parts, :selection), do: ["L", selection(parts), "N"]
 
+  # A second and its fraction are one number, with one sign.
+  defp value({second, {microseconds, precision}}, :second) when is_integer(second) do
+    total = second * 1_000_000 + microseconds
+    sign = if total < 0, do: "-", else: ""
+
+    [
+      sign,
+      Integer.to_string(div(abs(total), 1_000_000)),
+      ".",
+      fraction(rem(abs(total), 1_000_000), precision)
+    ]
+  end
+
   defp value({second, {microseconds, precision}}, :second),
     do: [value(second, :second), ".", fraction(microseconds, precision)]
 
   defp value({month, :leap}, :traditional_month), do: [value(month, :traditional_month), "+"]
+
+  # A fraction of a unit other than the second (ISO 8601-2 §11.4, `PT1.5H`).
+  defp value(float, _unit) when is_float(float),
+    do: :erlang.float_to_binary(float, [:compact, decimals: 6])
+
   defp value(integer, _unit) when is_integer(integer), do: Integer.to_string(integer)
 
   defp value(list, unit) when is_list(list),

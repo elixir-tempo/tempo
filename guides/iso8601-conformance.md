@@ -1,563 +1,369 @@
 # ISO 8601 Conformance Guide
 
-Tempo implements a substantial subset of [ISO 8601:2019](https://www.iso.org/standard/70907.html) Part 1 and [ISO 8601-2:2019](https://www.iso.org/standard/70908.html) Part 2, plus the [IETF IXDTF draft (draft-ietf-sedate-datetime-extended-09)](https://www.rfc-editor.org/rfc/rfc9557). This guide catalogues what is supported, what isn't, and where Tempo diverges from the strict standard.
+Tempo reads and writes [ISO 8601-1:2019](https://www.iso.org/standard/70907.html), [ISO 8601-2:2019](https://www.iso.org/standard/70908.html) and the suffix of [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557) (IXDTF). This guide says what is read, how each form is held and written back, where Tempo reads a text another way than the standard does, what it adds, and what it does not read.
 
-The canonical authority is the PDF of the ISO standard (held locally in `~/Documents/Development/iso_standards/`). When this document and the standard disagree, the standard wins — please file an issue.
+The grammar itself — every production, with the clause it comes from — is in [The grammar Tempo reads](iso8601-grammar.md). When this page and the standard disagree, the standard wins: please file an issue.
 
-## 1. Core principle — bounded intervals
+## Setup — required for every example
 
-Every Tempo value is a **bounded interval on the time line**, not an instant. `2026-01` is not the single instant "January 2026"; it is the interval `[2026-01-01, 2026-02-01)` — inclusive of the first boundary, exclusive of the last. This is called the **implicit-span semantics**: a partial date specification spans the next-finer unit that isn't given.
+```elixir
+import Tempo.Sigils
+```
 
-A single `Tempo.from_iso8601/1` call therefore always returns a bounded value, never a "partial" or "unresolved" date. This lets the set operations (`Tempo.union/2`, `intersection/2`, `difference/2`, and interval-set coalescing) reason about every value uniformly.
+## 1. Two principles
 
-## 2. ISO 8601 Part 1 — core representations
+**Every value is a span.** `2026-01` is not an instant: it is January 2026, from its first instant up to February's. A value written to any unit is the span of that unit, so every text reads to something that can be walked, related and combined.
 
-### Two forms, three spellings: implicit and explicit
+**What is written is what is held.** A week date stays a week date, an ordinal date an ordinal date, a group a group, a year with unspecified digits just that. Nothing is resolved to another form when it is read, so every expression writes back the text it was read from, in the explicit form.
 
-ISO 8601 lets you write the *same* value more than one way. The choice runs on two independent axes — worth knowing both, because **Tempo accepts all of them as input but always prints the explicit form**: `inspect(~o"2022-06-15")` shows `~o"2022Y6M15D"`, which surprises people the first time.
+```elixir
+iex> ~o"2026-W25-3"
+~o"2026Y25W3K"
 
-**Axis 1 — what identifies each component (the *form*).**
+iex> ~o"2026-166"
+~o"2026Y166O"
 
-* **Implicit form** — a component's identity is implied by its **position**. In `2022-06-15`, `06` is the month because it sits in the month slot. This is the everyday form, defined in ISO 8601 Part 1.
+iex> Tempo.relation(~o"2026-W25-3", ~o"2026-06-17")
+:equals
+```
 
-* **Explicit form** — each component carries a **designator letter** naming it: `Y` year, `M` month, `D` day, `O` day of the year, `W` week, and after the `T`, `H` hour, `M` minute, `S` second. `2022Y6M15D` needs no fixed positions because every field is labelled. Defined in ISO 8601 Part 2.
+> *"The Wednesday of week 25 is **written** as it was read, and **is** the 17th of June."*
 
-**Axis 2 — separators (the *format*; applies to the implicit form only).**
+## 2. ISO 8601-1 — the core representations
 
-* **Extended format** — components separated by `-` and `:`: `2022-06-15`, `T14:30:00`. The human-readable default.
+### Three spellings of one value
 
-* **Basic format** — no separators: `20220615`, `T143000`. Compact, for fixed-width contexts (filenames, identifiers).
+ISO 8601 writes the same value in more than one way, and Tempo reads them all and writes one.
 
-The explicit form needs no separators — the designators already say which field is which — so "basic vs extended" is a property of the implicit form. That yields **three concrete spellings** of any value:
+* **Extended format** — components in fixed places, separated by `-` and `:`: `2022-06-15T14:30:00`.
 
-| Value | Implicit · extended | Implicit · basic | Explicit |
-|---|---|---|---|
-| 15 June 2022 | `2022-06-15` | `20220615` | `2022Y6M15D` |
-| 14:30:00 | `T14:30:00` | `T143000` | `T14H30M0S` |
-| that date **and** time | `2022-06-15T14:30:00` | `20220615T143000` | `2022Y6M15DT14H30M0S` |
+* **Basic format** — the same with no separators: `20220615T143000`.
 
-All three parse to the identical `%Tempo{}`; `Tempo.to_iso8601/1`, `inspect/1`, and the `~o` sigil all emit the explicit form.
+* **Explicit form** (ISO 8601-2 §7) — each component followed by a designator: `Y` year, `M` month, `D` day, `O` day of the year, `W` week, `K` day of the week, and after the `T`, `H` hour, `M` minute, `S` second: `2022Y6M15DT14H30M0S`.
 
-**Why Tempo prints explicit form.** It is self-describing and order-independent, so it round-trips unambiguously — and it is the only form in which Tempo's richer constructs (durations like `P1Y6M`, groups, selections, and the recurrence designators) compose. It is also why the same letter `M` can mean both **month** and **minute**: the `T` beginning the time part disambiguates them. Before the `T`, `M` is a month (`6M` in `2022Y6M15D` = June); after it, `M` is a minute (`30M` in `T14H30M` = thirty minutes) — the same rule durations use (`P6M` is six months, `PT6M` is six minutes).
+```elixir
+iex> ~o"2022-06-15T14:30:00" == ~o"20220615T143000"
+true
 
-**Which should you write?** Prefer **implicit extended** (`2022-06-15T14:30`) for input — it is the most familiar and what most other systems emit. Reach for **explicit** only when you need what it uniquely offers: position independence, or Tempo's extended group/selection syntax.
+iex> ~o"20220615T143000"
+~o"2022Y6M15DT14H30M0S"
+```
 
-### Supported
+`Tempo.to_iso8601/1`, `inspect/1` and the `~o` sigil write the explicit form. It says which component is which without relying on position, and it is the one form in which durations, groups, selections and repeat rules all compose. It is also why `M` is both month and minute: before the `T` it is a month, after it a minute, as in a duration (`P6M` is six months, `PT6M` six minutes).
+
+Write the extended format for input: it is what people know and what other systems write.
+
+### What is read
 
 | Feature | Examples |
 |---|---|
 | Year | `2022`, `-0001`, `+002022` |
-| Year-month | `2022-06`, `202206` |
-| Year-month-day | `2022-06-15`, `20220615` |
+| Year and month | `2022-06` |
+| Calendar date | `2022-06-15`, `20220615` |
 | Ordinal date | `2022-166`, `2022166` |
-| Week date | `2022-W24`, `2022-W24-3`, `2022W243` (ISO 8601 week numbering: weeks start on Monday and week 1 holds the year's fourth day, counted in the value's calendar's own year) |
-| Month-day | `06-15` (the truncated `--06-15` / `--0615` forms are deprecated — see below) |
-| Time of day | `T10`, `T10:30`, `T10:30:00`, `T103000` |
-| Fractional seconds | `T10:30:00.5`, `T10:30:00,5` |
-| Time zone `Z`, `+HH`, `+HH:MM`, `+HHMM` | `10:30:00Z`, `10:30:00+05:30`, `10:30:00−05:30` (the minus sign, or a hyphen). Two digits of hours and two of minutes from 00 to 59, with no fraction. |
-| Combined datetime | `2022-06-15T10:30:00Z` |
-| Durations `PnYnMnDTnHnMnS` | `P1Y`, `PT30M`, `P3Y6M4DT12H30M5S` |
-| Negative duration | `-P100D` |
-| Durations in the alternative format | `P0002-01-10T22:33:55`, `P0002-178T22:33:55` — a calendar or ordinal date and a time of day |
-| Fractional durations | Whole units of the next smaller unit, truncated: `P1.5W` is 10 days, `P1.3D` 1 day 7 hours, `P1.5Y` 1 year 6 months; `P0.5M` is half the days to one month later (D.4.4) |
-| Fixed-endpoint interval | `2022-01/2022-06`, `20220101/20220630` |
-| Interval with an abbreviated end (§5.5.1) | `2018-01-15/02-20`, `2025-08-28T09:00/T10:15` |
-| Duration-relative interval | `2022-01-01/P1Y`, `P1Y/2022-12-31` |
+| Week date | `2022-W24`, `2022-W24-3`, `2022W243` |
+| Time of day | `T10`, `T10:30`, `T10:30:00`, `T103000`, and with no `T` where it is unambiguous |
+| A fraction of a second, a minute or an hour | `T10:30:00.5`, `T10:30:00,5`, `T10:30,5`, `T10,5` |
+| Time shift | `Z`, `+05`, `+05:30`, `+0530`, with a hyphen or a minus sign |
+| Date and time | `2022-06-15T10:30:00Z` |
+| Duration | `P1Y`, `PT30M`, `P3Y6M4DT12H30M5S`, `-P100D`, `P1.5W` |
+| Duration, alternative format (§5.5.2.4) | `P0002-01-10T22:33:55`, `P0002-178T22:33:55` |
+| Interval | `2022-01/2022-06`, `2022-01-01/P1Y`, `P1Y/2022-12-31` |
+| Interval with an abbreviated end (§5.5.1) | `2018-01-15/02-20`, `2026-06-15/20`, `2025-08-28T09:00/T10:15` |
 | Recurring interval | `R/2022-01/P1M`, `R5/2022-01/P1M` |
-| Expanded (large) years | `+002022`, `-0001` |
-| Leap second | `23:59:60Z` on 30 June or 31 December UTC |
 
-### Partial or divergent
+### Where a reading may surprise
 
-* **Truncated representations** (`--06-15`, `85-06-15` — 2-digit year) were deprecated in the 2019 edition and are not accepted. Modernise your input.
+* **Digits alone are read by how many there are**, as ISO 8601-1 §5.2 has it: four are a year, eight a calendar date, seven an ordinal date, and six a time of day (`202206` is 20:22:06), the basic format of a year and month being one the standard does not allow. Two digits are a century and three a decade.
 
-* **A date and time whose date is not complete** — ISO 8601-1 §5.4.1 and ISO 8601-2 §7.7.1 both say that the date part of a date and time expression shall be complete, so `2026-06T17` and `2026T17` are not ISO 8601. Tempo reads them, as that time on the first day of what is written, and holds the day in the value: `2026-06T17` is `2026Y6M1DT17H`, `2026T17` is 17:00 on 1 January, and `2026-W25T17` is 17:00 on the week's Monday. `Tempo.at/2` places a time of day on a year, a month or a week the same way, and under a group it is the group's first day. A time of day is a time of one day, and the day left out is read as the first as a clock unit left out is read as zero. That time on each day is written with the days named: `2026Y6M{1..-1}DT17H` is 17:00 on each day of June.
+* **An interval's end is read through, when it is a date.** `2022-01/2022-06` is January through June, and `2026-06-15/2026-06-20` six days. An end that is a time of day is the reading the span runs to: `T09/T17` is eight hours. So `2004-06-11/2004-06` is read, as the 11th through the end of June.
 
-* **Fractional seconds** are preserved as a `:microsecond {value, precision}` component (not truncated to whole seconds). The digit count is significant — `T10:30:00.120` is millisecond resolution and `T10:30:00.12` is centisecond resolution, two distinct interval widths. ISO 8601 permits an unbounded number of fractional digits; Tempo caps precision at 6 (microsecond), matching Elixir's `Time`/`DateTime`. Input with more than 6 fractional digits is truncated to microsecond.
+* **An abbreviated end takes from the start the components it leaves out**, down to the one it begins with: `2018-01-15/02-20` ends on the 20th of February 2018. An end cut down to one bare number is the day of a calendar date (`2026-06-15/20`); after a time, a week date or an ordinal date, write the end with its designator or its `T`.
 
-* **Fractional minutes and hours** are read as ISO 8601-2 §7.12 reads them: a fraction of an hour to the minute and a fraction of a minute to the second, so `T10,5` is the minute 10:30 and `T10:30,5` the second 10:30:30. A fraction that does not land on a whole minute or second is the minute, or the second, the time falls in: `T10.51` is 10:30 and `T10:30.51` is 10:30:30.
-
-### Not supported
-
-* Nothing known to be missing from Part 1 as of v0.2.0.
-
-## 3. ISO 8601-2 Part 2 — extensions
-
-### Supported
-
-| Feature | Examples |
-|---|---|
-| **Unspecified digits** (`X`) | `156X`, `1XXX`, `2022-XX`, `1985-XX-XX`, `-1XXX-XX`, `-XXXX-12-XX` |
-| **EDTF Level 1 qualification** (`?`, `~`, `%`) | `2022?`, `2022~`, `2022%` |
-| **ISO 8601-2 §8 component qualification** (implicit form) | `2004-06~-11` (group), `2004-?06-11` (individual), `?2022-06-15` (leading individual). See "Component qualification" below. |
-| **Per-endpoint qualification in intervals** | `1984?/2004~`, `2019-12/2020%`, `2004-06~/2004-06-11%` |
-| **An interval's ends in order** | An end that starts before its start does is refused, as EDTF's corpus has it: `2026/2025`, and an end coarser than its start that holds it, `2004-06-11/2004-06` (a day of June to June). An end that starts where its start does is read: `1111-01-01/1111`, `0000/0000`. An interval of seasons with no hemisphere is read whatever their order, and held to it where it is given one: `2012-24/2012-21`, which the corpus refuses, is June to September south of the equator. |
-| **Leading prefix qualifier** | `?2022-06-15`, `%2001`, `?-2004-06` |
-| **Open-ended intervals** | `1985/..`, `../1985`, `../..`, `1985/`, `/1985`, `/`, `/..`, `../` |
-| **Set of dates — all of** | `{1960,1961,1962}`, `{1960..1970}` |
-| **Set of dates — one of** | `[1984,1986,1988]`, `[1667..1672]` |
-| **Range in set** | `[1900..2000]`, `{-1640-06..-1200-01}` |
-| **A qualified member of a set** | `{2026-06-15?,2026-06~}`, `{2020?..2030}`. Each member is qualified as it would be alone (§8). |
-| **Set of durations** (§6.5) | `{P1D,P2D}`, `[P1M2S,P1M3S]`, and a range from one duration to another that differs in its last unit, `{P1M2S..P1M5S}`, which is the four durations it names. A set holds durations or dates and times, and not both; units written with no designator (`{1M2S..1M5S}`, §6.4 example 3) are times of day. |
-| **One of several values in a unit** | `2026Y[1,3]M`, and in the extended format after a separator: `2026-[01,03]`, `2026-01-15T[09,14]:30`, `[2026,2027]-01`. Each is the one-of set of the values written whole, `[2026-01,2026-03]`. |
-| **A time shift after a set** | `{2026-01-01T10:00,2026-03-01T10:00}Z`, `…}+02:00`. It is the shift of each member that has none, as a suffix after a set is each member's; a sign and two digits alone (`…}-05`) are not read as one. |
-| **Groups** | `5G10DU` (5th group of 10 days), `2018Y4G60DU6D` (2018, day 6 of the 4th group of 60 days), `1933Y1G80DU` (the first 80 days of 1933), `2026Y2G13WU` (weeks 14–26), `T16H1GT15MU` (16:00–16:15) |
-| **A value within a group** | `2018Y9M2DT3GT8HU0H30M` (30 minutes into the third eight hours: 16:30), `2018Y2G3MU2M` (May) |
-| **Selections** | `L1MN`, `L2MI3N` (1st month, 3rd instance of the 2nd month). A value holding one converts to the dates it picks in each period of its context (§12.11): `2018Y3ML1K1IN` is 5 March 2018, and `XXX{0,2,4,6,8}Y11MLLL1K1IN/P9DN2K1IN` (US Election Day) resolves one year at a time. |
-| **Seasons independent of location** (codes 21–24) | `2022-21` (spring), `2022-22` (summer), `2022-23` (autumn), `2022-24` (winter). Kept as written, and given whole months by a hemisphere: `Tempo.in_territory(~o"2022-21", :AU)` is September to November. |
-| **Astronomical seasons** (codes 25–32) | `2022-25` (N spring), `2022-26` (N summer), `2022-27` (N autumn), `2022-28` (N winter), `2022-29..32` (Southern hemisphere). Boundaries computed via the `Astro` library using March/September equinoxes and June/December solstices (accurate to ≈2 minutes for years 1000–3000 CE). |
-| **Quarters** (codes 33–36) | `2022-33` (Q1), `2022-36` (Q4). The calendar's own quarters, from Calendrical: a Hebrew leap year's Q2 holds Adar I and II, and a week-based calendar's are three of its months of weeks. |
-| **Quadrimesters** (codes 37–39) | `2022-37`, `2022-38`, `2022-39` |
-| **Semestrals / halves** (codes 40–41) | `2022-40` (H1), `2022-41` (H2) |
-| **Negative calendar qualification** | `-2004?`, `-2004-06?`, `-2001-34` (Q1 BCE) |
-| **Sets / ranges with negative members** | `[-1667,1668]`, `{-1640-06..-1200-01}` |
-| **Margin of error** | numeric literal with `±` (via `form_number`) |
-| **Exponents on year** | `2018E3` style — parsed by `numbers.ex` `exponent()` |
-| **Significant-digit annotations** (short form) | `1950S2`, `-1859S5`, `Y3388E2S3` |
-| **Year-zero** (`0000`, `-0000`) | Parses as year 0. Interpretation per astronomical convention (year 0 = 1 BCE) is the caller's responsibility. |
-| **Decades and centuries** (§4.3.5, §4.3.6) | `196J` and `196` (1960 to 1969), `16C` and `16` (1600 to 1699), held as groups of years and written `197G10YU`, `17G100YU` |
-| **Decades and centuries before year one** (§4.4.1.7, §4.4.1.8) | `-19` and `-19C` (the years −1999 to −1900), `-12J` (−129 to −120), and the negative zero forms `-00`, `-0C` (−99 to 0) and `-000`, `-0J` (−9 to 0), written with their sign: `-19C` |
-| **Day of the year** (§4.3.4) | `350O`, `1985Y102O` (12 April 1985) |
-| **Time shift in the explicit form** (§7.4) | `Z`, `Z8H`, `Z-5H30M`, `Z7H33M14S`, `Z0S` — whole hours, minutes and seconds, any that are zero left out (§7.10). A shift is at most 24 hours, so the standard's `Z28H` is refused. |
-
-### Partial or divergent
-
-* **A time of day selected in a month or a year (§12.11.1 example 2)** — the standard reads `2018Y9MTLT8H20MN3I` as the third instance of 08:20 in September 2018, 08:20 on 3 September: a time of day selected in a month is that time on each of its days. Tempo reads a time of day under a month or a year on its first day, in a selection as in a value (see "Partial or divergent" under Part 1), so `2018Y9MLT8H20MN` is 08:20 on 1 September and has no third instance. The days are named to select among them: `2018Y9ML{1..30}DT8H20M3IN` is 08:20 on 3 September. The example's own text is not read, since it writes the position after the selection's `N`, where §12.9 makes a position one of the selection's rules.
-
-### Not supported
-
-* Nothing known to be missing from EDTF Level 2: wide-range exponent years (`Y17E8`, `Y-170000002`) and long-year significant-digit annotations (`Y171010000S3`) are read.
-
-### Day of the year (ISO 8601-2 §4.3.4)
-
-`O` is the day of the year and `D` the day of the month, and Tempo keeps them apart: a day of the year writes back as `O`, and it never follows a month, so `Tempo.at(~o"3M", ~o"2O")` is an error. A `D` with no month before it reads as a day of the year wherever a year resolves it — `1985Y102D` is 12 April, as `1985Y102O` is, and `Tempo.select(~o"2026", ~o"-1D")` is 31 December — and as a day of a month elsewhere: `Tempo.at(~o"3M", ~o"2D")` is 2 March.
-
-A selection reads it the same way. Selected in a year with nothing to give it a month, a day is a day of the year: `2026YL45DN` is 14 February, `2026YL-1DN` is 31 December, and so are `Tempo.select(~o"2026", ~o"45D")` and the rule of a recurrence that steps by years from a year or from no start (`R/2026/P1Y/FL-1DN` is each 31 December). A rule takes from its start what it does not say (§13.6.3), so a start that names a month gives the day that month: `R/2026-03-10/P1Y/FL15DN` is each 15 March. A month, a week, a day of the year or a computed event beside the day places it already, and `L3M15DN` is 15 March wherever it is selected.
-
-Without a year, a day, a day of the year or a week is checked only against what every year shares: none is 0. A month is no further from either end than the most months a year of its calendar has, so `13M` is refused in the Gregorian calendar and allowed in the Hebrew. A day is bounded once it has a year: `366O` is 31 December in a leap year and an error in a common one.
-
-### Component qualification (ISO 8601-2 §8)
-
-A `?` (uncertain), `~` (approximate), or `%` (both) qualifier's **position** sets its scope, per §8.2. Tempo honours all three scopes for implicit-form dates and holds each the same way, per component (the `:qualifications` map, keyed by unit), so that texts of one meaning (§8.2.4) are one value: `2015-02-28?` and `2015-02?-?28` are equal. `Tempo.qualification/1` reads the qualifier every component shares and `Tempo.qualification/2` one component's:
-
-| Position | §8 scope | Example | Result |
-|---|---|---|---|
-| Rightmost end | §8.2.1 **complete** — every component | `2004-06-11%` | `qualifications: %{year: :uncertain_and_approximate, month: :uncertain_and_approximate, day: :uncertain_and_approximate}` |
-| Right of a component | §8.2.2 **group** — that component and every coarser one to its left | `2004-06~-11` | `qualifications: %{year: :approximate, month: :approximate}` |
-| Left of a component | §8.2.3 **individual** — that component only | `2004-?06-11` | `qualifications: %{month: :uncertain}` |
-| Leading (left of the first component) | §8.2.3 **individual** | `?2004-06-11` | `qualifications: %{year: :uncertain}` |
-
-Overlapping qualifiers on one component combine: `2004-?06~-11` (individual `?` on the month, group `~` on the month and year) yields `%{year: :approximate, month: :uncertain_and_approximate}`.
-
-The **explicit** (designator) form is also parsed: a qualifier between a value and its designator (`2004~Y6?M11D`, §8.3, including a qualified BC year `2004~YB`) is always individual. `inspect/1` and `to_iso8601/1` render the `:qualifications` map back in this form, so component qualification **round-trips** — a parsed group such as `2004-06~-11` re-encodes as the equivalent explicit individual qualifiers `2004~Y6~M11D`. Per §8.2.4, a value whose every present component shares one qualifier collapses to the compact complete form (`2004%Y6%M11%D` → `2004Y6M11D%`); group collapse is not attempted, as the explicit output form has no group representation.
-
-## 3a. Intervals whose end omits higher order components
-
-ISO 8601-1 §5.5.1 lets the end of an interval leave out the components it shares with the start: *"higher order time scale components may be omitted from the 'end of time interval', provided that the resulting expression is unambiguous. In this case the omitted higher order components from the 'start of time interval' expression apply."*
-
-Tempo applies them, so the end is a fully anchored value rather than a fragment:
+* **A time of day under a year, a month or a week is that time on each of its days.** ISO 8601 wants the date of a date and time complete; Tempo reads `2026-06T17` as five o'clock on each day of June, as it reads any gap between two units written.
 
 ```elixir
-iex> Tempo.from_iso8601!("2018-01-15/02-20") == Tempo.from_iso8601!("2018-01-15/2018-02-20")
+iex> ~o"202206"
+~o"T20H22M6S"
+
+iex> Tempo.duration(~o"2026-06-15/2026-06-20")
+~o"P6D"
+
+iex> ~o"2018-01-15/02-20" == ~o"2018-01-15/2018-02-20"
 true
 
-iex> Tempo.from_iso8601!("2025-08-28T09:00/T10:15") == Tempo.from_iso8601!("2025-08-28T09:00/2025-08-28T10:15")
-true
+iex> Enum.count(~o"2026-06T17")
+30
 ```
 
-Rendering goes the other way — `inspect/1` and `to_iso8601/1` drop the shared prefix again, so a value prints as compactly as it was written and round-trips unchanged:
+* **A fraction of a second is kept, with its precision.** `T10:30:00.120` is a millisecond and `T10:30:00.12` a hundredth of a second, two spans of different lengths. Six digits are kept, as Elixir's own types keep them, and more are cut.
 
-```elixir
-iex> Tempo.to_iso8601(Tempo.from_iso8601!("2026-06-15/2026-06-16"))
-{:ok, "2026Y6M15D/16D"}
-```
+* **A second numbered 60 is no value**, on any date, as it is none in Elixir's types. A leap second is a fact about a span: see `Tempo.LeapSeconds`.
 
-An end may be cut down to one bare number, which is then the start's last component: `2026-06-15/20` ends on the 20th, `2026-06-15T10:30/45` at 10:45, `2026-W25/27` in week 27 and `2026-166/170` on the year's 170th day. A day and a time (`2007-11-13T09:00/15T17:00`), a week and its day (`2026-W25-1/W26-5`) and a day of the week (`2026-W25-1/5`) are read the same way.
+* **Truncated forms** (`--06-15`, a two-digit year) were removed from the standard in 2019 and are not read.
 
-The omission is allowed only where it is unambiguous, and in the basic format digits alone are a date: four are a year (§5.3.5). So `20260615/0720` ends in the year 720 and `20260615T1030/1130` in the year 1130, each before its start, and the error says so and names the forms that are not ambiguous: the extended format (`2026-06-15/07-20`) and a time of day with its `T` (`20260615T1030/T1130`).
+## 3. ISO 8601-2 — the extensions
 
-```elixir
-iex> Tempo.from_iso8601!("2026-06-15/20") == Tempo.from_iso8601!("2026-06-15/2026-06-20")
-true
-
-iex> Tempo.from_iso8601!("2007-11-13T09:00/15T17:00") == Tempo.from_iso8601!("2007-11-13T09:00/2007-11-15T17:00")
-true
-```
-
-§5.5.1 allows the omission "provided that the resulting expression is unambiguous", and two digits alone are a century (§5.2.2.2). After a start written to a finer unit a century is no reading at all, since the interval would run backwards, so Tempo reads the number as the unit the start ends with. A century at the end of an interval is written with its designator, `2026-06-15/24C`, and after a start that is a year alone (`2022/24`) the two digits are still the century they are on their own.
-
-## 4. IXDTF — Internet Extended Date/Time Format
-
-Tempo implements the [RFC 9557 (IXDTF)](https://www.rfc-editor.org/rfc/rfc9557) suffix syntax. After any ISO 8601 date-time, an optional suffix may carry:
-
-| Suffix | Example | Stored on `%Tempo{}` |
+| Feature | Examples | Held and written as |
 |---|---|---|
-| IANA time zone | `[Europe/Paris]` | `extended.zone_id` |
-| Numeric offset | `[+08:45]`, `[-03:30]`, `[+0530]` | `extended.zone_offset` (minutes from UTC) |
-| Calendar (`u-ca=`) | `[u-ca=hebrew]`, `[u-ca=gregory]` | `calendar` (the module it names) |
-| Generic tag | `[_foo=bar-baz]` | `extended.tags` (`%{"key" => ["value", ...]}`) |
+| Unspecified digits (§4.6) | `156X`, `1XXX`, `2022-XX`, `1985-XX-XX`, `-1XXX-XX` | `156XY`, `1985YXXMXXD` |
+| Qualification (§4.5, §8) | `2022?`, `2022~`, `2022%`, `2004-06~-11`, `2004-?06-11`, `?2022-06-15` | per component: `2004~Y6~M11D` |
+| Qualified ends | `1984?/2004~`, `2019-12/2020%` | each end's own |
+| Open ends (§10.2) | `1985/..`, `../1985`, `1985/`, `/1985`, `../..` | `1985Y/..` |
+| Set, all of (§6) | `{1960,1961,1962}`, `{1960..1970}` | `{1960Y..1970Y}` |
+| Set, one of | `[1984,1986,1988]`, `[1667..1672]` | `[1667Y..1672Y]` |
+| Set of durations | `{P1D,P2D}`, `{P1M2S..P1M5S}` | the durations it names |
+| A set or a range in a unit | `2026Y{1,3}M`, `2026Y6M{1..-1}D`, `{2026,2027}Y1M` | as written |
+| Groups (§5) | `5G10DU`, `2018Y4G60DU6D`, `2026Y2G13WU`, `T16H1GT15MU` | as written |
+| Decade and century (§4.3.5, §4.3.6) | `196J`, `196`, `16C`, `16`, `-19C` | `196J`, `16C` |
+| Day of the year (§4.3.4) | `350O`, `1985Y102O` | as written |
+| Quarter, quadrimester, half (§4.8) | `2022-33` to `2022-36`, `2022-37` to `2022-39`, `2022-40`, `2022-41` | `2022Y33M`; `2022Y1G4MU`; `2022Y1G6MU` |
+| Season (§4.8) | `2022-21` to `2022-32` | `2022Y21M`; read and written, with no dates (below) |
+| Exponent and significant digits (§4.4.2, §4.4.3) | `2018E3`, `1950S2`, `Y3388E2S3` | `1950S2Y` |
+| Long years (§4.7) | `Y17E8`, `Y-170000002` | `17E8Y` |
+| Margin of error | `2018±2Y` | as written |
+| Selection (§12) | `L1MN`, `2018Y3ML1K1IN`, `L5KT{9,17}H2IN` | as written |
+| Selection with a window (§12.10) | `LL(easter)eN/-P7DN`, `L11MLL1K1IN/P9DN2K1IN` | as written |
+| Repeat rule (§13) | `R/2026-01-01/P1M/FL1K2IN` | as written |
+| Explicit time shift (§7.4) | `Z`, `Z8H`, `Z-5H30M` | as written |
 
-Each bracket may be prefixed with `!` to mark it **critical**. Unrecognised critical tags cause the parse to fail; unrecognised elective tags are retained verbatim in `extended.tags`.
+### Qualification
 
-A time zone is the first suffix or there is none (RFC 9557 §4.1). One written after a tag, as in `[u-ca=hebrew][Europe/Paris]`, is a `Tempo.ParseError`, and a second time zone after a first is dropped where it is elective and a `Tempo.DuplicateZoneError` where it is critical.
-
-A time shift and a zone on one value may disagree, and RFC 9557 §3.4 says what a reader does. A critical flag on a *time zone* makes agreement mandatory: `2022-01-01T00:00:00+05:00[!America/New_York]` is rejected with a `Tempo.ZoneOffsetMismatchError` because `+05:00` is not New York's offset on that date, and so is a disagreement with a critical zone written as an offset (`[!+08:45]`). Marking the zone critical is retained on `extended.zone_critical` and round-trips back out through `to_iso8601/1`. Beside an *elective* zone the numeric offset gives the moment, and the value is that moment as the zone's clock shows it: `2022-07-08T00:14:07+01:00[Europe/Paris]` is 23:14:07 UTC and is held as 01:14:07 in Paris, which is two hours ahead in July. To reject a disagreement even for elective zones, pass `strict: true` to `from_iso8601/2` — a superset of the mandatory critical check.
-
-`Z` is never a disagreement. RFC 9557 §2.2 has it state the time in UTC and say nothing of local time, so `2022-07-08T00:14:07Z[Europe/Paris]`, and the same with `[!Europe/Paris]`, is 00:14:07 UTC as Paris's clock shows it, 02:14:07. A value coarser than a second is shown on the zone's clock as `Tempo.shift_zone/2` shows one: the value there where the two clocks differ by whole units of it, and otherwise the span it is, so `2022-07-08Z[Europe/Paris]` is the interval from 02:00 that day to 02:00 the next.
-
-A value with no date names no moment to show on a zone's clock, so a time of day written with a time shift beside a zone is kept as it is written, the shift and the zone both held: `T00:14:07Z[Europe/Paris]`, and `Tempo.new(hour: 10, shift: [hour: 5], zone: "Etc/UTC")`, which there is no date to ask the zone of. A value that names several moments in UTC beside a zone (`2022-07-{08,09}T00:14:07Z[Europe/Paris]`) is a `Tempo.ConversionError`, each of its moments having its own reading there, and each value is read alone. The start of an interval written with `Z` and no zone of its own keeps it, and does not take the zone written after the end.
-
-Time zones are validated against the configured time zone database (`Tempo.TimeZoneDatabase.zone_exists?/1`); with no database configured, syntactically valid zone names are accepted without registry validation. Calendars are validated against `Localize.validate_calendar/1`, which also handles the `"gregory"` → `:gregorian` alias per BCP 47. Every other calendar Calendrical implements resolves through the identifiers `Calendrical.additional_calendars/0` registers, written with hyphens: `[u-ca=iso8601]` (the Gregorian calendar with ISO 8601's week rules, `Calendrical.ISO`), `[u-ca=iso-week]`, `[u-ca=julian]` and its year-start variants (`[u-ca=julian-march25]`), `[u-ca=vietnamese]`, `[u-ca=lunar-japanese]`, `[u-ca=nrf]`, and the reform calendars (`[u-ca=reform-england]`).
-
-A calendar suffix after a set is the calendar of every member, of each end of a range and of each member it excludes: `{5786-06-15,5786-07-01}[u-ca=hebrew]` is two Hebrew dates, each checked against the Hebrew calendar as a date on its own is, and `to_iso8601/1` writes the suffix back once, after the set. A zone suffix is each member's in the same way, and a suffix written on a member or on an end of a range is a `Tempo.ParseError`. A recurrence's domain, described below, is in the recurrence's calendar too.
-
-A calendar of weeks (`[u-ca=iso-week]`, `[u-ca=nrf]`) has months of its own, each four or five of its weeks, and its dates are a year, a month and a day of that month, as every calendar's are. A date written for one with a month, a day of the year or a season is read in it as in any calendar: `2026-06-15[u-ca=iso-week]` is the fifteenth day of its sixth month and `2026-166[u-ca=iso-week]` the 166th day of its year. A week date is the date it names in the calendar's own weeks, so `2026-W25-1[u-ca=iso-week]` and `2026Y25W1K[u-ca=iso-week]` are that same fifteenth day, held and written `2026Y6M15D[u-ca=iso-week]`. A date of another calendar is brought to it by converting it: `Tempo.to_calendar(~o"2026-06-15", Calendrical.ISOWeek)` is day 1 of week 25, 29 December 2025 is day 1 of week 1 of 2026, and a qualification of the date converted qualifies the whole of what it converts to, since each of its units is worked out from all of them (`2026-?06-15` is `2026Y6M15D?`). A quarter, a semester and a season are divisions of the year in every calendar, so `2026-33[u-ca=nrf]` is the first three months of the NRF year, thirteen weeks.
-
-A day of the week (`K`) is a day of the week of the value that holds it, counted as its calendar counts the days of a week date: from Monday, as ISO 8601 does, in a calendar whose weeks begin on Monday, and from the calendar's own first day where they begin on another. The third day is a Wednesday in the Gregorian and the ISO week calendars and a Tuesday in `[u-ca=nrf]`, whose weeks start on Sunday, in a value (`2026Y25W3K`), in a selection (`2026Y25WL3KN`) and in a recurrence's rule alike. A selector given to `Tempo.select/2` is read in the calendar it is written in, so `~o"3K"` selects Wednesdays from a span in any calendar, as `Tempo.workdays/1` selects the weekdays it names, and `~o"3K[u-ca=nrf]"` selects Tuesdays.
-
-## 5. Project-specific extensions (not in ISO 8601)
-
-These syntaxes are Tempo conveniences, not part of any standard:
-
-* **Step in range** — `{1990..1999//2}Y` or `2023Y{1..-1//2}W` means "every second week in 2023".
-
-* **Calendar week** — `2027Y1w` is the calendar's own week 1, where `2027Y1W` is ISO 8601's; described below.
-
-* **Week of a month** — `2026Y6M2W` is the second week of June 2026, where ISO 8601 has a week only of a year; described below.
-
-* **A year in a recurrence selection** — `FL{2026,2028}Y1M1DN` keeps the occurrences in those years, where ISO 8601-2 §12.2 has no year rule; described with the recurrence domain below.
-
-* **Explicit suffixes** — `2022Y11M20D` instead of `2022-11-20`. Used by the `~o` sigil as the canonical output form.
-
-* **Repeat rule** — `/F` combinator inside a parsed expression.
-
-* **The fractions of a second as a set** — `T10H30M45.{0..9}S` is the ten tenths of the second, the form `Tempo.extend/2` gives a second, and `T10H30M{45,50}.5S` the same fraction of each of a set of seconds. The fractions are written one by one (`.{0,5}`) or from a first to a last (`.{50..59}`), with as many digits each, and a range names at most a thousand.
-
-* **A time of day under a year, a month or a week** — `2026T17`, `2026-06T17` and `6MT10H` are that time on the first day of what is written, and are held with the day (`2026Y1M1DT17H`). This one diverges from the standard, which wants the date of a date and time complete: see "Partial or divergent" under Part 1.
-
-* **Selection position** — `L…N` with an `I` modifier for the nth occurrence of the resolved set, written weekday-then-position (`1K2I` = "the 2nd Monday"). `I` is the ISO 8601-2 §12.9 position designator, not a Tempo invention — it is listed here only for completeness and described in full below.
-
-None of these changes how a standard form is read — Tempo accepts the standard forms too.
-
-#### The lowercase-designator convention
-
-ISO 8601 designators are uppercase (`Y M D H W O K I N`). Tempo marks its own **selection** extensions with a **lowercase** letter, so they are easy to spot as non-standard at a glance: `q` (week start), `e` (a computed event), `m` (a traditional month, with `+m` for its leap month), `w` (a week in the calendar's own numbering), the `^` exclusion prefix (a recurrence domain member to drop), and the `e`/`o`/`l`/`c` domain filters (even / odd / leap / common years). Each is described below. `I` (BYSETPOS position) is uppercase because it *is* ISO 8601-2 §12.9, not a Tempo extension.
-
-### The position designator `I` and week start `q`
-
-A recurrence selection can carry two RFC 5545 (iCalendar RRULE / cron) concepts. One, `BYSETPOS`, **is** ISO 8601-2 — the §12.9 position designator `I`. The other, `WKST`, has **no ISO representation**, so Tempo gives it the project-specific designator `q`. Both round-trip through `inspect/1` and `Tempo.to_iso8601/1`.
-
-#### `I` — set position (RRULE `BYSETPOS`)
-
-`nI` keeps the **Nth occurrence of the resolved candidate set**, after every other `BY`-rule has run and the survivors are sorted. It is written last, lower-order than the weekday it ranks (`1K2I` = "the 2nd Monday"). Negative counts index from the end and a set picks several: `-1I` is the last, `{1,3}I` the 1st and 3rd. This is exactly RFC 5545's `BYSETPOS`.
-
-Because it ranks the *resolved* set, one designator covers what look like two different questions. "The last **Friday** of the month" resolves a single weekday, then takes the last of it; "the last **weekday** of the month" resolves Monday–Friday into one set, then takes the last of *that*. Both use `I` — the difference is only how many weekdays feed the set:
+A `?` (uncertain), `~` (approximate) or `%` (both) is of the components its place says (§8.2): at the very end, of every component; to the right of a component, of that one and every coarser one; to the left, of that one alone. Tempo holds a mark per component, so that texts of one meaning are one value, and writes the marks back in the explicit form, with one mark after the value where every component has it.
 
 ```elixir
-# Last FRIDAY of each month — one weekday, then position: R/../P1M/FL5K-1IN
-Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=-1FR")
-#   from 2022-06 → June 24, July 29, Aug 26
+iex> ~o"2004-06~-11"
+~o"2004~Y6~M11D"
 
-# Last WEEKDAY of each month — Mon–Fri merged, then position: R/../P1M/FL{1..5}K-1IN
-Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1")
-#   from 2022-06 → June 30 (Thu), July 29 (Fri), Aug 31 (Wed)
+iex> ~o"2004-?06-11"
+~o"2004Y6?M11D"
+
+iex> ~o"2015-02-28?" == ~o"2015-02?-?28"
+true
+
+iex> Tempo.qualification(~o"2004-06~-11", :month)
+:approximate
 ```
 
-They coincide only when the last weekday happens to be a Friday (July, above). RFC 5545's own worked example — "the third instance of Tuesday, Wednesday, or Thursday each month" — merges three weekdays, then takes the 3rd:
+A qualification is information about a value and changes nothing of its span. See [Uncertain dates](uncertain-dates.md) for the relations that answer in three values.
+
+### Unspecified digits, sets and ranges
+
+A value with an unspecified digit, or with a set or a range in a unit, names several values, and is walked, listed and selected from as each of them:
 
 ```elixir
-# R/../P1M/FL{2..4}K3IN
-Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=TU,WE,TH;BYSETPOS=3")
-#   from 1997-09 → Sept 4, Oct 7, Nov 6
+iex> Enum.count(~o"156X")
+10
+
+iex> {:ok, fifteenths} = Tempo.to_interval(~o"1985-XX-15")
+iex> Tempo.IntervalSet.count(fifteenths)
+12
+
+iex> Enum.to_list(~o"2026Y{1,3}M")
+[~o"2026Y1M", ~o"2026Y3M"]
 ```
 
-Times inside the selection join the set `I` ranks: `L5KT{9,17}H2IN` is the 2nd of every Friday's 09:00 and 17:00, the first Friday at 17:00. Times written after the selection refine each date it picks instead, as §12.9's Example 5 writes 09:00 on the second Tuesday (`L2K2INT9H`), so an RRULE ordinal with times, `BYDAY=2FR;BYHOUR=9,17`, is `R/../P1M/FL5K2INT{9,17}H`.
+A set of whole numbers with no designator is a set of years where each has four digits, and otherwise each member is read as it is alone: `{19,20}` is two centuries, `{19,20}Y` two years.
 
-The recurrence shapes with **no** ISO 8601 form are an ordinal spread across *distinct* weekdays — "the 2nd Monday **and** the 2nd Wednesday" (`BYDAY=2MO,2WE`) — and an ordinal beside a `BYSETPOS`. A single `I` ranks one set; it cannot name two independent per-weekday ordinals at once, nor a weekday's ordinal and a position over the whole set. Tempo holds such a rule as an internal `:byday` selection that round-trips only through `Tempo.RRule.to_string/1`, never through `to_iso8601/1`; so does a rule with an `UNTIL`, since ISO 8601 bounds a recurrence only by its count.
+### Seasons and divisions of a year
 
-#### `q` — week start (RRULE `WKST`)
-
-`nq` sets the weekday a week **begins** on (`1q` = Monday, the default; `7q` = Sunday). Because ISO 8601 weeks start on Monday by definition, any other week start has no ISO representation. The designator is emitted only when it is *not* the Monday default.
-
-`WKST` is a no-op for most rules: it changes nothing for `FREQ=WEEKLY;INTERVAL=1`, since one day per week is picked wherever the boundary sits. It becomes observable only when the week boundary decides *which* weeks are on — an `INTERVAL` of two or more, or a `BYWEEKNO`. This is RFC 5545's canonical example, with the week start as the only difference:
+A quarter, a quadrimester and a half are divisions of the year in every calendar, and have dates. A season does not yet: codes 21 to 32 are read, held and written, and listing one is a `Tempo.ConversionError` whose reason is `:season`, since Tempo asks its calendars for every date and none yet answers a season's.
 
 ```elixir
-# Every other week, Tue + Sun, from Tue 1997-08-05
-Tempo.RRule.parse!("FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU;WKST=MO")
-#   → Aug 5, 10, 19, 24   (R4/../P2W/FL{2,7}KN — no q, Monday is the default)
+iex> Tempo.duration(~o"2022-33")
+~o"P3M"
 
-Tempo.RRule.parse!("FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU;WKST=SU")
-#   → Aug 5, 17, 19, 31   (R4/../P2W/FL{2,7}K7qN)
+iex> ~o"2022-21"
+~o"2022Y21M"
+
+iex> {:error, %Tempo.ConversionError{reason: :season}} = Tempo.to_interval(~o"2022-21")
 ```
 
-Moving the week start from Monday to Sunday changes which fortnight each candidate falls in, so a different set of dates survives the `INTERVAL=2` filter.
+### Selections and repeat rules
 
-#### Interchange risk
-
-The lowercase family — `q` (week start), `e` (computed event), `m`/`+m` (traditional month), `w` (calendar week), `^` (exclusion), and the `e`/`o`/`l`/`c` domain filters — are the non-standard letters Tempo emits inside a selection or recurrence; `I` is ISO 8601-2 §12.9. Because they are not ISO 8601, a *different* system reading Tempo's ISO string would not understand them. We rate this risk **low**: we have not identified any other system that consumes ISO 8601-2 recurrence at all, let alone one a Tempo `q`/`e` string would reach in practice. Where a standard interchange form is needed — sharing a rule with a calendar server, for instance — use `Tempo.RRule.to_string/1`, which emits `WKST` (and `BYSETPOS`, and any multi-weekday ordinal) in its portable RFC 5545 spelling. Treat the Tempo string as the native, loss-free persistence form and the RRULE string as the wire format.
-
-### Computed events — the `e` designator
-
-ISO 8601-2 has no notation for a recurrence whose date is fixed by an **algorithm** rather than the calendar: Easter (the paschal computus), an astronomical event (an equinox or solstice), or one of the 24 East Asian solar terms (jié-qì). This is the one family of holiday rules the standard genuinely cannot express, so Tempo adds a single project-specific selection designator, `e`, whose value is the event name in parentheses, a lowercase letter followed by lowercase letters, digits and hyphens:
-
-```text
-R/../P1Y/FL(easter)eN              Easter Sunday, every year
-R/../P1Y/FL(march-equinox)eN       the March (northern spring) equinox
-R/../P1Y/FL(december-solstice)eN   the December solstice
-R/../P1Y/FL(qingming)eN            Qīngmíng (Ching Ming / Tomb-Sweeping Day)
-```
-
-The recognised names are `easter` and `orthodox-easter` (the same computus in the Julian calendar), the astronomical `march-equinox` / `june-solstice` / `september-equinox` / `december-solstice` / `new-moon` (the first new moon of the year), and the 24 solar terms (`qingming`, `lichun`, `dongzhi`, …) — see `Tempo.Event.known/0`. Converting the recurrence within a window resolves each event per year — Easter via `Calendrical.Ecclesiastical`, the astronomical events via `Astro`, and the solar terms via `Calendrical` (for the Chinese meridian by default; `Tempo.Event.date/3` takes a Vietnamese, Korean or Japanese lunisolar calendar to use its meridian instead):
+A selection (`L…N`) names the parts of a period to take: a month, a week, a day of the month or of the year, a weekday, a time of day, and a position among what those select (`I`, §12.9). Written in a value it is the dates it picks in the period before it; written after `F` in a recurrence it is the rule applied in each period.
 
 ```elixir
-# "Easter Sunday, every year" — resolved across 2026–2028
-Tempo.to_interval(~o"R/../P1Y/FL(easter)eN", within: ~o"{2026..2028}Y")
-#   → 2026-04-05, 2027-03-28, 2028-04-16
+iex> Tempo.to_interval(~o"2018Y3ML1K1IN")
+{:ok, ~o"{2018Y3M5D/2018Y3M5D}"}
+
+iex> Enum.take(~o"R/2026-01-01/P1M/FL5K-1IN", 2)
+[~o"2026Y1M30D/2026Y1M30D", ~o"2026Y2M27D/2026Y2M27D"]
 ```
 
-An equinox or solstice happens at an instant, so its date depends on where it is observed; by default it is the UTC date. The zone whose date it takes follows an `@` — an IANA zone or a `±HH:MM` offset — and the date stays a floating local date, as every other holiday's is:
+> *"The **first Monday** of March 2018. The **last Friday** of each month from January 2026."*
+
+Rules apply higher order first (§12.1). A selection followed by a duration (§12.10) opens a window of that length from each date it picks — back from it, for a negative length — and what is written after selects within the window:
 
 ```elixir
-# Japan's Vernal Equinox Day is the March equinox's date in +09:00:
-# in 2002 the equinox was on 20 March in UTC and 21 March in Tokyo
-Tempo.to_interval(~o"R/../P1Y/FL(march-equinox@+09:00)eN", within: ~o"2002Y")
-#   → 2002-03-21
+iex> Tempo.to_interval(~o"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN", within: ~o"2026")
+{:ok, ~o"{2026Y4M3D/2026Y4M3D}"}
+
+iex> Tempo.to_interval(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN", within: ~o"2026")
+{:ok, ~o"{2026Y11M3D/2026Y11M3D}"}
 ```
 
-An event is each of its days that falls in the period it is selected in, a year, a month or a week: `Tempo.select(~o"2026Y4M", ~o"L(easter)eN")` is 5 April, and `R/../P1M/FL(easter)eN` lists the Easter of each month that has one. In a recurrence that steps by days or less it keeps the occurrences that are on its day.
+> *"**Good Friday**: the last Friday in the seven days before Easter. **US election day**: the first Tuesday in the nine days from November's first Monday."*
 
-An event is a day on the time line, worked out for a year of the Gregorian calendar. In a recurrence or a selection of another calendar it is each day the event falls on in the calendar's own year, written in that calendar: one Easter in a Hebrew year, and one September equinox, none or two, as the year begins and ends:
+A window may carry a date out of the period that made it, and a `:within` window keeps each date where it lands: a holiday observed on the Friday before a Saturday New Year's Day is in the year before.
 
-```elixir
-# "Easter, in the Hebrew year 5786" is 18 Nisan, 5 April 2026
-Tempo.to_interval(~o"R/../P1Y/FL(easter)eN[u-ca=hebrew]", within: ~o"5786Y[u-ca=hebrew]")
-#   → 5786Y7M18D
+A day `D` is always a day of a month, in each month of the period it is selected in, and `O` a day of the year: `2026YL-1DN` is the last day of each month of 2026 and `2026YL-1ON` the 31st of December.
 
-# 5786 begins the day after one September equinox and ends before the next
-Tempo.to_interval(~o"R/../P1Y/FL(september-equinox)eN[u-ca=hebrew]", within: ~o"5786Y[u-ca=hebrew]")
-#   → no occurrences
-```
+[One form for ISO 8601 and RRULE](shared-ast-iso8601-and-rrule.md) says how an RFC 5545 rule is the same expression.
 
-An event that has no date where it is asked for is an error, a `Tempo.EventError` that names the event and the year: a name no resolver knows, a year the event is not computed for (an equinox and a solstice are computed from 1000 CE to 3000 CE), a zone on an event with no instant (`(easter@+09:00)e`) and a zone that is not one. No occurrence would say that the event did not happen. Like `q`, an `e` selection round-trips through `inspect/1`/`Tempo.to_iso8601/1`; there is no RFC 5545 equivalent, so `Tempo.RRule.to_string/1` cannot express it.
+## 4. RFC 9557 — the suffix
 
-### Traditional month — the `m` marker
-
-ISO 8601 numbers months **ordinally** (1..13 in a leap year with a leap month), which is what `M` writes and what `%Date{}` stores. Calendars with leap months also number months **traditionally** — the Chinese 8月 is always the eighth *named* month, but its ordinal position slips to 9 in a year that inserts a leap month before it. ISO 8601 has no notation for the traditional numbering, so Tempo adds the lowercase `m`: `<n>m` is traditional month `n`, and `<n>+m` is the intercalary ("leap") month following it (閏n月). Both are valid in a `[u-ca=chinese]` (or `dangi`, `vietnamese`, japanese-lunisolar) context, and in a `[u-ca=hebrew]` one; on any other calendar the two numberings coincide, so `m` is identical to `M`.
-
-The Hebrew traditional numbering is [RFC 7529](https://www.rfc-editor.org/rfc/rfc7529)'s (the `monthCode` of JavaScript's Temporal): Tishri is `1m` and Elul `12m`, Nisan is `7m`, Adar — Adar II in a leap year, the month of Purim — is `6m`, and Adar I, the leap month, is `5+m`. So Passover is `7m15D` in every year, the 7th month of an ordinary year and the 8th of a leap year.
-
-In a **concrete date** the year is known, so `m`/`+m` resolve to the ordinal month and are stored and rendered ordinally — the lowercase marker never survives a round-trip:
-
-```elixir
-# 閏6月 (leap month 6) of Chinese year 4662 sits at ordinal position 7
-Tempo.from_iso8601!("4662Y6+m1D[u-ca=chinese]")
-#=> Tempo.from_iso8601!("4662Y7M1D[u-ca=chinese]", Calendrical.Chinese)
-
-# Traditional month 8 is past that leap month, so it is ordinal 9
-Tempo.from_iso8601!("4662Y8m1D[u-ca=chinese]")
-#=> Tempo.from_iso8601!("4662Y9M1D[u-ca=chinese]", Calendrical.Chinese)
-
-# 15 Nisan is the 7th month of the ordinary Hebrew year 5786
-Tempo.from_iso8601!("5786Y7m15D[u-ca=hebrew]")
-#=> Tempo.from_iso8601!("5786Y7M15D[u-ca=hebrew]", Calendrical.Hebrew)
-```
-
-Adding years to such a date keeps its traditional month, as the calendar's own arithmetic does, so a yearly recurrence starting on it recurs on the same named month: `R/5786Y7m15D/P1Y[u-ca=hebrew]` is Passover every year, `5787Y8M15D` in the leap year 5787.
-
-In a **selection** — a recurrence, which has no year — there is nothing to resolve against, so `m`/`+m` survive the round-trip and the traditional→ordinal step happens per year at conversion. This is what makes a lunisolar holiday a recurrence that converts afresh in every year: `R/../P1Y/FL8m15DN[u-ca=chinese]` ("the 15th of traditional month 8, every year") lands on ordinal month 8 in a common year and ordinal 9 in a leap year, tracking the true traditional month rather than a fixed ordinal. A `<n>+m` selection yields an occurrence only in the years that actually carry that leap month.
-
-A **set or a mask** of traditional months names each month of the year the calendar numbers so, and each is then the month it is in that year. A number names a month that is no leap month, as RFC 7529's `BYMONTH` does, so a range passes over the leap month between its ends; a set or a mask with `+` after it names the leap month:
-
-```elixir
-# Shevat and Adar II of the leap year 5787, its fifth and seventh months
-Tempo.from_iso8601!("5787Y{5,6}m[u-ca=hebrew]")
-#=> Tempo.from_iso8601!("5787Y{5,7}M[u-ca=hebrew]", Calendrical.Hebrew)
-
-# Tamuz, Av and Elul, the traditional months numbered 10 to 12
-Tempo.from_iso8601!("5787Y1Xm[u-ca=hebrew]")
-#=> Tempo.from_iso8601!("5787Y{11..13}M[u-ca=hebrew]", Calendrical.Hebrew)
-
-# Whichever leap month the year has: Adar I
-Tempo.from_iso8601!("5787YX+m[u-ca=hebrew]")
-#=> Tempo.from_iso8601!("5787Y6M[u-ca=hebrew]", Calendrical.Hebrew)
-```
-
-A value is held to the months its year has (`5787Y13m` is refused with the twelve it numbers), and a value of several years (`{5786,5787}Y1Xm`) or a rule (`FL1XmN`) takes in each year the months that year has.
-
-A bare `<n>M` is always the ordinal month, unchanged, so existing values keep their meaning. `<n>+m` on a calendar without leap months, or in a year with no leap month at that position, is a parse error (concrete) or simply no occurrence (selection) rather than a silent misreading. It lowers to the `{n, :leap}` construct `Calendrical.Chinese.new/3` already accepts.
-
-### Calendar week — the `w` designator
-
-ISO 8601 numbers weeks one way: each starts on a Monday, and week 1 is the one holding the year's fourth day. That is what `W` writes in every calendar, counted over the calendar's own year in a non-Gregorian one, as RFC 7529 counts RRULE weeks. Calendars also number weeks their own way — `Calendrical.Gregorian` counts from the week holding January 1 — and Tempo adds the lowercase `w` for those.
-
-```elixir
-# 2027 starts on a Friday: ISO 8601's week 1 starts on 4 January,
-# the Gregorian calendar's own on 28 December 2026
-~o"2027Y1W1K"   # 2027-01-04
-~o"2027Y1w1K"   # 2026-12-28
-~o"2027Y1w"     # 2026-12-28/2027-01-04, the week's seven days
-```
-
-In a **concrete date** a `w` week resolves to its dates, so the lowercase marker never survives a round-trip, as `m` does not. In a **selection** it survives and resolves per year: `R/../P1Y/FL10wN` is the calendar's week 10 of each year and `FL10w3KN` its Wednesday. A calendar's own weeks are the weeks Calendrical numbers for it (`Calendrical.Interval.week/3`), which in a week-based calendar are its `W` weeks. A calendar that numbers its weeks within its own year (Hebrew, Islamic, Julian, …) cuts week 1 and the last week short, so `5787Y1w[u-ca=hebrew]` is 1 Tishri alone, a Saturday; the day of the week `K` is ISO 8601's, and a short week holds only its own days (`5787Y1w1K` is not a date). RFC 5545's `BYWEEKNO` counts ISO 8601 weeks (from `WKST`), so `Tempo.RRule.to_string/1` cannot express `w`.
-
-Either week can hold days of the year before or after it, and they belong to the year that numbers the week wherever they land: `Tempo.to_interval(~o"R/../P1Y/FL1W1KN", within: ~o"2025Y12M")` is Monday 29 December 2025, the first day of 2026's week 1.
-
-### Week of a month — `W` after a month
-
-ISO 8601 has a week of a year and none of a month. In the explicit form a `W` after a month is a week of that month, as the calendar numbers a month's weeks (`Calendrical.week_of_month/1`). In the Gregorian calendar those are whole weeks from a Monday, the first of a month the one that holds its first day, so a week of a month is not always within its month, and each week is the week of one month alone.
-
-```elixir
-~o"2026Y6M2W"            # 2026-06-08/2026-06-15, the week's seven days
-~o"2026Y7M1W"            # 2026-06-29/2026-07-06: 1 July is a Wednesday
-~o"2026Y6M-1W"           # 2026-06-22/2026-06-29, the last of June's four
-~o"2026Y6M2W3K"          # 2026-06-10, the Wednesday of that week
-~o"2026Y6M2W3KT10H30M"   # 2026-06-10T10:30
-```
-
-Like a `w` week it resolves to its dates in a **concrete date**, so it is written back as the dates it names, and a week the month does not have is an error (`2026Y6M5W`). It is one week of one month of one year: the weeks of a month are selected with `Tempo.select/2`, where `~o"2W"` from a month is its second week, `~o"{1,3}W"` its first and third and `~o"-1W"` its last. In a **selection** resolved in a month it is the week's span, so `R/2026Y6M/P1M/FL2WN` is the second week of each month from June 2026, and beside a part that picks within the week it hands that part its days, as a week of a year does: `2026Y6ML2W3KN` is Wednesday 10 June, `2026Y6ML2WT10HN` ten o'clock on each of the week's seven days, and `R/2026Y6M/P1M/FL-1W5KN` the Friday of each month's last week. A calendar that numbers a month's weeks from its first day to its last (Hebrew, Islamic, Julian, …) cuts the first and the last of them short, so `5786Y1M1W[u-ca=hebrew]` is the five days from 1 Tishri to its first Saturday.
-
-A week beside the month it is written with is a week of that month wherever the month stands. `2026YL6M2WN` is the second week of June, as `2026Y6ML2WN` is, and `R/2026/P1Y/FL6M2WN` that week of each year. A day and a time of day are written with their month, so a week selected from one keeps it where that week of its month holds it: `Tempo.select(~o"2026-06-10", ~o"2W")` is 10 June, and `~o"24W"` selects nothing from it. A week with no month beside it, selected from a year or from a week, is a week of the year. A Gregorian day is a day of its month however it is written, as a week date or an ordinal date too, so `~o"24W"` selects nothing from `2026-W24-3` and `~o"2W"` keeps it, where the week `2026-W24` is the one `~o"24W"` selects.
-
-A rule that starts on a date is asked of each day from its start, as RFC 5545's is, and its week is the week of the year: `R/2026-01-05/P1Y/FL6M24WN` is each day of June in week 24. An RRULE's `BYWEEKNO` is always that week, so `Tempo.RRule.parse/2` refuses one that would be read in a month, beside a `BYMONTH` or in a rule that steps by months with no start that is a date, with `{:byweekno_without_a_date, weeks}`.
-
-A week of the calendar's own numbering (`w`) is a week of its year, and under a month it has no meaning: `2026Y6ML2wN`, `Tempo.select(~o"2026-06", ~o"L2wN")` and a rule that steps by months from a month, a year or no start (`R/2026Y6M/P1M/FL2wN`) are a `Tempo.ConversionError` whose reason is `:calendar_week_in_month`, and are refused for good. It is selected in a year, where `2026YL2wN` is the calendar's second week of 2026, and a rule that starts on a date keeps or drops that date by its week of the year, as it does with `W`.
-
-### Exclusions and the recurrence domain — the `^` marker and `e`/`o`/`l`/`c` filters
-
-ISO 8601 can say "every year" (`R/../P1Y/…`) but not "every year **except** these" or "only even years". Tempo adds two set-level extensions for exactly that.
-
-**`^value` — an exclusion member.** Inside any `{…}` set, a member written with a leading `^` is *removed* from the set. The set converts to its plain members minus its excluded ones:
-
-```elixir
-# 2024 and 2028 — the ^2026 drops the year that is also listed
-Tempo.to_interval(~o"{2024Y,2026Y,2028Y,^2026Y}")
-#   → 2024, 2028
-```
-
-**The recurrence domain.** A `{…}` set placed in the interval slot of a recurrence — `R/{…}/P…/…` — is the recurrence's **domain**: the set of periods it recurs in, each keeping every occurrence its selection gives, even one a §12.10 window or a week carries into the year beside it. A range gives the window and `^` members punch holes in it, so a holiday that lapsed for a year, or a rule that skips a year, stays one declarative expression:
-
-```elixir
-# Christmas every year from 2020 to 2024, but not 2022
-Tempo.to_interval(~o"R/{2020Y..2024Y,^2022Y}/P1Y/FL12M25DN")
-#   → 2020, 2021, 2023, 2024
-```
-
-A domain of plain members is **self-bounding** — it needs no `:within`, because the listed years *are* the window. A domain of only exclusions (`R/^2022Y/P1Y/…`, or a brace set with `^` members alone) has no window of its own, so it still takes a `:within` and subtracts from it:
-
-```elixir
-# Christmas 2020–2023, skipping 2022 — exclusions-only, so `:within` supplies the window
-Tempo.to_interval(~o"R/^2022Y/P1Y/FL12M25DN", within: ~o"2020Y/2024Y")
-#   → 2020, 2021, 2023
-```
-
-**`e` / `o` / `l` / `c` — even / odd / leap / common-year filters.** A lowercase `e`, `o`, `l` or `c` after a domain set keeps only its even, odd, leap or common (non-leap) years. It composes with a range and with `^` exclusions, and works on an open range (`{2020Y..}e`) when a `:within` closes it:
-
-```elixir
-# New Year's Day in even years only, 2020–2026
-Tempo.to_interval(~o"R/{2020Y..2026Y}e/P1Y/FL1M1DN")
-#   → 2020, 2022, 2024, 2026
-```
-
-Leap (`l`) and common (`c`) ask the domain year's calendar `leap_year?/1`, so they are calendar-correct rather than a `rem/2` guess: 2100 is a common year. A domain's years are years of the recurrence's calendar, the one written after it: `R/{5787Y..5788Y}/P1Y/FL1M1DN[u-ca=hebrew]` is the first day of two Hebrew years. The Gregorian years a recurrence of another calendar falls in are another expression, given as a `:within` window. All four are Tempo extensions with no ISO or RFC 5545 form, so they round-trip through `inspect/1`/`to_iso8601/1` but not through `Tempo.RRule.to_string/1`.
-
-**Open-ended ranges.** A domain range may be open at either end, as an ISO 8601-2 set range may: `{2017Y..}` is 2017 on, `{..2016Y}` up to 2016, and `{..2019Y,2021Y..}` every year but 2020. An open domain has no window of its own, so it takes its missing end from a `:within`:
-
-```elixir
-# The 2nd of January, from 2017 on
-Tempo.to_interval(~o"R/{2017Y..}/P1Y/FL1M2DN", within: ~o"{2015..2019}Y")
-#   → 2017, 2018, 2019
-```
-
-**A multi-year cadence.** A cadence longer than one period steps through the domain, counted from its first year, so `R/{1848Y..}/P4Y/…` is "every four years since 1848":
-
-```elixir
-# US presidential Election Day, every four years since 1848
-Tempo.to_interval(~o"R/{1848Y..}/P4Y/FLLL11M1K1IN/P7DN2K-1IN", within: ~o"{2019..2028}Y")
-#   → 2020-11-03, 2024-11-05, 2028-11-07
-```
-
-**A count.** A count counts the domain's occurrences from its first period, as a count from a start does, and a `:within` window then keeps those that overlap it:
-
-```elixir
-# The domain's first three Christmases
-Tempo.to_interval(~o"R3/{2020Y..2022Y,2025Y..2027Y}/P1Y/FL12M25DN")
-#   → 2020, 2021, 2022
-```
-
-**A year in the selection.** ISO 8601-2 has no year selection rule (§12.2), but Tempo accepts a year inside a recurrence's selection and reads it as a domain: a listed year's period keeps every occurrence it selects, and any other year's selects nothing. A year, a set or range of years, a mask (`202XY`, `XXX{0,2,4,6,8}Y`) or `X*Y` for any year can be written there:
-
-```elixir
-# New Year's Day in 2026 and 2028 only
-Tempo.to_interval(~o"R/2026-01-01/P1Y/FL{2026,2028}Y1M1DN", within: ~o"2026Y/2030Y")
-#   → 2026, 2028
-```
-
-As with a domain, an occurrence belongs to the year that selects it, so `R/2025-01-01/P1Y/FL2026Y1W1KN` is Monday 29 December 2025, the first day of ISO 8601 week 1 of 2026. RFC 5545 has no `BYYEAR`, so `Tempo.RRule.to_string/1` cannot express it.
-
-### Selection with a time interval (ISO 8601-2 §12.10)
-
-A selection followed by `/[duration]` makes each resolved date the **start of a window** of that duration (a negative duration extends backward), and selectors placed after it pick *within* the window. Nesting is written with `L…N` pairs from the outside in. This is standard ISO 8601-2, not a Tempo extension, and it is how the holidays *derived* from a computed event are expressed:
-
-```elixir
-# Good Friday — the last Friday in the 7 days before Easter
-Tempo.to_interval(~o"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN", within: ~o"2026")  # → 2026-04-03
-
-# US Election Day — the 1st Tuesday in the 9 days from November's 1st Monday
-Tempo.to_interval(~o"R/../P1Y/FL11MLL1K1IN/P9DN2K1IN", within: ~o"2026")       # → 2026-11-03
-```
-
-The spec's worked examples resolve as written: `~o"R/../P1Y/FLLL2K2IN/P10DN4K2IN"` is "the 2nd Thursday within the ten days from the 2nd Tuesday" (§12.11 Example 3), and `~o"R/../P1Y/FLL4M4D/-P20DN7K-2IN"` is "the 2nd Sunday before April 4" (Example 7). A terminal window with no inner selectors — `~o"R/../P1Y/FLL3K4IN/P5DN"`, "the 4th Wednesday for 5 days" — yields one interval per period spanning its whole duration.
-
-A window holds what is selected within it whole. One of no length (`/P0D`) is no interval, and one shorter than a unit selected within it holds none: `LLL1K1IN/PT12HN1K1IN` asks for a Monday in twelve hours. Both are a `Tempo.ParseError` when the value is read, the window measured in the units a duration measures exactly (a week is seven days, a day twenty-four hours); a window written in months or years is as long as the calendar makes it where it starts. A window of hours that selects a time of day is read, and the times it selects are those that start within it: of the twelve hours from a Monday, `T{9,13}H` is that Monday's 09:00.
-
-A window can carry an occurrence out of the period that produced it, and the `:within` window keeps each occurrence in the year it lands in. A holiday observed on the previous Friday when it falls on a Saturday — `FLLL1M1D6KN/-P7DN5K1IN` — lands on 31 December 2021 for New Year's Day 2022:
-
-```elixir
-Tempo.to_interval(~o"R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN", within: ~o"2021")  # → 2021-12-31
-Tempo.to_interval(~o"R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN", within: ~o"2022")  # → (none)
-```
-
-## 6. Ambiguity resolution
-
-A few ISO 8601 constructs are genuinely ambiguous; Tempo resolves them as follows.
-
-| Construct | Standard says | Tempo does |
+| Suffix | Example | Held as |
 |---|---|---|
-| Seasons `21-24` | "Independent of location", with no dates given | Kept as written, with **no hemisphere**, until a territory or a locale gives one: `Tempo.in_territory/2`, the `:territory` and `:locale` options of the readers and of `Tempo.to_interval/2`, and with none of those the application's default territory and then the current locale. They are then the **meteorological** season, whole months (`21` is March to May north of the equator and September to November south of it), each of the year it **starts in**. A territory the equator runs through gives none. |
-| A season in a non-Gregorian year (`5787-25[u-ca=hebrew]`) | Seasons are defined on the Gregorian year | The Gregorian season of that kind that **starts within the year**, the first if two do, with endpoints in the value's calendar. A year that holds none, as a 354-day Islamic year can, is an error. |
-| `Z` without offset | ISO 8601-1 §4.3.13: no time shift from UTC, "functionally equivalent" to `+00:00`. RFC 9557 §2.2: "the time in UTC is known, but the offset to local time is unknown", which "differs semantically" from `+00:00` | Stored as `shift: [hour: 0]`, and `+00:00` (and `+00`, `Z0H`) as `shift: [hour: 0, minute: 0]`. With no zone beside them they are one time, as ISO 8601 has them. Beside a zone suffix, which is RFC 9557's, `Z` agrees with any zone and `+00:00` only with one that is at UTC; beside an elective zone both are the same moment on the zone's clock. |
-| `-00:00` | Not ISO 8601: a zero shift is written with a plus (ISO 8601-1 §4.3.13). RFC 3339 §4.3 had it for a time in UTC with no local offset, which RFC 9557 §2.2 now gives to `Z` | Read, as `Z` is. |
-| Leading qualifier on a date (`?2022-06-15`) | §8.2.3: left of a component qualifies that component | Individual qualification of the leftmost (coarsest) component — `?2022-06-15` qualifies the year alone (`%{year: :uncertain}`), not the whole value. See §3 "Component qualification". |
-| A set of whole numbers with no designator (`{1960,1961}`, `{19,20}`, `{20260615,20260616}`) | §6.1 shows a set of years; ISO 8601-1 writes a year with four digits, or with more after a sign (§4.4) | A set of years where each number has four digits, or more after a minus sign. Otherwise each member is read as it is alone, as in a set of one of: `{19,20}` is two centuries and `{20260615,20260616}` two dates. Years of fewer digits are written with the designator (`{19,20}Y`). |
+| Time zone | `[Europe/Paris]` | the expression's zone |
+| Offset as a zone | `[+08:45]` | a zone at a fixed offset |
+| Calendar | `[u-ca=hebrew]`, `[u-ca=gregory]` | the expression's calendar |
+| Any other tag | `[_foo=bar]` | metadata, written back |
+
+```elixir
+iex> ~o"2026-06-15T10:00[Europe/Paris][u-ca=gregory]"
+~o"2026Y6M15DT10H0M[Europe/Paris][u-ca=gregorian]"
+
+iex> Tempo.relation(~o"5786-09-30[u-ca=hebrew]", ~o"2026-06-15")
+:equals
+
+iex> {:error, %Tempo.ZoneError{reason: :unknown}} = Tempo.from_iso8601("2026-06-15T10:00[Nowhere/City]")
+```
+
+**A suffix is written once, after the whole expression**, and is of the whole of it: after the end of an interval it is the zone and calendar of both ends, after a set of every member, after a recurrence of its start, its end and its rule. One written inside — on the start of an interval, on a member of a set — is a `Tempo.ParseError`.
+
+```elixir
+iex> conference = ~o"2030-03-01T08:00/2030-03-05T08:00[Europe/Paris]"
+iex> Tempo.zoned?(Tempo.Interval.from(conference))
+true
+
+iex> {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2030-03-01T08:00[Europe/Paris]/2030-03-05T08:00")
+```
+
+A zone is the first suffix or there is none (RFC 9557 §4.1), and its name is checked against the time zone database. A tag marked critical (`[!…]`) that Tempo cannot act on is an error; an elective one is kept as metadata.
+
+**A time shift beside a zone gives the moment** (RFC 9557 §3.4), and the zone the clock it is to be shown on. Both are held and written back. A shift that the zone does not have at that reading is read too, as the moment the shift says.
+
+```elixir
+iex> stated = ~o"2022-07-08T00:14:07+01:00[Europe/Paris]"
+iex> Tempo.shift_zone(stated, "Etc/UTC")
+{:ok, ~o"2022Y7M7DT23H14M7S[Etc/UTC]"}
+```
+
+`Z`, `+00:00` and `-00:00` are one time. A time shift is each end's own in an interval, and one written on the start is the end's too where the end has none (ISO 8601-1 §5.5.1).
+
+**A reading a zone's clock skips is no value**: an hour of a spring change, a day a territory left out. One it shows twice is the first, or the one a written shift names. See [Falsehoods](falsehoods.md).
+
+**Calendars.** `u-ca` takes CLDR's calendar names (`hebrew`, `islamic-umalqura`, `persian`, `chinese`, `buddhist`, with `gregory` for the Gregorian) and Calendrical's own for the calendars CLDR does not name (`iso-week`, `julian`, `nrf`, `reform-england`). A calendar no name reads back to, such as a fiscal calendar, has no suffix, and a value in it has no text: `Tempo.to_iso8601/1` returns an error rather than a date another calendar would read.
+
+## 5. Tempo's own extensions
+
+These are in no standard. Each is written by `Tempo.to_iso8601/1` and read back, and a system that reads only the standards will not read them. Where an RFC 5545 form exists, `Tempo.RRule.to_string/1` is the portable one.
+
+Tempo marks the designators it adds with a lowercase letter, so that they are seen at a glance to be its own. `I`, the position, is uppercase because it is ISO 8601-2's.
+
+| Extension | Example | Meaning |
+|---|---|---|
+| A step in a range | `{1990..1999//2}Y`, `2023Y{1..-1//2}W` | every second year; every second week |
+| A week of a month | `2026Y6M2W` | the second week of June, as the calendar numbers a month's weeks |
+| A time under a period | `2026-06T17`, `6MT10H` | that time on each day of the period |
+| An end after a cadence | `R/2026-06-01/P1D/2026-06-10` | a recurrence's last date, RFC 5545's `UNTIL` |
+| A computed event, `e` | `L(easter)eN`, `L(march-equinox@+09:00)eN` | a day a rule computes |
+| A traditional month, `m` | `8m15D`, `6+m` | a lunisolar calendar's named month, and its leap month |
+| An exclusion, `^` | `{2020Y..2024Y,^2022Y}` | a member left out |
+| A recurrence's domain | `R/{2020Y..2024Y}/P1Y/F…` | the periods a rule recurs in |
+| A domain filter | `{2020Y..2026Y}e`, `o`, `l`, `c` | even, odd, leap or common years |
+| A year in a rule | `FL{2026,2028}Y1M1DN` | the years an occurrence may fall in |
+| A week start, `q` | `1q` | the day a week begins on: Monday, the one start kept to |
+
+### Computed events
+
+ISO 8601-2 cannot write a date fixed by an algorithm: Easter, an equinox, one of the twenty-four solar terms. `e` names one, in parentheses:
+
+```elixir
+iex> Tempo.to_interval(~o"R/../P1Y/FL(easter)eN", within: ~o"2026/2028")
+{:ok, ~o"{2026Y4M5D/2026Y4M5D,2027Y3M28D/2027Y3M28D,2028Y4M16D/2028Y4M16D}"}
+
+iex> Tempo.to_interval(~o"R/../P1Y/FL(march-equinox@+09:00)eN", within: ~o"2002")
+{:ok, ~o"{2002Y3M21D/2002Y3M21D}"}
+
+iex> {:error, %Tempo.InvalidDateError{unit: :event}} = Tempo.from_iso8601("R/../P1Y/FL(nonsense)eN")
+```
+
+> *"**Easter Sunday** of each year. The **March equinox** as its date falls in Japan: the 21st in 2002, where it was the 20th in UTC."*
+
+`Tempo.Event.known/0` lists the names: `easter` and `orthodox-easter`, the equinoxes and solstices, `new-moon`, and the solar terms (`qingming`, `lichun`, `dongzhi` and the rest). Easter is computed by Calendrical and the astronomical events by Astro. An equinox or a solstice happens at an instant, so its date is of a zone: UTC's, or the one written after `@`.
+
+### Traditional months
+
+ISO 8601 numbers a year's months in order, which is what `M` writes. A lunisolar calendar also names them, and a named month's place moves in a year that has a leap month before it. `m` is the named month and `+m` the leap month after it, in a Chinese, Korean, Vietnamese or Hebrew calendar:
+
+```elixir
+iex> Tempo.select(~o"4662[u-ca=chinese]", ~o"8m15D")
+{:ok, ~o"{4662Y8m15D}[u-ca=chinese]"}
+
+iex> Enum.map(Enum.take(~o"R/5786Y7m15D/P1Y[u-ca=hebrew]", 2), &Tempo.Interval.from/1)
+[~o"5786Y7M15D[u-ca=hebrew]", ~o"5787Y8M15D[u-ca=hebrew]"]
+```
+
+> *"The **15th of the eighth named month**: the Mid-Autumn Festival. **Passover** each year, the seventh month of 5786 and the eighth of the leap year 5787."*
+
+### Exclusions, domains and filters
+
+A member of a set written with `^` is left out of it. A set in the place of a recurrence's start is its **domain**, the periods it recurs in, so a rule that lapsed for a year, or holds in even years only, is one expression:
+
+```elixir
+iex> Tempo.to_interval(~o"{2024Y,2026Y,2028Y,^2026Y}")
+{:ok, ~o"{2024Y/2024Y,2028Y/2028Y}"}
+
+iex> years = fn text, options ->
+...>   {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!(text), options)
+...>   Tempo.IntervalSet.map(set, &Tempo.year/1)
+...> end
+iex> years.("R/{2020Y..2024Y,^2022Y}/P1Y/FL12M25DN", [])
+[2020, 2021, 2023, 2024]
+
+iex> years.("R/{2020Y..2026Y}e/P1Y/FL1M1DN", [])
+[2020, 2022, 2024, 2026]
+
+iex> years.("R/{1848Y..}/P4Y/FL11MLL1K1IN/P9DN2K1IN", within: ~o"2019/2028")
+[2020, 2024, 2028]
+
+iex> years.("R/^2022Y/P1Y/FL12M25DN", within: ~o"2020/2023")
+[2020, 2021, 2023]
+
+iex> years.("R/2026-01-01/P1Y/FL{2026,2028}Y1M1DN", within: ~o"2026/2030")
+[2026, 2028]
+```
+
+> *"Christmas from 2020 to 2024, **but not** 2022. New Year's Day in **even** years. Election day **every four years since 1848**. Christmas within a window, less 2022. New Year's Day in 2026 and 2028 **only**."*
+
+A domain that lists its periods needs no window. One that is open (`{1848Y..}`) or holds exclusions alone takes its periods from `:within`. A cadence of several units steps through a domain from its first period. The filters `l` and `c` ask the calendar which years are leap years, so 2100 is a common one.
+
+## 6. What is not read
+
+* **The `A` season designator** of §4.8.2 c); the month-slot form (`2022-21`) is read.
+
+* **The precedence form of a duration** (§11.3.3, `P1YP3MP2D`). Tempo applies years, then months with the day clamped, then weeks and days, then the clock.
+
+* **A set of values within a unit of the extended format** (`2026-[01,03]`) and a time shift written after a set. Write the set whole (`[2026-01,2026-03]`), or in the explicit form (`2026Y{1,3}M`).
+
+* **A range whose ends are not of one shape**, and digits and sets mixed in one unit (`XXX{0,2,4,6,8}Y`).
+
+* **`D` as a day of the year.** `1985Y102D` is refused; write `1985Y102O`.
+
+* **Truncated forms**, and a year and month in the basic format.
+
+Each is a `Tempo.ParseError`, or a `Tempo.InvalidDateError` where the text is well formed and names no date, that says where the reading stopped.
 
 ## 7. Test coverage
 
-Tempo's conformance is exercised by:
+* **The grammar's generators** produce texts for each production, which must be read and written back to a text that reads to the same value; a mutator makes texts that must be refused.
 
-* **`test/tempo/iso8601/dates_times_test.exs`** — Part 1 core representations.
-* **`test/tempo/iso8601/duration_test.exs`**, **`interval_test.exs`**, **`set_test.exs`** — interval, duration, and set constructs.
-* **`test/tempo/iso8601/extended_test.exs`** — IXDTF suffix parsing.
-* **`test/tempo/iso8601/qualification_test.exs`** — EDTF L1 and L2 qualification.
-* **`test/tempo/iso8601/open_interval_test.exs`** — open-ended intervals.
-* **`test/tempo/iso8601/unspecified_digit_test.exs`** — unspecified-digit masks.
-* **`test/tempo/iso8601/leap_second_test.exs`** — leap-second validation.
-* **`test/tempo/iso8601/round_trip_test.exs`** — one representative per token round-trips through `inspect/1`: parse a value, re-parse the canonical `~o"…"` form `inspect/1` shows, and get the identical value back — no component dropped or mangled.
-* **`test/tempo/iso8601/edtf_corpus_test.exs`** — the full `unt-libraries/edtf-validate` corpus (BSD-3-Clause), exercised at 100%. See `test/support/edtf_corpus.ex` for the raw strings and attribution.
+* **The EDTF corpus** of `unt-libraries/edtf-validate` (BSD-3-Clause), the one public conformance set for ISO 8601-2 we know of, in `test/support/edtf_corpus.ex`.
 
-The EDTF corpus is the only publicly-available conformance test set we know of for ISO 8601-2 Part 2; Tempo passes it in full.
+* **This guide's own examples**, and every other guide's, are run by `mix test --only guides`.
 
-## 8. Comparison to other implementations
+## 8. Reporting a gap
 
-No other known implementation in any language supports **full** ISO 8601 Parts 1 and 2. The RFC 3339 subset is covered by every mainstream date library (`java.time`, `chrono`, Python `datetime`, etc.). Part 2 — sets, groups, uncertainty, seasons, selections — is covered only by the EDTF family of libraries (`python-edtf`, `edtf.js`, `edtf-validate`, `mbklein/nulib` for Elixir), which themselves target EDTF's subset of the 2019 standard. Tempo's Part 2 coverage is roughly equivalent to EDTF Level 2 plus Tempo-specific extensions (groups, selections, step ranges).
-
-See `docs/iso8601-conformance-research.md` for the detailed prior-art survey.
-
-## 9. Reporting a conformance gap
-
-If you have an ISO 8601 or EDTF string that should parse and doesn't, please open an issue including:
-
-* The input string.
-* The expected result (cite the ISO 8601 clause or EDTF level).
-* The actual output from `Tempo.from_iso8601/1`.
-
-Pull requests with a failing test case are especially welcome.
+If a text of ISO 8601 should be read and is not, please open an issue with the text, the reading you expect and the clause that gives it, and what `Tempo.from_iso8601/2` returned.

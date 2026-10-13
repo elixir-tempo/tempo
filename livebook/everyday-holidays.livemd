@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 2.0"},
+  {:ex_tempo, "~> 3.0"},
   {:tz, "~> 0.28"},
   {:kino, "~> 0.14"}
 ])
@@ -22,7 +22,8 @@ The holidays are written as the rules their laws give them: each is an ISO 8601 
 Every question starts from today, and today depends on where it is asked: at breakfast in Melbourne it is still yesterday in London. `Tempo.today/1` gives the date in a zone, as a date with no zone of its own, so it compares with a holiday — which has none either.
 
 ```elixir
-today = Tempo.today("Australia/Melbourne")
+{:ok, today} = Tempo.today("Australia/Melbourne")
+today
 ```
 
 The holidays ahead of today are those that overlap the window from today on — an open-ended window, which has a start and no end.
@@ -56,7 +57,7 @@ school_holidays =
     Tempo.put_metadata(~o"2027-12-18/P41D", %{name: "Term 4 holidays"})
   ])
 
-{:ok, holidays_ahead} = Tempo.to_interval_set(school_holidays, within: from_today)
+{:ok, holidays_ahead} = Tempo.to_interval(school_holidays, within: from_today)
 next_break = Tempo.IntervalSet.first(holidays_ahead)
 ```
 
@@ -68,18 +69,18 @@ Tempo.metadata(next_break).name
 
 ## How many days until the next US Election Day?
 
-US federal elections are held on Election Day: the Tuesday after the first Monday in November, in even-numbered years. As a rule, that is every even year (`..e`), the week that starts on the first Monday of November (`FLLL11M1K1IN/P7DN`), and the last Tuesday in it (`2K-1I`) — the Tuesday after the Monday.
+US federal elections are held on Election Day: the Tuesday after the first Monday in November, in even-numbered years. As a rule, that is the even years from 2000 on (`{2000Y..}e`), in November the week that starts on its first Monday (`11MLL1K1IN/P7DN`), and the last Tuesday in it (`2K-1I`) — the Tuesday after the Monday.
 
 ```elixir
-election_day = ~o"R/..e/P1Y/FLLL11M1K1IN/P7DN2K-1IN"
+election_day = ~o"R/{2000Y..}e/P1Y/FL11MLL1K1IN/P7DN2K-1IN"
 
-{:ok, elections_ahead} = Tempo.to_interval_set(election_day, within: from_today)
-next_election = Tempo.IntervalSet.first(elections_ahead)
+{:ok, elections_ahead} = Tempo.select(from_today, election_day)
+[next_election] = Enum.take(elections_ahead, 1)
 
 {:ok, days_to_go} = Tempo.duration(today, Tempo.Interval.from(next_election))
 ```
 
-> *"The **next election** is the first Election Day from today on, and **days to go** is how long it is from today until then — counted in days, because both are days."*
+> *"The Election Days **ahead** are those the rule **selects** from today on, a set with no end that is walked only as far as it is taken. The **next election** is the first of them, and **days to go** is how long it is from today until then — counted in days, because both are days."*
 
 ## How many public holidays does England have this year?
 
@@ -118,16 +119,18 @@ england =
     Tempo.put_metadata(~o"R/../P1Y/FLLL12M26D7KN/P8DN2K-1IN", %{name: "Boxing Day", substitute: true})
   ])
 
-this_year = Tempo.trunc(today, :year)
+{:ok, this_year} = Tempo.trunc(today, :year)
 
-{:ok, england_this_year} = Tempo.to_interval_set(england, within: this_year)
+{:ok, england_this_year} = Tempo.to_interval(england, within: this_year)
 Tempo.IntervalSet.count(england_this_year)
 ```
 
 > *"England's **holidays this year** are its rules within this year, and there are this many of them: a holiday on a weekend is counted once, on the day it is observed."*
 
 ```elixir
-Kino.DataTable.new(england_this_year)
+england_this_year
+|> Tempo.IntervalSet.map(&%{day: Tempo.to_string!(&1, format: :long), holiday: Tempo.metadata(&1).name})
+|> Kino.DataTable.new()
 ```
 
 ## Which of them does England share with Australia?
@@ -167,22 +170,26 @@ australia =
     Tempo.put_metadata(~o"R/../P1Y/FLLL12M26D7KN/P8DN2K-1IN", %{name: "Boxing Day", substitute: true})
   ])
 
-{:ok, australia_this_year} = Tempo.to_interval_set(australia, within: this_year)
-{:ok, shared} = Tempo.intersection(england_this_year, australia_this_year, metadata: :merge)
+{:ok, australia_this_year} = Tempo.to_interval(australia, within: this_year)
+{:ok, shared} = Tempo.members_overlapping(england_this_year, australia_this_year)
 
-Kino.DataTable.new(shared)
+shared
+|> Tempo.IntervalSet.map(&%{day: Tempo.to_string!(&1, format: :long), holiday: Tempo.metadata(&1).name})
+|> Kino.DataTable.new()
 ```
 
-> *"The holidays England **shares** with Australia are the days both have off: the **intersection** of England's holidays this year and Australia's."*
+> *"The holidays England **shares** with Australia are those of England's that **overlap** one of Australia's, each with its name."*
 
 ## Any other year
 
-The rules are the holidays, not a list of dates, so the same questions answer for any other year: England's holidays in 2027 are its rules within 2027, and the days it shares with Australia then are the intersection of the two. In 2027 Christmas falls on a Saturday, so both countries observe it on the Monday and Boxing Day on the Tuesday.
+The rules are the holidays, not a list of dates, so the same questions answer for any other year: England's holidays in 2027 are its rules within 2027, and the days it shares with Australia then are those of the one that overlap the other's. In 2027 Christmas falls on a Saturday, so both countries observe it on the Monday and Boxing Day on the Tuesday.
 
 ```elixir
-{:ok, england_2027} = Tempo.to_interval_set(england, within: ~o"2027")
-{:ok, australia_2027} = Tempo.to_interval_set(australia, within: ~o"2027")
-{:ok, shared_2027} = Tempo.intersection(england_2027, australia_2027, metadata: :merge)
+{:ok, england_2027} = Tempo.to_interval(england, within: ~o"2027")
+{:ok, australia_2027} = Tempo.to_interval(australia, within: ~o"2027")
+{:ok, shared_2027} = Tempo.members_overlapping(england_2027, australia_2027)
 
-Kino.DataTable.new(shared_2027)
+shared_2027
+|> Tempo.IntervalSet.map(&%{day: Tempo.to_string!(&1, format: :long), holiday: Tempo.metadata(&1).name})
+|> Kino.DataTable.new()
 ```

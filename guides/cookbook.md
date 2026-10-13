@@ -10,7 +10,7 @@ Every code example in this guide uses the `~o` sigil from `Tempo.Sigils`. Before
 import Tempo.Sigils
 ```
 
-The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; no helper functions leak in. In `iex`, paste it once and every subsequent snippet runs against it.
+The import adds only `sigil_o/2` to the caller's namespace; no helper functions leak in. In `iex`, paste it once and every subsequent snippet runs against it.
 
 ---
 
@@ -21,15 +21,14 @@ The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; 
 3. [Iteration](#3-iteration)
 4. [Comparison and predicates](#4-comparison-and-predicates)
 5. [Set operations](#5-set-operations)
-6. [Selecting sub-spans with `Tempo.select/2`](#6-selecting-sub-spans-with-tempo-select-2)
+6. [Selecting with `Tempo.select/3`](#6-selecting-with-tempo-select-3)
 7. [Recurring events (RRULE)](#7-recurring-events-rrule)
 8. [iCalendar import](#8-icalendar-import)
 9. [Cross-calendar and cross-timezone](#9-cross-calendar-and-cross-timezone)
 10. [Archaeological / approximate dates](#10-archaeological-approximate-dates)
-11. [Chronological networks](#11-chronological-networks)
-12. [Scheduling](#12-scheduling)
-13. [Real-world scenarios](#13-real-world-scenarios)
-14. [Famous moments in time](#14-famous-moments-in-time)
+11. [Chronological networks and dependency scheduling](#11-chronological-networks-and-dependency-scheduling)
+12. [Real-world scenarios](#12-real-world-scenarios)
+13. [Famous moments in time](#13-famous-moments-in-time)
 
 ---
 
@@ -42,19 +41,22 @@ iex> ~o"2026-06-15"
 ~o"2026Y6M15D"
 ```
 
-The sigil output uses ISO 8601-2's unit-suffix form (`Y`/`M`/`D`/`H`/…) which disambiguates months from minutes.
+A value is shown as the sigil that reads it, in ISO 8601-2's explicit form (`Y`, `M`, `D`, `H`, …), which tells months from minutes. `Tempo.from_iso8601/2` reads the same text at run time and returns `{:ok, value}` or an error.
 
 ### How do I convert an Elixir `Date`, `Time`, `NaiveDateTime`, or `DateTime` to a Tempo?
 
 ```elixir
 iex> Tempo.from_elixir(~D[2026-06-15])
-~o"2026Y6M15D"
+{:ok, ~o"2026Y6M15D"}
 
 iex> Tempo.from_elixir(~U[2026-06-15 10:30:00Z])
-~o"2026Y6M15DT10H30M0SZ[Etc/UTC]"   # second resolution, zone_id "Etc/UTC"
+{:ok, ~o"2026Y6M15DT10H30M0SZ"}
+
+iex> Tempo.from_date(~D[2026-06-15])
+~o"2026Y6M15D"
 ```
 
-`from_elixir/2` accepts a `:resolution` option when you want to coarsen or extend the inferred one.
+A `DateTime` is a second in its zone. `from_elixir/2` takes a `:resolution` option when the value is really coarser than its type, and the typed `from_date/1`, `from_time/1`, `from_naive_datetime/1` and `from_datetime/1` return the value itself. See [Converting to and from Elixir date/time types](interop.md).
 
 ### How do I express a duration?
 
@@ -62,8 +64,8 @@ iex> Tempo.from_elixir(~U[2026-06-15 10:30:00Z])
 iex> ~o"P1Y6M"
 ~o"P1Y6M"
 
-iex> ~o"P1Y6M".time
-[year: 1, month: 6]
+iex> Tempo.Duration.new(year: 1, month: 6)
+{:ok, ~o"P1Y6M"}
 ```
 
 ### How do I express an interval between two dates?
@@ -73,22 +75,22 @@ iex> ~o"2026-06-01/2026-06-30"
 ~o"2026Y6M1D/30D"
 ```
 
-Tempo uses the half-open `[from, to)` convention. Adjacent intervals concatenate cleanly.
+An interval written to a date runs through that date: this is the whole of June, the 1st through the 30th. One written to a time of day runs to that reading, so `~o"2026-06-15T09/2026-06-15T17"` ends as five o'clock begins. Either way the span itself is half-open, `[start, end)`, and adjacent intervals join with no gap and no overlap.
 
 ### How do I say "approximately 2022" or "uncertain 1984"?
 
 ```elixir
-iex> ~o"2022~"
-# Approximate 2022
+iex> Tempo.qualification(~o"2022~", :year)
+:approximate
 
-iex> ~o"1984?"
-# Uncertain 1984
+iex> Tempo.qualification(~o"1984?", :year)
+:uncertain
 
-iex> ~o"1984%"
-# Both uncertain and approximate (equivalent to ISO 8601-2 `%`)
+iex> Tempo.qualification(~o"1984%", :year)
+:both
 ```
 
-`Tempo.qualification/1` reads the qualifier back; the span stays the same calendar year.
+`Tempo.qualification/2` reads a unit's mark back; the span stays the same calendar year.
 
 ---
 
@@ -110,11 +112,11 @@ iex> Tempo.qualification(about_june, :day)
 nil
 
 # At the very END → the whole value (complete)
-iex> Tempo.qualification(Tempo.from_iso8601!("2004-06-11~"))
-:approximate
+iex> Tempo.qualification(Tempo.from_iso8601!("2004-06-11~")) == %{year: :approximate, month: :approximate, day: :approximate}
+true
 ```
 
-So `2004-06~-11` reads as *"approximately June 2004, on the 11th"* — the `~` sits to the right of the month, so it covers the month **and the year it belongs to**, but not the day. A qualifier is held per component: `Tempo.qualification/2` reads one component's, and `Tempo.qualification/1` the one every component shares, which is what a qualifier at the very end says. The span is unchanged either way — the marker is metadata, not a widening of the date.
+So `2004-06~-11` reads as *"approximately June 2004, on the 11th"* — the `~` sits to the right of the month, so it covers the month **and the year it belongs to**, but not the day. A qualifier is held per component: `Tempo.qualification/2` reads one component's, and `Tempo.qualification/1` all of them as a map. The span is unchanged either way — the marker is metadata, not a widening of the date.
 
 The full rule — group / individual / complete, the explicit `2004~Y6~M11D` form, and how it round-trips — is in the [ISO 8601 conformance guide](iso8601-conformance.md#component-qualification-iso-8601-2-8).
 
@@ -125,33 +127,32 @@ The full rule — group / individual / complete, the explicit `2004~Y6~M11D` for
 ### How do I see what a value represents?
 
 ```elixir
-iex> Tempo.explain(~o"156X")
-"""
-A masked year spanning the 1560s.
-Span: [1560, 1570).
-Iterates at :month granularity.
-Convert it to an interval with `Tempo.to_interval/1`.
-"""
+iex> Tempo.explain(~o"2026-06") |> String.split("\n")
+["A value written to the month: Jun 1 – 30, 2026.", "It covers 2026Y6M through 2026Y6M.", "It is floating: a reading of a clock in no zone.", "Walking it gives its days."]
 ```
 
-`Tempo.explain/1` returns a plain string. For structured output (HTML, terminal colour) call `Tempo.Explain.explain/1` which returns a `%Tempo.Explanation{}` with tagged parts — `Tempo.Explain.to_string/1`, `to_ansi/1`, and `to_iodata/1` format it for different surfaces.
+`Tempo.explain/1` returns a plain string, a sentence to a line: what kind of expression it is, what it covers, what frame it is in and what a walk of it gives. `Tempo.Explain.lines/1` returns the lines as a list.
 
 ### How do I see the concrete bounds of an implicit interval?
 
 ```elixir
-iex> {:ok, iv} = Tempo.to_interval(~o"2026-06")
-iex> {from, to} = Tempo.Interval.endpoints(iv)
-iex> {Tempo.year(from), Tempo.month(from), Tempo.day(from), Tempo.year(to), Tempo.month(to), Tempo.day(to)}
-{2026, 6, 1, 2026, 7, 1}
+iex> Tempo.to_interval(~o"2026-06")
+{:ok, ~o"2026Y6M/2026Y6M"}
+
+iex> Tempo.to_interval(~o"2026-06-15T10")
+{:ok, ~o"2026Y6M15DT10H/T11H"}
+
+iex> Tempo.at_resolution(~o"2026-06", :day)
+{:ok, ~o"2026Y6M1D"}
 ```
 
-Every Tempo value *is* an interval. `to_interval/1` converts the implicit span to explicit `from`/`to` endpoints.
+Every Tempo value *is* an interval, and `to_interval/2` writes it as one at the value's own resolution: June is from June through June, and ten o'clock is from ten to eleven. `at_resolution/2` gives the first day, hour or minute of a value when that is what you are after.
 
 ### How do I check a value's resolution?
 
 ```elixir
 iex> Tempo.resolution(~o"2026-06-15")
-{:day, 1}
+:day
 ```
 
 ---
@@ -167,7 +168,7 @@ iex> Enum.take(~o"2026Y", 12)
  ~o"2026Y11M", ~o"2026Y12M"]
 ```
 
-A year iterates at month granularity — the next-finer unit below what's specified.
+A walk of a year gives its months — the unit below the one the value is written to.
 
 ### How do I list every day of a month?
 
@@ -184,18 +185,22 @@ iex> Enum.take(~o"156X", 5)
 [~o"1560Y", ~o"1561Y", ~o"1562Y", ~o"1563Y", ~o"1564Y"]
 ```
 
-The `X` mask is interpreted as "any digit." Enumeration walks the concrete years the mask represents.
+An `X` is a digit left unspecified. The value names ten years, and a walk of a value that names several gives each of them.
 
-### How do I step by a non-default unit?
+### How do I step by another unit?
 
-Wrap the value in an explicit interval with the resolution you want:
+An interval is walked in the unit its ends are written to, and `Tempo.walk/2` walks any expression in the unit you name:
 
 ```elixir
-iex> interval = ~o"2026-06-01/2026-07-01"
-# Iterates at day resolution (the boundaries' resolution).
-iex> Enum.take(interval, 3)
-# First three days of June
+iex> Enum.take(~o"2026-06-01/2026-06-30", 3)
+[~o"2026Y6M1D", ~o"2026Y6M2D", ~o"2026Y6M3D"]
+
+iex> {:ok, hours} = Tempo.walk(~o"2026-06-15", :hour)
+iex> Enum.take(hours, 2)
+[~o"2026Y6M15DT0H", ~o"2026Y6M15DT1H"]
 ```
+
+See [Enumeration semantics](enumeration-semantics.md) for the two rules behind every walk.
 
 ---
 
@@ -260,26 +265,30 @@ iex> Tempo.duration(~o"2026-06-15T09/2026-06-15T11")
 ~o"PT2H"
 
 iex> Tempo.duration(~o"2026-06-15/2026-07-21")
-~o"P36D"
+~o"P37D"
+
+iex> Tempo.duration(~o"2026-06-15", ~o"2026-07-21")
+{:ok, ~o"P36D"}
 ```
 
-> *"Nine to eleven is **two hours**; the fifteenth of June to the twenty-first of July is **thirty-six days**."*
+> *"Nine to eleven is **two hours**. The fifteenth of June **through** the twenty-first of July is **thirty-seven days**; **from** the one **to** the other is thirty-six."*
 
-A length is counted in the unit its endpoints are written in. Years, months, weeks and days are calendar steps, so the day a clock change shortens is still one day; hours, minutes and seconds are elapsed time, so that same day is 23 hours. Returns `:infinity` when one or both endpoints are `:undefined`.
+A length is counted in the unit the ends are written in. Years, months, weeks and days are calendar steps, so the day a clock change shortens is still one day; hours, minutes and seconds are elapsed time, so that same day is 23 hours. An interval written to dates runs through its last date, where `duration/2` measures from the start of one value to the start of another. An interval with an open end is `:infinity` long.
 
 ### How do I check an interval's length against a duration?
 
 Five predicates cover the comparison lattice:
 
 ```elixir
-iv = ~o"2026-06-15T09/2026-06-15T10"
+iex> meeting = ~o"2026-06-15T09/2026-06-15T10"
+iex> {Tempo.at_least?(meeting, ~o"PT1H"), Tempo.exactly?(meeting, ~o"PT1H"), Tempo.at_most?(meeting, ~o"PT1H")}
+{true, true, true}
 
-Tempo.at_least?(iv, ~o"PT1H")      # true — length ≥ 1h
-Tempo.exactly?(iv, ~o"PT1H")       # true — length == 1h
-Tempo.at_most?(iv, ~o"PT1H")       # true — length ≤ 1h
-Tempo.longer_than?(iv, ~o"PT30M")  # true — strict >
-Tempo.shorter_than?(iv, ~o"PT2H")  # true — strict <
+iex> {Tempo.longer_than?(meeting, ~o"PT30M"), Tempo.shorter_than?(meeting, ~o"PT2H")}
+{true, true}
 ```
+
+> *"The meeting is **at least**, **exactly** and **at most** an hour; it is **longer than** half an hour and **shorter than** two."*
 
 ### How do I compare two values across different calendars?
 
@@ -292,7 +301,7 @@ iex> Tempo.overlaps?(hebrew, ~o"2026-06-15")
 true
 ```
 
-The IXDTF `[u-ca=NAME]` suffix swaps the value's calendar to the corresponding `Calendrical.*` module — `hebrew`, `islamic-umalqura`, `persian`, `buddhist`, and the rest. See `Calendrical.supported_cldr_calendar_types/0` for the full list. Cross-calendar comparisons then convert operands to a shared reference automatically.
+The RFC 9557 suffix `[u-ca=NAME]` says which calendar the value is in — `hebrew`, `islamic-umalqura`, `persian`, `buddhist` and the rest of CLDR's. Two expressions in different calendars are compared on the one time line they share.
 
 ---
 
@@ -305,34 +314,35 @@ iex> a = ~o"2026-06-01/2026-06-15"
 iex> b = ~o"2026-06-10/2026-06-20"
 iex> {:ok, both} = Tempo.union(a, b)
 iex> Tempo.IntervalSet.count(both)
-2                                    # union is member-preserving — both intervals survive
-iex> merged = Tempo.IntervalSet.coalesce(both)
-iex> Tempo.IntervalSet.count(merged)
-1                                    # June 1 .. June 20 after coalescing
+2
+
+iex> Tempo.IntervalSet.coalesce(both)
+{:ok, ~o"{2026Y6M1D/20D}"}
 ```
 
-`Tempo.union/2` keeps both members so each event's identity and metadata survive. When you want the merged-span shape, call `Tempo.IntervalSet.coalesce/1` explicitly.
+> *"The **union** keeps both members. **Coalesced**, they are one span, the 1st of June through the 20th."*
+
+`Tempo.union/2` keeps both members so each event's identity and metadata survive. When you want the time they cover as merged spans, call `Tempo.IntervalSet.coalesce/1`.
 
 ### How do I find the overlap between two intervals?
 
 ```elixir
-iex> {:ok, overlap} = Tempo.intersection(a, b)
-iex> [span] = Tempo.IntervalSet.members(overlap)
-iex> {from, to} = Tempo.Interval.endpoints(span)
-iex> {Tempo.day(from), Tempo.day(to)}
-{10, 15}
+iex> Tempo.intersection(a, b)
+{:ok, ~o"{2026Y6M10D/15D}"}
 ```
+
+> *"The two **overlap** from the 10th of June through the 15th."*
 
 ### How do I subtract a busy period from a free window?
 
 ```elixir
-work_day = ~o"2026-06-15T09/2026-06-15T17"
-lunch    = ~o"2026-06-15T12/2026-06-15T13"
-
-{:ok, free} = Tempo.difference(work_day, lunch)
+iex> work_day = ~o"2026-06-15T09/2026-06-15T17"
+iex> lunch = ~o"2026-06-15T12/2026-06-15T13"
+iex> Tempo.difference(work_day, lunch)
+{:ok, ~o"{2026Y6M15DT9H/T12H,2026Y6M15DT13H/T17H}"}
 ```
 
-> The **workday minus lunch** is my **free** time — two intervals, 09:00-12:00 and 13:00-17:00.
+> *"The **workday minus lunch** is my **free** time — nine to twelve, and one to five."*
 
 ### How do I compose free/busy across a real schedule?
 
@@ -347,13 +357,16 @@ work = ~o"2026-06-15T09/2026-06-15T17"
 
 > **Work** minus **my schedule** gives me **free** time that day.
 
-Each free-time fragment carries the workday's metadata (the A-operand). To trace which meeting caused each gap, query the schedule directly with `Tempo.members_overlapping/2`.
+To trace which meeting made each gap, ask the schedule with `Tempo.members_overlapping/2`.
 
 ### How do I get the symmetric difference (everything in A or B but not both)?
 
 ```elixir
-iex> {:ok, set} = Tempo.symmetric_difference(a, b)
+iex> Tempo.symmetric_difference(a, b)
+{:ok, ~o"{2026Y6M1D/9D,2026Y6M16D/20D}"}
 ```
+
+> *"In one **or** the other but **not both**: the 1st through the 9th, and the 16th through the 20th."*
 
 ### How do I find double-booked time?
 
@@ -372,11 +385,9 @@ iex> Tempo.IntervalSet.members(double_booked)
 
 ---
 
-## 6. Selecting sub-spans with `Tempo.select/2`
+## 6. Selecting with `Tempo.select/3`
 
-`Tempo.select/2` narrows a base span (a Tempo, an Interval, or an IntervalSet) by a **selector** and returns the matched spans as a `{:ok, %Tempo.IntervalSet{}}` tuple. The same vocabulary covers territory-aware queries (via `Tempo.workdays/1` and `Tempo.weekends/1`), integer indices at the next-finer unit, and projection of a Tempo or Interval onto a larger base.
-
-`Tempo.select/2` is a **pure function** — no ambient territory, no hidden options. Locale-dependent constraints are constructed by `Tempo.workdays/1` and `Tempo.weekends/1` (which resolve the territory once at construction time) and composed in at the call site. A span is selected period by period at its start's resolution, so `Tempo.select(~o"2026/2029", ~o"12-25")` is three Christmases.
+`Tempo.select/3` picks, from a base, the values a selector names: the workdays of a month, the fifteenth of each month of a year, nine to five on each day of a quarter. It answers a set of the values picked, which drops straight into the set operations.
 
 ### How do I select the workdays of a month?
 
@@ -386,28 +397,36 @@ iex> Tempo.IntervalSet.count(workdays)
 22
 ```
 
-> **Workdays** of **June 2026** in the **United States** are Monday through Friday — 22 day-resolution intervals.
+> *"The **workdays** of **June 2026** in the **United States**: twenty-two days, Monday to Friday."*
 
 ### How do I pick specific days inside a month?
 
 ```elixir
-iex> {:ok, paydays} = Tempo.select(~o"2026-06", [1, 15])
-iex> Tempo.IntervalSet.map(paydays, &Tempo.day/1)
-[1, 15]
+iex> Tempo.select(~o"2026-06", [1, 15])
+{:ok, ~o"{2026Y6M1D,2026Y6M15D}"}
+
+iex> {:ok, mid_month} = Tempo.select(~o"2026-06", 10..15)
+iex> Tempo.IntervalSet.map(mid_month, &Tempo.day/1)
+[10, 11, 12, 13, 14, 15]
 ```
 
-> **Integer selectors** apply at the **next-finer unit** below the base's resolution — on a month base that's day, on a year base it's month. A `Range` works too: `Tempo.select(~o"2026-06", 10..15)`.
+> *"The **1st** and the **15th** of June."*
 
-### How do I project a date pattern onto a larger base?
+A list of whole numbers, or a range of them, is days of the month, in each month the base runs through: from a year, `[1, 15]` is twenty-four paydays.
+
+### How do I select a date in a year?
 
 ```elixir
-iex> {:ok, set} = Tempo.select(~o"2026", ~o"12-25")
-iex> [xmas] = Tempo.IntervalSet.members(set)
-iex> {Tempo.year(xmas), Tempo.month(xmas), Tempo.day(xmas)}
-{2026, 12, 25}
+iex> Tempo.select(~o"2026", ~o"12M25D")
+{:ok, ~o"{2026Y12M25D}"}
+
+iex> Tempo.select(~o"2026", [~o"7M4D", ~o"12M25D"])
+{:ok, ~o"{2026Y7M4D,2026Y12M25D}"}
 ```
 
-> **Project** the constraint `12-25` onto the base year — Dec 25 of 2026. A list of constraints works the same: `Tempo.select(~o"2026", [~o"07-04", ~o"12-25"])` yields both US holidays.
+> *"**Christmas Day** of 2026; and the **Fourth of July** with it."*
+
+A selector is a value with no year — a month and a day, a day of the week, a time of day — and the base supplies the rest. Write one in the explicit form (`12M25D`): the extended form `12-25` is read as a time of day with a shift.
 
 ### How do I select a different territory's weekend?
 
@@ -417,9 +436,9 @@ iex> Tempo.IntervalSet.map(sa_weekend, &Tempo.day/1)
 [6, 7, 13, 14, 20, 21, 27, 28]
 ```
 
-> Saudi Arabia's **weekend** is **Friday + Saturday**. `Tempo.weekends/1` and `Tempo.workdays/1` accept a territory atom (`:SA`), a territory string (`"SA"`, `"sazzzz"`), a locale string (`"ar-SA"`), or a `%Localize.LanguageTag{}`. With no argument they use the ambient resolution chain: `Application.get_env(:ex_tempo, :default_territory)` → `Localize.get_locale()`.
+> *"Saudi Arabia's **weekend** is **Friday and Saturday**."*
 
-Pass a full locale when you have one rather than the territory:
+`Tempo.weekends/1` and `Tempo.workdays/2` take a territory atom (`:SA`), a territory string (`"SA"`), a locale string (`"ar-SA"`) or a `%Localize.LanguageTag{}`. With no argument they use the application's `:default_territory`, and then the territory of `Localize.get_locale/0`. Pass a full locale when you have one rather than the territory:
 
 ```elixir
 iex> {:ok, sa_weekend} = Tempo.select(~o"2026-02", Tempo.weekends("ar-SA"))
@@ -431,171 +450,206 @@ iex> Tempo.IntervalSet.map(sa_weekend, &Tempo.day/1)
 
 ```elixir
 iex> {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends(:SA))
-iex> weekends
-...> |> Tempo.IntervalSet.walk()
-...> |> Enum.take(3)
-...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
-[19, 20, 26]
+iex> Enum.take(weekends, 3)
+[~o"2026Y6M19D", ~o"2026Y6M20D", ~o"2026Y6M26D"]
+
+iex> {:ok, christmases} = Tempo.select(~o"2026/..", ~o"12M25D")
+iex> Enum.take(christmases, 2)
+[~o"2026Y12M25D", ~o"2027Y12M25D"]
 ```
 
-> The **weekend days** of **Saudi Arabia** from **the 15th of June on**. A span with no end gives a lazy set, walked only as far as it is taken — here, the first three. The same set is busy time for `Tempo.shift/3` to skip, and `Tempo.select(~o"2026/..", ~o"12-25")` is every Christmas from this year on.
+> *"The **weekend days** of **Saudi Arabia** from **the 15th of June on**; and every **Christmas** from this year on."*
+
+A base with no end gives a lazy set, walked only as far as it is taken. The same set is busy time for `Tempo.shift/3` to skip (see the [scheduling guide](./scheduling.md)).
 
 ### How do I compose select with the set operations?
 
 ```elixir
-{:ok, june_workdays} = Tempo.select(~o"2026-06", Tempo.workdays(:US))
-{:ok, vacation} = Tempo.to_interval_set(~o"2026-06-15/2026-06-20")
-{:ok, available} = Tempo.difference(june_workdays, vacation)
+iex> {:ok, june_workdays} = Tempo.select(~o"2026-06", Tempo.workdays(:US))
+iex> vacation = ~o"2026-06-15/2026-06-20"
+iex> Tempo.difference(june_workdays, vacation)
+{:ok, ~o"{2026Y6M1D/5D,2026Y6M8D/12D,2026Y6M22D/26D,2026Y6M29D/30D}"}
+
+iex> {:ok, days_at_work} = Tempo.members_outside(june_workdays, vacation)
+iex> Tempo.IntervalSet.count(days_at_work)
+17
 ```
 
-> **US workdays** of June **minus** my **vacation** yields the workdays I'm **available**. Because `select/2` returns an IntervalSet, it drops straight into `union/2`, `intersection/2`, `difference/2`, and `symmetric_difference/2`.
+> *"The **US workdays** of June **minus** my **vacation** are the time I am at work: four runs of days. The workdays **outside** my vacation are seventeen."*
+
+`difference/2` answers the time left, with days that touch joined into one span. `members_outside/2` keeps each workday a member of its own, which is the one to use when the days are to be counted or listed.
 
 ### How do I use a function as a selector?
 
 ```elixir
-holidays = fn _base -> [~o"01-01", ~o"07-04", ~o"12-25"] end
-{:ok, set} = Tempo.select(~o"2026", holidays)
+iex> holidays = fn _base -> [~o"1M1D", ~o"7M4D", ~o"12M25D"] end
+iex> Tempo.select(~o"2026", holidays)
+{:ok, ~o"{2026Y1M1D,2026Y7M4D,2026Y12M25D}"}
 ```
 
-> **Function selectors** receive the base and return any selector shape (list of Tempos here). This is the extension point for user-defined holiday calendars, business rules, or anything else you want to compute from the base.
+> *"The **holidays** of 2026, by a rule of my own."*
+
+A function selector is given the base and returns any other selector — here a list of values. It is the place for a holiday calendar, a business rule, or anything else computed from the base.
 
 ### How do I pick "the last X of Y"?
 
-ISO 8601-2 §4.4.1 allows any component to be negative, meaning "count from the end of the containing unit". Negative components flow straight through `Tempo.select/2` — no string arithmetic, no `days_in_month/2` calls, no calendar branches:
+ISO 8601-2 §4.4.1 lets a component be negative, counting from the end of the unit that holds it. A negative component goes straight through `Tempo.select/3` — no arithmetic on text, no `days_in_month/1`, no branch for the calendar:
 
 ```elixir
-iex> {:ok, last_month} = Tempo.select(~o"2026", ~o"-1M")
-iex> Tempo.Interval.from(Tempo.IntervalSet.first(last_month))
-~o"2026Y12M"
+iex> Tempo.select(~o"2026", ~o"-1M")
+{:ok, ~o"{2026Y12M}"}
 
-iex> {:ok, last_day_of_feb} = Tempo.select(~o"2024-02", ~o"-1D")
-iex> Tempo.Interval.from(Tempo.IntervalSet.first(last_day_of_feb))
-~o"2024Y2M29D"
+iex> Tempo.select(~o"2024-02", ~o"-1D")
+{:ok, ~o"{2024Y2M29D}"}
 
-iex> {:ok, last_day_of_feb} = Tempo.select(~o"2026-02", ~o"-1D")
-iex> Tempo.Interval.from(Tempo.IntervalSet.first(last_day_of_feb))
-~o"2026Y2M28D"
+iex> Tempo.select(~o"2026-02", ~o"-1D")
+{:ok, ~o"{2026Y2M28D}"}
+
+iex> Tempo.select(~o"2026", ~o"-1W")
+{:ok, ~o"{2026Y53W}"}
 ```
 
-> **`-1M`** on a year base is the **last month**. **`-1D`** on a month base is the **last day of that month** — **leap-aware** (Feb 29 in 2024, Feb 28 in 2026). **`-1W`** on a year base is the **last ISO week** (52 or 53 depending on year).
+> *"The **last month** of 2026. The **last day** of February, in a leap year and in a common one. The **last week** of 2026, which is its fifty-third."*
 
-`-1W` on a year base is the last ISO week of the year (the 52nd or the 53rd), `-1O` (ordinal) the year's last day and `-1K` the week's last day of the week. A week selected from a month is a week of that month, which the calendar numbers: `Tempo.select(~o"2026-06", ~o"-1W")` is 22 to 28 June, the last of June's four, and `~o"1W"` from July starts on 29 June, the Monday of the week that holds 1 July. A week selected from a day keeps the day where it is in that ISO week.
+`-1O` is the year's last day and `-1K` the week's last day. The weeks asked of a month are the weeks the calendar numbers in that month: `Tempo.select(~o"2026-06", ~o"-1W")` is the last of June's four, and `~o"1W"` from July 2026 begins on the 29th of June, the Monday of the week that holds the 1st.
 
-Time-of-day units work the same way. `~o"-1H"` is hour 23, `~o"T-1M"` is minute 59, `~o"T-1S"` is second 59:
+Times of day work the same way, written after a `T`:
 
 ```elixir
-iex> {:ok, last_hour} = Tempo.select(~o"2026-06-15", ~o"-1H")
-iex> last_hour
-...> |> Tempo.IntervalSet.first()
-...> |> Tempo.Interval.from()
-~o"2026Y6M15DT23H"
+iex> Tempo.select(~o"2026-06-15", ~o"T-1H")
+{:ok, ~o"{2026Y6M15DT23H}"}
 
-iex> {:ok, last_minute} = Tempo.select(~o"2026-06-15T14", ~o"T-1M")
-iex> last_minute
-...> |> Tempo.IntervalSet.first()
-...> |> Tempo.Interval.from()
-~o"2026Y6M15DT14H59M"
+iex> Tempo.select(~o"2026-06-15T14", ~o"T-1M")
+{:ok, ~o"{2026Y6M15DT14H59M}"}
 ```
 
-> **`~o"-1M"`** is always **month** (last month of year). Use **`~o"T-1M"`** — with the `T` time designator — to select **minute-of-hour**. The bare-form `M` belongs to the date axis; the `T`-prefixed form belongs to time-of-day.
+> *"The **last hour** of the 15th; the **last minute** of two o'clock."*
 
-Negative components compose with the rest of the selector vocabulary — `Tempo.select(~o"2026", [~o"-1D", ~o"12-25"])` projects *both* "last day of year" and "Christmas" onto 2026, yielding Dec 25 and Dec 31 as separate members.
+`~o"-1M"` is always a month. `~o"T-1M"`, with the time designator, is a minute.
+
+The last *weekday* of a period is a position among the days selected — a selection of its own, written between `L` and `N`:
+
+```elixir
+iex> Tempo.select(~o"2026-06", ~o"L5K-1IN")
+{:ok, ~o"{2026Y6M26D}"}
+```
+
+> *"Of the **Fridays** of June, the **last**."*
 
 ### How do I express business hours across a quarter?
 
-An interval selector projects as a **span** — the coarser units come from each base member, the finer units from the selector's endpoints — so a time-of-day window applies to every day in one expression. A list gives several windows per day:
+An interval with no date selects a span of each day: the day comes from the base, the times from the selector. A list gives several windows a day:
 
 ```elixir
-iex> {:ok, workdays} = Tempo.select(~o"2026-07/2026-10", Tempo.workdays(:AU))
+iex> {:ok, workdays} = Tempo.select(~o"2026-07/2026-09", Tempo.workdays(:AU))
 iex> {:ok, open} = Tempo.select(workdays, [~o"T09/T12", ~o"T13/T17"])
 iex> Tempo.IntervalSet.count(open)
 132
-iex> Tempo.IntervalSet.duration(open)
+
+iex> Tempo.duration(open)
 ~o"PT462H"
+
+iex> Tempo.IntervalSet.first(open)
+~o"2026Y7M1DT9H/T12H"
 ```
 
-> *"The **workdays** of the quarter, **nine to five** with an **hour for lunch**"* — 66 days, two windows each, 462 open hours. Bounds are half-open throughout Tempo, so nine-to-five is written as nine to five: `~o"T09/T17"` is eight hours, no off-by-one, no `coalesce/1`.
+> *"The **workdays** of the quarter, **nine to five** with an **hour for lunch**: sixty-six days, two windows each, 462 open hours."*
 
-Subtract the public holidays with `Tempo.members_outside(open, holidays)` and the result is still one pipeline. A window that is not hour-aligned uses the duration form — `~o"T09/PT7H36M"` is a statutory 7.6-hour day — and a window crossing midnight rolls its end to the following day: `~o"T21/T05"` is the night shift a roster writes.
+A clock end is the reading the span runs to, so nine to five is written as nine to five: `~o"T09/T17"` is eight hours, with nothing to add or take away.
 
-See `Tempo.Select` for the full selector vocabulary.
+Take the public holidays out with `Tempo.members_outside(open, holidays)` and the result is still one pipeline. A window that does not end on the hour is written with a duration — `~o"T09/PT7H36M"` is a statutory 7.6-hour day — and one that crosses midnight ends on the day after: `~o"T21/T05"` is the night shift as a roster writes it.
 
 ---
 
 ## 7. Recurring events (RRULE)
 
-An RRULE parses into a recurring `%Tempo.Interval{}` with `Tempo.RRule.parse!/2`; you convert it to occurrences with `Tempo.to_interval/2`, limited by a `:within` window or by the rule's own `COUNT`/`UNTIL`. (A plain periodic cadence with no calendar filter needs no RRULE at all — build it directly with `Tempo.Interval.new!(from: ~o"2026-06-01", duration: ~o"P1W", recurrence: 10)`; see the [scheduling guide](./scheduling.md).)
+`Tempo.RRule.parse!/2` reads an RRULE into a recurrence, the same expression ISO 8601-2 writes as `R…/…/F…`. Walk it, or list its occurrences with `Tempo.to_interval/2`, bounded by the rule's own `COUNT` or `UNTIL` or by a `:within` window. (A plain cadence needs no RRULE at all: `~o"R10/2026-06-01/P1W"` is ten weeks from the 1st of June. See the [scheduling guide](./scheduling.md).)
 
 ### How do I express "every Monday for 10 weeks"?
 
 ```elixir
-iex> recurrence = Tempo.RRule.parse!("FREQ=WEEKLY;BYDAY=MO;COUNT=10", from: ~o"2026-06-01")
-iex> {:ok, set} = Tempo.to_interval(recurrence)
-iex> Tempo.IntervalSet.count(set)
+iex> mondays = Tempo.RRule.parse!("FREQ=WEEKLY;BYDAY=MO;COUNT=10", from: ~o"2026-06-01")
+iex> Enum.count(mondays)
 10
+
+iex> Enum.take(mondays, 2)
+[~o"2026Y6M1D/2026Y6M1D", ~o"2026Y6M8D/2026Y6M8D"]
 ```
+
+> *"**Every Monday** from the 1st of June, **ten** times."*
+
+An occurrence is a span — here a day, from itself through itself. Give `parse!/2` a `:duration` and each is that long.
 
 ### How do I express "the 4th Thursday of November" (Thanksgiving)?
 
 ```elixir
-iex> recurrence = Tempo.RRule.parse!("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH;COUNT=5", from: ~o"2022-11-24")
-iex> {:ok, set} = Tempo.to_interval(recurrence)
-iex> Enum.map(Tempo.IntervalSet.members(set), &Tempo.day(Tempo.Interval.from(&1)))
+iex> thanksgiving = Tempo.RRule.parse!("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH;COUNT=5", from: ~o"2022-11-24")
+iex> Enum.map(thanksgiving, &Tempo.day(Tempo.Interval.from(&1)))
 [24, 23, 28, 27, 26]
 ```
 
-Positive ordinals count from the start of the period; negatives count from the end (`-1FR` = last Friday).
+> *"The **fourth Thursday** of **November**, for five years."*
+
+A positive number counts from the start of the month and a negative one from its end (`-1FR` is the last Friday).
 
 ### How do I express "every Friday the 13th"?
 
 ```elixir
-iex> recurrence = Tempo.RRule.parse!("FREQ=MONTHLY;BYMONTHDAY=13;BYDAY=FR;COUNT=10", from: ~o"1998-02-13")
-iex> {:ok, set} = Tempo.to_interval(recurrence)
-iex> Tempo.IntervalSet.count(set)
-10
+iex> friday_13th = Tempo.RRule.parse!("FREQ=MONTHLY;BYMONTHDAY=13;BYDAY=FR;COUNT=4", from: ~o"1998-02-13")
+iex> Enum.map(friday_13th, &Tempo.Interval.from/1)
+[~o"1998Y2M13D", ~o"1998Y3M13D", ~o"1998Y11M13D", ~o"1999Y8M13D"]
+
+iex> Tempo.select(~o"2026", ~o"13D5K")
+{:ok, ~o"{2026Y2M13D,2026Y3M13D,2026Y11M13D}"}
 ```
 
-When `BYMONTHDAY` is co-present, `BYDAY` becomes a filter (per RFC Note 1) — `BYMONTHDAY=13` picks day 13 of each month, then `BYDAY=FR` keeps only the Fridays.
+> *"The **13th** of a month that is a **Friday**."*
+
+Beside `BYMONTHDAY`, `BYDAY` is a filter (RFC 5545's Note 1): the thirteenth of each month, kept when it is a Friday. As a selector the same thing is `13D5K`, a day of the month and the day of the week it must be.
 
 ### How do I express US Presidential Election Day?
 
 "Every four years, the first Tuesday after a Monday in November":
 
 ```elixir
-iex> recurrence =
+iex> election_day =
 ...>   Tempo.RRule.parse!(
 ...>     "FREQ=YEARLY;INTERVAL=4;BYMONTH=11;BYDAY=TU;BYMONTHDAY=2,3,4,5,6,7,8;COUNT=3",
 ...>     from: ~o"1996-11-05"
 ...>   )
-iex> {:ok, set} = Tempo.to_interval(recurrence)
-iex> Enum.map(Tempo.IntervalSet.members(set), fn iv ->
-...>   start = Tempo.Interval.from(iv)
-...>   {Tempo.year(start), Tempo.day(start)}
-...> end)
-[{1996, 5}, {2000, 7}, {2004, 2}]
+iex> Enum.map(election_day, &Tempo.Interval.from/1)
+[~o"1996Y11M5D", ~o"2000Y11M7D", ~o"2004Y11M2D"]
 ```
+
+> *"Every **fourth year**, the **Tuesday** of November that falls on the **2nd to the 8th**."*
 
 ### How do I express "last weekday of every month"?
 
 ```elixir
-iex> recurrence = Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=3", from: ~o"2026-06-01")
-iex> {:ok, set} = Tempo.to_interval(recurrence)
-iex> Tempo.IntervalSet.count(set)
-3
+iex> last_weekday = Tempo.RRule.parse!("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=3", from: ~o"2026-06-01")
+iex> Enum.map(last_weekday, &Tempo.Interval.from/1)
+[~o"2026Y6M30D", ~o"2026Y7M31D", ~o"2026Y8M31D"]
 ```
 
-`BYDAY=MO,TU,WE,TH,FR` expands each month to all weekdays; `BYSETPOS=-1` picks the last.
+> *"Of each month's **weekdays**, the **last**."*
+
+`BYDAY=MO,TU,WE,TH,FR` is every weekday of the month; `BYSETPOS=-1` picks the last of them.
 
 ### How do I handle an unbounded rule?
 
 Supply `:within`:
 
 ```elixir
-iex> recurrence = Tempo.RRule.parse!("FREQ=DAILY", from: ~o"2026-06-01")  # No COUNT, no UNTIL
-iex> {:ok, set} = Tempo.to_interval(recurrence, within: ~o"2026-06")
-iex> Tempo.IntervalSet.count(set)
+iex> daily = Tempo.RRule.parse!("FREQ=DAILY", from: ~o"2026-06-01")
+iex> {:ok, june} = Tempo.to_interval(daily, within: ~o"2026-06")
+iex> Tempo.IntervalSet.count(june)
 30
+
+iex> Enum.take(daily, 2)
+[~o"2026Y6M1D/2026Y6M1D", ~o"2026Y6M2D/2026Y6M2D"]
 ```
+
+> *"**Every day** from the 1st of June, with no end: thirty of them **within June**, or as many as are taken."*
 
 ---
 
@@ -611,7 +665,7 @@ iex> Tempo.IntervalSet.count(schedule)
 # One interval per VEVENT (or per recurrence occurrence).
 ```
 
-Each event becomes a `%Tempo.Interval{}` with full metadata (summary, location, attendees, …) attached to `:metadata`.
+Each event is an interval, with the event's summary, location, attendees and the rest as its metadata.
 
 ### How do I import an `.ics` that contains recurring events?
 
@@ -623,7 +677,7 @@ Pass a `:within` so unbounded recurrences terminate:
 iex> {:ok, schedule} = Tempo.ICal.parse(ics, within: ~o"2026-04-01/2026-07-01")
 ```
 
-Every RRULE part (including BY-rules, BYSETPOS, WKST, RDATE, EXDATE) expands correctly — one `%Tempo.Interval{}` per occurrence carrying the event's metadata.
+A recurring event is one interval for each occurrence in the window, each carrying the event's metadata. See the [iCalendar guide](ical-integration.md) for what is read, and the [RRULE conformance guide](rfc5545_rrule_conformance.md) for the parts of a rule that are not.
 
 ### How do I find when a specific attendee is in a meeting?
 
@@ -636,13 +690,13 @@ ada_meetings =
   schedule
   |> Tempo.IntervalSet.members()
   |> Enum.filter(fn meeting ->
-    "ada@example.com" in (Tempo.Interval.metadata(meeting)[:attendees] || [])
+    "ada@example.com" in (Tempo.metadata(meeting)[:attendees] || [])
   end)
 ```
 
 > **Ada's meetings** are every event in the **schedule** whose **attendees** include her.
 
-Metadata rides through any downstream set operation — after `intersection/difference/union`, you can still trace each result fragment to its originating event.
+The operations that keep members — `union/2`, `members_overlapping/2`, `members_outside/2` — keep each member's metadata with it.
 
 ---
 
@@ -651,28 +705,32 @@ Metadata rides through any downstream set operation — after `intersection/diff
 ### How do I compare a Hebrew date to a Gregorian one?
 
 ```elixir
-hebrew    = Tempo.new!(year: 5786, month: 9, day: 30, calendar: Calendrical.Hebrew)
-gregorian = ~o"2026-06-15"
+iex> hebrew = Tempo.new!(year: 5786, month: 9, day: 30, calendar: Calendrical.Hebrew)
+iex> gregorian = ~o"2026-06-15"
+iex> Tempo.overlaps?(hebrew, gregorian)
+true
 
-Tempo.overlaps?(hebrew, gregorian)
-#=> true
+iex> Tempo.relation(hebrew, gregorian)
+:equals
 ```
 
-> The **Hebrew date** 5786-09-30 **overlaps** the **Gregorian date** 2026-06-15 — they're the same day.
+> *"The **Hebrew** 30th of the ninth month of 5786 **is** the **Gregorian** 15th of June 2026 — the same day."*
 
 ### How do I compare across timezones?
 
 ```elixir
-paris      = Tempo.from_elixir(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))
-utc_window = ~o"2026-06-15T07/2026-06-15T09Z"
+iex> paris = Tempo.from_datetime(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))
+iex> utc_window = ~o"2026-06-15T07Z/2026-06-15T09Z"
+iex> Tempo.within?(paris, utc_window)
+true
 
-Tempo.overlaps?(paris, utc_window)
-#=> true
+iex> Tempo.shift_zone(paris, "Etc/UTC")
+{:ok, ~o"2026Y6M15DT8H0M0S[Etc/UTC]"}
 ```
 
-> **Paris 10:00 CEST** **overlaps** the **UTC 07:00-09:00 window** — it projects to UTC 08:00, which is inside.
+> *"Ten o'clock in **Paris** is **within** seven to nine **UTC**: it is eight o'clock there."*
 
-Tempo projects to UTC via the configured time zone database for cross-zone comparisons. The wall-clock representation on the struct is preserved; the projection happens per-call.
+Two zoned expressions are compared as the instants they are, through the configured time zone database at the time of the call. Each keeps the reading it was written with.
 
 ### How do I convert a Tempo to a specific calendar?
 
@@ -684,7 +742,7 @@ iex> {Tempo.year(hebrew), Tempo.month(hebrew), Tempo.day(hebrew)}
 
 ### How do I get a fiscal quarter from the calendar that defines it?
 
-Calendrical's period functions answer *"which days are in this quarter?"* in any calendar — fiscal, retail, academic — and return an inclusive `Date.Range`. `Tempo.from_elixir/2` (or the named `Tempo.from_date_range/2`) converts it to a half-open interval covering exactly those days, with the calendar preserved:
+Calendrical's period functions answer *"which days are in this quarter?"* in any calendar — fiscal, retail, academic — and return a `Date.Range`. `Tempo.from_elixir/2` makes it the interval of exactly those days, in that calendar:
 
 ```elixir
 iex> {:ok, calendar} = Calendrical.FiscalYear.calendar_for(:AU)
@@ -694,33 +752,21 @@ iex> Tempo.IntervalSet.count(workdays)
 66
 ```
 
-> *"The first quarter of Australian financial year 2027 has **66 workdays**"* — including the quarter's final day, which a hand-written `range.first`-to-`range.last` interval silently drops (the inclusive/half-open off-by-one this conversion exists to prevent). The literal alternative, `~o"2026-07-01/2026-10-01"`, encodes the fiscal boundary by hand — right when written, wrong the year the rules change; the calendar itself says which days it is.
+> *"The first quarter of Australian financial year 2027 has **66 workdays**."*
 
-Fiscal values compose with Gregorian ones directly — `Tempo.relation(Tempo.Interval.from(quarter), ~o"2026-07-01")` is `:equals` — so nothing needs converting before the set algebra. A stepped or descending `Date.Range` is refused rather than guessed: it enumerates a set of days, not a span.
+Written out, the same quarter is `~o"2026-07-01/2026-09-30"` — the fiscal boundary by hand, right when written and wrong the year the rules change. The calendar itself says which days it is.
 
-### How do I say "the spring of 2026" in Sydney and in London?
-
-ISO 8601-2 numbers four seasons "independent of location": 21 is spring, 22 summer, 23 autumn and 24 winter, wherever they are read. A season has no dates until it is in a territory, which says which side of the equator it is on.
+A fiscal value is related to and combined with a Gregorian one directly: the quarter's first day is the Gregorian 1st of July 2026.
 
 ```elixir
-spring = ~o"2026-21"
+iex> Tempo.relation(Tempo.Interval.from(quarter), ~o"2026-07-01")
+:equals
 
-{:ok, in_sydney} = Tempo.in_territory(spring, :AU)
-{:ok, in_london} = Tempo.in_territory(spring, :GB)
-
-Tempo.contains?(in_sydney, ~o"2026-10-15")
-#=> true
-
-Tempo.contains?(in_london, ~o"2026-10-15")
-#=> false
-
-Tempo.overlaps?(in_sydney, in_london)
-#=> false
+iex> Tempo.to_calendar(quarter, Calendrical.Gregorian)
+{:ok, ~o"2026Y7M1D/9M30D[u-ca=gregorian]"}
 ```
 
-> *"**Spring 2026 in Sydney** **contains** the 15th of October, and **spring 2026 in London** does not: the two springs do **not overlap**."*
-
-A season is the meteorological one, whole months: September to November south of the equator, March to May north of it. `Tempo.from_iso8601/2` and `Tempo.to_interval/2` take the territory as `:territory`, or a `:locale` whose territory it is, and with neither `Tempo.to_interval/2` asks the application's `:default_territory` and then the current locale. A territory the equator runs through, such as Brazil, has no one answer, and says so: write the season of a hemisphere there (`~o"2026-29"`, the southern spring).
+A fiscal calendar has no name ISO 8601 can write, so a value in it has no text of its own (`Tempo.to_iso8601/1` returns an error rather than a date another calendar would read): convert it to the Gregorian calendar to store or show it. A `Date.Range` with a step is refused: it lists days, and is no span.
 
 ---
 
@@ -729,9 +775,19 @@ A season is the meteorological one, whole months: September to November south of
 ### How do I say "sometime in the 1560s"?
 
 ```elixir
-iex> ~o"156X"
-# Decade mask — spans 1560-01-01 .. 1570-01-01.
+iex> Enum.count(~o"156X")
+10
+
+iex> Tempo.duration(~o"156X")
+~o"P10Y"
+
+iex> Tempo.within?(~o"1564-06", ~o"156X")
+true
 ```
+
+> *"Some year of the **1560s**: one of **ten** years, a decade between them, and June 1564 is **within** it."*
+
+An `X` is a digit left unspecified, so the value names each year it could be.
 
 ### How do I say "the 15th of every month in 1985"?
 
@@ -741,218 +797,150 @@ iex> Tempo.IntervalSet.count(set)
 12
 ```
 
-A non-contiguous mask (masked month, concrete day) expands to one interval per valid month.
+An unspecified month with a day written after it is that day of each month: twelve days, each a span of its own.
 
 ### How do I move an approximate date?
 
-Arithmetic moves each value the mask stands for. A block-aligned shift stays a mask; a misaligned one gives the exact candidate values; a shift that passes the mask by keeps it; and a mask with a concrete component after it — which denotes *disjoint* spans — gives an `IntervalSet`.
+A shift moves each value the expression names, and gathers them back in the shape that holds them:
 
 ```elixir
 iex> Tempo.shift(~o"156X", ~o"P10Y")
-# The 1560s a decade on — still a decade mask: ~o"157X".
+{:ok, ~o"[1570Y..1579Y]"}
 
 iex> Tempo.shift(~o"156X", ~o"P1Y")
-# One year isn't a clean decade, so the ten candidate years: ~o"[1561Y..1570Y]".
+{:ok, ~o"[1561Y..1570Y]"}
 
 iex> Tempo.shift(~o"1985-XX-15", ~o"P1D")
-# The day after the 15th of some month is its 16th: ~o"1985YXXM16D".
-
-iex> Tempo.shift(~o"156X-06-XX", ~o"P1Y")
-...> |> Tempo.IntervalSet.count()
-# The Junes of the 1560s, a year on — ten disjoint month spans: 10.
+{:ok, ~o"1985YXXM16D"}
 ```
+
+> *"Some year of the 1560s, **a decade on**, is some year of the 1570s; **a year on**, some year from 1561 to 1570. The 15th of some month of 1985, **a day on**, is its 16th."*
+
+Where the shift passes the unspecified digits by, the mask is kept as written. Where it does not, the answer is the years it could be, written as one of a range.
 
 ### How do I express an open-ended interval?
 
 ```elixir
-iex> ~o"1985/.."
-# From 1985 onward, no end.
+iex> since_1985 = ~o"1985/.."
+iex> {Tempo.bounded?(since_1985), Tempo.duration(since_1985)}
+{false, :infinity}
 
-iex> ~o"../2024"
-# No start, ending 2024.
+iex> Tempo.Interval.to(~o"1985/..")
+:open
 
-iex> ~o"../.."
-# Fully open.
+iex> Tempo.Interval.from(~o"../2024")
+:open
 ```
+
+> *"From 1985 on, with **no end**: it is not bounded, and its length is infinite."*
+
+An open end has no place on the time line, so an open-ended interval is a window (`within: ~o"2026/.."`) and a base to select from, and is refused by the relations and the set operations until it is given both ends.
 
 ### How do I attach a qualifier to a single endpoint?
 
 ```elixir
-iex> ~o"1984?/2004~"
-# Uncertain lower bound, approximate upper bound.
+iex> reign = ~o"1984?/2004~"
+iex> Tempo.qualification(Tempo.Interval.from(reign), :year)
+:uncertain
+
+iex> Tempo.qualification(Tempo.Interval.to(reign), :year)
+:approximate
 ```
 
-Each endpoint carries its own qualifiers, which `Tempo.qualification/1` reads from the value `Tempo.Interval.from/1` or `Tempo.Interval.to/1` gives.
+> *"From an **uncertain** 1984 to an **approximate** 2004."*
+
+Each end carries its own marks.
 
 ---
 
-## 11. Chronological networks
+## 11. Chronological networks and dependency scheduling
 
-`Tempo.Network` reasons over periods whose start, end, and duration are only partly known: give each its bounds (exact, ranged, or one-sided), link them with sequences and relations like `:starts_during` or `:overlaps`, and the solver returns the tightest dates consistent with everything — or flags a contradiction. The [Chronological networks guide](chronological-networks.md) covers it in full, including traces that explain each derived bound.
+Two kinds of reasoning build on Tempo's intervals and live in the companion package `tempo_network`:
 
-### How do I derive dates from partial constraints?
+* **Chronological networks** — periods whose start, end and length are only partly known, linked by relations such as "began during" or "overlaps", solved for the tightest dates consistent with all of them, or for the contradiction among them.
 
-```elixir
-iex> network =
-...>   Tempo.Network.new()
-...>   |> Tempo.Network.add_period(:reign, from: {:not_before, ~o"1200Y"}, duration: {:at_most, ~o"P10Y"})
-...>   |> Tempo.Network.add_period(:stratum, duration: {:at_least, ~o"P20Y"})
-...>   |> Tempo.Network.add_relation(:starts_during, :stratum, :reign)
-iex> {:ok, solved} = Tempo.Network.Solver.propagate(network)
-iex> solved.periods[:stratum].earliest_end
-~o"1220Y"
-```
+* **Dependency scheduling** — tasks with durations and finish-to-start dependencies, solved for each task's earliest and latest place and for the critical path.
 
-The stratum has no dates of its own, but *"it began during a reign that started no earlier than 1200, and it lasted at least 20 years"* forces it to end no earlier than 1220. Every bound comes back as a Tempo value.
-
-### How do I check a chronology for contradictions?
-
-```elixir
-iex> Tempo.Network.new()
-...> |> Tempo.Network.add_period(:k, from: ~o"1200Y", to: ~o"1180Y")
-...> |> Tempo.Network.Solver.consistent?()
-false
-```
-
-`consistent?/1` is `true` when at least one assignment of dates satisfies every constraint at once — here it's `false`, since a period can't end before it starts.
-
-### How do I tell whether two periods could overlap?
-
-Two pottery phases dated only to overlapping windows — nothing forces them together or apart:
-
-```elixir
-iex> network =
-...>   Tempo.Network.new()
-...>   |> Tempo.Network.add_period(:phase_a, from: {:not_before, ~o"1200Y"}, to: {:not_after, ~o"1260Y"})
-...>   |> Tempo.Network.add_period(:phase_b, from: {:not_before, ~o"1250Y"}, to: {:not_after, ~o"1300Y"})
-iex> Tempo.Network.Solver.contemporaneity(network, :phase_a, :phase_b)
-:possible
-```
-
-`contemporaneity/3` reads the propagated network and answers three ways — `:certain` (every consistent chronology has them overlapping), `:possible` (some do, some don't), or `:impossible` (none do) — so *"could these two phases have been in use at the same time?"* gets a graded answer, not a guess. `certainly_contemporary?/3` and `possibly_contemporary?/3` are the boolean shortcuts.
+Both take and return Tempo values, so everything in this cookbook applies to what they answer.
 
 ---
 
-## 12. Scheduling
-
-`Tempo.Schedule` is critical-path project planning built on `Tempo.Network`: declare tasks with durations and finish-to-start dependencies (plus optional fixed starts and deadlines), then `solve/1` for each task's earliest/latest position and its critical-path flag. See the [Scheduling guide](scheduling.md).
-
-### How do I schedule tasks with dependencies?
-
-```elixir
-iex> {:ok, plan} =
-...>   Tempo.Schedule.new()
-...>   |> Tempo.Schedule.task(:design, duration: ~o"P2D", start: ~o"2026-06-01")
-...>   |> Tempo.Schedule.task(:build,  duration: ~o"P3D", after: :design)
-...>   |> Tempo.Schedule.task(:docs,   duration: ~o"P1D", after: :design)
-...>   |> Tempo.Schedule.task(:ship,   duration: ~o"P2D", after: [:build, :docs])
-...>   |> Tempo.Schedule.solve()
-iex> plan[:ship].early
-~o"2026Y6M6D/8D"
-```
-
-Each task lands at its earliest feasible position. `ship` waits for both `build` and `docs`, so it can't begin until `build` finishes on the 6th — even though `docs` was done on the 4th.
-
-### How do I find the critical path?
-
-```elixir
-iex> Tempo.Schedule.critical_path(plan)
-[:design, :build, :ship]
-iex> plan[:docs].critical?
-false
-```
-
-The critical path is the zero-slack chain — delay any of those tasks and the whole project slips. `docs` has slack, so it sits off the path.
-
-### How do I catch an impossible deadline?
-
-```elixir
-iex> Tempo.Schedule.new()
-...> |> Tempo.Schedule.task(:a, duration: ~o"P5D", start: ~o"2026-06-01")
-...> |> Tempo.Schedule.task(:b, duration: ~o"P5D", after: :a, deadline: ~o"2026-06-08")
-...> |> Tempo.Schedule.solve()
-{:error, :infeasible}
-```
-
-`a` then `b` need ten days from June 1 but `b` is due the 8th, so `solve/1` returns `{:error, :infeasible}` (a dependency cycle is reported the same way).
-
----
-
-## 13. Real-world scenarios
+## 12. Real-world scenarios
 
 ### Find every Friday the 13th this century
 
 ```elixir
-friday_the_13th =
-  Tempo.RRule.parse!("FREQ=MONTHLY;BYMONTHDAY=13;BYDAY=FR", from: ~o"2000-01-01")
+iex> {:ok, unlucky} = Tempo.select(~o"2000/2099", ~o"13D5K")
+iex> Tempo.IntervalSet.count(unlucky)
+172
 
-century = ~o"2000-01-01/2100-01-01"
-
-{:ok, occurrences} = Tempo.to_interval(friday_the_13th, within: century)
+iex> Tempo.IntervalSet.first(unlucky)
+~o"2000Y10M13D"
 ```
 
-> **Friday the 13th** is a monthly rule — Fridays whose day-of-month is 13. **Expanding** the rule across the **century** gives every occurrence.
+> *"The **13ths** of the century that are **Fridays**: a hundred and seventy-two of them, the first in October 2000."*
+
+The same days as a rule, for a system that speaks RRULE:
+
+```elixir
+iex> friday_13th = Tempo.RRule.parse!("FREQ=MONTHLY;BYMONTHDAY=13;BYDAY=FR", from: ~o"2000-01-01")
+iex> {:ok, occurrences} = Tempo.to_interval(friday_13th, within: ~o"2000/2099")
+iex> Tempo.IntervalSet.count(occurrences)
+172
+```
 
 ### Find when two people are both free for at least 1 hour
 
-<!-- guides:skip -->
-
 ```elixir
-{:ok, ada}   = Tempo.ICal.parse_file("~/ada.ics")
-{:ok, grace} = Tempo.ICal.parse_file("~/grace.ics")
-
-work = ~o"2026-06-15T09/2026-06-15T17"
-
-{:ok, ada_free}   = Tempo.difference(work, ada)
-{:ok, grace_free} = Tempo.difference(work, grace)
-{:ok, mutual}     = Tempo.intersection(ada_free, grace_free)
-
-slots =
-  mutual
-  |> Tempo.IntervalSet.members()
-  |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
+iex> work = ~o"2026-06-15T09/2026-06-15T17"
+iex> ada = Tempo.IntervalSet.new!([~o"2026-06-15T10/2026-06-15T11", ~o"2026-06-15T14/2026-06-15T15"])
+iex> grace = Tempo.IntervalSet.new!([~o"2026-06-15T09:30/2026-06-15T10:30", ~o"2026-06-15T16/2026-06-15T17"])
+iex> {:ok, ada_free} = Tempo.difference(work, ada)
+iex> {:ok, grace_free} = Tempo.difference(work, grace)
+iex> {:ok, mutual} = Tempo.intersection(ada_free, grace_free)
+iex> mutual |> Tempo.IntervalSet.members() |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
+[~o"2026Y6M15DT11H/T14H", ~o"2026Y6M15DT15H/T16H"]
 ```
 
-> Ada's free time is the workday **minus** her busy periods. Grace's is the same. **Mutual** free time is the **intersection** of theirs. **Slots** are the mutual windows **at least an hour** long.
+> *"Ada's free time is the workday **minus** her busy periods. Grace's is the same. **Mutual** free time is the **intersection** of theirs. The windows worth offering are those **at least an hour** long."*
+
+With real calendars, `ada` and `grace` come from `Tempo.ICal.parse_file/2` instead; nothing else changes.
 
 ### List every bookable 1-hour slot two people share
 
 ```elixir
-mutual                                  # the mutual free time from above
-|> Tempo.IntervalSet.slots(~o"PT1H")    # cut into back-to-back 1-hour slots
-|> Tempo.IntervalSet.members()
+iex> {:ok, slots} = Tempo.IntervalSet.slots(mutual, ~o"PT1H")
+iex> Tempo.IntervalSet.members(slots)
+[~o"2026Y6M15DT11H/T12H", ~o"2026Y6M15DT12H/T13H", ~o"2026Y6M15DT13H/T14H", ~o"2026Y6M15DT15H/T16H"]
 ```
 
-> Where the recipe above gives the free **windows**, `slots/2` cuts each window into the discrete **1-hour slots** a booking page would actually offer. Pass `every: ~o"PT30M"` to start a slot on every half-hour (overlapping), or a larger `:every` to leave gaps between offered times.
+> *"The mutual free time, **cut into hour-long slots**."*
+
+Where the recipe above gives the free *windows*, `slots/3` cuts each into the slots a booking page offers. Pass `every: ~o"PT30M"` to start a slot on every half-hour, or a larger `:every` to leave gaps between them.
 
 ### Which of these candidate meeting times can I book?
 
 ```elixir
-candidates = [
-  ~o"2026-06-15T09/2026-06-15T10",
-  ~o"2026-06-15T11/2026-06-15T12",
-  ~o"2026-06-15T16/2026-06-15T17"
-]
-
-bookable =
-  Enum.filter(candidates, fn candidate ->
-    Enum.any?(Tempo.IntervalSet.members(mutual), &Tempo.within?(candidate, &1))
-  end)
+iex> candidates = [~o"2026-06-15T09/2026-06-15T10", ~o"2026-06-15T11/2026-06-15T12", ~o"2026-06-15T15/2026-06-15T16"]
+iex> Enum.filter(candidates, &Tempo.within?(&1, mutual))
+[~o"2026Y6M15DT11H/T12H", ~o"2026Y6M15DT15H/T16H"]
 ```
 
-> A **candidate** is **bookable** if **any** mutual free window **contains** it.
+> *"A candidate is **bookable** when it is **within** the mutual free time."*
 
 ### How do I check if a dig layer overlaps a historical period?
 
 ```elixir
-dig_layer    = ~o"1520/1590"
-ming_period  = ~o"1368/1644"
+iex> dig_layer = ~o"1520/1590"
+iex> ming_period = ~o"1368/1644"
+iex> Tempo.overlaps?(dig_layer, ming_period)
+true
 
-Tempo.overlaps?(dig_layer, ming_period)
-#=> true
+iex> Tempo.within?(dig_layer, ming_period)
+true
 ```
 
-> The **dig layer overlaps** the **Ming period** — the site was in use during the dynasty.
+> *"The **dig layer overlaps** the **Ming period** — and lies wholly **within** it."*
 
 ### How do I find free time across multiple schedules and timezones?
 
@@ -962,22 +950,29 @@ Tempo.overlaps?(dig_layer, ming_period)
 {:ok, ny}     = Tempo.ICal.parse_file("~/cal_ny.ics")
 {:ok, london} = Tempo.ICal.parse_file("~/cal_london.ics")
 
-work = ~o"2026-06-15T09/2026-06-15T17"
+work = ~o"2026-06-15T09/2026-06-15T17[America/New_York]"
 
-{:ok, ny_free}   = Tempo.difference(work, ny)
-{:ok, free}      = Tempo.difference(ny_free, london)
+{:ok, ny_free} = Tempo.difference(work, ny)
+{:ok, free}    = Tempo.difference(ny_free, london)
 ```
 
-> **Work** minus **New York's busy times** gives one person's free window; that **minus London's busy times** gives the cross-timezone **free** slots. Each `difference/2` call projects to UTC internally, so wall-clock mismatches across zones resolve correctly.
+> *"**Work** minus **New York's busy times**, minus **London's**, is the time **free** for both."*
 
-### How do I round a datetime to the nearest hour?
+Each operand is in its own zone and all are compared as the instants they are, so the clocks' five hours' difference takes care of itself. The answer is in the zone of the first operand.
+
+### How do I round a datetime to the hour?
 
 ```elixir
-iex> Tempo.at_resolution(~o"2026-06-15T10:37:42", :hour)
-~o"2026Y6M15DT10H"
+iex> Tempo.trunc(~o"2026-06-15T10:37:42", :hour)
+{:ok, ~o"2026Y6M15DT10H"}
+
+iex> Tempo.round(~o"2026-06-15T10:37:42", :hour)
+{:ok, ~o"2026Y6M15DT11H"}
 ```
 
-`at_resolution/2` is the single entry point for normalising to a target unit — coarser uses `trunc/2`, finer uses `extend_resolution/2`.
+> *"**Truncated** to the hour it is ten o'clock; **rounded**, eleven."*
+
+`Tempo.at_resolution/2` is the one to use when the target may be coarser or finer than the value: coarser it truncates, finer it fills with the first of each unit.
 
 ### How do I generate a list of business days in a month?
 
@@ -987,20 +982,20 @@ iex> Tempo.IntervalSet.count(workdays)
 22
 ```
 
-> **Workdays** of **June 2026** are Monday through Friday — 22 day-resolution intervals, locale-aware via `Localize.Calendar`. See [§6](#6-selecting-sub-spans-with-tempo-select-2) for the full selector vocabulary and territory-resolution chain.
+> *"The **workdays** of **June 2026**: twenty-two, Monday to Friday."*
 
-An RRULE equivalent is available when you need the full rule machinery (byday counts, bymonth filters, intervals greater than 1):
+See [section 6](#6-selecting-with-tempo-select-3) for the selectors, and [Working with workdays and weekends](workdays-and-weekends.md) for holidays and the territory. As a rule, for a system that speaks RRULE:
 
 ```elixir
-weekdays =
-  Tempo.RRule.parse!("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR", from: ~o"2026-06-01")
-
-{:ok, days} = Tempo.to_interval(weekdays, within: ~o"2026-06")
+iex> weekdays = Tempo.RRule.parse!("FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR", from: ~o"2026-06-01")
+iex> {:ok, days} = Tempo.to_interval(weekdays, within: ~o"2026-06")
+iex> Tempo.IntervalSet.count(days)
+22
 ```
 
 ### Business/252 — Brazil's business-day year fraction
 
-Brazilian fixed-income instruments accrue interest on the BUS/252 day count: the year fraction between two dates is the number of business days between them divided by a fixed 252, where a business day is Monday–Friday minus the [ANBIMA](https://www.anbima.com.br/feriados/feriados.asp) national banking holidays. Tempo's half-open `[from, to)` convention is exactly the counting rule BUS/252 requires — two consecutive business days count as 1.
+Brazilian fixed-income instruments accrue interest on the BUS/252 day count: the year fraction between two dates is the number of business days between them divided by a fixed 252, where a business day is Monday to Friday less the [ANBIMA](https://www.anbima.com.br/feriados/feriados.asp) national banking holidays.
 
 ANBIMA publishes the holiday list (2001–2099) as a spreadsheet; `scripts/anbima_xls_to_ics.py` in this repository converts it to an iCalendar file that Tempo loads directly.
 
@@ -1009,140 +1004,129 @@ ANBIMA publishes the holiday list (2001–2099) as a spreadsheet; `scripts/anbim
 ```elixir
 {:ok, holidays} = Tempo.ICal.parse_file("feriados_anbima.ics")
 
-settlement = ~o"2024-01-01"
-maturity   = ~o"2025-01-01"
+accrual = ~o"2024-01-01/2024-12-31"
 
-{:ok, window}        = Tempo.Interval.new(from: settlement, to: maturity)
-{:ok, workdays}      = Tempo.select(window, Tempo.workdays(:BR))
+{:ok, workdays}      = Tempo.select(accrual, Tempo.workdays(:BR))
 {:ok, business_days} = Tempo.members_outside(workdays, holidays)
 
 Tempo.IntervalSet.count(business_days) / 252
 #=> 1.003968253968254   (253 business days in 2024)
 ```
 
-> The **window** runs from settlement to maturity. **Workdays** narrow it to Brazil's Monday–Friday. **Business days** are the workdays falling **outside** the ANBIMA holidays. The **year fraction** is the business-day count over a fixed 252.
+> *"The **workdays** of the accrual period are Brazil's Monday to Friday. **Business days** are the workdays **outside** the ANBIMA holidays. The **year fraction** is their count over a fixed 252."*
 
-The denominator is always 252, regardless of how many business days a given year actually contains — a fraction slightly above 1 for a calendar year is correct, not a bug. And because the holiday list is normative pricing data, pin a dated copy of the generated `.ics` rather than refreshing it from a live feed.
+The accrual period is written to its last day: BUS/252 counts from settlement up to and not including maturity, so a bond maturing on the 1st of January 2025 accrues through the 31st of December. The denominator is always 252, however many business days a year holds, so a fraction a little above 1 for a calendar year is correct. And because the holiday list is pricing data, pin a dated copy of the generated `.ics` rather than refreshing it from a live feed.
 
 ### Ramadan working hours — statutory hours across two calendars
 
-UAE labour law (Article 17 of Federal Decree-Law No. 33 of 2021) reduces the private-sector workday by two hours — from eight to six — for every day of Ramadan, for all employees. The payroll year is Gregorian; Ramadan is the ninth month of the Islamic calendar, and it drifts about eleven days earlier each Gregorian year. Computing statutory hours therefore means intersecting a Gregorian working year with an Islamic month — a set operation *across two calendars*:
+UAE labour law (Article 17 of Federal Decree-Law No. 33 of 2021) reduces the private-sector workday by two hours — from eight to six — for every day of Ramadan, for all employees. The payroll year is Gregorian; Ramadan is the ninth month of the Islamic calendar, and falls about eleven days earlier each Gregorian year. Statutory hours are therefore a question of a Gregorian working year and an Islamic month — two expressions in *two calendars*:
 
 ```elixir
-work_year = ~o"2026"
-ramadan   = ~o"1447-09[u-ca=islamic-civil]"
+iex> work_year = ~o"2026"
+iex> ramadan = ~o"1447-09[u-ca=islamic-civil]"
+iex> {:ok, workdays} = Tempo.select(work_year, Tempo.workdays(:AE))
+iex> {:ok, ramadan_workdays} = Tempo.members_overlapping(workdays, ramadan)
+iex> {:ok, normal_workdays} = Tempo.members_outside(workdays, ramadan)
+iex> {Tempo.IntervalSet.count(normal_workdays), Tempo.IntervalSet.count(ramadan_workdays)}
+{239, 22}
 
-standard_hours = 8
-ramadan_hours  = 6
+iex> Tempo.IntervalSet.count(normal_workdays) * 8 + Tempo.IntervalSet.count(ramadan_workdays) * 6
+2044
 
-{:ok, workdays}         = Tempo.select(work_year, Tempo.workdays(:AE))
-{:ok, ramadan_workdays} = Tempo.members_overlapping(workdays, ramadan)
-{:ok, normal_workdays}  = Tempo.members_outside(workdays, ramadan)
-
-Tempo.IntervalSet.count(normal_workdays) * standard_hours +
-  Tempo.IntervalSet.count(ramadan_workdays) * ramadan_hours
-#=> 2044   (239 normal workdays × 8h + 22 Ramadan workdays × 6h; 44 hours reduced)
+iex> Tempo.to_calendar(ramadan, Calendrical.Gregorian)
+{:ok, ~o"2026Y2M18D/3M19D[u-ca=gregorian]"}
 ```
 
-> The **workdays** of 2026 are the working year narrowed to the UAE's Monday–Friday. The **Ramadan workdays** are the ones **overlapping** Ramadan 1447; the **normal workdays** are the ones **outside** it. **Statutory hours** are eight for each normal workday and six for each Ramadan workday.
+> *"The **workdays** of 2026 are the UAE's Monday to Friday. The **Ramadan workdays** are those **overlapping** Ramadan 1447; the **normal workdays** are those **outside** it. **Statutory hours** are eight for each normal workday and six for each of Ramadan's."*
 
-Three things are doing quiet work here. `Tempo.workdays(:AE)` knows from CLDR that the UAE moved its weekend to Saturday–Sunday in 2022 — no hand-coded weekday list. The intersection of a Gregorian year with `~o"1447-09[u-ca=islamic-civil]"` converts calendars internally — Ramadan 1447 lands on 2026-02-18 through 2026-03-19 without either value being manually converted. And the two member-preserving filters partition the workdays exactly, so the hours arithmetic cannot double-count a day.
+Three things are doing quiet work here. `Tempo.workdays(:AE)` knows from CLDR that the UAE moved its weekend to Saturday and Sunday in 2022. The Gregorian workdays are compared with an Islamic month on the time line the two calendars share — Ramadan 1447 is the 18th of February through the 19th of March — with neither converted by hand. And the two filters part the workdays exactly, so no day is counted twice.
 
-Next year the same pipeline needs only new bindings — `~o"2027"` and `~o"1448-09[u-ca=islamic-civil]"` — and Ramadan moves ten days earlier (2027-02-08 through 2027-03-09) with nothing else changing.
+Next year the same pipeline needs only new bindings — `~o"2027"` and `~o"1448-09[u-ca=islamic-civil]"`.
 
-Two production caveats. The tabular `islamic-civil` calendar is a planning approximation: the legal month follows the moon-sighting announcement, so for an actual payroll run pin the announced start and end dates (the same advice as pinning the ANBIMA `.ics` above). And public holidays — Eid al-Fitr immediately follows Ramadan — subtract with `Tempo.members_outside/2` exactly as in the Business/252 recipe.
+Two cautions for production. The tabular `islamic-civil` calendar is for planning: the legal month follows the announced sighting of the moon, so for a payroll run pin the announced dates. And public holidays — Eid al-Fitr follows Ramadan at once — come out with `Tempo.members_outside/2` exactly as in the Business/252 recipe.
 
 ### The 25-hour shift — DST and payroll
 
-A night-shift worker in New York works 21:00–05:00. On the night the clocks fall back (the first Sunday of November) the 01:00–02:00 hour happens twice, and US wage law pays non-exempt workers for hours *actually worked* — nine hours, not eight. On the spring-forward night the 02:00 hour never exists, and the same shift is seven. Naive `end - start` wall-clock arithmetic gets both wrong; Tempo's hour walk gets both right because the timezone database drives the enumeration:
+A night-shift worker in New York works 21:00 to 05:00. On the night the clocks go back the hour from one to two happens twice, and US wage law pays non-exempt workers for hours *actually worked* — nine, not eight. On the night they go forward the hour from two to three never happens, and the same shift is seven. Arithmetic on the wall clock gets both wrong; Tempo measures and walks elapsed hours through the time zone database:
 
 ```elixir
-normal      = ~o"2026-10-24T21/2026-10-25T05[America/New_York]"
-fall_back   = ~o"2026-10-31T21/2026-11-01T05[America/New_York]"
-spring_fwd  = ~o"2026-03-07T21/2026-03-08T05[America/New_York]"
+iex> normal = ~o"2026-10-24T21/2026-10-25T05[America/New_York]"
+iex> fall_back = ~o"2026-10-31T21/2026-11-01T05[America/New_York]"
+iex> spring_forward = ~o"2026-03-07T21/2026-03-08T05[America/New_York]"
+iex> {Tempo.duration(normal), Tempo.duration(fall_back), Tempo.duration(spring_forward)}
+{~o"PT8H", ~o"PT9H", ~o"PT7H"}
 
-Enum.count(normal)     #=> 8
-Enum.count(fall_back)  #=> 9   (01:00 EDT and 01:00 EST both worked — both paid)
-Enum.count(spring_fwd) #=> 7   (02:00 never happened)
+iex> fall_back |> Enum.to_list() |> Enum.slice(4, 2)
+[~o"2026Y11M1DT1HZ-4H0M[America/New_York]", ~o"2026Y11M1DT1HZ-5H0M[America/New_York]"]
 ```
 
-> The **shift** is an explicit hour-resolution interval in the worker's zone. **Counting** its hours walks the wall clock the worker actually lived: the fall-back night contains the 01:00 hour **twice**, the spring-forward night skips 02:00 entirely.
+> *"The usual shift is **eight hours**; the night the clocks go back it is **nine**, and the night they go forward **seven**. One o'clock happens **twice** in the long one: once four hours behind UTC, once five."*
 
-The two occurrences of the repeated hour are distinct values, disambiguated by their UTC offset exactly as RFC 9557 prescribes — the first is `~o"2026Y11M1DT1HZ-4H[America/New_York]"` (EDT), the second `~o"2026Y11M1DT1HZ-5H[America/New_York]"` (EST) — so a payroll record built from the walk round-trips each hour to the correct instant.
+The two one o'clocks are two values, told apart by the offset each had, as RFC 9557 writes them. So a payroll record made from the walk reads each hour back to the instant it was.
 
 ### Is the on-call rotation fair?
 
-Three engineers rotate weekly on-call, handing over each Monday, thirteen weeks a quarter. By shift count the rota looks nearly fair — 5 / 4 / 4 weeks. But weekends are what on-call actually costs, and each rotation is written as one set-of-intervals sigil, so the question is one `select` per person:
+Three engineers rotate weekly on call, handing over each Monday, thirteen weeks a quarter. By count of weeks the rota looks nearly fair — five, four and four. But weekends are what on-call costs, and each rotation is one set of intervals, so the question is one selection each:
 
 ```elixir
-alice = ~o"{2025-12-29/2026-01-05,2026-01-19/2026-01-26,2026-02-09/2026-02-16,2026-03-02/2026-03-09,2026-03-23/2026-03-30}"
-bob   = ~o"{2026-01-05/2026-01-12,2026-01-26/2026-02-02,2026-02-16/2026-02-23,2026-03-09/2026-03-16}"
-carol = ~o"{2026-01-12/2026-01-19,2026-02-02/2026-02-09,2026-02-23/2026-03-02,2026-03-16/2026-03-23}"
-
-for {name, rota} <- [alice: alice, bob: bob, carol: carol] do
-  {:ok, weekend_days} = Tempo.select(rota, Tempo.weekends(:US))
-  {name, Tempo.IntervalSet.count(weekend_days)}
-end
-#=> [alice: 10, bob: 8, carol: 8]   (240 vs 192 vs 192 weekend hours)
+iex> alice = ~o"{2025-12-29/2026-01-04,2026-01-19/2026-01-25,2026-02-09/2026-02-15,2026-03-02/2026-03-08,2026-03-23/2026-03-29}"
+iex> bob = ~o"{2026-01-05/2026-01-11,2026-01-26/2026-02-01,2026-02-16/2026-02-22,2026-03-09/2026-03-15}"
+iex> carol = ~o"{2026-01-12/2026-01-18,2026-02-02/2026-02-08,2026-02-23/2026-03-01,2026-03-16/2026-03-22}"
+iex> for {name, rota} <- [alice: alice, bob: bob, carol: carol] do
+...>   {:ok, weekend_days} = Tempo.select(rota, Tempo.weekends(:US))
+...>   {name, Tempo.IntervalSet.count(weekend_days)}
+...> end
+[alice: 10, bob: 8, carol: 8]
 ```
 
-> Each engineer's **rota** is the set of weeks they carry the pager. Their **weekend burden** is the rota's days **selected** down to Saturdays and Sundays. Alice's five weekends against four make her weekend load **25% heavier** — from a rotation that looked fair by shift count.
+> *"Each engineer's **rota** is the weeks they carry the pager, Monday through Sunday. Their **weekend burden** is the **weekend days selected** from it. Alice's ten against eight make her load a **quarter heavier**, from a rotation that looked fair by count of weeks."*
 
-The mechanics: a `{a/b,c/d,…}` sigil is a set of explicit intervals; `Tempo.select/2` converts it and applies the selector to every member, so "the weekend days of Alice's five separate weeks" needs no loop. The counts convert to hours because each selected member is exactly one day.
+A `{a/b,c/d,…}` sigil is a set of intervals, and `Tempo.select/3` selects from every member, so "the weekend days of Alice's five weeks" needs no loop.
 
 ### Daylight-limited work — Tempo + Astro
 
-Outdoor crews — surveyors, riggers, film units — can only use site hours that are also daylight. How much workable time does a Helsinki crew have in December 2026, against the same crew in Lisbon? Sunrise and sunset come from the [Astro](https://hex.pm/packages/astro) ephemeris; the rest is set algebra:
+Outdoor crews — surveyors, riggers, film units — can use only the site hours that are also daylight. How much workable time does a Helsinki crew have in December 2026, against the same crew in Lisbon? Sunrise and sunset come from the [Astro](https://hex.pm/packages/astro) ephemeris; the rest is set algebra:
 
 ```elixir
-workable_daylight = fn december, territory, location, zone ->
-  {:ok, workdays} = Tempo.select(december, Tempo.workdays(territory))
+iex> workable_daylight = fn december, territory, location, zone ->
+...>   {:ok, workdays} = Tempo.select(december, Tempo.workdays(territory))
+...>
+...>   lengths =
+...>     for day <- workdays do
+...>       {:ok, date} = Tempo.to_date(day)
+...>       {:ok, sunrise} = Astro.sunrise(location, date, time_zone: zone)
+...>       {:ok, sunset} = Astro.sunset(location, date, time_zone: zone)
+...>
+...>       daylight =
+...>         Tempo.Interval.new!(
+...>           from: Tempo.from_datetime(DateTime.truncate(sunrise, :second)),
+...>           to: Tempo.from_datetime(DateTime.truncate(sunset, :second))
+...>         )
+...>
+...>       {:ok, site_hours} = Tempo.select(day, ~o"T08/T16")
+...>       {:ok, workable} = Tempo.intersection(site_hours, daylight)
+...>       Tempo.duration(workable)
+...>     end
+...>
+...>   {:ok, hours} = lengths |> Tempo.Duration.sum() |> Tempo.Duration.to_unit(:hour)
+...>   Float.round(hours, 1)
+...> end
+iex> workable_daylight.(~o"2026-12[Europe/Helsinki]", :FI, {24.9384, 60.1699}, "Europe/Helsinki")
+137.8
 
-  for day <- workdays do
-    {:ok, date}    = Tempo.to_date(day)
-    {:ok, sunrise} = Astro.sunrise(location, date, time_zone: zone)
-    {:ok, sunset}  = Astro.sunset(location, date, time_zone: zone)
-
-    {:ok, daylight} =
-      Tempo.Interval.new(
-        from: Tempo.from_elixir(DateTime.truncate(sunrise, :second)),
-        to: Tempo.from_elixir(DateTime.truncate(sunset, :second))
-      )
-
-    {:ok, site_hours} = Tempo.select(day, 8..15)
-    {:ok, workable}   = Tempo.intersection(site_hours, daylight)
-    Tempo.duration(workable)
-  end
-end
-
-{:ok, helsinki_december} = Tempo.from_iso8601("2026-12[Europe/Helsinki]")
-{:ok, lisbon_december}   = Tempo.from_iso8601("2026-12[Europe/Lisbon]")
-
-workable_daylight.(helsinki_december, :FI, {24.9384, 60.1699}, "Europe/Helsinki")
-# totals 137.8 hours across 23 workdays
-
-workable_daylight.(lisbon_december, :PT, {-9.1393, 38.7223}, "Europe/Lisbon")
-# totals 184.0 hours — every site hour is daylit
+iex> workable_daylight.(~o"2026-12[Europe/Lisbon]", :PT, {-9.1393, 38.7223}, "Europe/Lisbon")
+184.0
 ```
 
-> The **workdays** of a zoned December, each drilled to its 08:00–16:00 **site hours**, **intersected** with that day's **daylight** from the ephemeris, and **totalled**. Lisbon crews get their full 184 site-hours; Helsinki crews get 137.8 — a **34% December capacity gap** from geography alone.
+> *"For each **workday** of a December, the **site hours**, eight to four, **intersected** with that day's **daylight**, and their lengths **summed**. Lisbon's crew has all 184 of its site hours; Helsinki's has 137.8 — a quarter fewer, from geography alone."*
 
-Three details matter. The December value carries its zone (`~o"2026-12[Europe/Helsinki]"`), and `select` propagates it down to the hour members — without it, naive site hours would compare as UTC and shift the overlap by two hours. `Astro.sunrise/3` needs `time_zone:` named explicitly unless `tz_world` is a dependency to resolve zones from coordinates. And the `DateTime.truncate(:second)` keeps sunrise at whole-second resolution, which is as precise as any site schedule needs.
-
-```elixir
-{:ok, schedule} = Tempo.ICal.parse(ics, within: ~o"2026-06")
-
-month = ~o"2026-06"
-{:ok, free} = Tempo.difference(month, schedule)
-```
-
-> The **month** of June **minus** my **schedule** is my **free** time that month.
+Three details matter. The December is in its zone (`~o"2026-12[Europe/Helsinki]"`), and the days and site hours selected from it are too, so they are compared with the sunrise as the instants they are. `Astro.sunrise/3` needs `time_zone:` named unless `tz_world` is a dependency to find the zone from the coordinates. And `DateTime.truncate(:second)` keeps sunrise to the second, as precise as any site schedule needs.
 
 ---
 
-## 14. Famous moments in time
+## 13. Famous moments in time
 
-A small collection of historically awkward dates — the kind that break naive date libraries. Each recipe demonstrates a specific Tempo capability against a real artefact of history.
+A small collection of historically awkward dates — the kind that break naive date libraries. Each recipe shows one thing Tempo does, against a real artefact of history.
 
 ### The Ides of March, 44 BCE
 
@@ -1152,91 +1136,103 @@ iex> {Tempo.year(ides), Tempo.month(ides), Tempo.day(ides)}
 {-43, 3, 15}
 ```
 
-> ISO 8601 uses **astronomical year numbering** — 1 BCE is year 0, 2 BCE is year -1, and so on. The Ides of March in **44 BCE** is therefore year **-43**. Tempo parses this without fuss; negative years are first-class.
+> *"The **Ides of March** in the year **-43**."*
 
-### The 1560s as an iterable decade
+ISO 8601 numbers years astronomically — 1 BCE is year 0, 2 BCE is year -1 — so the Ides of March in 44 BCE is in year -43.
+
+### The 1560s as a decade to walk
 
 ```elixir
-iex> decade = ~o"156X"
-iex> Enum.to_list(decade)
-...> |> Enum.map(&Tempo.year/1)
+iex> Enum.map(~o"156X", &Tempo.year/1)
 [1560, 1561, 1562, 1563, 1564, 1565, 1566, 1567, 1568, 1569]
 ```
 
-> `~o"156X"` is an **ISO 8601-2 masked year** — "some year in the 1560s." It's both a bounded span (the full decade) and an enumerable sequence of 10 year-values. Archaeological records and historical citations use this form routinely; Tempo gives it a first-class type.
+> *"**Some year of the 1560s**, and each year it could be."*
 
-### A leap second — detected, never represented as a value
+`~o"156X"` is ISO 8601-2's year with an unspecified digit. Archaeological records and historical citations use the form routinely.
+
+### A leap second — spanned, never a value
 
 ```elixir
-iex> iv = ~o"2016-12-31T23:59:00Z/2017-01-01T00:01:00Z"
-iex> Tempo.Interval.spans_leap_second?(iv)
+iex> new_year = ~o"2016-12-31T23:59:00Z/2017-01-01T00:01:00Z"
+iex> Tempo.Interval.spans_leap_second?(new_year)
 true
 
-iex> Tempo.Interval.duration(iv)
+iex> Tempo.duration(new_year)
 ~o"PT120S"
 
-iex> Tempo.Interval.duration(iv, leap_seconds: true)
+iex> Tempo.duration(new_year, leap_seconds: true)
 ~o"PT121S"
 ```
 
-> At the end of 2016 UTC, a **leap second** was inserted — the minute 23:59 had **61 seconds**, numbered 00 through 60. Tempo rejects `23:59:60` as a *value* (to stay compatible with `Time`, `DateTime`, and `Calendar.ISO` in Elixir/OTP — none of which represent leap seconds). Instead, Tempo exposes leap-second information as **interval metadata** via `Tempo.Interval.spans_leap_second?/1`, `leap_seconds_spanned/1`, and the `leap_seconds: true` option on `duration/2`. Scientific and financial pipelines that need exact elapsed time get a clean API; everyone else gets stdlib interop for free. See `Tempo.LeapSeconds.dates/0` for the 27 IERS-announced insertions.
+> *"The two minutes around New Year 2017 **span a leap second**: 120 seconds on the clock, 121 elapsed."*
+
+At the end of 2016 UTC a leap second was inserted — the minute 23:59 had 61 seconds, numbered 00 to 60. Tempo reads no `23:59:60` as a *value*, as Elixir's `Time`, `DateTime` and `Calendar.ISO` read none. A leap second is instead a fact about a span: `Tempo.Interval.spans_leap_second?/1`, `Tempo.LeapSeconds.spanned/1`, and the `leap_seconds: true` option of `Tempo.duration/2`. `Tempo.LeapSeconds.dates/0` lists the 27 the IERS has announced.
 
 ### A daylight-saving gap — the hour that never was
 
 ```elixir
 iex> {:error, error} = Tempo.from_iso8601("2024-03-10T02:30:00[America/New_York]")
 iex> Exception.message(error)
-"Wall time 2024-03-10T02:30:00 does not exist in \"America/New_York\" (it falls inside a daylight-saving or zone-transition gap)."
+"~o\"2024Y3M10DT2H30M0S[America/New_York]\" is a reading the clock of \"America/New_York\" skips"
 ```
 
-> At 02:00 local time on the second Sunday of March, US clocks **jump to 03:00** — the hour 02:00–03:00 never exists. Tempo consults the time zone database at parse time and rejects wall times inside the gap, so downstream operations never encounter a phantom instant. Fall-back ambiguity (the repeated hour in November) is accepted by default — callers can disambiguate with an explicit offset.
+> *"Half past two on the 10th of March is a reading New York's clock **skips**."*
 
-### Samoa skipping the international date line, 2011
+At two in the morning on the second Sunday of March, US clocks jump to three: the hour between never exists. Tempo asks the time zone database as the value is read and refuses a reading in the gap, so nothing downstream meets a phantom instant. The hour shown twice in November is read as the first of the two, or as the one a written shift names.
+
+### Samoa skipping a day, 2011
 
 ```elixir
-iex> {:error, error} = Tempo.from_iso8601("2011-12-30[Pacific/Apia]")
-iex> Exception.message(error)
-"Wall time 2011-12-30 does not exist in \"Pacific/Apia\" (it falls inside a daylight-saving or zone-transition gap)."
+iex> {:error, %Tempo.ZoneError{reason: :gap}} = Tempo.from_iso8601("2011-12-30[Pacific/Apia]")
+iex> december = ~o"2011-12[Pacific/Apia]"
+iex> thursday = ~o"2011-12-29[Pacific/Apia]"
+iex> Tempo.shift(thursday, day: 1)
+{:ok, ~o"2011Y12M31D[Pacific/Apia]"}
 
-iex> {:error, %Tempo.ZoneGapError{}} = Tempo.from_iso8601("2011-12-30T12:00:00[Pacific/Apia]")
+iex> {:ok, fridays} = Tempo.select(december, ~o"5K")
+iex> Tempo.IntervalSet.map(fridays, &Tempo.day/1)
+[2, 9, 16, 23]
+
+iex> Enum.count(december)
+30
 ```
 
-> At the end of 29 December 2011, Samoa moved from east of the international date line to west of it: the day after Thursday the 29th was Saturday the 31st, and **30 December never happened** there. Tempo consults the time zone database for the gap, and a value the clock skips the whole of (that day, any hour of it, any timestamp in it) is an error.
+> *"The day **after** Thursday the 29th is Saturday the 31st. The **Fridays** of that December are four, where the calendar shows five; and the month has **thirty days**."*
+
+At the end of 29 December 2011 Samoa moved from east of the international date line to west of it, and 30 December never happened there. The day, any hour of it and any timestamp in it are refused, and a step, a walk and a selection pass over it.
+
+### Julian vs Gregorian — the same date written, two days
 
 ```elixir
-december = ~o"2011-12[Pacific/Apia]"
-thursday = ~o"2011-12-29[Pacific/Apia]"
-
-saturday = Tempo.shift(thursday, day: 1)
-{:ok, fridays} = Tempo.select(december, ~o"5K")
-```
-
-> *"The day **after** Thursday the 29th is Saturday the 31st. The **Fridays** of that December are the 2nd, 9th, 16th and 23rd: four, where the calendar shows five."*
-
-### Julian vs Gregorian — the same nominal date, different calendars
-
-```elixir
-iex> {:ok, julian}    = Tempo.from_iso8601("1582-01-01", Calendrical.Julian)
+iex> {:ok, julian} = Tempo.from_iso8601("1582-01-01", calendar: Calendrical.Julian)
 iex> {:ok, gregorian} = Tempo.from_iso8601("1582-01-01[u-ca=gregory]")
 iex> Tempo.overlaps?(julian, gregorian)
 false
+
+iex> Tempo.duration(gregorian, julian)
+{:ok, ~o"P10D"}
 ```
 
-> 1 January 1582 under the **Julian calendar** and 1 January 1582 under the **Gregorian calendar** are not the same real day — they're **10 days apart** because of the Julian-to-Gregorian drift. Tempo comparisons are **calendar-aware**: same nominal components, different calendar, different underlying instant. The answer is `false`.
+> *"The 1st of January 1582 on the **Julian** calendar is **ten days after** the same date on the **Gregorian**."*
+
+The calendar is part of the value, so the same numbers in two calendars are the two days they are.
 
 ### How do I work in a fiscal year?
 
 ```elixir
-iex> {:ok, us_fiscal}   = Calendrical.FiscalYear.calendar_for(:US)
-iex> {:ok, fiscal_2026} = Tempo.from_iso8601("2026", us_fiscal)
-iex> {:ok, months}      = Tempo.to_interval(fiscal_2026)
-iex> Enum.count(months)
+iex> {:ok, us_fiscal} = Calendrical.FiscalYear.calendar_for(:US)
+iex> {:ok, fiscal_2026} = Tempo.from_iso8601("2026", calendar: us_fiscal)
+iex> Enum.count(fiscal_2026)
 12
-iex> Tempo.relation(Tempo.from_iso8601!("2026-01-01", us_fiscal), ~o"2025-10-01")
+
+iex> Tempo.relation(Tempo.from_iso8601!("2026-01-01", calendar: us_fiscal), ~o"2025-10-01")
 :equals
 ```
 
-> The **US federal fiscal year** starts on 1 October, so fiscal year 2026 iterates to its **twelve fiscal months** and its first day **equals** 1 October 2025 on the shared timeline. A fiscal calendar is just a `Calendrical` calendar — every comparison, duration, and set operation stays calendar-aware. See the [custom calendars guide](custom-calendars.md).
+> *"**Fiscal 2026** has twelve months to walk, and its first day **is** the 1st of October 2025."*
+
+The US federal fiscal year begins on 1 October. A fiscal calendar is a Calendrical calendar like any other, so every relation, length and set operation knows it. See the [custom calendars guide](custom-calendars.md).
 
 ### Allen's interval algebra
 
@@ -1251,7 +1247,9 @@ iex> Tempo.relation(~o"2022-06", ~o"2023-06")
 :precedes
 ```
 
-> Two intervals relate in one of **13 named ways** — [Allen's interval algebra](https://ics.uci.edu/~alspaugh/cls/shr/allen.html). June **meets** July (touches at the boundary with no gap or overlap). June 2022 **contains** June 15 2022. June 2022 **precedes** June 2023. The relation is always exact; no equality-tolerance bikeshedding.
+> *"June **meets** July. June **contains** its 15th. June 2022 **precedes** June 2023."*
+
+Two intervals stand in exactly one of thirteen relations — [Allen's interval algebra](https://ics.uci.edu/~alspaugh/cls/shr/allen.html). The relation is always exact, with no tolerance to tune.
 
 ---
 
@@ -1265,11 +1263,11 @@ iex> Tempo.relation(~o"2022-06", ~o"2023-06")
 
 * [Holidays — planning with a real holiday calendar](./holidays.md) — fetch an ICS holiday feed, parse it with `Tempo.ICal.parse/1`, and compose it with `Tempo.workdays/1` for territory-aware scheduling.
 
-* [Falsehoods programmers believe about time](./falsehoods.md) — the ten most impactful wrong assumptions, each with the Tempo idiom that makes the right behaviour automatic.
+* [Falsehoods programmers believe about time](./falsehoods.md) — eleven wrong assumptions with the largest bug-surface, each with the Tempo idiom that makes the right behaviour automatic.
 
 * [ISO 8601 conformance](./iso8601-conformance.md) — what's supported from the standard.
 
 * [Enumeration semantics](./enumeration-semantics.md) — how iteration works across Tempo values.
 * [Set operations](./set-operations.md) — union, intersection, complement, difference.
 * [iCalendar integration](./ical-integration.md) — full `.ics` import with RRULE/RDATE/EXDATE.
-* [Shared AST for ISO 8601 and RRULE](./shared-ast-iso8601-and-rrule.md) — the internal representation.
+* [One form for ISO 8601 and RRULE](./shared-ast-iso8601-and-rrule.md) — how a rule and an ISO 8601 recurrence are the same expression.

@@ -30,6 +30,8 @@ defmodule Tempo.Walk do
   """
   @spec steps({Scale.position(), Scale.position() | nil}, Unit.t(), frame()) ::
           {:ok, Enumerable.t()} | {:error, term()}
+  # A step is a value's units, or `{:shifted, units, shift}` for a reading a
+  # zone's clock shows twice.
   def steps({start, stop}, unit, frame)
       when is_integer(start) and (is_integer(stop) or stop == nil) do
     cond do
@@ -111,9 +113,14 @@ defmodule Tempo.Walk do
     first_day
     |> Stream.unfold(fn
       day when last_day != nil and day > last_day -> nil
-      day -> {at_day(day, unit, calendar), next_period(day, unit, calendar)}
+      day -> {{day, at_day(day, unit, calendar)}, next_period(day, unit, calendar)}
     end)
+    |> Stream.reject(fn {day, _value} -> unit == :day and day_skipped?(day, frame) end)
+    |> Stream.map(fn {_day, value} -> value end)
   end
+
+  # A day the zone's clock leaves out is no day of a walk there.
+  defp day_skipped?(day, %{zone: zone, shift: shift}), do: Zone.day_skipped?(zone, shift, day)
 
   defp next_period(day, :day, _calendar), do: day + 1
 
@@ -147,8 +154,24 @@ defmodule Tempo.Walk do
     start
     |> Stream.iterate(&(&1 + step))
     |> Stream.take_while(fn tick -> stop == nil or tick < stop end)
-    |> Stream.map(fn tick -> at_tick(wall(tick, frame), written_unit(unit), calendar) end)
+    |> Stream.map(fn tick -> reading(tick, written_unit(unit), calendar, frame) end)
   end
+
+  # A reading a named zone's clock shows twice is given with the offset it
+  # had, `{:shifted, units, shift}`, so the two are two values; any other is
+  # its units alone.
+  defp reading(tick, unit, calendar, %{zone: %Zone{name: name} = zone, shift: nil})
+       when is_binary(name) do
+    {wall, offset} = Zone.wall_of_utc(zone, nil, tick)
+    units = at_tick(wall, unit, calendar)
+
+    case Zone.offsets_at_wall(zone, wall) do
+      [_first, _second] -> {:shifted, units, Zone.shift_of(offset)}
+      _one -> units
+    end
+  end
+
+  defp reading(tick, unit, calendar, frame), do: at_tick(wall(tick, frame), unit, calendar)
 
   defp step_of({:microsecond, precision}), do: Integer.pow(10, 6 - precision)
   defp step_of(:microsecond), do: 1

@@ -2,9 +2,9 @@
 
 This is the grammar of every text `Tempo.from_iso8601/2` reads and `Tempo.to_iso8601/1` writes, written in the ABNF of [RFC 5234](https://www.rfc-editor.org/rfc/rfc5234) and transcribed clause by clause from ISO 8601-1:2019, ISO 8601-2:2019 and RFC 9557. Each production names the clause it comes from. Productions that are Tempo's own, and not in any standard, are in section 4 and marked `; Tempo`.
 
-The reader (`Tempo.Reader`) is written as one function per production, in the order given here, so that the code can be held against the standard and this page against the code. A generator built from this grammar produces texts the reader must accept and round-trip through the writer, and a mutator produces texts it must refuse; the examples of the two standards (ISO 8601-1 Annex A, ISO 8601-2's worked examples) are a table beside them.
+The reader (`lib/tempo/reader.ex`) is written as one function per production, in the order given here, so that the code can be held against the standard and this page against the code. A generator built from this grammar produces texts the reader must accept and round-trip through the writer, and a mutator produces texts it must refuse; the examples of the two standards (ISO 8601-1 Annex A, ISO 8601-2's worked examples) are a table beside them.
 
-**What the grammar decides, and what it does not.** The grammar says which texts are well formed. It does not say which are *valid*: `2026-13-01` is a `date-extended` by this grammar and is refused by `Tempo.Validate`, because the calendar has no thirteenth month; `2026-03-29T02:30[Europe/Paris]` is well formed and refused because the clock skips that reading; `2026-07/2026-06` is well formed and refused because its end is before its start. Ranges of values, the existence of a date, the readings a zone's clock shows and the order of an interval's ends are the validator's, after the reader. Likewise the grammar does not say what a text *means*: that is `plans/architecture-redesign.md`, section 4, and in particular the reading of a written end (law 9).
+**What the grammar decides, and what it does not.** The grammar says which texts are well formed. It does not say which are *valid*: `2026-13-01` is a `date-extended` by this grammar and is refused when the value is validated, because the calendar has no thirteenth month; `2026-03-29T02:30[Europe/Paris]` is well formed and refused because the clock skips that reading; `2026-07/2026-06` is well formed and refused because its end is before its start. Ranges of values, the existence of a date, the readings a zone's clock shows and the order of an interval's ends are the validator's, after the reader. Likewise the grammar does not say what a text *means*: that is `plans/architecture-redesign.md`, section 4, and in particular the reading of a written end (law 9).
 
 **Ambiguity.** ABNF is declarative and ISO 8601's basic format is not prefix-free: `1985` is a year, `198504` is not a month (ISO 8601-1 §5.2.2.2 forbids the basic form of a year and month), `19850412` is a date and `1985102` an ordinal date. The reader tells the basic forms apart by the length of a digit run, as ISO 8601-1 §5.2 does, and this page notes each such rule where it applies. Where ISO 8601-2 makes a form ambiguous (a bare integer set, `{1,2}`, is a set of years in one place and of integers in another), the context production says which reading applies.
 
@@ -355,7 +355,7 @@ lcalpha           = %x61-7A
 alphanum          = ALPHA / DIGIT
 ```
 
-A suffix is written once, after the whole expression (law 5): after the end of an interval, after a set, after a recurrence's rule. The time zone, if present, comes first and at most once. A `u-ca` tag names the calendar (`[u-ca=hebrew]`), which Tempo resolves through `Tempo.Calendar.from_type/1`; any other tag is kept as metadata. A critical tag (`[!…]`) that Tempo cannot act on is an error; an elective one may be ignored (RFC 9557 §3.3). A time zone's name is validated against the zone database by `Tempo.Validate`; a suffix inside an expression, on an end or a member, is a `Tempo.ParseError` that says where it belongs.
+A suffix is written once, after the whole expression (law 5): after the end of an interval, after a set, after a recurrence's rule. The time zone, if present, comes first and at most once. A `u-ca` tag names the calendar (`[u-ca=hebrew]`), which Tempo resolves to its calendar module; any other tag is kept as metadata. A critical tag (`[!…]`) that Tempo cannot act on is an error; an elective one may be ignored (RFC 9557 §3.3). A time zone's name is validated against the zone database; a suffix inside an expression, on an end or a member, is a `Tempo.ParseError` that says where it belongs.
 
 ## 5. Tempo's own extensions
 
@@ -363,10 +363,8 @@ These are not in ISO 8601 or any RFC. Each is marked `; Tempo`, each is written 
 
 ```abnf
 range-step      = negint ".." negint "//" integer            ; Tempo: {1..-1//2}W, every second week
-fraction-set    = integer decimal-sign int-set               ; Tempo: T10H30M45.{0..9}S, the tenths of a second as a set
-week-own        = negint "w"                                 ; Tempo: the calendar's own week numbering, 2027Y1w
 week-of-month   = monthE negint "W"                          ; Tempo: a week of a month, 2026Y6M2W; ISO 8601 has weeks of a year only
-week-start      = integer "q"                                ; Tempo, in a selection: the weekday a week begins on, RFC 5545's WKST; 7q
+week-start      = integer "q"                                ; Tempo, in a selection: the weekday a week begins on, RFC 5545's WKST; read, and valid only as 1q, Monday
 event           = "(" event-name ["@" (time-zone-name / time-numoffset)] ")" "e"   ; Tempo, in a selection: (easter)e, (march-equinox@+09:00)e
 event-name      = lcalpha *(lcalpha / DIGIT / "-")
 traditional-month = (negint / int-set / masked-valueE) ["+"] "m"   ; Tempo: a lunisolar calendar's named month, 8m; its leap month, 6+m
@@ -374,10 +372,10 @@ exclusion       = "^" member                                 ; Tempo, in a set: 
 domain-filter   = set-all ("e" / "o" / "l" / "c")           ; Tempo, after a recurrence's domain: even, odd, leap, common years
 domain          = (set-all / set-one / exclusion / domain-filter)   ; Tempo: in a recurrence's interval slot, R/{2020Y..2024Y}/P1Y/…
 year-rule       = (negint / int-set / masked-valueE) "Y"     ; Tempo, in a selection: the years an occurrence may fall in, FL{2026,2028}Y1M1DN
-time-under-period = (year-only / year-month / week-basic / week-extended / monthE) time   ; Tempo: 2026T17, 2026-06T17, 6MT10H, read on the first day
+time-under-period = (year-only / year-month / week-basic / week-extended / monthE) time   ; Tempo: 2026T17, 2026-06T17, 6MT10H, that time on each day of the period
 ```
 
-Tempo marks its selection extensions with a lowercase designator (`w`, `q`, `e`, `m`) so that they are visible at a glance as non-standard; `I` is uppercase because it is ISO 8601-2 §12.9.
+Tempo marks its selection extensions with a lowercase designator (`q`, `e`, `m`) so that they are visible at a glance as non-standard; `I` is uppercase because it is ISO 8601-2 §12.9.
 
 ## 6. The whole
 

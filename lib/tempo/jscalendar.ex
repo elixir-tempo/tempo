@@ -20,7 +20,7 @@ if Code.ensure_loaded?(JSCalendar) do
     """
 
     alias JSCalendar.{Event, Group, NDay, Occurrence, RecurrenceRule}
-    alias Tempo.{ConversionError, Occurrences, Spans}
+    alias Tempo.{Algebra, ConversionError, Occurrences, Options, Spans}
 
     @frequencies %{
       "yearly" => :year,
@@ -94,9 +94,10 @@ if Code.ensure_loaded?(JSCalendar) do
     """
     @spec from_jscalendar(struct(), keyword()) :: {:ok, Tempo.t()} | {:error, term()}
     def from_jscalendar(object, options \\ []) do
-      with {:ok, spans} <- object_occurrences(object, options),
+      with :ok <- Options.check(options, [:within], "Tempo.JSCalendar.parse/2"),
+           {:ok, spans} <- object_occurrences(object, options),
            {:ok, kept} <- Occurrences.within(spans, options[:within]) do
-        {:ok, set(Enum.sort(kept, Tempo))}
+        Algebra.gathered(kept, floating: :place, sorted: true)
       end
     end
 
@@ -310,10 +311,5 @@ if Code.ensure_loaded?(JSCalendar) do
 
     defp flat({:ok, lists}), do: {:ok, List.flatten(lists)}
     defp flat(error), do: error
-
-    defp set([]), do: %Tempo{form: {:all, []}, calendar: Calendar.ISO}
-
-    defp set([first | _] = spans),
-      do: %Tempo{form: {:all, spans}, calendar: first.calendar, zone: first.zone}
   end
 end

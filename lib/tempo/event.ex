@@ -87,9 +87,9 @@ defmodule Tempo.Event do
 
   * `year` is the Gregorian year.
 
-  * `calendar` is the calendar whose meridian a solar term is reckoned at,
-    one of Calendrical's lunisolar calendars; the default, `Calendar.ISO`,
-    reckons none.
+  * `calendar` is the calendar whose meridian a solar term is reckoned at:
+    one of Calendrical's lunisolar calendars, or the Gregorian, the default,
+    which reckons it at the Chinese meridian.
 
   ### Returns
 
@@ -204,6 +204,9 @@ defmodule Tempo.Event do
       _error -> {:error, {:uncomputable_event, event}}
     end
   end
+
+  # `Calendar.ISO` is the Gregorian calendar, which Calendrical reckons the terms for.
+  defp solar_term(number, year, Calendar.ISO), do: solar_term(number, year, Calendrical.Gregorian)
 
   defp solar_term(number, year, calendar) do
     if Code.ensure_loaded?(calendar) and function_exported?(calendar, :solar_term, 2) do

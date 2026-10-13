@@ -5,7 +5,7 @@ This tutorial builds the availability core of a real service, one concept at a t
 No scaffolding is needed. Everything below runs in `iex` after:
 
 ```elixir
-Mix.install([{:ex_tempo, "~> 2.0"}, {:ical, "~> 3.0"}, {:tz, "~> 0.28"}])
+Mix.install([{:ex_tempo, "~> 3.0"}, {:ical, "~> 3.0"}, {:tz, "~> 0.28"}])
 Calendar.put_time_zone_database(Tz.TimeZoneDatabase)
 import Tempo.Sigils
 ```
@@ -73,19 +73,15 @@ Three free regions — before the tracking session, the afternoon gap, and the l
 
 ## Step 4 — From free regions to bookable slots
 
-A booking page doesn't offer "regions"; it offers slots. Cut the free time into hour slots and keep only the windows a full hour fits:
+A booking page doesn't offer "regions"; it offers slots. Cut the free time into hour slots; only the windows a full hour fits in are kept:
 
 ```elixir
-iex> slots =
-...>   free
-...>   |> Tempo.IntervalSet.slots(~o"PT1H")
-...>   |> Tempo.IntervalSet.members()
-...>   |> Enum.filter(&Tempo.at_least?(&1, ~o"PT1H"))
-iex> length(slots)
+iex> {:ok, slots} = Tempo.IntervalSet.slots(free, ~o"PT1H")
+iex> Tempo.IntervalSet.count(slots)
 5
 ```
 
-> *"**Bookable slots** are the **free regions**, cut into **hour-long windows**, keeping those **at least an hour** — five of them."*
+> *"**Bookable slots** are the **free regions**, cut into **hour-long windows** that fit — five of them."*
 
 Every noun and verb in that sentence is a line of the pipeline. This is the test Tempo's API holds itself to: if you can say it, you can write it.
 
@@ -108,8 +104,9 @@ The engineer is out until 13:00, so the morning region drops away and two window
 Studio Nine closes on weekends — but *which days are the weekend* depends on where the studio is. Tempo reads that from CLDR data rather than hard-coding Saturday–Sunday:
 
 ```elixir
-iex> Tempo.weekend?(~o"2026-06-19")
+iex> Tempo.weekend?(~o"2026-06-19", :GB)
 false
+
 iex> Tempo.weekend?(~o"2026-06-19", :SA)
 true
 ```
@@ -117,8 +114,8 @@ true
 June 19 is a Friday — a workday for the London studio, the weekend for a Riyadh branch. Business-day arithmetic rides on the same data:
 
 ```elixir
-iex> Tempo.add_workdays(~o"2026-06-18", 3)
-~o"2026Y6M23D"
+iex> Tempo.add_workdays(~o"2026-06-18", 3, :GB)
+{:ok, ~o"2026Y6M23D"}
 ```
 
 Three workdays from Thursday lands on Tuesday — the weekend doesn't count.
@@ -128,9 +125,9 @@ Three workdays from Thursday lands on Tuesday — the weekend doesn't count.
 A client drops off a 72-hour tape restoration on Thursday at 16:00. The machine only runs while the studio is staffed — weekends don't count. `Tempo.shift/3` with `skipping:` consumes the duration from free time only, and the weekends of a span with no end (`~o"2026-06-18/.."`) are an *unbounded lazy set* — no end date required, the walk takes only what it needs:
 
 ```elixir
-iex> {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends())
+iex> {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:GB))
 iex> Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
-~o"2026Y6M23DT16H0M0S"
+{:ok, ~o"2026Y6M23DT16H0M"}
 ```
 
 > *"Seventy-two hours of restoration starting **Thursday 16:00**, skipping **every weekend**, finishes **Tuesday 16:00**."*
@@ -160,12 +157,12 @@ true
 A Sydney band asks for "8 pm our time on June 15". Does that collide with anything in the book? Place their wall-clock request in their zone and ask — Tempo compares across zones by UTC instant, no manual conversion:
 
 ```elixir
-iex> sydney_request = Tempo.from_elixir(DateTime.new!(~D[2026-06-15], ~T[20:00:00], "Australia/Sydney"))
+iex> sydney_request = Tempo.from_elixir!(DateTime.new!(~D[2026-06-15], ~T[20:00:00], "Australia/Sydney"))
 iex> Tempo.overlaps?(sydney_request, bookings)
 true
 ```
 
-Sydney 20:00 is 10:00 UTC — squarely inside the Velvet Static tracking session. The booking page can answer honestly before anyone gets an email.
+Sydney 20:00 is 10:00 UTC — squarely inside the Velvet Static tracking session. The booking page can say so before anyone gets an email.
 
 ## What you built
 

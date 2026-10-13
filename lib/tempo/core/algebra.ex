@@ -205,6 +205,109 @@ defmodule Tempo.Algebra do
 
   # ── The sweep ─────────────────────────────────────────────────────────
 
+  # ── One set ───────────────────────────────────────────────────────────
+
+  @doc """
+  Members gathered into one set (law 5: one expression, one calendar, one
+  zone). Each is brought to the set's calendar, the first member's unless one
+  is given. Where a member is in a named zone the set is in one, the first
+  named unless one is given, and each zoned member is moved to it; members
+  that carry only shifts keep them. A member with no zone beside a zoned one
+  is an error, or with `floating: :place` is read on the set's clock, as an
+  event with no zone is in a calendar that has one. With `sorted: true` the
+  members are put in order once they are in one frame.
+  """
+  @spec gathered([Tempo.t()], keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def gathered(members, options \\ [])
+
+  def gathered([], options) do
+    {:ok,
+     %Tempo{
+       form: {:all, []},
+       calendar: options[:calendar] || Calendar.ISO,
+       zone: options[:zone],
+       metadata: options[:metadata] || %{}
+     }}
+  end
+
+  def gathered([first | _] = members, options) do
+    calendar = options[:calendar] || first.calendar
+    zone = options[:zone] || named_zone(members) || placing_zone(members, options[:floating])
+
+    zoned = Enum.find(members, &(Spans.frame(&1) == :utc))
+    floating = {options[:floating], zoned}
+
+    with {:ok, members} <- each_member(members, &in_calendar(&1, calendar)),
+         {:ok, members} <- each_member(members, &in_zone(&1, zone, floating)) do
+      {:ok,
+       %Tempo{
+         form: {:all, in_order(members, options[:sorted])},
+         calendar: calendar,
+         zone: zone,
+         metadata: options[:metadata] || %{}
+       }}
+    end
+  end
+
+  # Members are sorted once they share a frame to be ordered on.
+  defp in_order(members, true), do: Enum.sort(members, Tempo)
+  defp in_order(members, _as_given), do: members
+
+  defp named_zone(members) do
+    Enum.find_value(members, fn
+      %Tempo{zone: %Tempo.Zone{name: name} = zone} when is_binary(name) -> zone
+      _ -> nil
+    end)
+  end
+
+  # Members with shifts alone keep them, unless a member with no zone is to
+  # be placed beside them: then all are read on UTC's clock.
+  defp placing_zone(members, :place) do
+    frames = Enum.map(members, &Spans.frame/1)
+
+    if :utc in frames and :floating in frames,
+      do: %Tempo.Zone{name: "Etc/UTC"},
+      else: nil
+  end
+
+  defp placing_zone(_members, _floating), do: nil
+
+  defp in_calendar(%Tempo{calendar: calendar} = member, calendar), do: {:ok, member}
+  defp in_calendar(%Tempo{} = member, calendar), do: Tempo.to_calendar(member, calendar)
+
+  defp in_zone(member, nil, _floating), do: {:ok, member}
+  defp in_zone(%Tempo{zone: zone} = member, zone, _floating), do: {:ok, member}
+
+  defp in_zone(%Tempo{} = member, %Tempo.Zone{name: name}, {floating, zoned}) do
+    case {Spans.frame(member), floating} do
+      {:utc, _} ->
+        Tempo.shift_zone(member, name)
+
+      {:floating, :place} ->
+        Tempo.in_zone(member, name)
+
+      {:floating, _} ->
+        {:error, FrameError.exception(a: zoned, b: member, reason: :floating_and_zoned)}
+
+      {_cycle, _} ->
+        {:ok, member}
+    end
+  end
+
+  defp each_member(members, fun) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, done} ->
+      case fun.(member) do
+        {:ok, member} -> {:cont, {:ok, [member | done]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> reversed()
+  end
+
+  defp reversed({:ok, members}), do: {:ok, Enum.reverse(members)}
+  defp reversed(error), do: error
+
   @doc "Every point in either operand."
   @spec union([positioned()], [positioned()], frame()) :: [result()]
   def union(a, b, frame), do: sweep(a, b, frame, fn da, db -> da > 0 or db > 0 end)

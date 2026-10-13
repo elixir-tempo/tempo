@@ -83,9 +83,9 @@ Tempo.Allen.compose(:precedes, :during)
 
 > *"If the dig predates the reign, and the reign falls within the dynasty, then the dig is somewhere at or before the dynasty — before it, meeting it, overlapping into it, sharing its start, or inside it."*
 
-This looks like it should cross the tractability line — its *result* is a disjunction, the very thing the NP-hardness warning above is about. It doesn't, and the reason is exactly where that line is drawn. The NP-hard problem is *deciding* whether a network of disjunctive constraints can be satisfied. `compose/2` is a table lookup for each pair of relations it is given, and `Tempo.Network.Solver.relation/3` reads its disjunction off an already-solved metric network. Emitting a disjunctive *answer* is polynomial; deciding a network of disjunctive *constraints* is not.
+This looks like it should cross the tractability line — its *result* is a disjunction, the very thing the NP-hardness warning above is about. It doesn't, and the reason is exactly where that line is drawn. The NP-hard problem is *deciding* whether a network of disjunctive constraints can be satisfied. `compose/2` is a table lookup for each pair of relations it is given. Emitting a disjunctive *answer* is polynomial; deciding a network of disjunctive *constraints* is not.
 
-`Tempo.Interval.RelationNetwork` does close such a network under composition — Allen's own path-consistency propagation — and says exactly what that buys: every relation it removes is impossible, but a network that propagates cleanly may still be unsatisfiable. Path consistency is the standard polynomial approximation, and Tempo offers it as that; it never claims to decide satisfiability.
+Closing a whole network of such constraints under composition — Allen's own path-consistency propagation — is the standard polynomial approximation: every relation it removes is impossible, but a network that propagates cleanly may still be unsatisfiable. It is the work of the companion package `tempo_network`, which offers it as that and never claims to decide satisfiability.
 
 ### Resolution-indexed atomicity — a granularity lattice
 
@@ -108,38 +108,40 @@ See the [interop guide](interop.md) for how this plays out when you convert Elix
 
 The granularity literature is about *mapping and relating* granularities — converting an index in one to a span in another, deciding whether one is finer than another. What has no home there, nor in the calendar-arithmetic literature (which operates on *complete* dates), is **arithmetic on a value that omits a coarser field**. A month-day with no year lives on a repeating axis; shifting it is sometimes well-defined and sometimes not, depending entirely on the missing year.
 
-Tempo answers this with one principle: **compute the shift when its result is invariant to the missing field, and return a typed `Tempo.UnanchoredError` when the result would depend on it — never guess, never raise.**
+Tempo answers this with one principle: **compute the shift when its result is the same in every year, and return an error that says it needs a year when the result would depend on one — never guess.**
 
 ```elixir
-# Invariant to the missing year — computed
-Tempo.shift(~o"1M15D", ~o"P1M")   #=> ~o"2M15D"   # 15 Jan → 15 Feb in every year
-Tempo.shift(~o"10M", ~o"P3M")     #=> ~o"1M"      # October + 3 months wraps to January
+iex> Tempo.shift(~o"1M15D", ~o"P1M")
+{:ok, ~o"2M15D"}
 
-# Depends on the missing year — refused, not guessed
-Tempo.shift(~o"2M28D", ~o"P1D")
-#=> {:error, %Tempo.UnanchoredError{}}              # 28 Feb + 1 day is 29 Feb or 1 Mar
+iex> Tempo.shift(~o"10M", ~o"P3M")
+{:ok, ~o"1M"}
+
+iex> {:error, %Tempo.ConversionError{reason: :needs_a_year}} = Tempo.shift(~o"2M28D", ~o"P1D")
 ```
+
+> *"The 15th of January, a month on, is the 15th of February **in every year**. October and three months is January. The 28th of February and a day is the 29th or the 1st of March, **by the year**, and is refused."*
 
 The nearest formal frame is time-granularity theory; the shift-invariance operation on underspecified values appears to be new — it is the one move in this guide with no cited precedent.
 
-## The constraint-solving layer: Tempo.Network
+## The constraint-solving layer: the companion `tempo_network`
 
 Everything above assumes *grounded* values — concrete endpoints you can project and compare. Some domains, chronology especially, instead hand you *partial* information: a reign that "lasted at least 35 years", a stratum "built during" a king, a date known only to be "no earlier than 1200". Here the endpoints are unknowns, and finding their tightest possible values genuinely *is* a constraint problem. This is where Tempo blends the two sides of the divide more deeply than the core algebra does, and it is worth being explicit about why the addition is safe.
 
-`Tempo.Network` is the library's one constraint solver, a chronological-network layer after the ChronoLog scheme of Levy et al. (2020). The decision to add it rests on a single observation about *where* the intractability lives. The NP-hardness that motivated Vilain–Kautz comes from **qualitative disjunction** — constraints of the form "*a* is `before` **or** `after` *b*". `Tempo.Network` never admits one. Its constraints are **metric and conjunctive**: every relation, sequence link, duration, and absolute date reduces to atomic inequalities `b₁ − b₂ ≤ k` over endpoint variables. That is precisely a **Simple Temporal Problem** (Dechter, Meiri & Pearl 1991) — the quantitative generalisation of the Vilain–Kautz point algebra — and it is solved in **polynomial time** by all-pairs shortest paths (Floyd–Warshall): a network is consistent iff its constraint graph has no negative cycle, and the tightest bound on any pair of endpoints is a shortest-path weight.
+`Tempo.Network`, in the companion package `tempo_network`, is the one constraint solver, a chronological-network layer after the ChronoLog scheme of Levy et al. (2020). The decision to add it rests on a single observation about *where* the intractability lives. The NP-hardness that motivated Vilain–Kautz comes from **qualitative disjunction** — constraints of the form "*a* is `before` **or** `after` *b*". `Tempo.Network` never admits one. Its constraints are **metric and conjunctive**: every relation, sequence link, duration, and absolute date reduces to atomic inequalities `b₁ − b₂ ≤ k` over endpoint variables. That is precisely a **Simple Temporal Problem** (Dechter, Meiri & Pearl 1991) — the quantitative generalisation of the Vilain–Kautz point algebra — and it is solved in **polynomial time** by all-pairs shortest paths (Floyd–Warshall): a network is consistent iff its constraint graph has no negative cycle, and the tightest bound on any pair of endpoints is a shortest-path weight.
 
 So the layer extends Tempo *along its existing tractable axis* rather than across the divide. The point algebra handles grounded endpoints by comparison; the STP handles bounded endpoints by shortest paths; both are polynomial, and both are metric rather than qualitative-disjunctive. The one regime the solver declines to enter — by construction, since it exposes no disjunctive relation — is the NP-hard qualitative-network fragment that Allen's full algebra inhabits. Adding a solver did not cost the library its tractability guarantee; the solver inherited it. The interval ontology supplies the vocabulary (periods are intervals, the relations are Allen's plus metric delays), and the point-algebra heritage supplies the engine; `Tempo.Network` is what falls out when both are already present and the values stop being grounded.
 
-The accompanying [chronological-networks guide](chronological-networks.md) develops the layer from a practitioner's point of view, and notes where a plain interval chain suffices and the solver is not needed at all.
+The companion package's own guide develops the layer from a practitioner's point of view, and notes where a plain interval chain suffices and the solver is not needed at all.
 
 ## Summary
 
 * Tempo takes the **interval-first** ontology of Allen–Hayes and Grüninger–Li (no instants, no degenerate intervals).
 * It uses the **point-algebra** reduction of Vilain–Kautz as its computational engine (endpoints projected to a real UTC frame).
 * Because its core values are **fully grounded**, relation queries are point-algebra comparisons, not constraint propagation — the core is an algebra, not a solver.
-* Where the values *aren't* grounded, the opt-in **`Tempo.Network`** layer does solve constraints, but only in the polynomial **Simple Temporal Problem** fragment (metric, conjunctive) — never the NP-hard qualitative-disjunctive regime.
+* Where the values *aren't* grounded, the companion package's **`Tempo.Network`** does solve constraints, but only in the polynomial **Simple Temporal Problem** fragment (metric, conjunctive) — never the NP-hard qualitative-disjunctive regime.
 * Its **atomicity is resolution-indexed** — an "instant" is the one-unit interval at the finest declared ISO 8601 resolution — a special case of the **time-granularity** lattice (Bettini; Euzenat & Montanari).
-* Its one **genuinely novel** move is **shift-invariance arithmetic**: a shift on an underspecified value (a month-day with no year) is computed only when the result is invariant to the missing field, and returns a typed `UnanchoredError` otherwise.
+* Its one **genuinely novel** move is **shift-invariance arithmetic**: a shift on an underspecified value (a month-day with no year) is computed only when the result is invariant to the missing field, and returns a `Tempo.ConversionError` with the reason `:needs_a_year` otherwise.
 
 ## Further reading
 

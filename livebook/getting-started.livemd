@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.6"},
+  {:ex_tempo, "~> 3.0"},
   {:tz, "~> 0.28"}
 ])
 
@@ -20,12 +20,10 @@ The `~o` sigil parses the full ISO 8601 Part 1 and Part 2 grammar (plus IXDTF zo
 ~o"2026-06-15"
 ```
 
-The value knows its own resolution — and its bounds are real. Converting it gives a half-open interval whose endpoints stay at the value's resolution, with the walk granularity carried separately on `:unit`:
+The value knows the unit it is written to, and its span is real. Written out as an interval, a day runs from itself through itself, and an hour from itself to the next:
 
 ```elixir
-{:ok, day} = Tempo.to_interval(~o"2026-06-15")
-{from, to} = Tempo.Interval.endpoints(day)
-{Tempo.day(from), Tempo.day(to), day.unit}
+{Tempo.resolution(~o"2026-06-15"), Tempo.to_interval!(~o"2026-06-15"), Tempo.to_interval!(~o"2026-06-15T10")}
 ```
 
 One type covers every resolution — a year, a month, a minute, a zoned datetime:
@@ -36,7 +34,7 @@ One type covers every resolution — a year, a month, a minute, a zoned datetime
 
 ## Constructing values at runtime
 
-The sigil is for literals. For runtime data use `Tempo.new/1`, which accepts components in any order and validates them against the calendar, or `Tempo.from_elixir/1` to bridge from stdlib types:
+The sigil is for literals. For runtime data use `Tempo.new/1`, which accepts components in any order and validates them against the calendar, or `Tempo.from_elixir/2` to bring a stdlib value in:
 
 ```elixir
 Tempo.new!(day: 15, year: 2026, month: 6, hour: 14, minute: 30)
@@ -93,9 +91,8 @@ working
 Cut a free region into bookable slots:
 
 ```elixir
-working
-|> Tempo.IntervalSet.slots(~o"PT2H")
-|> Tempo.IntervalSet.members()
+{:ok, slots} = Tempo.IntervalSet.slots(working, ~o"PT2H")
+Tempo.IntervalSet.members(slots)
 ```
 
 ## Locale-aware formatting

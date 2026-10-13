@@ -70,4 +70,14 @@ defmodule Tempo.PartsTest do
     assert Tempo.qualification(~o"2026-06-15", :day) == nil
     assert Tempo.put_metadata(~o"2026-06-15", %{a: 1}).metadata == %{a: 1}
   end
+
+  describe "bounded?/1 of a set" do
+    test "a set of durations is bounded, and a set with no last member is not" do
+      assert Tempo.bounded?(~o"{P1D,P2D}")
+      assert Tempo.bounded?(~o"[PT30M,PT1H]")
+
+      assert {:ok, mondays} = Tempo.select(~o"2026-06-01/..", ~o"1K")
+      refute Tempo.bounded?(mondays)
+    end
+  end
 end

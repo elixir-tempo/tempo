@@ -9,6 +9,7 @@ defmodule Tempo.Duration do
 
   """
 
+  alias Tempo.Options
   alias Tempo.Scale
   alias Tempo.Spans
 
@@ -190,20 +191,40 @@ defmodule Tempo.Duration do
   def multiply(%__MODULE__{units: units}, n) when is_integer(n) do
     %__MODULE__{
       units:
-        Enum.map(units, fn
+        units
+        |> Enum.map(fn
           {:microsecond, {microseconds, precision}} ->
             {:microsecond, {microseconds * n, precision}}
 
           {unit, value} ->
             {unit, value * n}
         end)
+        |> carried()
     }
+  end
+
+  # A fraction is of its second, so a million microseconds or more are whole
+  # seconds: the one carry between a duration's units.
+  defp carried(units) do
+    case Keyword.fetch(units, :microsecond) do
+      {:ok, {microseconds, precision}} when abs(microseconds) >= 1_000_000 ->
+        seconds = Keyword.get(units, :second, 0) + div(microseconds, 1_000_000)
+        fraction = {rem(microseconds, 1_000_000), precision}
+
+        units
+        |> Keyword.drop([:second, :microsecond])
+        |> Kernel.++(second: seconds, microsecond: fraction)
+
+      _within_a_second ->
+        units
+    end
   end
 
   @doc """
   The sum of two durations, unit by unit: an hour and a half plus forty-five
   minutes is an hour and seventy-five minutes, no unit carried into another,
   because an hour is sixty minutes but a month is not a fixed number of days.
+  A fraction of a second is the one exception, being part of its second.
 
   ### Examples
 
@@ -212,6 +233,9 @@ defmodule Tempo.Duration do
 
       iex> Tempo.Duration.add(~o"P1Y", ~o"P2M")
       ~o"P1Y2M"
+
+      iex> Tempo.Duration.add(~o"PT0.7S", ~o"PT0.6S")
+      ~o"PT1.3S"
 
   """
   @spec add(t(), t()) :: t()
@@ -226,7 +250,7 @@ defmodule Tempo.Duration do
         end
       end)
 
-    %__MODULE__{units: units}
+    %__MODULE__{units: carried(units)}
   end
 
   defp added({x, px}, {y, py}), do: {x + y, max(px, py)}
@@ -295,6 +319,8 @@ defmodule Tempo.Duration do
   """
   @spec compare(t(), t(), keyword()) :: :lt | :eq | :gt
   def compare(%__MODULE__{} = a, %__MODULE__{} = b, options \\ []) do
+    Options.check!(options, [:relative_to], "Tempo.Duration.compare/3")
+
     case {laid(a, options), laid(b, options)} do
       {{:ok, x}, {:ok, y}} -> Scale.compare(x, y)
       {{:error, exception}, _} -> raise exception
@@ -341,7 +367,8 @@ defmodule Tempo.Duration do
 
   def to_unit(%__MODULE__{} = duration, unit, options)
       when unit in [:week, :day, :hour, :minute, :second, :microsecond] do
-    with {:ok, microseconds} <- laid(duration, options) do
+    with :ok <- Options.check(options, [:relative_to], "Tempo.Duration.to_unit/3"),
+         {:ok, microseconds} <- laid(duration, options) do
       {:ok, microseconds / ticks(unit, 1)}
     end
   end
@@ -370,6 +397,7 @@ defmodule Tempo.Duration do
   defp whole?({:microsecond, {microseconds, precision}}),
     do: is_integer(microseconds) and is_integer(precision) and precision in 0..6
 
+  defp whole?({:microsecond, _other}), do: false
   defp whole?({_unit, value}), do: is_integer(value)
 
   defp argument(message), do: ArgumentError.exception(message)

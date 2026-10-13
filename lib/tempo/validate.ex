@@ -10,11 +10,14 @@ defmodule Tempo.Validate do
 
   alias Tempo.Calendar
   alias Tempo.Duration
+  alias Tempo.Event
   alias Tempo.Expand
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
   alias Tempo.Scale
   alias Tempo.Unit
+  alias Tempo.Zone
+  alias Tempo.ZoneError
 
   @doc "Checks an expression; a duration has nothing to check."
   @spec run(Tempo.t() | Duration.t()) ::
@@ -29,9 +32,11 @@ defmodule Tempo.Validate do
   end
 
   defp form({:value, units}, expression) do
-    case value(units, expression) do
-      :ok -> shift(expression.shift, expression)
-      error -> error
+    with :ok <- value(units, expression),
+         :ok <- shift(expression.shift, expression),
+         :ok <- events(units, expression),
+         :ok <- week_start(units, expression) do
+      shown(units, expression)
     end
   end
 
@@ -42,8 +47,10 @@ defmodule Tempo.Validate do
     end
   end
 
-  defp form({:every, first, bound, _rule}, expression) do
-    with :ok <- form(first.form, first) do
+  defp form({:every, first, bound, rule}, expression) do
+    with :ok <- form(first.form, first),
+         :ok <- events(rule || [], expression),
+         :ok <- week_start(rule || [], expression) do
       end_of(bound, expression)
     end
   end
@@ -58,6 +65,68 @@ defmodule Tempo.Validate do
   end
 
   defp form({:when, member, _conditions}, _expression), do: form(member.form, member)
+
+  # A day or a time of day in a named zone is a reading that zone's clock
+  # shows: one the clock skips whole (an hour of a spring change, the day
+  # Samoa left out of 2011) is no value. A shift beside the zone gives the
+  # moment itself, and a coarser value is a period the clock runs through.
+  defp shown(units, %Tempo{zone: %Zone{name: name} = zone, shift: nil} = expression)
+       when is_binary(name) do
+    if Unit.concrete?(units) and day_or_finer?(units),
+      do: wall_shown(position(units, %{expression | zone: nil}), zone, expression),
+      else: :ok
+  end
+
+  defp shown(_units, _expression), do: :ok
+
+  defp day_or_finer?(units) do
+    Keyword.has_key?(units, :year) and
+      Unit.compare(Unit.grain(Unit.resolution(units)), :day) != :lt
+  end
+
+  defp wall_shown({:ok, {start, stop}}, zone, expression)
+       when is_integer(start) and is_integer(stop) do
+    if Zone.skipped?(zone, start) and Zone.skipped?(zone, stop - 1),
+      do: {:error, ZoneError.exception(zone: zone.name, reason: :gap, value: expression)},
+      else: :ok
+  end
+
+  defp wall_shown(_no_position, _zone, _expression), do: :ok
+
+  # An event a selection names is one Tempo, or a resolver registered with
+  # it, knows how to find: an unknown name would select nothing, and say so
+  # of an event that happened.
+  defp events(parts, expression) do
+    case unknown_event(parts) do
+      nil -> :ok
+      name -> invalid(expression, :event, {:unknown_event, name})
+    end
+  end
+
+  # A week of a selection begins on Monday, as ISO 8601's does: another
+  # start would be read and not kept to.
+  defp week_start(parts, expression) do
+    case other_week_start(parts) do
+      nil -> :ok
+      day -> invalid(expression, :week_start, {:week_start_not_monday, day})
+    end
+  end
+
+  defp other_week_start(parts) do
+    Enum.find_value(parts, fn
+      {:selection, inner} -> other_week_start(inner)
+      {:week_start, day} when day != 1 -> day
+      _other -> nil
+    end)
+  end
+
+  defp unknown_event(parts) do
+    Enum.find_value(parts, fn
+      {:selection, inner} -> unknown_event(inner)
+      {:event, {name, _zone}} -> if name in Event.known(), do: nil, else: name
+      _other -> nil
+    end)
+  end
 
   defp member({:except, %Tempo{} = member}), do: form(member.form, member)
   defp member(%Tempo{} = member), do: form(member.form, member)

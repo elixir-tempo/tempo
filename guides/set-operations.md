@@ -1,16 +1,16 @@
 # Set operations
 
-Tempo implements the core set operations — `union/2`, `intersection/2`, `complement/2`, `difference/2`, `symmetric_difference/2` — over `%Tempo.IntervalSet{}`. **The named operations all behave the way set algebra textbooks behave**: `intersection`, `difference`, `complement`, and `symmetric_difference` are **instant-level** — they return the trimmed covered-time result. `union` is the only member-preserving default, because two members covering the same time stay distinct events with their own metadata; the merged-span form is one explicit `IntervalSet.coalesce/1` away.
+Tempo implements the core set operations — `union/3`, `intersection/3`, `complement/2`, `difference/3`, `symmetric_difference/3` — over any expression that has spans. **The named operations all behave the way set algebra textbooks behave**: `intersection`, `difference`, `complement`, and `symmetric_difference` are **instant-level** — they return the trimmed covered-time result. `union` is the only member-preserving default, because two members covering the same time stay distinct events with their own metadata; the merged-span form is one explicit `Tempo.IntervalSet.coalesce/2` away.
 
 When you need to ask an **event-list question** — "*which* meetings hit this window?", "*which* workdays aren't holidays?" — reach for the `members_*` companion. Each of them is a member-preserving filter that keeps surviving members whole, with their identity and metadata intact:
 
-* `members_overlapping/2` — companion to `intersection/2`
-* `members_outside/2` — companion to `difference/2`
-* `members_in_exactly_one/2` — companion to `symmetric_difference/2`
+* `members_overlapping/3` — companion to `intersection/3`
+* `members_outside/3` — companion to `difference/3`
+* `members_in_exactly_one/3` — companion to `symmetric_difference/3`
 
 Companion predicates (`disjoint?/2`, `overlaps?/2`, `within?/2`, `contains?/2`, `equal?/2`) operate at the instant-set level.
 
-Every operation accepts any Tempo shape — an implicit `%Tempo{}`, an `%Tempo.Interval{}`, a `%Tempo.IntervalSet{}`, or an all-of `%Tempo.Set{}` — and returns a `%Tempo.IntervalSet{}` (or a boolean for predicates). The top-level API lives on the `Tempo` module: `Tempo.union/2`, `Tempo.intersection/2`, and so on.
+Every operation accepts any expression with spans — a value, an interval, a set, a bounded recurrence — and returns `{:ok, set}`, the set a `%Tempo{}` holding the result's spans (or a boolean for predicates). The top-level API lives on the `Tempo` module: `Tempo.union/3`, `Tempo.intersection/3`, and so on.
 
 ## Setup — required for every example
 
@@ -20,13 +20,13 @@ Every code example in this guide uses the `~o` sigil from `Tempo.Sigils`. Before
 import Tempo.Sigils
 ```
 
-The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; no helper functions leak in.
+The import adds only `sigil_o/2` to the caller's namespace; no helper functions leak in.
 
 ## 0. Instant-level vs member-preserving
 
 This is the most important distinction in Tempo's set algebra, and the one that drives every design decision below.
 
-A `%Tempo.IntervalSet{}` is two things at once:
+A set of intervals is two things at once:
 
 1. **A list of distinct member intervals** — typically events, bookings, meetings, holidays, or any domain object with identity and metadata.
 
@@ -38,11 +38,11 @@ Different questions need different views, so Tempo gives you both. Each canonica
 
 | Question shape | Default — instant-level | Companion — member-preserving |
 |---|---|---|
-| "What time is in both?" / "What time is the overlap?" | `intersection/2` — trimmed `A ∩ B` | `members_overlapping/2` — whole A members that overlap B |
-| "What time is in A but not B?" / "What's left after subtracting?" | `difference/2` — trimmed `A ∖ B` | `members_outside/2` — whole A members that don't overlap B |
-| "What time is in exactly one of A or B?" | `symmetric_difference/2` — trimmed `A △ B` | `members_in_exactly_one/2` — whole members of either side that don't overlap the other |
+| "What time is in both?" / "What time is the overlap?" | `intersection/3` — trimmed `A ∩ B` | `members_overlapping/3` — whole A members that overlap B |
+| "What time is in A but not B?" / "What's left after subtracting?" | `difference/3` — trimmed `A ∖ B` | `members_outside/3` — whole A members that don't overlap B |
+| "What time is in exactly one of A or B?" | `symmetric_difference/3` — trimmed `A △ B` | `members_in_exactly_one/3` — whole members of either side that don't overlap the other |
 | "What time is uncovered within a window?" | `complement/2` (always instant-level) | — |
-| "What members are in either set?" | — | `union/2` (always member-preserving — coalesce explicitly with `IntervalSet.coalesce/1` for the instant-level form) |
+| "What members are in either set?" | — | `union/3` (always member-preserving — coalesce explicitly with `IntervalSet.coalesce/2` for the instant-level form) |
 
 **Instant-level operations** treat operands as covered time and produce a trimmed result. The result interval(s) cover exactly the instants the question asks for. A single A member may split into multiple fragments; each fragment carries the source A member's metadata.
 
@@ -60,7 +60,7 @@ Worked examples:
 
 * *"What time of day are Alice and Bob both free for at least an hour?"* → instant-level. Use `difference` to get Alice's free fragments, `difference` for Bob's, `intersection` for the mutual fragments, then filter by duration.
 
-* *"Which of my next 30 meetings fall inside Q2?"* → event-list. Use `members_overlapping(meetings, ~o"2026-Q2")` — each surviving meeting keeps its full title, location, and attendees.
+* *"Which of my next 30 meetings fall inside the second quarter?"* → event-list. Use `members_overlapping(meetings, ~o"2026-04/2026-06")` — each surviving meeting keeps its full title, location, and attendees.
 
 * *"What workdays aren't holidays?"* → ambiguous in English, but the implementations agree because `workdays` is a multi-member set of single-day intervals — each holiday either fully covers a workday-member (drop) or doesn't overlap (keep). Use `difference` (canonical name) or `members_outside` (more explicit about intent); both produce the same result here.
 
@@ -70,11 +70,11 @@ The rule of thumb: **if you're going to say *"time"* or *"the period"* about the
 
 ## 1. The four rules
 
-Before any operation runs, both operands are **aligned** by a shared preflight. Three rules govern that alignment; a fourth governs what results carry.
+Before any operation runs, both operands are read as spans on one **frame**. Three rules govern that; a fourth governs what walking a result gives.
 
 ### 1.1. Resolution — finer wins
 
-Given operands at different resolutions, the coarser one is extended to the finer one before math runs. This is lossless: extending `2022Y` to day resolution yields `[2022-01-01, 2023-01-01)` — the same span, just more explicit.
+Operands of different resolutions are compared as the spans they are: `2022Y` is the span from the start of 1 January 2022 to the start of 1 January 2023, whatever unit it is written in, so nothing is extended or truncated.
 
 ```
 iex> {:ok, set} = Tempo.intersection(~o"2022Y", ~o"2022-06-15")
@@ -82,18 +82,18 @@ iex> Tempo.IntervalSet.count(set)
 1
 ```
 
-The result's endpoints are at day precision — the finer of the two inputs (the trimmed overlap is the day itself). The alternative (truncate the finer operand to year) would silently destroy information.
+The result's ends are written to the day: each end of a result is written at the resolution of the operand end that stands there.
 
-### 1.2. Timezone — compare via UTC, inherit first operand's zone
+### 1.2. Timezone — compare on the one time line, inherit the first operand's zone
 
-Each operand keeps its wall-clock time and zone as authoritative. When set operations need to compare endpoints across zones, Tempo computes UTC projections on demand — per-operation, never cached. The result's `extended.zone_id` comes from the first operand, so the caller controls the display frame.
+Each operand keeps its wall-clock time and zone as authoritative. When set operations compare ends across zones, Tempo finds each one's place on the universal time line as it is needed — per operation, never stored. The result is written in the first operand's zone, so the caller controls the display frame.
 
 A Paris 12:00 CEST interval compares equal to a UTC 10:00 interval because they map to the same UTC instant. Zone-data updates don't invalidate stored values — nothing UTC-shaped is stored — so results stay stable when IANA pushes new zone rules.
 
-A value with no zone has no UTC projection, so it is not combined with one that has: the set operations return a `Tempo.FloatingTempoError` for the pair, and the predicates raise it. Place the floating value first with `Tempo.in_zone/2`.
+A value with no zone has no place on the universal time line, so it is not combined with one that has: the set operations return a `Tempo.FrameError` for the pair, and the predicates raise it. Place the floating value first with `Tempo.in_zone/2`.
 
 ```elixir
-iex> {:error, %Tempo.FloatingTempoError{}} = Tempo.union(~o"2026-06-15T10", ~o"2026-06-15T10Z")
+iex> {:error, %Tempo.FrameError{reason: :floating_and_zoned}} = Tempo.union(~o"2026-06-15T10", ~o"2026-06-15T10Z")
 iex> {:ok, in_utc} = Tempo.in_zone(~o"2026-06-15T10", "Etc/UTC")
 iex> Tempo.equal?(in_utc, ~o"2026-06-15T10Z")
 true
@@ -101,36 +101,42 @@ true
 
 ### 1.3. Calendar — first operand's calendar wins
 
-If the operands are in different calendars (Gregorian vs Hebrew, say), the second is converted to the first's calendar before math runs. Each endpoint of the second operand is extended to day precision, then year/month/day are converted via `Date.convert!/2`; hour/minute/second pass through unchanged (those units are calendar-independent). The result's calendar is the first operand's.
+If the operands are in different calendars (Gregorian and Hebrew, say), both are placed on the one time line, where a day is a day in any calendar, and the result is written in the first operand's calendar. A result end that comes from the second operand is written to the day, a month of one calendar being no month of another.
 
 ```elixir
-hebrew_day = Tempo.new!(year: 5782, month: 10, day: 16, calendar: Calendrical.Hebrew)
-# Hebrew 5782-10-16 corresponds to Gregorian 2022-06-15.
+# Hebrew 5782-10-16 is Gregorian 2022-06-15.
+iex> hebrew_day = Tempo.new!(year: 5782, month: 10, day: 16, calendar: Calendrical.Hebrew)
+iex> Tempo.overlaps?(hebrew_day, ~o"2022-06-15")
+true
 
-Tempo.overlaps?(hebrew_day, ~o"2022-06-15")
-# => true
-
-Tempo.disjoint?(hebrew_day, ~o"2023-01")
-# => true
+iex> Tempo.disjoint?(hebrew_day, ~o"2023-01")
+true
 ```
 
-### 1.4. Iteration granularity — members keep it, new extents derive it
+### 1.4. Walking a result gives its members
 
-A converted operand carries its iteration granularity on the interval's `:unit` field (a month converts with `unit: :day`, so `Enum` walks its days — see the [enumeration guide](enumeration-semantics.html)). Set operations treat that as part of member identity: a member that passes through an operation **unchanged** keeps its unit, while an interval the sweep **constructs** — an intersection overlap, a difference remainder, a complement gap, a coalesced merge (which inherits the first merged member's unit) — is a new extent that walks at its own bounds resolution.
+A result is a set, and walking a set gives its members: the intervals it holds, one by one. That is one rule for every operation, so `Enum.count/1` of a result is how many spans it has.
 
 ```elixir
-# Members pass through union unchanged — each month still walks its days.
-{:ok, months} = Tempo.union(~o"2022Y1M", ~o"2022Y3M")
-Enum.count(months)
-#=> 62    # 31 + 31 days
+# Union keeps each member: two months.
+iex> {:ok, months} = Tempo.union(~o"2022Y1M", ~o"2022Y3M")
+iex> Enum.count(months)
+2
 
-# Difference constructs new extents — the fragments walk at month resolution.
-{:ok, gaps} = Tempo.difference(~o"2022", ~o"2022-06")
-Enum.count(gaps)
-#=> 11    # Jan–May and Jul–Dec, as months
+# Difference answers the time left: January to May, and July to December.
+iex> {:ok, gaps} = Tempo.difference(~o"2022", ~o"2022-06")
+iex> Enum.count(gaps)
+2
 ```
 
-The practical rule: **event-list questions** (the member-preserving operations) keep each member enumerating exactly as it did before the operation; **covered-time questions** (the instant-level operations) return extents, and an extent walks at the resolution its bounds state. `equal?/2` ignores `:unit` entirely — instant-set equality is about extents.
+To walk the days or the hours inside a result, say the unit: `Tempo.walk/2` walks every span of an expression at the unit asked.
+
+```elixir
+iex> {:ok, months} = Tempo.union(~o"2022Y1M", ~o"2022Y3M")
+iex> {:ok, days} = Tempo.walk(months, :day)
+iex> Enum.count(days)
+62
+```
 
 ## 2. The anchor-class rule
 
@@ -145,21 +151,17 @@ Set operations require **both operands to share an anchor class**:
 | anchored | unanchored | needs `:within` |
 | duration | anything | an error — a duration has no place on the time line |
 
-Two unanchored operands must recur on the **same axis** — share their coarsest (leading) unit — to be comparable. `~o"1M31D"` and `~o"6M15D"` are both annual, so they align; `~o"1M31D"` (annual) and `~o"15D"` (monthly) recur on different cycles with no common time line, so they return a `Tempo.UnanchoredError` rather than a silently misaligned result. Place them on a date, or give both the same leading unit.
+Two unanchored operands must recur on the **same axis** — share their coarsest (leading) unit — to be comparable. `~o"1M31D"` and `~o"6M15D"` are both annual, so they align; `~o"1M31D"` (annual) and `~o"15D"` (monthly) recur on different cycles with no common time line, so they return a `Tempo.FrameError` rather than a silently misaligned result. Place them on a date, or give both the same leading unit.
 
 The cross-axis case *is* mathematically defined — a bare time-of-day is an infinite set of 1-second slots (one per day), and an anchored operand bounds it to finite occurrences. But picking the universe (what year range does "every day" mean?) isn't something Tempo can do without inventing a default. The `:within` option makes the choice explicit:
 
 ```elixir
-# No window — an error
-Tempo.intersection(~o"2026-01-04", ~o"T10:30")
-#=> {:error, %Tempo.UnanchoredError{}}
-#   Cannot combine a value with a year and one without in a set operation
-#   that has no `:within` window to place it on. Place a value without a
-#   year on a date first with `Tempo.at/2` or `Tempo.on/2`.
+# No window: an error that says what to give
+iex> {:error, %Tempo.FrameError{reason: :needs_a_year}} = Tempo.intersection(~o"2026-01-04", ~o"T10:30")
 
-# With a window — works
-Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
-#=> {:ok, #Tempo.IntervalSet<[~o"2026Y1M4DT10H30M/T31M"]>}
+# With a window, half past ten is placed on the day
+iex> Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
+{:ok, ~o"{2026Y1M4DT10H30M/T31M}"}
 ```
 
 A window places a time of day on each day it touches, and what is placed is inside the window: on a window from noon on Monday to noon on Wednesday, nine to five is noon to five on Monday, nine to five on Tuesday and nine to noon on Wednesday, for every operation alike. The other operand is not cut by the window. A dated window places every operand that has no year, whatever the other operand is, so the working hours of a week with no meetings in it are still that week's hours, and each placed span keeps the metadata of the time of day it is.
@@ -198,10 +200,9 @@ For the canonical instant-set form (touching members merged into one span), coal
 
 ```elixir
 iex> {:ok, r} = Tempo.union(~o"2022Y", ~o"2023Y")
-iex> r
-...> |> Tempo.IntervalSet.coalesce()
-...> |> Tempo.IntervalSet.count()
-1                                    # [2022-01-01, 2024-01-01)
+iex> {:ok, merged} = Tempo.IntervalSet.coalesce(r)
+iex> Tempo.IntervalSet.count(merged)
+1                                    # 2022 through 2023
 ```
 
 Identities hold at the instant-set level: `∅ ∪ A` has the same covered instants as `A`; `A ∪ B` and `B ∪ A` differ only in sort order, which is normalised.
@@ -247,7 +248,7 @@ Every instant in `a` that is NOT in `b`. Each result interval is the portion of 
 ```elixir
 iex> {:ok, r} = Tempo.difference(~o"2022Y", ~o"2022-06")
 iex> Tempo.IntervalSet.count(r)
-2                                    # Jan–Jun and Jul–Dec
+2                                    # January to May, and July to December
 ```
 
 For the member-preserving filter — keep whole A members that don't overlap, drop any that do:
@@ -299,37 +300,38 @@ true                                 # June ⊆ 2022
 iex> Tempo.contains?(~o"2022Y", ~o"2022-06")
 true                                 # 2022 ⊇ June (the mirror: within?(b, a))
 
-iex> Tempo.equal?(~o"2022Y", Tempo.from_iso8601!("2022-01-01/2023-01-01"))
-true                                 # same covered instants, different representations
+iex> Tempo.equal?(~o"2022Y", ~o"2022-01-01/2022-12-31")
+true                                 # the same covered time, written two ways
 ```
 
 ### Counting a result
 
-Once you hold a result set, three different "how much" questions each have their own tool — and they return very different numbers, so pick the one that matches intent:
+Once you hold a result set, three different "how much" questions each have their own tool, and they answer very different numbers, so pick the one that matches intent:
 
-* **How many windows** (member spans)? — `Tempo.IntervalSet.count/1`, the set's cardinality.
+* **How many windows** (member spans)? — `Tempo.IntervalSet.count/1`, or `Enum.count/1`: walking a set gives its members.
 
-* **How many sub-points** (days, hours, … at the members' resolution)? — `Enum.count/1`. The `Enumerable` protocol walks *into* each member and yields its stepped points, so this totals across every window, not the number of windows.
+* **How many days, or hours**? — `Tempo.walk/2` at that unit, then `Enum.count/1`.
 
-* **How long** (elapsed time)? — `Tempo.duration/1` on the whole set (the members' total) or on a member, or `Tempo.at_least?/2` to keep only windows of a given length. Don't count sub-points for this — across a DST boundary the walk skips the spring-forward hour and emits the fall-back hour twice, so `Enum.count` deliberately diverges from elapsed time.
+* **How long** (elapsed time)? — `Tempo.duration/1` on the whole set (the time it covers) or on a member, or `Tempo.at_least?/2` to keep only windows of a given length. Don't count walked values for this — across a change of the clocks a day's walk has 23 or 25 hours, as the clock shows them.
 
 ```elixir
 iex> {:ok, free} = Tempo.union(~o"2026Y1M", ~o"2026Y3M")
-{:ok, #Tempo.IntervalSet<[~o"2026Y1M1D/2M1D", ~o"2026Y3M1D/4M1D"]>}
+iex> free
+~o"{2026Y1M/2026Y1M,2026Y3M/2026Y3M}"
 
 iex> Tempo.IntervalSet.count(free)
 2                                    # two windows: January and March
 
-iex> Enum.count(free)
-62                                   # 62 sub-points: 31 + 31 days
+iex> Tempo.duration(free)
+~o"P2M"
 
 iex> free
 ...> |> Tempo.IntervalSet.members()
 ...> |> Enum.filter(&Tempo.at_least?(&1, ~o"P1M"))
-[~o"2026Y1M1D/2M1D", ~o"2026Y3M1D/4M1D"]   # both windows ≥ 1 month
+[~o"2026Y1M/2026Y1M", ~o"2026Y3M/2026Y3M"]
 ```
 
-`Tempo.IntervalSet.members/1` exposes the windows for `Enum`; `Tempo.at_least?/2` (and its companions) then select by duration — the member-level idiom that keeps the sub-point walk and the window count from being confused.
+`Tempo.IntervalSet.members/1` gives the windows as a list for `Enum`; `Tempo.at_least?/2` (and its companions) then select by length.
 
 ## 4. Algebraic laws
 
@@ -348,15 +350,15 @@ Note that `≡` here is covered-instant equality (via `Tempo.equal?/2`), not mem
 
 | Case | Behaviour |
 |---|---|
-| Empty IntervalSet on either side | Follows algebraic identities |
+| An empty set on either side | Follows algebraic identities |
 | Open-ended interval (`1985/..`) as operand | An error: bound the interval first |
-| Unbounded recurrence (`R/.../P1M`) | An error, for the same reason |
+| Unbounded recurrence (`R/…/P1M`) | Bounded by the `:within` window, or by the other operand's whole stretch |
 | `Tempo.Duration` | An error: a duration is no set of instants |
-| One-of `Tempo.Set` (`[a,b,c]`) | An error: one of several values is no set of them |
+| A one-of set (`[a,b,c]`) | An error: one of several values is no set of them; ask `Tempo.certainty/3` |
 | Cross-calendar operands | Second operand converted to the first's calendar; the result is in the first's |
 | Cross-zone operands | Compared via UTC; the result is in the first operand's zone |
-| A value with no zone and one with a zone | A `Tempo.FloatingTempoError` |
-| A value with a year and one with none | A `Tempo.UnanchoredError` |
+| A value with no zone and one with a zone | A `Tempo.FrameError`, reason `:floating_and_zoned` |
+| A value with a year and one with none | A `Tempo.FrameError`, reason `:needs_a_year` |
 | A span with no year that runs through its cycle's end (`T23:30/T01:00`) | One member: swept as the two spans it is in one turn of the cycle, and written back as one |
 | A span with no year that ends where it starts (`T00/T00`) | Once round its cycle: the whole day |
 
@@ -364,18 +366,8 @@ Each error is returned by the operations that return a set, and raised by the pr
 
 ## 6. Not in scope
 
-- **Rule-algebra** — intersecting two infinite recurrences to produce a closed-form rule. Intentionally deferred; see `plans/set-operations.md` for the rationale.
-- **UTC caching on IntervalSet** — projections are recomputed per operation. Enables stability across zone-data updates; revisit if profiling shows the recomputation matters.
+- **Rule-algebra** — intersecting two infinite recurrences to produce a closed-form rule. Intentionally deferred.
 
 ## 7. Implementation notes
 
-- **Union** (member-preserving): concat + `IntervalSet.new/1` (which sorts but does *not* coalesce by default). O(n log n) on the combined input.
-- **Intersection** (instant-level): sweep-line, O(n+m). Each step emits the trimmed overlap and advances whichever interval ends first.
-- **Difference** (instant-level): sweep-line over A with a running cursor into B, emitting A's uncovered portions.
-- **Symmetric difference** (instant-level): derived as `(A ∖ B) ∪ (B ∖ A)`.
-- **Complement**: internally coalesces the input and then calls `difference(window, coalesced)`.
-- **`members_overlapping`** (member-preserving): per-A-member overlap check against B. O(n × m) in the worst case; sweep-line optimisation planned for large sets.
-- **`members_outside`** (member-preserving): per-A-member anti-overlap check against B. Same complexity as `members_overlapping`.
-- **`members_in_exactly_one`**: derived as `members_outside(A, B) ∪ members_outside(B, A)`.
-
-Implementation in `lib/operations.ex`. Shared comparison primitives in `lib/compare.ex`. Tests in `test/tempo/operations_test.exs`.
+Every instant-level operation is one sweep (`lib/tempo/core/algebra.ex`): each operand is read as its spans, each span placed on the frame as two positions, and the edges of both operands are walked in order with a count of how many spans of each cover the point after them. Intersection keeps where both counts are positive, difference where only the first is, symmetric difference where exactly one is, and a complement is the window less the operand. The sweep is O((n + m) log(n + m)) in the spans of the two operands. The member-preserving operations use the same positioned spans and keep or drop each member whole. The predicates are questions of the same sweep, and the algebraic laws above are checked against an integer model in `test/tempo/set_operations_test.exs`.

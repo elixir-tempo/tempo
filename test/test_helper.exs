@@ -3,6 +3,6 @@
 #
 # The README and the guides (`test/guides_test.exs`) run with
 # `mix test --include guides`.
-ExUnit.configure(exclude: [golden: true, guides: true])
+ExUnit.configure(exclude: [golden: true, guides: true, total: true])
 
 ExUnit.start()

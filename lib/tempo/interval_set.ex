@@ -11,8 +11,8 @@ defmodule Tempo.IntervalSet do
   alias Tempo.Algebra
   alias Tempo.Allen
   alias Tempo.Duration
-  alias Tempo.IntervalEndpointsError
   alias Tempo.Limit
+  alias Tempo.Options
   alias Tempo.Shift
   alias Tempo.Spans
 
@@ -21,7 +21,7 @@ defmodule Tempo.IntervalSet do
 
   ### Arguments
 
-  * `members` is a list of expressions, each a `t:Tempo.t/0`, in one calendar.
+  * `members` is a list of expressions, each a `t:Tempo.t/0`.
 
   * `options` is a keyword list of options.
 
@@ -31,10 +31,13 @@ defmodule Tempo.IntervalSet do
 
   ### Returns
 
-  * `{:ok, set}`, a `t:Tempo.t/0` of the `:all` form.
+  * `{:ok, set}`, a `t:Tempo.t/0` of the `:all` form. A set is one
+    expression, in one calendar and one zone: a member of another calendar
+    than the first's is converted to it, and where a member is in a named
+    zone every zoned member is moved to the first such zone.
 
-  * `{:error, %Tempo.IntervalEndpointsError{reason: :calendars}}` when the
-    members are in two calendars.
+  * `{:error, %Tempo.FrameError{}}` when one member is zoned and another has
+    no zone: place it with `Tempo.in_zone/2`.
 
   ### Examples
 
@@ -45,30 +48,14 @@ defmodule Tempo.IntervalSet do
       iex> Tempo.IntervalSet.count(set)
       2
 
+      iex> Tempo.IntervalSet.new([~o"2026-06-01T09/2026-06-01T10[Europe/London]", ~o"2026-06-01T09/2026-06-01T10[America/New_York]"])
+      {:ok, ~o"{2026-06-01T09/2026-06-01T10,2026-06-01T14/2026-06-01T15}[Europe/London]"}
+
   """
   @spec new([Tempo.t()], keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def new(members, options \\ []) when is_list(members) do
-    case Enum.uniq(Enum.map(members, & &1.calendar)) do
-      [] ->
-        {:ok, %Tempo{form: {:all, []}, metadata: Keyword.get(options, :metadata, %{})}}
-
-      [calendar] ->
-        {:ok,
-         %Tempo{
-           form: {:all, members},
-           calendar: calendar,
-           zone: members |> hd() |> Map.get(:zone),
-           metadata: Keyword.get(options, :metadata, %{})
-         }}
-
-      _calendars ->
-        {:error,
-         IntervalEndpointsError.exception(
-           from: hd(members),
-           to: List.last(members),
-           reason: :calendars
-         )}
-    end
+    with :ok <- Options.check(options, [:metadata], "Tempo.IntervalSet.new/2"),
+         do: Algebra.gathered(members, metadata: Keyword.get(options, :metadata, %{}))
   end
 
   @doc """
@@ -137,7 +124,8 @@ defmodule Tempo.IntervalSet do
   @spec slots(Tempo.t(), Duration.t(), keyword()) ::
           {:ok, Tempo.t()} | {:error, Exception.t()}
   def slots(%Tempo{} = expression, %Duration{} = duration, options \\ []) do
-    with {:ok, length} <- Duration.to_microseconds(duration),
+    with :ok <- Options.check(options, [:every], "Tempo.IntervalSet.slots/3"),
+         {:ok, length} <- Duration.to_microseconds(duration),
          {:ok, step} <- Duration.to_microseconds(Keyword.get(options, :every, duration)),
          :ok <- positive(step, duration),
          {:ok, spans} <- Spans.spans(expression) do
@@ -241,7 +229,9 @@ defmodule Tempo.IntervalSet do
   """
   @spec covered(Tempo.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def covered(set, options \\ []) do
-    with {:ok, frame, positioned} <- Algebra.positioned(set, options) do
+    with :ok <-
+           Options.check(options, [:at_least, :within, :metadata], "Tempo.IntervalSet.covered/2"),
+         {:ok, frame, positioned} <- Algebra.positioned(set, options) do
       spans =
         positioned
         |> Algebra.covered(Keyword.get(options, :at_least, 1), frame)
@@ -362,8 +352,10 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec from_stream(Enumerable.t(), keyword()) :: Tempo.t()
-  def from_stream(enumerable, options \\ []),
-    do: %Tempo{form: {:all, enumerable}, metadata: Keyword.get(options, :metadata, %{})}
+  def from_stream(enumerable, options \\ []) do
+    Options.check!(options, [:metadata], "Tempo.IntervalSet.from_stream/2")
+    %Tempo{form: {:all, enumerable}, metadata: Keyword.get(options, :metadata, %{})}
+  end
 
   @doc """
   The members of a set, or of any expression: a singular expression is its

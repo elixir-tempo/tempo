@@ -5,10 +5,11 @@ defmodule Tempo.GoldenTest do
 
   # The library's answers against the golden files of `test/golden/` (see
   # `plans/architecture-redesign.md`, section 11.1). Runs with
-  # `mix test --include golden`. A difference a decision of section 10
+  # `mix test --only golden`, in about three minutes. A difference a decision of section 10
   # accounts for is reported, not failed; one no decision accounts for fails.
 
   @moduletag :golden
+  @moduletag timeout: :infinity
 
   test "the library answers as the golden files record, but for the decisions" do
     differences = Golden.check()

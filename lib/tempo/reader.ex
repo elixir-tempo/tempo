@@ -19,6 +19,8 @@ defmodule Tempo.Reader do
   alias Tempo.Unit
   alias Tempo.Validate
 
+  @suffix_inside "a zone, a calendar or a tag is written once, after the whole expression"
+
   @doc """
   Reads a text. Options: `:calendar`, the calendar a text that names none is
   in (the default is `Calendar.ISO`).
@@ -28,10 +30,21 @@ defmodule Tempo.Reader do
   def read(text, options \\ []) when is_binary(text) do
     with {:ok, body, suffix} <- split_suffix(text),
          {:ok, calendar} <- calendar(suffix, options, text),
-         {:ok, expression} <- expression(normalised(body), text) do
+         {:ok, expression} <- body |> normalised() |> expression(text) |> suffix_inside() do
       Validate.run(in_frame(expression, calendar, suffix))
     end
   end
+
+  # A zone, a calendar or a tag written on an end of an interval, on a member
+  # of a set or on a recurrence's start: the reader stops at it, and says
+  # where it belongs (law 5) rather than only that it could not go on.
+  defp suffix_inside({:error, %ParseError{rest: rest} = error}) when is_binary(rest) do
+    if Regex.match?(~r/\[!?(?:[A-Za-z_][^\[\]{},]*|[+-]\d\d(?::?\d\d)?)\]/, rest),
+      do: {:error, %{error | reason: @suffix_inside}},
+      else: {:error, error}
+  end
+
+  defp suffix_inside(read), do: read
 
   # ISO 8601-1 §3.4.2 writes the hyphen as U+2010 and the minus as U+2212 where
   # the character set has them; RFC 3339 §5.6 lets `T` and `Z` be lower case

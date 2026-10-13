@@ -12,7 +12,7 @@ Every code example in this guide uses the `~o` sigil from `Tempo.Sigils`. Before
 import Tempo.Sigils
 ```
 
-The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; no helper functions leak in.
+The import adds only `sigil_o/2` to the caller's namespace; no helper functions leak in.
 
 ## Tempo is the right call when…
 
@@ -24,39 +24,61 @@ Scheduling ("this meeting from 2pm to 3pm"), availability ("free during work hou
 
 `Tempo.union/2`, `intersection/2`, `difference/2`, `symmetric_difference/2`, `complement/2`. "Find the overlap between these two people's calendars." "Available slots within the work day minus busy periods." "Free hours across a team of five." None of this exists in the stdlib.
 
+```elixir
+iex> work = ~o"2026-06-15T09/2026-06-15T17"
+iex> busy = Tempo.IntervalSet.new!([~o"2026-06-15T10/2026-06-15T11", ~o"2026-06-15T14/2026-06-15T15"])
+iex> Tempo.difference(work, busy)
+{:ok, ~o"{2026Y6M15DT9H/T10H,2026Y6M15DT11H/T14H,2026Y6M15DT15H/T17H}"}
+```
+
+> *"The **workday minus** the busy periods is the time that is **free**."*
+
 ### You need Allen's interval algebra
 
 The thirteen named relations — `:precedes`, `:meets`, `:overlaps`, `:during`, `:equals`, and the eight inverses — named by `Tempo.relation/2`, with a predicate for each in `Tempo.Allen` and the everyday unions of them as `Tempo.before?/2`, `after?/2`, `adjacent?/2`, `within?/2` and `overlaps?/2`. When "A comes before B" isn't specific enough ("is there a gap? does A end where B begins? do they overlap?"), stdlib's three-valued `:lt | :eq | :gt` doesn't help.
 
 ### You need calendar awareness beyond Gregorian
 
-Hebrew, Islamic, Julian, Coptic, Ethiopic, Persian, Chinese, Japanese, and more. `~o"5786-09-30[u-ca=hebrew]"` and `~o"2026-06-15"` can be compared, enumerated, and combined directly — Tempo performs the calendar conversion automatically. Historical / archaeological dates (the switch from Julian to Gregorian is a real thing that happens inside date comparisons before 1582) are first-class.
+Hebrew, Islamic, Julian, Coptic, Ethiopic, Persian, Chinese, Japanese, and more. `~o"5786-09-30[u-ca=hebrew]"` and `~o"2026-06-15"` are related, walked and combined directly, on the one time line their calendars share. Historical and archaeological dates — a Julian date before the Gregorian reform — are values like any other.
+
+```elixir
+iex> Tempo.relation(~o"5786-09-30[u-ca=hebrew]", ~o"2026-06-15")
+:equals
+```
 
 ### You need RRULE or iCalendar integration
 
-Stdlib cannot model recurrence at all. `Tempo.RRule` and `Tempo.ICal` parse, generate, and expand RFC 5545 rules, round-trip `.ics` files, and preserve metadata through interval operations.
+Stdlib cannot model recurrence at all. `Tempo.RRule` reads and writes RFC 5545 rules as the recurrences ISO 8601-2 writes, and `Tempo.ICal` and `Tempo.JSCalendar` read calendar files into intervals that carry each event's metadata.
 
 ### You need uncertain or masked dates
 
-ISO 8601-2 EDTF: `~o"156X"` (the 1560s), `~o"2022?"` (approximately 2022), `~o"2026~"` (circa 2026). Tempo treats these as bounded, enumerable values you can compare and operate on. Stdlib has no vocabulary for uncertainty.
+ISO 8601-2's uncertain and unspecified dates: `~o"156X"` (some year of the 1560s), `~o"2022?"` (2022, uncertain), `~o"2026~"` (about 2026). Tempo holds them as written, walks them, and answers whether a relation between them is certain, possible or impossible. Stdlib has no vocabulary for uncertainty.
 
 ### You need locale-aware display
 
-`Tempo.to_string(tempo, locale: "de", format: :long)` goes through CLDR via Localize. Year and month values render as closed intervals ("Jan – Dec 2026") because they *are* intervals. Stdlib's `Calendar.strftime/2` has no concept of this — it formats instants, in the developer's choice of pattern string, without locale-specific month or weekday names.
+`Tempo.to_string/2` writes a value in a locale's words, through CLDR and Localize. A year or a month is shown as the span it is. Stdlib's `Calendar.strftime/2` formats an instant in a pattern the developer chooses, with no locale's month or weekday names.
+
+```elixir
+iex> Tempo.to_string(~o"2026", locale: "de", format: :long)
+{:ok, "Januar–Dezember 2026"}
+
+iex> Tempo.to_string(~o"2026-06-15", locale: "de", format: :long)
+{:ok, "15. Juni 2026"}
+```
 
 ### You need leap-second awareness
 
-`Tempo.Interval.spans_leap_second?/1`, `leap_seconds_spanned/1`, `duration(iv, leap_seconds: true)`. There have been 27 positive leap seconds since 1972; the POSIX abstraction hides them. No stdlib equivalent.
+`Tempo.Interval.spans_leap_second?/1`, `Tempo.LeapSeconds.spanned/1` and `Tempo.duration(span, leap_seconds: true)`. There have been 27 leap seconds since 1972, and POSIX time hides them. No stdlib equivalent.
 
 ### You want wall-clock + zone preservation for future events
 
-`~o"2030-03-01T08:00:00[Europe/Paris]"` stores the wall time and the zone, and projects UTC on demand — so your event survives DST rule changes that happen between now and 2030. Stdlib's `DateTime` caches a frozen UTC offset, which becomes stale the moment the zone data updates.
+`~o"2030-03-01T08:00:00[Europe/Paris]"` holds the wall time and the zone, and finds the UTC instant when it is asked for — so the event survives a change of DST rules between now and 2030. Stdlib's `DateTime` holds a UTC offset fixed when it was built, which is stale the moment the zone data changes.
 
 ## Elixir stdlib is the right call when…
 
-### You need sub-second precision
+### You are stamping moments, not asking about spans
 
-Tempo operates at second resolution today. Comparison and arithmetic below the second fail. For microsecond or millisecond precision — API latency measurement, audio/video timing, high-frequency trading — use `DateTime` with its microsecond field.
+Tempo reads, relates and shifts fractions of a second to the microsecond, each a span as long as its precision. But a stream of timestamps that are only ever stored, sorted and subtracted — API latency, audio and video timing, trade ticks — wants a `DateTime` with its microsecond field and `DateTime.diff/3`.
 
 ### You need monotonic time
 
@@ -76,26 +98,27 @@ Ecto schemas with `:utc_datetime` columns — use `DateTime`. Phoenix controller
 
 ### You're in a hot loop where allocation matters
 
-Tempo values carry more fields than stdlib values (`:calendar`, `:extended`, `:qualifications`). For high-frequency per-event work (log processing at millions of events per second, sensor streams), stdlib's lighter structs pay off. If you then need interval operations, promote *after* aggregation.
+A Tempo value holds its units as a list, with its calendar, zone, marks and metadata beside them, and its operations work through the calendar. For high-frequency per-event work (log processing at millions of events a second, sensor streams), stdlib's lighter structs pay off. If you then need interval operations, convert *after* aggregation.
 
 ## The interop contract
 
 Conversion is one function call each way:
 
 ```elixir
-# Stdlib → Tempo
-Tempo.from_date(~D[2026-06-15])
-Tempo.from_time(~T[14:30:00])
-Tempo.from_naive_datetime(~N[2026-06-15 14:30:00])
-Tempo.from_datetime(~U[2026-06-15 14:30:00Z])
-Tempo.from_elixir(value, resolution: :day)  # unified gateway
+iex> Tempo.from_date(~D[2026-06-15])
+~o"2026Y6M15D"
 
-# Tempo → Stdlib
-Tempo.to_date(tempo)
-Tempo.to_time(tempo)
-Tempo.to_naive_datetime(tempo)
-Tempo.to_elixir(tempo)  # best-fit Date | Time | NaiveDateTime (durations too)
+iex> Tempo.from_elixir(~U[2026-06-15 14:30:00Z], resolution: :minute)
+{:ok, ~o"2026Y6M15DT14H30MZ"}
+
+iex> Tempo.to_date(~o"2026-06-15")
+{:ok, ~D[2026-06-15]}
+
+iex> Tempo.to_elixir(~o"2026-06-15T14:30Z")
+{:ok, ~U[2026-06-15 14:30:00Z]}
 ```
+
+`from_date/1`, `from_time/1`, `from_naive_datetime/1` and `from_datetime/1` take each type by name and `from_elixir/2` any of them. Going back, `to_date/1`, `to_time/1`, `to_naive_datetime/1` and `to_datetime/1` name the type wanted, and `to_elixir/1` answers with the one the value fills. See [Converting to and from Elixir date/time types](interop.md).
 
 A healthy Tempo-using application looks like this:
 
@@ -113,7 +136,7 @@ Convert at the edges; stay in Tempo wherever the business logic is interval-shap
 > Yes → Tempo.
 > No → stdlib is probably enough.
 >
-> **Do I need sub-second precision or monotonic time?**
+> **Do I need monotonic time, or only to stamp and subtract moments?**
 > Yes → stdlib.
 > No → either works; prefer whichever idiom the surrounding code already uses.
 >
@@ -129,8 +152,8 @@ Convert at the edges; stay in Tempo wherever the business logic is interval-shap
 
 * [Scheduling](./scheduling.md) — bounded enumeration, wall-clock authority, floating vs zoned events.
 
-* [Falsehoods programmers believe about time](./falsehoods.md) — the ten most impactful wrong assumptions, with Tempo idioms showing the correct behaviour.
+* [Falsehoods programmers believe about time](./falsehoods.md) — eleven wrong assumptions with the largest bug-surface, with the Tempo idiom for each.
 
-* [Set operations](./set-operations.md) — union, intersection, difference, and the sweep-line algorithm.
+* [Set operations](./set-operations.md) — union, intersection, difference, and the operators that keep members.
 
-* [Enumeration semantics](./enumeration-semantics.md) — what iteration means on a Tempo value or IntervalSet.
+* [Enumeration semantics](./enumeration-semantics.md) — what a walk of a Tempo value or an interval set yields.

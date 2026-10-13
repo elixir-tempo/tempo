@@ -17,7 +17,17 @@ defmodule Tempo.Select do
 
   alias Tempo.{ConversionError, Duration, Event, Expand, Limit, Shift, Spans, Unit, Zone}
 
-  @part_units [:month, :week, :day, :day_of_week, :day_of_year, :hour, :minute, :second]
+  @part_units [
+    :month,
+    :traditional_month,
+    :week,
+    :day,
+    :day_of_week,
+    :day_of_year,
+    :hour,
+    :minute,
+    :second
+  ]
 
   @type parts :: Unit.selection()
 
@@ -28,13 +38,43 @@ defmodule Tempo.Select do
   """
   @spec in_period(Tempo.t(), parts(), keyword()) :: {:ok, [Tempo.t()]} | {:error, Exception.t()}
   def in_period(%Tempo{} = period, parts, options \\ []) do
-    {parts, nested, window} = nested(parts)
+    {before, nested, window, later} = around_nested(parts)
 
     with :ok <- anchored(period),
-         {:ok, {start, stop}} <- bounded_extent(period),
-         {:ok, periods} <- windows(period, nested, window, options) do
-      picked = Enum.flat_map(periods, &selected(&1, parts, {start, stop}, options))
-      {:ok, if(nested == nil, do: Enum.map(picked, &windowed(&1, window, period)), else: picked)}
+         {:ok, {start, stop} = outer} <- bounded_extent(period),
+         {:ok, periods} <-
+           windows(scopes(period, before, outer, options), nested, window, options) do
+      {:ok,
+       Enum.flat_map(periods, &selected(&1, later, outer_of(&1, nested, {start, stop}), options))}
+    end
+  end
+
+  # A window a nested selection opens may run out of the period that made
+  # it: the Friday before a New Year's Day is in the year before. What is
+  # selected in a window is selected in the whole of it.
+  defp outer_of(_period, nil, outer), do: outer
+
+  defp outer_of(window, _nested, outer) do
+    case bounded_extent(window) do
+      {:ok, extent} -> extent
+      {:error, _} -> outer
+    end
+  end
+
+  @doc """
+  What to look for, and a year, a month or a day at a time, to find where
+  parts next name a value: the unit their coarsest counts in and the parts
+  less a position. Nil for parts that name no value of their own.
+  """
+  @spec probe(Unit.selection()) :: {Unit.t(), Unit.selection()} | nil
+  def probe(parts) do
+    search = Keyword.drop(parts, [:instance])
+    units = Enum.filter(search, fn {unit, _} -> unit in @part_units end)
+
+    cond do
+      units != [] -> {container_of(coarsest(units)), search}
+      Keyword.has_key?(search, :event) -> {:year, search}
+      true -> nil
     end
   end
 
@@ -46,31 +86,64 @@ defmodule Tempo.Select do
     end
   end
 
-  # A nested selection and its window: the part written `L…N/P…` inside.
-  defp nested(parts) do
-    {Keyword.drop(parts, [:selection, :window]), Keyword.get(parts, :selection),
-     Keyword.get(parts, :window)}
+  # A nested selection, written `L…N/P…` inside, with its window, the parts
+  # written before it and those after. Rules apply higher order first
+  # (ISO 8601-2 §12.1): the parts before say where the nested selection is
+  # made (`11M` before it, in November), and the parts after select within
+  # each window it opens. With no nested selection every part selects in the
+  # period.
+  defp around_nested(parts) do
+    case Enum.split_while(parts, fn {key, _held} -> key != :selection end) do
+      {parts, []} ->
+        {[], nil, nil, parts}
+
+      {before, [{:selection, nested} | rest]} ->
+        {window, later} = Keyword.pop(rest, :window)
+        {before, nested, window, later}
+    end
   end
 
-  # The periods the remaining parts select in: the period itself, or a window
-  # from each value a nested selection picks.
-  defp windows(period, nil, _window, _options), do: {:ok, [period]}
+  # Where a nested selection is made: the period, or each value the parts
+  # before it select there.
+  defp scopes(period, [], _outer, _options), do: [period]
+  defp scopes(period, before, outer, options), do: selected(period, before, outer, options)
 
-  defp windows(period, nested, window, options) do
-    with {:ok, picked} <- in_period(period, nested, options) do
-      {:ok, Enum.map(picked, &windowed(&1, window, period))}
-    end
+  # The periods the later parts select in: each scope itself, or a window
+  # from each value a nested selection picks in it.
+  defp windows(scopes, nil, _window, _options), do: {:ok, scopes}
+
+  defp windows(scopes, nested, window, options) do
+    Enum.reduce_while(scopes, {:ok, []}, fn scope, {:ok, windows} ->
+      case in_period(scope, nested, options) do
+        {:ok, picked} -> {:cont, {:ok, windows ++ Enum.map(picked, &windowed(&1, window, scope))}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
   end
 
   defp windowed(value, nil, _period), do: value
 
-  defp windowed(%Tempo{form: {:value, _}} = value, %Duration{} = window, period),
-    do: %{period | form: {:span, value, window}}
+  # A window of a negative length runs back from the value: the seven days
+  # before Easter, and not Easter.
+  defp windowed(%Tempo{form: {:value, _}} = value, %Duration{} = window, period) do
+    if backward?(window),
+      do: back_window(Shift.shift(value, window), window, value, period),
+      else: %{period | form: {:span, value, window}}
+  end
 
   defp windowed(%Tempo{form: {:span, from, _}} = span, %Duration{} = window, _period),
     do: %{span | form: {:span, from, window}}
 
   defp windowed(other, _window, _period), do: other
+
+  defp backward?(%Duration{units: units}),
+    do: units != [] and Enum.all?(units, fn {_unit, held} -> is_integer(held) and held <= 0 end)
+
+  defp back_window({:ok, from}, window, _value, period),
+    do: %{period | form: {:span, from, Spans.negated(window)}}
+
+  defp back_window({:error, _}, window, value, period),
+    do: %{period | form: {:span, value, window}}
 
   # ── One period ────────────────────────────────────────────────────────
 
@@ -118,10 +191,11 @@ defmodule Tempo.Select do
     if unit_parts == [] do
       []
     else
+      unit = coarsest(unit_parts)
+
       period
-      |> containers(container_of(coarsest(unit_parts)), extent)
-      |> Enum.flat_map(&expanded(period, &1, unit_parts))
-      |> Enum.flat_map(&met(&1, period, extent))
+      |> containers(counted_in(unit, period, extent), extent)
+      |> Enum.flat_map(&in_container(&1, period, unit_parts, unit, extent))
     end
   end
 
@@ -130,6 +204,22 @@ defmodule Tempo.Select do
     |> years_through(extent)
     |> Enum.flat_map(&event_date(name, zone, &1, period))
     |> Enum.flat_map(&with_parts(&1, parts, period))
+    |> Enum.flat_map(&met(&1, period, extent))
+  end
+
+  # A week is of the year or the month that numbers it, though it may begin
+  # before it or end after: the first week of 2026 begins in 2025. So a
+  # numbered week is picked when the period holds the whole of what numbers
+  # it, as any candidate is that lies within the period.
+  defp in_container(container, period, parts, :week, extent) do
+    if within?(container, extent),
+      do: expanded(period, container, parts),
+      else: in_container(container, period, parts, :other, extent)
+  end
+
+  defp in_container(container, period, parts, _unit, extent) do
+    period
+    |> expanded(container, parts)
     |> Enum.flat_map(&met(&1, period, extent))
   end
 
@@ -176,10 +266,23 @@ defmodule Tempo.Select do
 
   # The unit a part counts its candidates in: days of the month in their
   # month, days of the week in their month, months and weeks in their year,
-  # the clock in its day.
-  defp container_of(unit) when unit in [:month, :week, :day_of_year], do: :year
+  # the clock in its day. The weeks of a month, asked of that month, are the
+  # weeks the calendar numbers in it.
+  defp container_of(unit) when unit in [:month, :traditional_month, :week, :day_of_year],
+    do: :year
+
   defp container_of(unit) when unit in [:day, :day_of_week], do: :month
   defp container_of(_clock), do: :day
+
+  # The weeks asked of one whole month are that month's.
+  defp counted_in(:week, period, extent) do
+    case containers(period, :month, extent) do
+      [month] -> if Spans.extent(month) == {:ok, extent}, do: :month, else: :year
+      _several -> :year
+    end
+  end
+
+  defp counted_in(unit, _period, _extent), do: container_of(unit)
 
   # The containers a period runs through: the one its start is in, and each
   # next until the period's end.
@@ -233,10 +336,7 @@ defmodule Tempo.Select do
   defp rezoned(value, zone) do
     case Spans.extent(%{value | shift: nil}) do
       {:ok, {start, _}} when is_integer(start) ->
-        offset = Zone.offset_at_utc(zone, start)
-        hours = div(offset, 3_600_000_000)
-        minutes = div(rem(offset, 3_600_000_000), 60_000_000)
-        %{value | shift: [hour: hours, minute: minutes]}
+        %{value | shift: Zone.shift_of(Zone.offset_at_utc(zone, start))}
 
       _ ->
         value
@@ -344,9 +444,9 @@ defmodule Tempo.Select do
   # A base with no end is selected as it is walked: each period the selector
   # counts in is taken in turn, and the answer is a stream.
   def select(%Tempo{form: {:span, %Tempo{} = from, :open}} = base, selector, options) do
-    with {:ok, {start, _}} <- Spans.extent(from) do
+    with {:ok, frame} <- line_of(base),
+         {:ok, {start, _}} <- Spans.extent(from) do
       unit = selector_unit(selector)
-      frame = Spans.frame_of(base)
 
       first = %{
         from
@@ -369,6 +469,15 @@ defmodule Tempo.Select do
     with {:ok, periods} <- Spans.spans(base, Keyword.take(options, [:within])),
          {:ok, periods} <- bounded_periods(periods, base) do
       each_picked(periods, &apply_selector(selector, &1, options))
+    end
+  end
+
+  # A base with no end is on a line: one with no year has no periods to take
+  # in turn, as a base with an end and no year has none.
+  defp line_of(base) do
+    case Spans.frame(base) do
+      {:cycle, _} -> {:error, ConversionError.exception(value: base, reason: :needs_a_year)}
+      _line -> {:ok, Spans.frame_of(base)}
     end
   end
 

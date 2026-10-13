@@ -69,15 +69,24 @@ defmodule Tempo.Measure do
 
     case Enum.find(counts, &match?({:error, _}, &1)) do
       nil ->
-        Duration.multiply(
-          unit_duration({unit, 1}),
-          counts |> Enum.map(&elem(&1, 1)) |> Enum.sum()
-        )
+        counted_in(unit, counts |> Enum.map(&elem(&1, 1)) |> Enum.sum())
 
       error ->
         error
     end
   end
+
+  # A count of a unit as a duration; of a fraction, as seconds and their fraction.
+  defp counted_in({:microsecond, precision}, microseconds) do
+    %Duration{
+      units: [
+        second: div(microseconds, 1_000_000),
+        microsecond: {rem(microseconds, 1_000_000), precision}
+      ]
+    }
+  end
+
+  defp counted_in(unit, count), do: Duration.multiply(Shift.one(unit), count)
 
   defp count({start, stop}, {:microsecond, _}, _frame, _expression), do: {:ok, stop - start}
 
@@ -135,7 +144,7 @@ defmodule Tempo.Measure do
          :ok <- ordered(start, stop, from, to),
          unit = finest([resolution(from), resolution(to)]),
          {:ok, count} <- count({start, stop}, unit, Spans.frame_of(from), from) do
-      {:ok, Duration.multiply(unit_duration({unit, 1}), count)}
+      {:ok, counted_in(unit, count)}
     end
   end
 

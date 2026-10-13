@@ -3,7 +3,7 @@ defmodule Tempo.RRuleTest do
 
   import Tempo.Sigils
 
-  alias Tempo.{Cron, IntervalSet, RRule}
+  alias Tempo.{Cron, Interval, IntervalSet, RRule}
 
   # RFC 5545 rules lowered to Tempo recurrences
   # (`plans/architecture-redesign.md`, section 18): the examples of RFC 5545
@@ -160,6 +160,36 @@ defmodule Tempo.RRuleTest do
              ]
     end
 
+    test "a weekday beside a day of the month keeps the days that are that weekday" do
+      friday_13th =
+        RRule.parse!("FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13;COUNT=5", from: ~o"1998-02-13")
+
+      assert Enum.map(friday_13th, &Tempo.to_iso8601!(Interval.from(&1))) == [
+               "1998Y2M13D",
+               "1998Y3M13D",
+               "1998Y11M13D",
+               "1999Y8M13D",
+               "2000Y10M13D"
+             ]
+
+      election_day =
+        RRule.parse!(
+          "FREQ=YEARLY;INTERVAL=4;BYMONTH=11;BYDAY=TU;BYMONTHDAY=2,3,4,5,6,7,8;COUNT=3",
+          from: ~o"1996-11-05"
+        )
+
+      assert Enum.map(election_day, &Tempo.to_iso8601!(Interval.from(&1))) == [
+               "1996Y11M5D",
+               "2000Y11M7D",
+               "2004Y11M2D"
+             ]
+
+      assert Tempo.select(~o"2026", ~o"13D5K") ==
+               {:ok, ~o"{2026Y2M13D,2026Y3M13D,2026Y11M13D}"}
+
+      assert Enum.to_list(~o"2026Y3M14D5K") == []
+    end
+
     test "an occurrence keeps the start's time of day and the event's length" do
       {:ok, rule} =
         RRule.parse("FREQ=MONTHLY;BYDAY=1WE;COUNT=2",
@@ -189,6 +219,135 @@ defmodule Tempo.RRuleTest do
                {:ok, "FREQ=MONTHLY;BYDAY=1MO,3MO"}
     end
 
+    test "a rule with an occurrence length writes text that reads back, and the rule without it" do
+      start = ~o"2025-06-01T14:00[Europe/London]"
+
+      for text <- ["FREQ=WEEKLY", "FREQ=DAILY;COUNT=3", "FREQ=MONTHLY;BYDAY=2MO;COUNT=3"] do
+        {:ok, rule} = RRule.parse(text, from: start, duration: ~o"PT1H")
+        {:ok, bare} = RRule.parse(text, from: start)
+
+        assert Tempo.from_iso8601(Tempo.to_iso8601!(rule)) == {:ok, rule}, text
+        assert RRule.to_string(rule) == RRule.to_string(bare), text
+      end
+
+      {:ok, weekly} = RRule.parse("FREQ=WEEKLY", from: start, duration: ~o"PT1H")
+      assert Tempo.to_iso8601!(weekly) == "R/2025Y6M1DT14H0M/P1W/FLL7KN/PT1HN[Europe/London]"
+
+      assert Enum.take(weekly, 2) == [
+               ~o"2025-06-01T14:00/2025-06-01T15:00[Europe/London]",
+               ~o"2025-06-08T14:00/2025-06-08T15:00[Europe/London]"
+             ]
+    end
+
+    test "a part coarser than the cadence keeps the periods it names" do
+      january = RRule.parse!("FREQ=DAILY;BYMONTH=1;COUNT=3", from: ~o"2026-12-30")
+
+      assert Enum.map(january, &Interval.from/1) == [
+               ~o"2027-01-01",
+               ~o"2027-01-02",
+               ~o"2027-01-03"
+             ]
+
+      nine = RRule.parse!("FREQ=SECONDLY;BYHOUR=9;COUNT=2", from: ~o"2026-01-01T00:00:00")
+
+      assert Enum.map(nine, &Interval.from/1) == [
+               ~o"2026-01-01T09:00:00",
+               ~o"2026-01-01T09:00:01"
+             ]
+    end
+
+    test "a rule far between its occurrences is stepped to each" do
+      leap_mondays =
+        RRule.parse!("FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO", from: ~o"2026-01-01")
+
+      assert Enum.map(Enum.take(leap_mondays, 2), &Interval.from/1) == [
+               ~o"2044-02-29",
+               ~o"2072-02-29"
+             ]
+    end
+
+    test "a rule that selects nothing comes to an end" do
+      for {text, from} <- [
+            {"FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31;COUNT=2", ~o"2026-01-01"},
+            {"FREQ=YEARLY;BYMONTH=3;BYYEARDAY=100", ~o"2026-01-01"},
+            {"FREQ=DAILY;BYSETPOS=2", ~o"2026-01-01"},
+            {"FREQ=HOURLY;INTERVAL=12;BYHOUR=9", ~o"2026-01-01T10"}
+          ] do
+        assert Enum.take(RRule.parse!(text, from: from), 1) == [], text
+      end
+
+      april_31st = RRule.parse!("FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31", from: ~o"2026-01-01")
+      assert Tempo.to_interval(april_31st, within: ~o"2026/2036") == {:ok, ~o"{}"}
+    end
+
+    test "parts that name a day hold at once" do
+      both = RRule.parse!("FREQ=YEARLY;BYMONTH=3,4;BYYEARDAY=80,100", from: ~o"2026-01-01")
+      assert Enum.map(Enum.take(both, 2), &Interval.from/1) == [~o"2026-03-21", ~o"2026-04-10"]
+
+      ides = RRule.parse!("FREQ=YEARLY;BYMONTHDAY=15;BYYEARDAY=74", from: ~o"2026-01-01")
+      assert Enum.map(Enum.take(ides, 2), &Interval.from/1) == [~o"2026-03-15", ~o"2027-03-15"]
+    end
+
+    test "a count counts from the start and a window keeps what overlaps it" do
+      assert Tempo.to_interval(~o"R3/2026-06-01/P1D", within: ~o"2026-06-02/2026-06-02") ==
+               {:ok, ~o"{2026-06-02/2026-06-02}"}
+
+      long_ago = RRule.parse!("FREQ=DAILY;COUNT=3", from: ~o"2000-01-01")
+      assert Tempo.to_interval(long_ago, within: ~o"2026") == {:ok, ~o"{}"}
+
+      until = RRule.parse!("FREQ=DAILY;UNTIL=20260610", from: ~o"2026-06-01")
+      {:ok, late} = Tempo.to_interval(until, within: ~o"2026-06-08/2026-06-20")
+      assert IntervalSet.count(late) == 3
+    end
+
+    test "a part RFC 5545 forbids a frequency is not written" do
+      for text <- [
+            "R/2026-01-01/P1W/FL15DN",
+            "R/2026-01-01/P1D/FL45ON",
+            "R/2026-01-01/P1M/FL20WN",
+            "R/2026-01-01/P1W/FL3K2IN",
+            "R/2026-01-01/P1D/FL2IN"
+          ] do
+        assert {:error, %Tempo.ConversionError{reason: {:no_rrule, {:part_at, _, _}}}} =
+                 RRule.to_string(Tempo.from_iso8601!(text)),
+               text
+      end
+
+      assert RRule.to_string(~o"R/2026-01-01/P1M/FL3K2IN") == {:ok, "FREQ=MONTHLY;BYDAY=2WE"}
+
+      assert RRule.to_string(~o"R/2026-01-01/P1Y/FL20W1KN") ==
+               {:ok, "FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO"}
+    end
+
+    test "a rule that names a week takes its start's day of the week" do
+      rule = RRule.parse!("FREQ=YEARLY;BYWEEKNO=20", from: ~o"2026-05-11T09:00")
+
+      assert Enum.take(rule, 2) == [
+               ~o"2026-W20-1T09:00/2026-W20-1T09:01",
+               ~o"2027-W20-1T09:00/2027-W20-1T09:01"
+             ]
+
+      assert RRule.to_string(rule) == {:ok, "FREQ=YEARLY;BYWEEKNO=20"}
+    end
+
+    test "a recurrence RFC 5545 would read as another has no RRULE" do
+      assert {:error, %Tempo.ConversionError{reason: {:no_rrule, :month_end}} = month_end} =
+               RRule.to_string(~o"R/2026-01-31/P1M")
+
+      assert Exception.message(month_end) =~ "pass the month over"
+
+      assert {:error, %Tempo.ConversionError{reason: {:no_rrule, :month_end}}} =
+               RRule.to_string(~o"R/2024-02-29/P1Y")
+
+      assert RRule.to_string(~o"R/2026-01-15/P1M") == {:ok, "FREQ=MONTHLY"}
+
+      assert {:error,
+              %Tempo.ConversionError{reason: {:no_rrule, {:calendar, Calendrical.Hebrew}}}} =
+               RRule.to_string(~o"R/5786-01-01/P1Y[u-ca=hebrew]")
+
+      assert RRule.to_string(~o"R/5786-01-01/P1W[u-ca=hebrew]") == {:ok, "FREQ=WEEKLY"}
+    end
+
     test "what is no rule, or not supported, is an error" do
       for text <- [
             "BYMONTH=6",
@@ -207,6 +366,9 @@ defmodule Tempo.RRuleTest do
 
       assert {:error, %Tempo.ConversionError{reason: {:no_rrule, _}}} =
                RRule.to_string(~o"R/2026-01-01/P1Y/FL(easter)eN")
+
+      assert {:error, %Tempo.ConversionError{reason: {:no_rrule, _}}} =
+               RRule.to_string(~o"R/2026-01-01/P1Y/FLL2K2IN/P10D4K2IN")
     end
   end
 

@@ -21,12 +21,39 @@ defmodule Tempo.Reader.Duration do
 
   def read(<<"P", rest::binary>>) do
     case units(rest, :date) do
-      {:ok, [], _rest} -> :error
+      {:ok, [], _rest} -> alternative(rest)
       {:ok, units, rest} -> {:ok, %Tempo.Duration{units: units}, rest}
     end
   end
 
   def read(_text), do: :error
+
+  # The alternative format of ISO 8601-1 §5.5.2.4: a duration written as a
+  # date and a time of day, by month or by day of the year, `P0002-01-10T22:33:55`.
+  defp alternative(text) do
+    Enum.find_value(alternatives(), :error, fn {pattern, units} ->
+      case Regex.run(pattern, text) do
+        [whole | numbers] ->
+          held = Enum.zip(units, Enum.map(numbers, &String.to_integer/1))
+          {:ok, %Tempo.Duration{units: held}, String.replace_prefix(text, whole, "")}
+
+        nil ->
+          nil
+      end
+    end)
+  end
+
+  defp alternatives do
+    by_month = [:year, :month, :day, :hour, :minute, :second]
+    by_day = [:year, :day, :hour, :minute, :second]
+
+    [
+      {~r/\A(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/, by_month},
+      {~r/\A(\d{4})-(\d{3})T(\d{2}):(\d{2}):(\d{2})/, by_day},
+      {~r/\A(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, by_month},
+      {~r/\A(\d{4})(\d{3})T(\d{2})(\d{2})(\d{2})/, by_day}
+    ]
+  end
 
   @doc "Duration units, `T` before the clock's, as far as they run; a group's size reads them after `G`."
   @spec units(String.t(), :date | :clock) :: {:ok, Tempo.Duration.units(), String.t()}
@@ -52,16 +79,24 @@ defmodule Tempo.Reader.Duration do
   # One component: a signed number, a fraction and a designator.
   defp component(text, context) do
     with {:ok, value, rest} <- Number.signed(text),
-         {:ok, value, rest} <- fraction(value, rest, context),
+         {:ok, value, rest} <- fraction(value, rest, String.starts_with?(text, "-")),
          {:ok, unit, rest} <- designator(rest, context) do
       {:ok, unit, value, rest}
     end
   end
 
-  defp fraction(value, rest, _context) do
-    case Number.fraction(rest) do
-      {:ok, fraction, rest} -> {:ok, {value, fraction}, rest}
-      :error -> {:ok, value, rest}
+  # A fraction has the sign written before its whole number: `-1.5` is a
+  # second and a half back, and `-0.5` half a second back.
+  defp fraction(value, rest, negative?) do
+    case {Number.fraction(rest), negative?} do
+      {{:ok, {microseconds, precision}, rest}, true} ->
+        {:ok, {value, {-microseconds, precision}}, rest}
+
+      {{:ok, fraction, rest}, false} ->
+        {:ok, {value, fraction}, rest}
+
+      {:error, _} ->
+        {:ok, value, rest}
     end
   end
 

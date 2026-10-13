@@ -17,6 +17,7 @@ defmodule Tempo.RecurrenceSet do
   """
 
   alias Tempo.IntervalSet
+  alias Tempo.Options
 
   @doc """
   Builds a recurrence set from its members.
@@ -129,6 +130,7 @@ defmodule Tempo.RecurrenceSet do
   """
   @spec keep_when(Tempo.t(), keyword()) :: Tempo.t()
   def keep_when(%Tempo{} = member, options) when is_list(options) do
+    Options.check!(options, [:at, :falls_on, :metadata], "Tempo.RecurrenceSet.keep_when/2")
     conditional(member, [keep: Keyword.take(options, [:at, :falls_on])], options)
   end
 
@@ -168,6 +170,7 @@ defmodule Tempo.RecurrenceSet do
   """
   @spec move_when(Tempo.t(), keyword()) :: Tempo.t()
   def move_when(%Tempo{} = member, options) when is_list(options) do
+    Options.check!(options, [:falls_on, :to_next, :metadata], "Tempo.RecurrenceSet.move_when/2")
     conditional(member, [move: Keyword.take(options, [:falls_on, :to_next])], options)
   end
 

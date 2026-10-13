@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.6"},
+  {:ex_tempo, "~> 3.0"},
   {:tz, "~> 0.28"}
 ])
 
@@ -12,7 +12,7 @@ import Tempo.Sigils
 
 ## Real data is not precise
 
-Historians, archivists, genealogists, and anyone parsing messy records meet dates like *"sometime in the 1560s"*, *"the 15th of some month in 1985"*, *"1984 or 1986"*, *"around 2000, give or take a year"*. Most libraries force these into a false precision. Tempo represents each one faithfully — as ISO 8601-2 / EDTF values with real semantics — and answers questions about them without pretending to know more than the data does.
+Historians, archivists, genealogists, and anyone parsing messy records meet dates like *"sometime in the 1560s"*, *"the 15th of some month in 1985"*, *"1984 or 1986"*, *"around 2000, give or take a year"*. Most libraries force these into a false precision. Tempo holds each one as it is written — as ISO 8601-2 / EDTF values with real semantics — and answers questions about them without pretending to know more than the data does.
 
 ## Masks — unknown digits
 
@@ -45,8 +45,8 @@ Tempo.explain(~o"[1984,1986]") |> IO.puts()
 around_2000 = ~o"2000±1Y"
 
 {
-  Tempo.overlap_certainty(around_2000, ~o"1999"),
-  Tempo.overlap_certainty(around_2000, ~o"1997")
+  Tempo.certainty(:overlaps, around_2000, ~o"1999"),
+  Tempo.certainty(:overlaps, around_2000, ~o"1997")
 }
 ```
 
@@ -60,36 +60,36 @@ EDTF's `?` (uncertain) and `~` (approximate) attach to values and travel through
 
 ## Asking questions that respect the uncertainty
 
-Here is the point of all this representation: the **certainty API** gives three-valued answers — `:certain`, `:possible`, or `:impossible` — computed over every grounding the uncertain value admits.
+Here is the point of all this representation: `Tempo.certainty/3` gives three-valued answers — `:certain`, `:possible`, or `:impossible` — computed over every grounding the uncertain value admits.
 
-Was *some year in the 20XXs* within the 21st century? Every grounding is:
+Was *some year of the 20XXs* within 2000 through 2099? Every reading is:
 
 ```elixir
-Tempo.within_certainty(~o"20XX", ~o"2000Y/2100Y")
+Tempo.certainty(:within, ~o"20XX", ~o"2000Y/2099Y")
 ```
 
-Shrink the window by one year and a single grounding (2000) escapes — so the answer honestly degrades:
+Move the window on by a year and one reading, 2000, is outside it — so the answer is no longer certain:
 
 ```elixir
-Tempo.within_certainty(~o"20XX", ~o"2001Y/2101Y")
+Tempo.certainty(:within, ~o"20XX", ~o"2001Y/2100Y")
 ```
 
 Do two `±`-qualified events overlap? Depends how far apart they are:
 
 ```elixir
 {
-  Tempo.overlap_certainty(~o"2000±1Y", ~o"2001±1Y"),
-  Tempo.overlap_certainty(~o"2000±1Y", ~o"2010±1Y")
+  Tempo.certainty(:overlaps, ~o"2000±1Y", ~o"2001±1Y"),
+  Tempo.certainty(:overlaps, ~o"2000±1Y", ~o"2010±1Y")
 }
 ```
 
-The crisp predicates come in `certainly_*` and `possibly_*` pairs — the modal square of the same underlying relation set:
+`Tempo.certainly?/3` and `Tempo.possibly?/3` are the two yes-or-no forms of the same question:
 
 ```elixir
 {
-  Tempo.certainly_before?(~o"2000±1Y", ~o"2010"),
-  Tempo.certainly_before?(~o"2000±1Y", ~o"2001"),
-  Tempo.possibly_before?(~o"2000±1Y", ~o"2001")
+  Tempo.certainly?(:before, ~o"2000±1Y", ~o"2010"),
+  Tempo.certainly?(:before, ~o"2000±1Y", ~o"2001"),
+  Tempo.possibly?(:before, ~o"2000±1Y", ~o"2001")
 }
 ```
 
@@ -102,16 +102,16 @@ entry = ~o"1985-XX-15"
 fire = ~o"1985-06-20"
 
 {
-  Tempo.relation_certainty(entry, fire, :precedes),
-  Tempo.possibly_before?(entry, fire),
-  Tempo.certainly_before?(entry, fire)
+  Tempo.certainty(:before, entry, fire),
+  Tempo.possibly?(:before, entry, fire),
+  Tempo.certainly?(:before, entry, fire)
 }
 ```
 
 > *"The entry **possibly** precedes the fire — the January-through-June 15ths do, the July-through-December ones don't — but not **certainly**. If the fire had been in 1986, every candidate would precede it:"*
 
 ```elixir
-Tempo.certainly_before?(entry, ~o"1986-01-01")
+Tempo.certainly?(:before, entry, ~o"1986-01-01")
 ```
 
 ## Where next

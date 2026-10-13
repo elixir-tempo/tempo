@@ -26,7 +26,17 @@ defmodule Tempo.Spans do
   alias Tempo.Walk
   alias Tempo.Zone
 
-  @rule_units [:month, :week, :day, :day_of_week, :day_of_year, :hour, :minute, :second]
+  @rule_units [
+    :month,
+    :traditional_month,
+    :week,
+    :day,
+    :day_of_week,
+    :day_of_year,
+    :hour,
+    :minute,
+    :second
+  ]
 
   @day Scale.ticks_per_day()
 
@@ -69,6 +79,9 @@ defmodule Tempo.Spans do
 
   def frame(%Tempo{}), do: :floating
 
+  # A duration has no place: a set of durations is on no line.
+  def frame(%Duration{}), do: :floating
+
   defp placed?(%Tempo{form: {:every, %Tempo{form: {:span, :open, _}}, _, _}}), do: false
   defp placed?(%Tempo{form: {:span, :open, _}}), do: false
   defp placed?(_member), do: true
@@ -76,6 +89,47 @@ defmodule Tempo.Spans do
   defp first_value(ends), do: Enum.find(ends, &match?(%Tempo{}, &1)) || %Tempo{form: {:value, []}}
   defp member_value({:except, member}), do: member
   defp member_value(member), do: member
+
+  @doc """
+  A window as an expression's occurrences are looked for in it. A floating
+  window beside a zoned expression is read on that expression's clock: June
+  is the June of its zone.
+  """
+  @spec window_in(Tempo.t() | nil, Tempo.t()) :: Tempo.t() | nil
+  def window_in(%Tempo{} = window, %Tempo{} = expression) do
+    if frame(window) == :floating and frame(expression) == :utc,
+      do: on_clock(window, clock_of(expression)),
+      else: window
+  end
+
+  def window_in(window, _expression), do: window
+
+  defp windowed_for(options, expression) do
+    case options[:within] do
+      %Tempo{} = window -> Keyword.put(options, :within, window_in(window, expression))
+      _none -> options
+    end
+  end
+
+  # The zone, or with none the shift, an expression's readings are placed by.
+  defp clock_of(%Tempo{form: {:every, first, _bound, _rule}, zone: zone}),
+    do: {zone || first.zone, frame_of(first).shift}
+
+  defp clock_of(%Tempo{form: {:all, [%Tempo{} = first | _]}, zone: nil}), do: clock_of(first)
+  defp clock_of(%Tempo{zone: zone} = expression), do: {zone, frame_of(expression).shift}
+
+  defp on_clock(window, {nil, nil}), do: window
+
+  defp on_clock(%Tempo{form: {:value, _}} = value, {nil, shift}), do: %{value | shift: shift}
+  defp on_clock(%Tempo{form: {:value, _}} = value, {zone, _shift}), do: %{value | zone: zone}
+
+  defp on_clock(%Tempo{form: {:span, from, to}} = span, {zone, _shift} = clock),
+    do: %{span | zone: zone, form: {:span, end_on_clock(from, clock), end_on_clock(to, clock)}}
+
+  defp on_clock(window, _clock), do: window
+
+  defp end_on_clock(%Tempo{} = value, clock), do: on_clock(value, clock)
+  defp end_on_clock(other, _clock), do: other
 
   @doc "The calendar, zone and shift of an expression, as the engine takes them."
   @spec frame_of(Tempo.t()) :: frame()
@@ -198,7 +252,8 @@ defmodule Tempo.Spans do
   @doc """
   A position moved by a duration: the date part on the day scale through the
   calendar (years, then months with the day clamped, then weeks and days),
-  the clock part in ticks, each read on the wall clock of the frame.
+  read on the wall clock of the frame; then the clock part in ticks, which is
+  elapsed time.
   """
   @spec shifted(Scale.position(), Duration.t(), frame(), Tempo.t()) ::
           {:ok, Scale.position()} | {:error, Exception.t()}
@@ -213,16 +268,32 @@ defmodule Tempo.Spans do
     {date_units, clock_units} =
       Enum.split_with(units, fn {unit, _} -> unit in [:year, :month, :week, :day] end)
 
-    wall = Walk.wall(tick, frame)
-    day = Integer.floor_div(wall, @day)
-    clock = Integer.mod(wall, @day)
-    moved = day_shifted(day, date_units, frame.calendar) * @day + clock + clock_ticks(clock_units)
-    {:ok, placed(moved, frame)}
+    {:ok, date_shifted(tick, date_units, frame) + clock_ticks(clock_units)}
   end
 
   def shifted(nil, _duration, _frame, expression), do: {:error, conversion(expression, :open)}
 
-  defp day_shifted(day, [], _calendar), do: day
+  # The date part moves the day and keeps the reading of the wall clock; the
+  # clock part is added to the position, so an hour is an hour of elapsed time
+  # across a change of the clock.
+  defp date_shifted(tick, [], _frame), do: tick
+
+  defp date_shifted(tick, date_units, frame) do
+    wall = Walk.wall(tick, frame)
+    day = Integer.floor_div(wall, @day)
+    moved = day |> day_shifted(date_units, frame.calendar) |> shown_day(day, frame)
+    placed(moved * @day + Integer.mod(wall, @day), frame)
+  end
+
+  # A day the zone's clock leaves out is not landed on: the step goes on to
+  # the day after it, or the day before where it runs back.
+  defp shown_day(moved, from, %{zone: zone, shift: shift}) do
+    cond do
+      not Zone.day_skipped?(zone, shift, moved) -> moved
+      moved < from -> moved - 1
+      true -> moved + 1
+    end
+  end
 
   defp day_shifted(day, date_units, calendar) do
     {weeks, rest} = Keyword.pop(date_units, :week, 0)
@@ -297,6 +368,8 @@ defmodule Tempo.Spans do
   end
 
   def spans(%Tempo{form: {:every, first, bound, rule}} = recurrence, options) do
+    options = windowed_for(options, recurrence)
+
     if rule == nil,
       do: occurrences(first, bound, recurrence, options),
       else: rule_occurrences(first, bound, rule, recurrence, options)
@@ -310,10 +383,12 @@ defmodule Tempo.Spans do
   def spans(%Tempo{form: {:all, members}} = set, options) do
     case Enum.split_with(members, &match?({:except, _}, &1)) do
       {[], members} ->
-        member_spans(members, options)
+        members |> member_spans(options) |> overlapping(set, options)
 
       {excluded, members} ->
-        excluded_spans(set, members, Enum.map(excluded, &elem(&1, 1)), options)
+        set
+        |> excluded_spans(members, Enum.map(excluded, &elem(&1, 1)), options)
+        |> overlapping(set, options)
     end
   end
 
@@ -340,6 +415,25 @@ defmodule Tempo.Spans do
 
   # A set's members' spans; members conditional on the others are judged
   # against the others' spans, and the whole put in order of start.
+  # A window keeps the members of a set that overlap it, a dated member as
+  # an occurrence of a recurrence.
+  defp overlapping({:ok, spans}, set, options) do
+    case window_extent(window_in(options[:within], set)) do
+      {:ok, {start, stop}} ->
+        {:ok, Stream.filter(spans, &overlaps_window?(extent(&1), start, stop))}
+
+      _none ->
+        {:ok, spans}
+    end
+  end
+
+  defp overlapping(error, _set, _options), do: error
+
+  defp overlaps_window?({:ok, {s, e}}, start, stop) when is_integer(s) and is_integer(e),
+    do: (stop == nil or s < stop) and (start == nil or e > start)
+
+  defp overlaps_window?(_extent, _start, _stop), do: true
+
   defp member_spans(members, options) do
     case Enum.split_with(members, &Conditions.conditional?/1) do
       {[], members} ->
@@ -432,19 +526,158 @@ defmodule Tempo.Spans do
        ) do
     with {:ok, periods} <- rule_periods(aligned(first), from, recurrence, options),
          {:ok, until} <- until_position(bound) do
-      parts = with_inherited(rule, inherited_units(from, rule))
-      begins = start_of_rule(from)
+      parts = with_inherited(rule, inherited_units(from, rule, first))
+      stepped = stepped_first(first, range_start(from))
+      walk = %{first: stepped, parts: parts, begins: start_of_rule(from), options: options}
 
       stream =
         periods
-        |> Stream.map(&eligible(&1, first))
-        |> Stream.flat_map(&in_rule_period(&1, parts, options))
-        |> Stream.filter(&(start_position(&1) >= begins))
+        |> selected_in(walk, first_step(periods, bound, options))
+        |> left_out(from, options)
+        |> to_range_end(from)
+        |> in_range_years(from, first.calendar)
+        |> Stream.dedup_by(&landing/1)
         |> Stream.map(&%{&1 | metadata: Map.merge(recurrence.metadata, &1.metadata)})
         |> bounded(bound, until, options)
 
       {:ok, stream}
     end
+  end
+
+  # A domain's members are each selected in.
+  defp selected_in({:each, periods}, walk, _first_step) do
+    periods
+    |> Stream.map(&eligible(&1, walk.first))
+    |> Stream.flat_map(&picked_in(&1, walk))
+  end
+
+  # A cadence's periods are stepped through by number, so that a run of
+  # periods the rule selects nothing in is passed over to the next value its
+  # parts name, and a rule that selects nothing in a whole cycle of its
+  # calendar's years comes to an end.
+  defp selected_in({:steps, period_at}, walk, first_step) do
+    walk = Map.merge(walk, %{period_at: period_at, horizon: horizon(walk)})
+
+    {first_step, nil}
+    |> Stream.unfold(fn {k, quiet_since} ->
+      period = eligible(period_at.(k), walk.first)
+      step(picked_in(period, walk), period, k, quiet_since, walk)
+    end)
+    |> Stream.flat_map(& &1)
+  end
+
+  defp picked_in(period, %{parts: parts, begins: begins, options: options}) do
+    period
+    |> in_rule_period(parts, options)
+    |> Enum.filter(&(start_position(&1) >= begins))
+  end
+
+  defp step([_ | _] = picked, _period, k, _quiet_since, _walk), do: {picked, {k + 1, nil}}
+
+  defp step([], period, k, quiet_since, walk) do
+    {start, stop} = ends_of(period)
+    quiet_since = quiet_since || start
+
+    if start - quiet_since > walk.horizon,
+      do: nil,
+      else: stepped_on(next_named(stop, period, walk), k, quiet_since, walk)
+  end
+
+  defp stepped_on(nil, _k, _quiet_since, _walk), do: nil
+
+  defp stepped_on(tick, k, quiet_since, walk),
+    do: {[], {index_at(tick, walk.period_at, k, k + 1), quiet_since}}
+
+  defp ends_of(period) do
+    case extent(period) do
+      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) -> {start, stop}
+      _ -> {0, 0}
+    end
+  end
+
+  # A count counts from the rule's start; any other bound's occurrences are
+  # looked for from the period the window begins in.
+  defp first_step({:steps, period_at}, bound, options) when not is_integer(bound) do
+    case window_extent(options[:within]) do
+      {:ok, {start, _}} when is_integer(start) -> index_at(start, period_at, 0, 0)
+      _none -> 0
+    end
+  end
+
+  defp first_step(_periods, _bound, _options), do: 0
+
+  # The number of the last period that begins by a position, no less than a
+  # least number: reckoned from the length of a period and then stepped to.
+  defp index_at(tick, period_at, k, least) do
+    start = start_position(period_at.(k))
+    length = max(start_position(period_at.(k + 1)) - start, 1)
+
+    (k + div(tick - start, length))
+    |> max(least)
+    |> back_to(tick, period_at, least)
+    |> on_to(tick, period_at)
+  end
+
+  defp back_to(n, tick, period_at, least) when n > least do
+    if start_position(period_at.(n)) > tick,
+      do: back_to(n - 1, tick, period_at, least),
+      else: n
+  end
+
+  defp back_to(n, _tick, _period_at, _least), do: n
+
+  defp on_to(n, tick, period_at) do
+    if start_position(period_at.(n + 1)) <= tick, do: on_to(n + 1, tick, period_at), else: n
+  end
+
+  # Where the rule's parts next name a value from a position on, whatever
+  # the cadence: looked for a year, a month or a day at a time, as far as the
+  # horizon.
+  defp next_named(tick, period, walk) do
+    case Select.probe(picking(walk.parts)) do
+      nil -> nil
+      probe -> named_from(tick, tick, probe, period, walk)
+    end
+  end
+
+  defp named_from(tick, from, {unit, search} = probe, period, walk) do
+    span = %{period | form: {:value, Shift.period_units(tick, unit, frame_of(period))}}
+    {_start, stop} = ends_of(span)
+
+    cond do
+      found = first_named(span, search, from, walk.options) -> found
+      stop <= tick or stop - from > walk.horizon -> nil
+      true -> named_from(stop, from, probe, period, walk)
+    end
+  end
+
+  # A window may carry what it selects back out of its period, so where the
+  # parts open one, a period in which anything is selected is the place.
+  defp first_named(span, search, from, options) do
+    case {Select.in_period(span, search, options), Keyword.has_key?(search, :selection)} do
+      {{:ok, [_ | _]}, true} ->
+        max(from, start_position(span))
+
+      {{:ok, picked}, _windowed?} ->
+        picked
+        |> Enum.map(&start_position/1)
+        |> Enum.filter(&(&1 >= from))
+        |> Enum.min(fn -> nil end)
+
+      {{:error, _}, _windowed?} ->
+        nil
+    end
+  end
+
+  # How long a rule may select nothing before it has no more to select. One
+  # that names times of day alone has named them all in two years, a zone's
+  # clock changing by the year. Any other has in a cycle of its calendar's
+  # years, in which every date and weekday it could name comes round, or in
+  # a thousand years in a calendar with no cycle.
+  defp horizon(%{parts: parts, first: %Tempo{calendar: calendar}}) do
+    if Enum.all?(Keyword.keys(picking(parts)), &(&1 in [:hour, :minute, :second, :instance])),
+      do: 2 * 366 * @day,
+      else: (Calendar.years_in_cycle(calendar) || 1000) * 366 * @day
   end
 
   # A rule's repeating intervals are whole periods of its cadence's unit, the
@@ -484,19 +717,33 @@ defmodule Tempo.Spans do
 
   defp start_of_rule(_from), do: 0
 
-  # The start's finer units join the rule's parts, before its window.
+  # The start's finer units join the parts that pick the occurrences: the
+  # rule's own, or those of a selection whose windows are the occurrences.
   defp with_inherited(rule, []), do: rule
 
-  defp with_inherited(rule, inherited) do
-    {window, parts} = Keyword.pop(rule, :window)
-    parts ++ inherited ++ if(window, do: [window: window], else: [])
-  end
+  defp with_inherited([selection: parts, window: window], inherited),
+    do: [selection: with_inherited(parts, inherited), window: window]
+
+  defp with_inherited(rule, inherited), do: rule ++ inherited
+
+  defp picking(selection: parts, window: _window), do: picking(parts)
+  defp picking(rule), do: rule
 
   # A domain (a set in the start's place) gives its members as the periods;
   # a start gives the cadence's repeating intervals.
-  defp rule_periods(_first, %Tempo{form: form} = domain, _recurrence, options)
-       when elem(form, 0) in [:all, :when],
-       do: spans(domain, options)
+  defp rule_periods(first, %Tempo{form: form} = domain, recurrence, options)
+       when elem(form, 0) in [:all, :when] do
+    cond do
+      only_exclusions?(domain) ->
+        rule_periods(%{first | form: put_elem(first.form, 1, :open)}, :open, recurrence, options)
+
+      match?(%Tempo{}, range_start(domain)) ->
+        steps(aligned(stepped_first(first, range_start(domain))), recurrence)
+
+      true ->
+        each_member(domain, first, recurrence, options)
+    end
+  end
 
   # A rule with no start (`R/../P1Y/F…`) has the cadence's periods the window runs through.
   defp rule_periods(
@@ -507,32 +754,173 @@ defmodule Tempo.Spans do
        ) do
     case window_extent(options[:within]) do
       {:ok, {start, stop}} when is_integer(start) and is_integer(stop) ->
-        frame = frame_of(options[:within])
+        # The window says where; the periods are of the rule's own calendar.
+        frame = %{frame_of(options[:within]) | calendar: first.calendar}
         anchor = %{first | form: {:value, Shift.period_units(start, unit, frame)}}
         step = %Duration{units: [{unit, n}]}
-        occurrences(%{first | form: {:span, anchor, step}}, :infinity, recurrence, options)
+        steps(%{first | form: {:span, anchor, step}}, recurrence)
 
       _none ->
         {:error, conversion(recurrence, :unbounded)}
     end
   end
 
-  defp rule_periods(first, _from, recurrence, options),
-    do: occurrences(first, :infinity, recurrence, options)
+  defp rule_periods(first, _from, recurrence, _options), do: steps(first, recurrence)
 
-  defp inherited_units(%Tempo{form: {:value, units}}, rule) do
+  # A domain that is one range (`{1848Y..}`) is stepped through from its
+  # start by the cadence, to its end.
+  defp stepped_first(first, nil), do: first
+  defp stepped_first(first, %Tempo{} = start), do: %{first | form: put_elem(first.form, 1, start)}
+
+  defp range_start(%Tempo{form: {:all, [%Tempo{form: {:span, %Tempo{} = from, _to}}]}}), do: from
+  # A filter of years on a range (`{2000Y..}e`) is of the range's periods.
+  defp range_start(%Tempo{form: {:when, %Tempo{} = inner, [years: _filter]}}),
+    do: range_start(inner)
+
+  defp range_start(_domain), do: nil
+
+  defp in_range_years(stream, %Tempo{form: {:when, %Tempo{} = inner, [years: filter]}}, calendar) do
+    if range_start(inner),
+      do: Stream.filter(stream, &in_years?(&1, filter, calendar)),
+      else: stream
+  end
+
+  defp in_range_years(stream, _from, _calendar), do: stream
+
+  defp to_range_end(
+         stream,
+         %Tempo{form: {:all, [%Tempo{form: {:span, %Tempo{}, %Tempo{} = to}}]}}
+       ) do
+    case end_position(to) do
+      {:ok, stop} when is_integer(stop) -> Stream.take_while(stream, &(start_position(&1) < stop))
+      _ -> stream
+    end
+  end
+
+  defp to_range_end(stream, %Tempo{form: {:when, %Tempo{} = inner, [years: _filter]}}),
+    do: to_range_end(stream, inner)
+
+  defp to_range_end(stream, _from), do: stream
+
+  defp each_member(domain, first, recurrence, options) do
+    with {:ok, members} <- spans(domain, options) do
+      {:ok, {:each, on_steps(members, domain_start(domain), first, recurrence)}}
+    end
+  end
+
+  # A cadence of several units steps through a domain from its first period:
+  # `R/{1848Y..}/P4Y/F…` is every fourth year from 1848.
+  defp on_steps(
+         members,
+         %Tempo{} = start,
+         %Tempo{form: {:span, _domain, %Duration{units: [{_unit, n}]} = cadence}} = first,
+         recurrence
+       )
+       when n > 1 do
+    case steps(%{first | form: {:span, start, cadence}}, recurrence) do
+      {:ok, {:steps, period_at}} -> Stream.filter(members, &on_step?(&1, period_at))
+      _no_steps -> members
+    end
+  end
+
+  defp on_steps(members, _start, _first, _recurrence), do: members
+
+  defp on_step?(member, period_at) do
+    start = start_position(member)
+    start_position(period_at.(index_at(start, period_at, 0, 0))) == start
+  end
+
+  # Where a domain's first period begins, if it has a first.
+  defp domain_start(%Tempo{form: {:all, [first | _]}}), do: first_start(first)
+  defp domain_start(_domain), do: nil
+
+  defp first_start(%Tempo{form: {:span, %Tempo{} = from, _to}}), do: from
+
+  defp first_start(%Tempo{form: {:value, _}} = value) do
+    case spans(value, []) do
+      {:ok, spans} -> spans |> Enum.take(1) |> Enum.map(&elem(&1.form, 1)) |> List.first()
+      {:error, _} -> nil
+    end
+  end
+
+  defp first_start(_member), do: nil
+
+  # A domain of exclusions alone (`R/^2022Y/P1Y/F…`) names no period of its
+  # own: the window gives the periods, and what the exclusions name is left out.
+  defp only_exclusions?(%Tempo{form: {:all, [_ | _] = members}}) when is_list(members),
+    do: Enum.all?(members, &match?({:except, _}, &1))
+
+  defp only_exclusions?(_domain), do: false
+
+  defp left_out(stream, domain, options) do
+    if only_exclusions?(domain),
+      do: without(stream, domain, options),
+      else: stream
+  end
+
+  defp without(stream, %Tempo{form: {:all, members}} = domain, options) do
+    excluded = %{domain | form: {:all, Enum.map(members, &elem(&1, 1))}}
+
+    case spans(excluded, options) do
+      {:ok, out} ->
+        out = out |> Enum.take(Limit.values()) |> Enum.map(&extent/1)
+        Stream.reject(stream, &excluded?(extent(&1), out))
+
+      {:error, _} ->
+        stream
+    end
+  end
+
+  # The cadence's periods by number: the first, and each a cadence on.
+  defp steps(%Tempo{form: {:span, from, to}} = first, recurrence) do
+    with {:ok, [base]} <- spans(first, []),
+         {:ok, cadence} <- cadence(from, to, base, recurrence) do
+      {:ok, {:steps, fn k -> occurrence(base, {from, to}, cadences(cadence, k), recurrence) end}}
+    end
+  end
+
+  defp inherited_units(%Tempo{form: {:value, units}} = from, rule, first) do
+    rule = picking(rule)
+
     finest =
       case Keyword.take(rule, @rule_units) do
         [] -> :day
-        parts -> parts |> Unit.resolution() |> Unit.grain()
+        parts -> parts |> Unit.resolution() |> Unit.grain() |> finer_of(cadence_unit(first))
       end
 
-    Enum.filter(units, fn {unit, _} ->
+    units
+    |> Enum.filter(fn {unit, _} ->
       Unit.compare(Unit.grain(unit), finest) == :gt and not Keyword.has_key?(rule, unit)
     end)
+    |> weekday_of_week(rule, from)
   end
 
-  defp inherited_units(_from, _rule), do: []
+  defp inherited_units(_from, _rule, _first), do: []
+
+  # A rule whose parts are coarser than its cadence keeps the periods they
+  # name (`FREQ=DAILY;BYMONTH=1` is each day of January), so its start gives
+  # it only what is finer than a period.
+  defp finer_of(unit, nil), do: unit
+
+  defp finer_of(unit, cadence),
+    do: if(Unit.compare(cadence, unit) == :gt, do: cadence, else: unit)
+
+  defp cadence_unit(%Tempo{form: {:span, _from, %Duration{units: [{unit, _}]}}})
+       when unit in [:year, :month, :day, :hour, :minute, :second],
+       do: unit
+
+  defp cadence_unit(_first), do: nil
+
+  # A rule that names a week and no day of it takes the day of the week its
+  # start falls on, where a rule of months takes the start's day of the month.
+  defp weekday_of_week(inherited, rule, from) do
+    weekday = Tempo.day_of_week(from)
+
+    if Keyword.has_key?(rule, :week) and not Keyword.has_key?(rule, :day_of_week) and
+         is_integer(weekday),
+       do: [{:day_of_week, weekday} | Keyword.delete(inherited, :day)],
+       else: inherited
+  end
 
   defp in_rule_period(period, parts, options) do
     case Select.in_period(period, parts, options) do
@@ -654,16 +1042,16 @@ defmodule Tempo.Spans do
   are placed each, and a set's members.
   """
   @spec placed_in(Tempo.t(), Tempo.t() | nil) :: Tempo.t()
+  def placed_in(value, window)
+
   def placed_in(
         %Tempo{form: {:value, units}} = value,
         %Tempo{form: {:value, window_units}} = window
       ) do
-    cyclic = Unit.cyclic(units)
-    coarsest = Unit.coarsest(cyclic)
-
-    case Enum.take_while(window_units, fn {unit, _} -> Unit.compare(unit, coarsest) == :lt end) do
-      [] -> value
-      above -> in_window(%{value | form: {:value, Expand.filled(above ++ cyclic)}}, window)
+    case Unit.cyclic(units) do
+      # Any year (`X*Y`) placed in a window is the window.
+      [] -> %{value | form: {:value, window_units}}
+      cyclic -> placed_under(value, cyclic, window_units, window)
     end
   end
 
@@ -724,6 +1112,15 @@ defmodule Tempo.Spans do
   defp cycle_of(unit) when unit in [:month, :day, :day_of_year], do: %Duration{units: [year: 1]}
   defp cycle_of(_clock), do: %Duration{units: [day: 1]}
 
+  defp placed_under(value, cyclic, window_units, window) do
+    coarsest = Unit.coarsest(cyclic)
+
+    case Enum.take_while(window_units, fn {unit, _} -> Unit.compare(unit, coarsest) == :lt end) do
+      [] -> value
+      above -> in_window(%{value | form: {:value, Expand.filled(above ++ cyclic)}}, window)
+    end
+  end
+
   defp in_window(expression, window) do
     %{
       expression
@@ -770,10 +1167,14 @@ defmodule Tempo.Spans do
         %{value | form: {:value, units}, qualifications: nil}
 
       _line ->
-        wall = Walk.wall(stop, frame_of(value))
-        units = Walk.at_tick(wall, written_unit(units), value.calendar)
-        %{value | form: {:value, units}, qualifications: nil}
+        %{value | form: {:value, clock_end_units(units, stop, value)}, qualifications: nil}
     end
+  end
+
+  defp clock_end_units(units, stop, value) do
+    if own_axis?(units),
+      do: Shift.rewritten(stop, units, frame_of(value)),
+      else: Walk.at_tick(Walk.wall(stop, frame_of(value)), written_unit(units), value.calendar)
   end
 
   defp written_unit(units) do
@@ -816,12 +1217,19 @@ defmodule Tempo.Spans do
   defp open_end(%Tempo{} = window, side, %Tempo{form: {:span, from, to}} = span) do
     with :ok <- placeable(span),
          {:ok, {wstart, wstop}} <- extent(window) do
-      case side do
-        :from -> {:ok, value_at(wstart, model_of(to, window), :start, span)}
-        :to -> {:ok, value_at(wstop, model_of(from, window), :end, span)}
-      end
+      placed_end(side, {wstart, wstop}, {from, to}, window, span)
     end
   end
+
+  # A window open at the side it is asked for places nothing there.
+  defp placed_end(:from, {nil, _wstop}, _ends, _window, _span), do: {:ok, :open}
+  defp placed_end(:to, {_wstart, nil}, _ends, _window, _span), do: {:ok, :open}
+
+  defp placed_end(:from, {wstart, _wstop}, {_from, to}, window, span),
+    do: {:ok, value_at(wstart, model_of(to, window), :start, span)}
+
+  defp placed_end(:to, {_wstart, wstop}, {from, _to}, window, span),
+    do: {:ok, value_at(wstop, model_of(from, window), :end, span)}
 
   defp placeable(span) do
     case frame(span) do
@@ -877,12 +1285,17 @@ defmodule Tempo.Spans do
 
     units =
       cond do
+        clock_unit?(resolution) and own_axis?(units) ->
+          Shift.rewritten(position, units, frame)
+
         clock_unit?(resolution) ->
           Walk.at_tick(Walk.wall(position, frame), resolution, span.calendar)
 
         kind == :end ->
+          # The day of the last tick before the end, read on the wall clock: so
+          # an end at the midnight after a day the clock left out is the day before it.
           Walk.at_day(
-            Integer.floor_div(Walk.wall(position, frame) - 1, @day),
+            Integer.floor_div(Walk.wall(position - 1, frame), @day),
             day_unit(resolution),
             span.calendar
           )
@@ -897,6 +1310,10 @@ defmodule Tempo.Spans do
 
     %{model | form: {:value, units}, qualifications: nil, shift: model.shift}
   end
+
+  # A time of day on a week date or an ordinal date is written on that date's own axis.
+  defp own_axis?(units),
+    do: Keyword.has_key?(units, :week) or Keyword.has_key?(units, :day_of_year)
 
   defp clock_unit?({:microsecond, _}), do: true
   defp clock_unit?(unit), do: Unit.clock?(unit)
@@ -942,10 +1359,21 @@ defmodule Tempo.Spans do
          {:ok, until} <- until_position(bound) do
       stream =
         indexes
-        |> Stream.map(fn n -> occurrence(base, {from, to}, scaled(cadence, n), recurrence) end)
+        |> Stream.map(fn n -> occurrence(base, {from, to}, cadences(cadence, n), recurrence) end)
+        |> Stream.dedup_by(&landing/1)
         |> bounded(bound, until, options)
 
       {:ok, stream}
+    end
+  end
+
+  # Where an occurrence starts on a line. Two steps that land on one start
+  # (the second having stepped over a day the clock left out) are one
+  # occurrence; on a cycle each is its own.
+  defp landing(occurrence) do
+    case extent(occurrence) do
+      {:ok, {start, _}} when is_integer(start) -> start
+      _ -> make_ref()
     end
   end
 
@@ -961,35 +1389,52 @@ defmodule Tempo.Spans do
 
   defp indexes(_from, _bound, _recurrence), do: {:ok, Stream.iterate(0, &(&1 + 1))}
 
-  # The nth occurrence: the first span's start moved n cadences, and its end as
-  # the first was written, a duration from that start or a value moved the same.
-  defp occurrence(base, _ends, %Duration{units: []}, _recurrence), do: base
+  # The cadence scaled to the nth occurrence, to the one after it and to the one before.
+  defp cadences(cadence, n),
+    do: {scaled(cadence, n), scaled(cadence, n + 1), scaled(cadence, n - 1)}
+
+  # The nth occurrence. A first span written with a length is one of a series
+  # of consecutive spans (ISO 8601-1 3.1.1.11), each ending where the next
+  # starts: both of its ends are the first's moved by whole cadences, so a
+  # month from 31 January ends on 28 February and the next on 31 March. A
+  # first span of two values is moved whole.
+  defp occurrence(base, _ends, {%Duration{units: []}, _next, _previous}, _recurrence), do: base
 
   defp occurrence(
          %Tempo{form: {:span, from, to}} = base,
          {_, %Duration{} = duration},
-         step,
+         {step, next, _previous},
          recurrence
        ) do
-    from = moved_value(from, step, :start, base, recurrence)
-    {:ok, {start, _}} = extent(from)
-    {:ok, stop} = shifted(start, duration, frame_of(base), recurrence)
-    %{base | form: {:span, from, value_at(stop, to, :end, base)}}
+    moved = moved_value(from, step, :start, base, recurrence)
+    {:ok, {start, _}} = extent(moved)
+    {:ok, {stop, _}} = extent(moved_value(from, next, :start, base, recurrence))
+    stop = later(stop, start, duration, base, recurrence)
+    %{base | form: {:span, moved, value_at(stop, to, :end, base)}}
   end
 
   defp occurrence(
          %Tempo{form: {:span, from, to}} = base,
-         {%Duration{} = duration, _},
-         step,
+         {%Duration{}, _},
+         {step, _next, previous},
          recurrence
        ) do
-    to = moved_value(to, step, :end, base, recurrence)
-    {:ok, stop} = end_position(to)
-    {:ok, start} = shifted(stop, negated(duration), frame_of(base), recurrence)
-    %{base | form: {:span, value_at(start, from, :start, base), to}}
+    {:ok, start} = end_position(moved_value(to, previous, :end, base, recurrence))
+
+    %{
+      base
+      | form:
+          {:span, value_at(start, from, :start, base),
+           moved_value(to, step, :end, base, recurrence)}
+    }
   end
 
-  defp occurrence(%Tempo{form: {:span, from, to}} = base, _ends, step, recurrence) do
+  defp occurrence(
+         %Tempo{form: {:span, from, to}} = base,
+         _ends,
+         {step, _next, _previous},
+         recurrence
+       ) do
     %{
       base
       | form:
@@ -998,19 +1443,36 @@ defmodule Tempo.Spans do
     }
   end
 
+  # Where the next occurrence starts, when that is later; where it is not (the
+  # next step lands on the same start past a day a clock left out, or a cycle
+  # comes round), the occurrence's own length from its start.
+  defp later(stop, start, _duration, _base, _recurrence) when stop > start, do: stop
+
+  defp later(_stop, start, duration, base, recurrence) do
+    {:ok, stop} = shifted(start, duration, frame_of(base), recurrence)
+    stop
+  end
+
   defp backward_indexes(count, _recurrence) when is_integer(count),
     do: {:ok, Enum.to_list((count - 1)..0//-1)}
 
   defp backward_indexes(_bound, recurrence), do: {:error, conversion(recurrence, :unbounded)}
 
-  defp bounded(stream, count, _until, _options) when is_integer(count),
-    do: Stream.take(stream, count)
+  # A count counts from the sequence's start and an until ends it; of the
+  # occurrences either leaves, a window keeps those that overlap it.
+  defp bounded(stream, count, _until, options) when is_integer(count),
+    do: stream |> Stream.take(count) |> windowed(options)
 
-  defp bounded(stream, %Tempo{}, until, _options),
-    do: Stream.take_while(stream, fn occurrence -> starts_before?(occurrence, until) end)
+  defp bounded(stream, %Tempo{}, until, options) do
+    stream
+    |> Stream.take_while(fn occurrence -> starts_before?(occurrence, until) end)
+    |> windowed(options)
+  end
 
   # With no end of its own a sequence is its occurrences that overlap the window.
-  defp bounded(stream, :infinity, _until, options) do
+  defp bounded(stream, :infinity, _until, options), do: windowed(stream, options)
+
+  defp windowed(stream, options) do
     case window_extent(options[:within]) do
       {:ok, {start, stop}} -> stream |> dropped_before(start) |> taken_before(stop)
       _none -> stream
@@ -1247,6 +1709,8 @@ defmodule Tempo.Spans do
   end
 
   # A step as a value of the expression's frame, keeping the marks on the units it shares with its source.
+  defp stepped(source, {:shifted, units, shift}), do: %{stepped(source, units) | shift: shift}
+
   defp stepped(%Tempo{form: {:span, from, to}} = span, units),
     do: stepped(%{first_value([from, to]) | metadata: span.metadata}, units)
 
@@ -1341,9 +1805,10 @@ defmodule Tempo.Spans do
   allows; an interval with uncertain ends, each pairing of their readings in
   order. An expression with one reading is its own extent.
   """
-  @spec readings(Tempo.t()) ::
+  @spec readings(Tempo.t() | Duration.t()) ::
           {:ok, [{Scale.position(), Scale.position()}]} | {:error, Exception.t()}
   def readings(%Tempo{form: {:one, members}}), do: each_readings(members, &readings/1)
+  def readings(%Duration{} = duration), do: {:error, conversion(duration, :bare_duration)}
 
   def readings(%Tempo{form: {:value, units}} = value) do
     with {:ok, placings} <- placings(value, units), do: closed_extents(placings, value)

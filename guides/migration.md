@@ -1,169 +1,217 @@
-# Migrating to Tempo 2.0
+# Migrating from Tempo 1.6 to 3.0
 
-Tempo 2.0 gives each word in its API one meaning, the one it has in everyday English. Most of the changes are renames: the compiler warns about every call to a removed function, and a leftover `:bound` option returns an error that names its replacement. A few names keep their spelling and change what they answer, and those need a read of each call site. This guide takes the changes one at a time, each with its 1.x form and its 2.0 form.
+Tempo 3.0 is a new implementation of the same idea: every date and time is a span on the time line. It keeps the words of the 1.6 API and gives each one meaning, and it removes what 1.6 needed only because of how it was built: five structs, twenty-four error modules, and several functions that did one thing under two names.
 
-## Overview
+Most of an upgrade is mechanical. A call to a function that no longer exists fails when it is compiled, and an option a function does not take is an error that names the option. Three changes are not mechanical, because code written for 1.6 still compiles and answers something else. They come first.
 
-| 1.x | 2.0 |
-|---|---|
-| `Tempo.IntervalSet.total_duration/1` | `Tempo.IntervalSet.duration/1` |
-| the `:bound` option | `:within` |
-| `Tempo.subset?/3` | `Tempo.within?/3` |
-| `during?/2`, `meets?/2` on `Tempo` and `Tempo.Interval` | `Tempo.Allen.during?/2`, `Tempo.Allen.meets?/2` |
-| `Tempo.Interval.inverse_relation/1` | `Tempo.Allen.inverse/1` |
-| `compose/2` on `Tempo` and `Tempo.Interval` | `Tempo.Allen.compose/2` |
-| `Tempo.Interval.equivalent?/2` | `Tempo.equal?/3` |
-| IXDTF tags through `Tempo.new/1`'s `:metadata` | `:tags` |
-| `Tempo.anchor/2` | `Tempo.on/2` or `Tempo.at/2`, in either order |
-| `Tempo.NonAnchoredError`, `Tempo.RequiresAnchorError` | `Tempo.UnanchoredError` |
-| `Tempo.grounded?/1` | `Tempo.zoned?/1` |
-| `Tempo.GroundedTempoError` | `Tempo.ZonedTempoError` |
-| `Tempo.to_date_time/1`, `from_date_time/1` | `Tempo.to_datetime/1`, `from_datetime/1` |
-| `Tempo.to_naive_date_time/1`, `from_naive_date_time/1` | `Tempo.to_naive_datetime/1`, `from_naive_datetime/1` |
-| `Tempo.to_calendar/1` | `Tempo.to_elixir/1` |
-| `Tempo.ICal.from_ical/2`, `from_ical_file/2` | `Tempo.ICal.parse/2`, `parse_file/2` |
-| `Tempo.ICal.available_from_ical/2` | `Tempo.ICal.available/2`, given text |
-| `Tempo.JSCalendar.from_jscalendar/2` | `Tempo.JSCalendar.parse/2` |
-| `Tempo.to_rrule/1`, `to_rrule!/1` | `Tempo.RRule.to_string/1`, `to_string!/1` |
-| `Tempo.MaterialisationError` | `Tempo.ConversionError` |
-| `Tempo.RRule.Expander.expand/3` | `Tempo.RRule.parse/2`, then `Tempo.to_interval_set/2` |
-| `relation/2`, `before?/2`, `after?/2`, `adjacent?/2` on `Tempo.Interval` | The same names on `Tempo` |
-| The `certainly_` and `possibly_` predicates and the `_certainty` functions on `Tempo.Interval` | The same names on `Tempo` |
-| `at_least?/2`, `at_most?/2`, `exactly?/2`, `longer_than?/2`, `shorter_than?/2` on `Tempo.Interval` | The same names on `Tempo` |
-| `bounded?/1` on `Tempo.Interval` and `Tempo.IntervalSet`, `Tempo.IntervalSet.empty?/1` | `Tempo.bounded?/1`, `Tempo.empty?/1` |
-| `Tempo.Operations.union/3` and the other set operations and predicates | The same names on `Tempo` |
-| `Tempo.Select.select/2` | `Tempo.select/2` |
-| `Tempo.Format.to_string/2`, `to_relative_string/2` | `Tempo.to_string/2`, `Tempo.to_relative_string/2` |
-| `Tempo.Compare.compare/3` | `Tempo.compare/3` |
-| `Tempo.Clock.utc_now/0` | `Tempo.utc_now/0` |
-| `Tempo.add_working_days/3` | `Tempo.add_workdays/3` |
-| `Tempo.next_working_day/2`, `previous_working_day/2` | `Tempo.next_workday/2`, `previous_workday/2` |
-| `Tempo.nearest_working_day/2` | `Tempo.nearest_workday/2` |
-| `Tempo.working_days_in/2` | `Tempo.count_workdays/2` |
-| `Tempo.weekend/1` | `Tempo.weekends/1` |
-| `Tempo.weekends(from: date)`, a lazy set | `Tempo.select/2` over a span with no end |
-| `Tempo.IntervalSet.to_list/1` | `Tempo.IntervalSet.members/1` |
-| `Tempo.IntervalSet.overlapping/2` | `Tempo.IntervalSet.covered/2` |
-| `Tempo.beginning_of_day/1`, `beginning_of_week/1`, `beginning_of_month/1` | `Tempo.trunc/2` to `:day`, `:week` or `:month` |
-| `Tempo.end_of_day/1`, `end_of_month/1` | `Tempo.Interval.to/1` of the day or month `Tempo.trunc/2` gives |
-| `Tempo.Network.TimePeriod.new/2`'s `:start`, `:end` | `:from`, `:to` |
-| `Tempo.Network.Solver.tighten/1` | `Tempo.Network.Solver.propagate/1` |
-| `Tempo.Schedule.Slot` | `Tempo.Schedule.ScheduledTask` |
-| `Tempo.Schedule.task/3`'s `:earliest` | `:not_before` |
-
-These keep their names and change their meaning:
-
-* **`before?/2` and `after?/2`** — two spans that meet now count, because they share no instant.
-
-* **`today/1` and `utc_today/0`** — the date with no zone, where 1.x returned the zoned day.
-
-* **An interval with a zone on its start only** — the zone applies to its end too, as ISO 8601-1 says.
-
-* **`Tempo.IntervalSet.new/2` given intervals of several calendars** — brings each to the first interval's calendar, as the set operations do, where 1.x kept each in its own.
-
-* **A zone, a calendar or a tag written inside an expression** — an error: an IXDTF suffix (`[Europe/Paris]`, `[u-ca=hebrew]`, `[key=value]`) is written once, after the whole expression, and applies to all of it. Write `2026-06-15T10:00/2026-06-15T12:00[Europe/Paris]`, `{2026-06-15,2026-06-16}[Europe/Paris]` and `R/2026-05-30T23:30/P1D[America/New_York]`, where 1.x took a suffix on an end of an interval, on a member of a set and on a recurrence's start.
-
-* **An interval with ends of two calendars or two zones** — an error, where 1.x kept each end in its own: `Tempo.Interval.new/1` refuses the pair. Convert one end with `Tempo.to_calendar/2` or `Tempo.shift_zone/2` first. A time shift (`+02:00`) is still each end's own.
-
-* **A recurrence's domain beside a calendar** — its years are years of the calendar written after the recurrence (`R/{5787Y..5788Y}/P1Y/FL1M1DN[u-ca=hebrew]`), where they were Gregorian years. Give the Gregorian years a rule of another calendar falls in as a `:within` window.
-
-* **`duration/1` and `duration/2`** — counted in the unit the endpoints are written in, where 1.x counted seconds.
-
-* **`shift/2` on a zoned value** — hours, minutes and seconds are time on the time line, where 1.x added them to the wall clock.
-
-* **`duration/1` on a set** — the time the set covers, counting time its members share once.
-
-* **The `:within` window** — every occurrence that overlaps the window, for every kind of recurrence.
-
-* **`Tempo.new/1`'s `:metadata`** — the value's own data, no longer written into its ISO 8601 form.
-
-* **`parse/2` and the typed parsers** — ISO 8601 first, then the locale's words, where `parse/2` read only words and the typed parsers only ISO 8601.
-
-* **`select/2` across a span** — selects in every period of the span, where 1.x selected in its first period alone.
-
-* **`shift/3`'s `:skipping` on a day shifted by days or weeks** — steps from free day to free day and returns a day, where 1.x counted days of free time and returned the instant they ran out.
-
-* **`Tempo.RecurrenceSet.new/2`** — returns `{:ok, set}` and checks its members, where 1.x returned the struct; `new!/2` returns the struct.
-
-* **`Tempo.Network.TimePeriod.new/2`** — returns `{:ok, period}`, where 1.x returned the struct; `new!/2` returns the struct.
-
-* **The network and schedule builders** — record an option or a value they cannot read, which the solver then returns, where 1.x ignored an unknown option and raised on a bad value.
-
-* **One home for an operation, and no engine** — an operation on any value is documented on `Tempo` and nowhere else, as the table above maps it, and the modules 1.x documented as its engine are no part of the API: the comparison of values, the tokenizer, the RRULE expander, the network's normaliser, the set operations' own module. `Tempo.validate_zone_offset/1`, `Tempo.Interval.next_unit_boundary/1`, `Tempo.ZoneOffsetMismatchError.format_offset/1` and the readers of the zone database on `Tempo.TimeZoneDatabase` other than `database/0` and `zone_exists?/1` go with them. None of these names exists any longer, in the table or here, so a call of one fails when it is compiled.
-
-* **A network's lengths** — a year or a month in a network of days (or a year in one of months) is its actual length from where its period can start, in the period's calendar, where 1.x used a mean Gregorian year and month: a year from 1 January 2024 is 366 days, where it was 365.
-
-* **`Tempo.to_iso8601/1`** — returns `{:ok, string}`, or an error for a value ISO 8601 cannot write, where 1.x returned the string and raised; `to_iso8601!/1` returns the string.
-
-* **`Tempo.to_relative_string/2`** — counts calendar periods in the value's own calendar and on its own wall clock, and never in a unit finer than the value's own, where 1.x divided the seconds between two UTC instants by a mean month or year. It returns `{:ok, string}`, or an error where 1.x raised; `to_relative_string!/2` returns the string.
-
-* **`Tempo.to_string/2`** — returns `{:ok, string}`, or an error for a value it cannot render, where 1.x returned the string and raised; `to_string!/2` returns the string, and interpolating a value it cannot render writes its ISO 8601 form. Several spans are joined as a list in the locale, where 1.x used commas.
-
-* **`round/2`** — to the nearest boundary, half way up, for a date with a time too, where 1.x rounded half an hour down and a mid-June day to the next year.
-
-* **`shift_zone/2`** — the span a value names on the other zone's clock: the same resolution where it is one unit there and otherwise an interval, where 1.x gave the second it starts at.
-
-* **`to_time/1`, `to_naive_datetime/1`, `to_datetime/1` and `to_elixir/1`** — a whole second has a precision of zero, where 1.x gave six digits.
-
-* **`Tempo.new/1` of a week and a day of it** — the calendar date they name, as the parser reads them, where 1.x kept the week date.
-
-* **A value of a calendar of weeks** — a year, a month of the calendar's weeks and a day of that month, as a value of any calendar is: `~o"2026-W25-2"W` is `~o"2026Y6M16D"W`, a date written with a month is that calendar's own month, and a year walks its twelve months, where 1.x kept the week and the day of the week and walked a year by its weeks. It needs Calendrical 1.4, whose calendars of weeks hold a date so.
-
-* **`shift/3` by months and days** — the months, then the days from the day they land on, as `Date.shift/2` counts; and an unknown unit is an error, where 1.x passed it over.
-
-* **A recurrence across the end of a month** — its occurrences are consecutive, each ending where the next starts.
-
-* **A computed event** — each of its days that falls in a year, a month or a week, where 1.x found it in a year alone; and one with no date where it is asked for (a year it is not computed for, a name no resolver knows) is a `Tempo.EventError`, where 1.x gave no occurrence.
-
-* **A rule read from an RRULE with a start** — states what RFC 5545 takes from the start (a weekly rule's weekday, a monthly rule's day of the month, a yearly rule's month and day), so a month that lacks the day is passed over and each occurrence is as long as the start is precise, where 1.x listed the month's last day and occurrences a cadence long.
-
-* **A value with no zone beside one with a zone** — refused by the set operations and the sorter, where the floating one was read as UTC.
-
-* **An interval's walk** — by the finer of its two ends' units.
-
-* **An interval's end of one bare number** — the start's last unit, where it was a century.
-
-* **A span with no year that ends where it starts** — once round its cycle, where it was empty.
-
-* **`split/1` and `at/2`** — keep the zone of the value they split or place, where 1.x dropped it.
-
-* **A time of day under a year, a month or a week** — that time on its first day, with the day held in the value (`2026-06T17` is 17:00 on 1 June), where 1.x kept the gap.
-
-* **`1950S0`** — a parse error, since a value has at least one significant digit.
-
-* **Ordinal days** — a day of the year that does not resolve to a date (`350O`, `2020Y{100,200}O`) holds a `:day_of_year`, written back as `O`, where 1.x held a `:day` written `D`, so a match on `[day: _]` for one now matches `[day_of_year: _]`. The walk of one with a year yields the dates the days name (`Enum.to_list(~o"2020Y{100,200}O")` is `~o"2020-04-09"` and `~o"2020-07-18"`), and a shift reaches each of them.
-
-* **A value's `extended` map** — a zone, an offset and tags only, and `nil` with none of them: the calendar a `[u-ca=…]` suffix names is the value's `:calendar` module alone, where 1.x also kept its name as `extended.calendar`. A value read with a suffix now equals the same value made with a calendar module, and a Gregorian value read with `[u-ca=gregory]` is written without the suffix.
+Every 3.0 example on this page is run by the test suite. The 1.6 examples were run against the published 1.6.4.
 
 ## Updating the dependency
 
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 2.0"}
+    {:ex_tempo, "~> 3.0"}
   ]
 end
 ```
 
-A search for the removed names finds the renames:
+`Tempo.Network` and `Tempo.Schedule` are no longer in this package. They are in `tempo_network`, with their module names unchanged; add it beside `ex_tempo` if you use them.
 
-```bash
-grep -rnE 'bound:|subset\?|total_duration|inverse_relation|equivalent\?|Tempo\.(meets|during)\?|Interval\.(meets|during)\?|(Tempo|Interval)\.compose|Tempo\.anchor[(/]|(NonAnchored|RequiresAnchor)Error|:unanchored|grounded\?|GroundedTempoError|(to|from)_(naive_)?date_time|from_(ical|jscalendar)|available_from_ical|to_rrule|MaterialisationError|Expander.expand|working_days?|Tempo\.weekend\(|weekends\(from|IntervalSet\.(to_list|overlapping)|RecurrenceSet\.new\(|Tempo\.to_iso8601[(/]|beginning_of_|end_of_(day|month)|tighten\(|Schedule\.Slot|earliest:|extended\.calendar|(add_period|TimePeriod\.new)\([^)]*(start|end):' lib test
-```
+## A written end is read through
 
-The changes of meaning need a read rather than a replace: every `before?`, `after?` and their `certainly_` and `possibly_` forms, every duration read as a count of seconds, every shift of a zoned value by hours, every `duration/1` of a set, every window, every `:metadata` passed to `Tempo.new/1`, every `select/2` across a span longer than one period, every `:skipping` shift of a day by days or weeks, every `round/2`, every `shift_zone/2` of a value coarser than a second, every conversion to an Elixir time compared with a literal, every `Tempo.new/1` of a week and a weekday, every set operation on a value with no zone and one with a zone, and every `RecurrenceSet.new/2` and `to_iso8601/1`, which the search finds.
-
-## A value that names no calendar is in Calendar.ISO
-
-In 1.x a value written with no calendar was in `Calendrical.Gregorian`. In 2.0 it is in `Calendar.ISO`, Elixir's own, so its dates are the ones the standard library gives and takes. `Calendrical.Gregorian` is a calendar like any other: it is read from `[u-ca=gregory]` and written with it.
+This is the change to read every call site for. In 1.6 an interval written with two dates ended at the start of its second date: `2026-06-15/2026-06-20` was five days and did not hold the 20th. In 3.0 a date names a period of the calendar, and an interval written to a date runs through that date, as it does when it is said aloud and as EDTF and ISO 8601-2 read it.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-(~o"2026-06-15").calendar
-#=> Calendrical.Gregorian
+# 1.6
+Enum.count(~o"2026-06-15/2026-06-20")
+#=> 5
+Tempo.overlaps?(~o"2026-06-15/2026-06-20", ~o"2026-06-20/2026-06-25")
+#=> false
 ```
+
+```elixir
+iex> Enum.count(~o"2026-06-15/2026-06-20")
+6
+iex> Tempo.overlaps?(~o"2026-06-15/2026-06-20", ~o"2026-06-20/2026-06-25")
+true
+iex> Tempo.adjacent?(~o"2026-06-15/2026-06-20", ~o"2026-06-21/2026-06-25")
+true
+```
+
+> *"The fifteenth to the twentieth is **six days**. It **overlaps** the twentieth to the twenty-fifth, which share the twentieth, and is **adjacent** to a span that starts on the twenty-first."*
+
+An end written to a time of day is a reading of the clock, and a reading is a boundary, so nothing changes there: nine to five is eight hours and ends as five begins.
+
+```elixir
+iex> Tempo.duration(~o"2026-06-15T09/2026-06-15T17")
+~o"PT8H"
+iex> Tempo.Allen.meets?(~o"2026-06-15T09/2026-06-15T12", ~o"2026-06-15T12/2026-06-15T17")
+true
+```
+
+The rule is by the unit the end is written to: a year, a month, a week or a date is read through; an hour, a minute or a second is a boundary. Spans are still half-open underneath, so set operations and Allen's relations are exact, and an interval is written back as it was read.
+
+What to look for:
+
+* **An interval that named its end by the next period**, such as `2026-06-01/2026-07-01` for June. It now holds 1 July. Write `2026-06-01/2026-06-30`, or the month itself.
+
+* **Back-to-back bookings written with dates**, each ending on the date the next begins. They now overlap by a day. End each on its last day, or write the ends as times of day.
+
+* **A `Date.Range` brought in with `Tempo.from_elixir/2`** needs no change. A range holds its last date, and 3.0 writes it as it is.
+
+```elixir
+iex> Tempo.equal?(~o"2026-06", ~o"2026-06-01/2026-06-30")
+true
+iex> Tempo.from_elixir(Date.range(~D[2026-06-15], ~D[2026-06-20]))
+{:ok, ~o"2026Y6M15D/20D"}
+```
+
+`Tempo.to_interval/2` follows the same rule, so a month as an interval is June through June where 1.6 wrote June to July.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.6
+Tempo.to_interval(~o"2026-06")
+#=> {:ok, #Tempo.Interval<~o"2026Y6M/7M" unit: day>}
+```
+
+```elixir
+iex> Tempo.to_interval(~o"2026-06")
+{:ok, ~o"2026Y6M/2026Y6M"}
+iex> {:ok, june} = Tempo.to_interval(~o"2026-06")
+iex> Tempo.Interval.to(june)
+~o"2026Y6M"
+```
+
+## One struct
+
+1.6 had a struct for each kind of thing: `%Tempo{}`, `%Tempo.Interval{}`, `%Tempo.IntervalSet{}`, `%Tempo.Set{}` and `%Tempo.Range{}`. In 3.0 every expression is a `%Tempo{}`, and what kind it is is its `:form`. The modules `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.RecurrenceSet` keep their functions and return a `%Tempo{}`.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.6
+%Tempo.Interval{from: from, to: to} = ~o"2026-06-15/2026-06-20"
+%Tempo{time: [year: year, month: month]} = ~o"2026-06"
+```
+
+A match on `%Tempo.Interval{}` or `%Tempo.IntervalSet{}` no longer compiles, and neither does one on the `:time` or `:extended` field. Ask for what you need by name, or match with the sigil, which expands to the new shape and matches any value written within it:
+
+```elixir
+iex> {from, to} = Tempo.Interval.endpoints(~o"2026-06-15/2026-06-20")
+iex> {from, to}
+{~o"2026Y6M15D", ~o"2026Y6M20D"}
+iex> match?(~o"2026", ~o"2026-06-15")
+true
+iex> {Tempo.year(~o"2026-06"), Tempo.month(~o"2026-06")}
+{2026, 6}
+```
+
+| 1.6 | 3.0 |
+|---|---|
+| `%Tempo.Interval{from: f, to: t}` | `Tempo.Interval.endpoints/1`, `from/1`, `to/1` |
+| `set.intervals` | `Tempo.IntervalSet.members/1` |
+| `value.time[:hour]` | `Tempo.hour/1` and its siblings |
+| `value.extended.zone_id` | `Tempo.zoned?/1`; the name is `value.zone.name` |
+| `value.qualification` | `Tempo.qualification/1` |
+| `interval.metadata` | `Tempo.metadata/1`, `Tempo.put_metadata/2` |
+
+A set is shown as the text that reads it, where 1.6 showed a struct, and it now has ISO 8601 text:
+
+```elixir
+iex> Tempo.union(~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-16T09/2026-06-16T11")
+{:ok, ~o"{2026Y6M15DT9H/T11H,2026Y6M16DT9H/T11H}"}
+```
+
+## A function that can fail returns a tuple
+
+In 1.6 some functions that could fail returned a bare value and raised, and others returned a tuple. In 3.0 every function that can fail returns `{:ok, value}` or `{:error, exception}`, and has a `!` form that returns the value or raises.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.6
+Tempo.shift(~o"2026-06-15", day: 1)
+#=> ~o"2026Y6M16D"
+Tempo.to_iso8601(~o"2026-06-15")
+#=> "2026Y6M15D"
+```
+
+```elixir
+iex> Tempo.shift(~o"2026-06-15", day: 1)
+{:ok, ~o"2026Y6M16D"}
+iex> Tempo.shift!(~o"2026-06-15", day: 1)
+~o"2026Y6M16D"
+iex> Tempo.to_iso8601(~o"2026-06-15")
+{:ok, "2026Y6M15D"}
+```
+
+These now return a tuple where 1.6 returned the value: `shift/3`, `trunc/2`, `round/2`, `at_resolution/2`, `to_iso8601/1`, `to_string/2`, `to_relative_string/2`, `from_elixir/2`, `today/1`, `now/1`, `days_in_month/1`, `workdays/2`, `weekends/1` and `Tempo.IntervalSet.coalesce/2`. The predicates, `compare/3`, `duration/1` and a walk with `Enum` return a bare value and raise the same exception.
+
+## Names
+
+The compiler finds every one of these.
+
+| 1.6 | 3.0 |
+|---|---|
+| the `:bound` option | `:within` |
+| `Tempo.subset?/3` | `Tempo.within?/3` |
+| `Tempo.grounded?/1` | `Tempo.zoned?/1` |
+| `Tempo.anchor/2`, `Tempo.merge/2` | `Tempo.at/2` or `Tempo.on/2`, in either order |
+| `Tempo.to_date_time/1`, `from_date_time/1` | `Tempo.to_datetime/1`, `from_datetime/1` |
+| `Tempo.to_naive_date_time/1`, `from_naive_date_time/1` | `Tempo.to_naive_datetime/1`, `from_naive_datetime/1` |
+| `Tempo.to_calendar/1` | `Tempo.to_elixir/1` |
+| `Tempo.from_date_range/2` | `Tempo.from_elixir/2` |
+| `Tempo.extend_resolution/2` | `Tempo.at_resolution/2` |
+| `Tempo.to_interval_set/2` | `Tempo.to_interval/2` |
+| `Tempo.to_rrule/1` | `Tempo.RRule.to_string/1` |
+| `Tempo.parse_date/2`, `parse_time/2`, `parse_datetime/2`, `parse_interval/2` | `Tempo.from_iso8601/2` with `:profile` |
+| `Tempo.meets?/2`, `during?/2` | `Tempo.Allen.meets?/2`, `during?/2` |
+| `Tempo.compose/2`, `Tempo.Interval.inverse_relation/1` | `Tempo.Allen.compose/2`, `inverse/1` |
+| `Tempo.Interval.equivalent?/2` | `Tempo.equal?/3` |
+| the `certainly_`, `possibly_` and `_certainty` functions | `Tempo.certainly?/3`, `possibly?/3`, `certainty/3` |
+| `Tempo.add_working_days/3` | `Tempo.add_workdays/3` |
+| `Tempo.next_working_day/2`, `previous_working_day/2`, `nearest_working_day/2` | `Tempo.next_workday/2`, `previous_workday/2`, `nearest_workday/2` |
+| `Tempo.working_days_in/2` | `Tempo.count_workdays/2` |
+| `Tempo.weekend/1` | `Tempo.weekends/1` |
+| `Tempo.beginning_of_day/1`, `beginning_of_week/1`, `beginning_of_month/1` | `Tempo.trunc/2` |
+| `Tempo.end_of_day/1`, `end_of_month/1` | the day or month `Tempo.trunc/2` gives, which is its own span |
+| `Tempo.IntervalSet.to_list/1` | `Tempo.IntervalSet.members/1` |
+| `Tempo.IntervalSet.total_duration/1` | `Tempo.duration/1` |
+| `Tempo.IntervalSet.overlapping/2` | `Tempo.IntervalSet.covered/2` |
+| `Tempo.ICal.from_ical/2` given text, `from_ical_file/2` | `Tempo.ICal.parse/2`, `parse_file/2` |
+| `Tempo.ICal.available_from_ical/2` | `Tempo.ICal.available/2` |
+| `Tempo.JSCalendar.to_interval_set/2` | `Tempo.JSCalendar.parse/2` |
+| `Tempo.RRule.Expander.expand/3` | `Tempo.RRule.parse/2`, then `Tempo.to_interval/2` |
+| `Tempo.Clock.utc_now/0` | `Tempo.utc_now/0` |
+| the functions of `Tempo.Operations`, `Tempo.Select`, `Tempo.Format`, `Tempo.Compare` and `Tempo.Explain` | the same names on `Tempo` |
+| the relations, predicates and lengths on `Tempo.Interval` | the same names on `Tempo` |
+| the `W` and other modifiers of `~o` | a `[u-ca=…]` suffix in the text |
+
+Each operation is documented on `Tempo` and nowhere else. The modules 1.6 listed as its engine (the tokenizer, the comparison of values, the RRULE expander, `Tempo.TimeZoneDatabase`, `Tempo.Clock.Test`) are no part of the API.
+
+A search finds most of the renames before the compiler does:
+
+```bash
+grep -rnE 'bound:|subset\?|grounded\?|Tempo\.(anchor|merge|meets\?|during\?|compose)\(|_date_time|to_calendar\(|from_date_range|extend_resolution|to_interval_set|to_rrule|parse_(date|time|datetime|interval)|inverse_relation|equivalent\?|certainly_|possibly_|_certainty|working_day|Tempo\.weekend\(|beginning_of_|end_of_(day|month)|IntervalSet\.(to_list|total_duration|overlapping)|from_ical|Expander|Tempo\.(Operations|Select|Format|Compare)\.|%Tempo\.(Interval|IntervalSet|Set|Range)\{' lib test
+```
+
+## An option a function does not take is an error
+
+1.6 passed over an option it did not know. 3.0 refuses it, so a misspelt window is not read as no window, and the 1.6 name of an option says what it became.
+
+```elixir
+iex> Tempo.to_interval(~o"R/2020-01-01/P1Y", bound: ~o"2026")
+{:error, %ArgumentError{message: ":bound is not an option of Tempo.to_interval/2: it is :within"}}
+```
+
+## A value that names no calendar is in Calendar.ISO
+
+In 1.6 a value written with no calendar was in `Calendrical.Gregorian`. In 3.0 it is in `Calendar.ISO`, Elixir's own, so its dates are the ones the standard library gives and takes. `Calendrical.Gregorian` is a calendar like any other, read from `[u-ca=gregory]`.
 
 ```elixir
 iex> (~o"2026-06-15").calendar
@@ -174,37 +222,80 @@ Calendrical.Gregorian
 
 > *"A date is in Elixir's calendar unless it says otherwise."*
 
-Two things follow. `Calendar.ISO`'s weeks are ISO 8601's, and its weeks of a month are counted as CLDR counts them: the first is the week that holds four or more of the month's days, where the Gregorian calendar's first week of a month is the one that holds its first day.
+## Walking a plural expression gives its members
 
-```elixir
-iex> {:ok, weeks} = Tempo.select(~o"2026-08", ~o"1W")
-iex> Tempo.IntervalSet.members(weeks)
-[~o"2026Y8M3D/10D"]
-```
-
-> *"The first week of August 2026 is the 3rd to the 9th."*
-
-And a solar term is the calendar's to answer, and `Calendar.ISO` reckons none. `(qingming)e` on a value that names no calendar is a `Tempo.EventError`; a value of `[u-ca=gregory]` or of a lunisolar calendar has its solar terms, and `Tempo.Event.date/3` takes the calendar to ask.
-
-```elixir
-iex> Tempo.Event.date("qingming", 2026)
-{:error, {:no_solar_terms, Calendar.ISO}}
-iex> Tempo.Event.date("qingming", 2026, Calendrical.Gregorian)
-{:ok, ~D[2026-04-05]}
-```
-
-> *"Qingming of 2026 is 5 April, in a calendar that reckons the solar terms."*
-
-## A set's duration is the time it covers
-
-In 1.x, `Tempo.IntervalSet.duration/1` (and `Tempo.duration/1` of a set) added up its members' lengths, and `total_duration/1` measured the time they covered. In 2.0 `duration/1` measures the time covered, and `total_duration/1` is gone.
+`Enum` over one span gives the units below it, as before: a month its days, a day its hours. Over an expression that is several spans (a set, a recurrence, a value with a list in it) 1.6 had two rules, and a recurrence was walked by the units inside its occurrences. In 3.0 a plural expression gives its members, always.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-Tempo.IntervalSet.total_duration(bookings)
+# 1.6
+Enum.count(~o"R5/2022-01-01/P1M")
+#=> 151
+Enum.count(Tempo.to_interval!(~o"2026Y{1,3}M"))
+#=> 62
 ```
+
+```elixir
+iex> Enum.count(~o"R5/2022-01-01/P1M")
+5
+iex> Enum.count(Tempo.to_interval!(~o"2026Y{1,3}M"))
+2
+iex> Enum.count(~o"2026-06")
+30
+```
+
+> *"Five monthly occurrences are **five** things. January and March are **two**. June is thirty days."*
+
+An interval made from a value no longer carries a unit to walk by. `Tempo.to_interval(~o"2026-06-15")` is the interval of that one day, which walks its one day, where 1.6 kept `unit: hour` on it to walk 24 hours. To walk a span at a unit, say the unit:
+
+```elixir
+iex> {:ok, day} = Tempo.to_interval(~o"2026-06-15")
+iex> Enum.count(day)
+1
+iex> {:ok, hours} = Tempo.walk(day, :hour)
+iex> Enum.count(hours)
+24
+```
+
+An interval of two ends is walked by the finer of its ends' units, where 1.6 walked by its start's:
+
+```elixir
+iex> Enum.to_list(~o"2026/2026-03")
+[~o"2026Y1M", ~o"2026Y2M", ~o"2026Y3M"]
+```
+
+## A duration is counted in its ends' unit
+
+In 1.6 `Tempo.duration/1` and `duration/2` answered in seconds. In 3.0 they answer in the unit the ends are written in: days between two days, months between two months, hours between two hours. Years, months, weeks and days are counted on the calendar; hours, minutes and seconds are elapsed time.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.6
+Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
+#=> {:ok, ~o"PT3110400S"}
+```
+
+```elixir
+iex> Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
+{:ok, ~o"P36D"}
+iex> Tempo.duration(~o"2026-06")
+~o"P1M"
+```
+
+> *"From the twenty-eighth of September to Election Day is **thirty-six days**. June is **a month** long."*
+
+Code that read the seconds converts the duration. A month or a year has no fixed length, so converting one takes a date to count from:
+
+```elixir
+iex> Tempo.Duration.to_unit(~o"P36D", :second)
+{:ok, 3110400.0}
+iex> Tempo.Duration.to_unit(~o"P3M", :day, relative_to: ~o"2026-01-01")
+{:ok, 90.0}
+```
+
+The duration of a set is the time it covers, counting time two members share once. In 1.6 that was `Tempo.IntervalSet.total_duration/1`, and `duration/1` added the members' lengths.
 
 ```elixir
 iex> {:ok, bookings} = Tempo.union(~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12")
@@ -214,99 +305,45 @@ iex> Tempo.duration(bookings)
 
 > *"Two bookings, nine to eleven and ten to twelve, **cover** three hours."*
 
-The two meanings agree for the sets the set operations return, whose members never overlap. They differ only where a set keeps overlapping members apart, as a union does. A member's own length is still `Tempo.duration/1` of that member.
-
-## A duration is counted in its endpoints' unit
-
-In 1.x `duration/1` and `duration/2` answered in seconds. In 2.0 they answer in the unit the endpoints are written in: days between two days, months between two months, hours between two hours, and the finer unit where the endpoints differ. Years, months, weeks and days are counted on the calendar, so the day a clock change shortens is one day; hours, minutes and seconds are elapsed time, so the same day is 23 hours.
-
-<!-- guides:skip -->
-
-```elixir
-# 1.x
-Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
-#=> {:ok, ~o"PT3110400S"}
-```
-
-```elixir
-iex> Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
-{:ok, ~o"P36D"}
-```
-
-> *"From the twenty-eighth of September to Election Day is **thirty-six days**."*
-
-Code that read the seconds converts the duration with `Tempo.Duration.to_unit/3`. A month or a year has no fixed length, so converting one, or ordering it against another duration with `Tempo.Duration.compare/3`, takes a `:relative_to` date:
-
-```elixir
-iex> Tempo.Duration.to_unit(~o"P36D", :second)
-{:ok, 3110400.0}
-
-iex> Tempo.Duration.to_unit(~o"P3M", :day, relative_to: ~o"2026-01-01")
-{:ok, 90.0}
-```
-
 ## A zoned value's hours are time on the time line
 
-In 1.x `Tempo.shift/2` added every unit to a zoned value's wall clock, so five hours after 23:00 on the night New York springs forward was 04:00, four hours later. In 2.0 hours, minutes and seconds are time on the time line, and the result is the reading the clock shows then; years, months, weeks and days still step the calendar, so a day after noon is noon. An interval written as a start and a number of hours, an hour's own span and an hourly recurrence follow the same rule.
+In 1.6 `Tempo.shift/2` added every unit to a zoned value's wall clock, so five hours after 23:00 on the night New York springs forward was 04:00, four hours later. In 3.0 hours, minutes and seconds are elapsed time, and the answer is the reading the clock shows then. Years, months, weeks and days still step the calendar, so a day after noon is noon.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
+# 1.6
 Tempo.shift(~o"2026-03-07T23[America/New_York]", hour: 5)
 #=> ~o"2026Y3M8DT4H[America/New_York]"
 ```
 
 ```elixir
 iex> Tempo.shift(~o"2026-03-07T23[America/New_York]", hour: 5)
-~o"2026Y3M8DT5H[America/New_York]"
-
+{:ok, ~o"2026Y3M8DT5H[America/New_York]"}
 iex> Tempo.shift(~o"2026-03-07T12[America/New_York]", day: 1)
-~o"2026Y3M8DT12H[America/New_York]"
+{:ok, ~o"2026Y3M8DT12H[America/New_York]"}
 ```
 
 > *"Five hours after eleven at night is five in the morning, though the clocks went forward in between; a day after noon is noon."*
 
-## The within window
-
-`:within` replaces `:bound` everywhere it appeared: `Tempo.to_interval/2`, `Tempo.to_interval_set/2`, the set operations, `Tempo.complement/2`, `Tempo.ICal.parse/2`, `Tempo.JSCalendar.parse/2` and the RRULE expander. A leftover `:bound` is an error that names its replacement:
+A shift of months and days applies the months, brings the day into the month they land in, and then counts the days, as `Date.shift/2` does. A unit that is none is an error, where 1.6 passed it over.
 
 ```elixir
-iex> Tempo.to_interval(~o"R/2020-01-01/P1Y", bound: ~o"2026")
-{:error, %ArgumentError{message: ":bound is not an option of Tempo.to_interval/2; pass the window as :within"}}
+iex> Tempo.shift(~o"2026-07-29", month: -5, day: -1)
+{:ok, ~o"2026Y2M27D"}
+iex> Tempo.shift(~o"2026-06-15", fortnight: 1)
+{:error, %ArgumentError{message: "[:fortnight] are not units of a duration"}}
 ```
-
-The window keeps every occurrence that overlaps it, including one already under way when the window opens — the rule calendar clients use. In 1.x a recurrence with a start read `:bound` as an upper limit and returned every occurrence from its start up to the bound. In 2.0 the window is a window:
-
-<!-- guides:skip -->
-
-```elixir
-# 1.x — every year from 2020 up to the bound
-Tempo.to_interval(~o"R/2020-01-01/P1Y", bound: ~o"2026")
-```
-
-```elixir
-iex> Tempo.to_interval(~o"R/2020-01-01/P1Y", within: ~o"2026")
-{:ok, #Tempo.IntervalSet<[~o"2026Y1M1D/2027Y1M1D"]>}
-
-iex> {:ok, since_2020} = Tempo.to_interval(~o"R/2020-01-01/P1Y", within: ~o"2020/2027")
-iex> Tempo.IntervalSet.count(since_2020)
-7
-```
-
-> *"The yearly occurrence **within** 2026 is 2026's own. For every year since 2020, the window starts in 2020."*
-
-iCalendar and JSCalendar imports hold to the window the same way: `Tempo.ICal.parse(ics, within: window)` returns only the events that overlap it, one-off events as well as recurring ones.
 
 ## Before and after share no instant
 
-`Tempo.before?/2` and `Tempo.after?/2` answer the everyday question: is one over by the time the other starts? In 1.x they followed Allen's `:precedes`, which also needs a gap between the two, so a meeting that ends as lunch starts was not before lunch.
+`Tempo.before?/2` and `Tempo.after?/2` answer the everyday question: is one over by the time the other starts? In 1.6 they were Allen's `:precedes`, which also needs a gap between the two, so a meeting that ends as lunch starts was not before lunch.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-Tempo.before?(meeting, lunch)
+# 1.6
+Tempo.before?(~o"2026-06-15T11/2026-06-15T12", ~o"2026-06-15T12/2026-06-15T13")
 #=> false
 ```
 
@@ -321,446 +358,257 @@ false
 
 > *"The meeting is **before** lunch: it is over when lunch starts. It does not **precede** lunch in Allen's sense, which needs a gap between them."*
 
-Code that relied on the gap asks `Tempo.Allen.precedes?/2`, or `Tempo.Allen.preceded_by?/2` in place of `after?/2`. The certainty forms follow the everyday meaning too: `certainly_before?/2`, `possibly_before?/2`, `certainly_after?/2` and `possibly_after?/2`.
-
-## Allen's relations are in Tempo.Allen
-
-`Tempo`'s predicates are the everyday ones: `before?/2`, `after?/2`, `adjacent?/2`, `overlaps?/2`, `disjoint?/2`, `within?/2`, `contains?/2` and `equal?/2`. Allen's thirteen relations, several of whose names are narrower than the same English words, are predicates in `Tempo.Allen` under Allen's own names, beside `inverse/1` and `compose/2`. `Tempo.Allen.overlaps?/2` is Allen's strict relation, where `Tempo.overlaps?/2` holds for any shared instant.
-
-<!-- guides:skip -->
+`Tempo`'s predicates are the everyday ones: `before?`, `after?`, `adjacent?`, `overlaps?`, `disjoint?`, `within?`, `contains?` and `equal?`, each for any two expressions, sets included. Allen's thirteen relations are in `Tempo.Allen` under Allen's own names, beside `inverse/1` and `compose/2`.
 
 ```elixir
-# 1.x
-Tempo.meets?(june, july)
-Tempo.during?(midsummer, june)
-Tempo.Interval.inverse_relation(:precedes)
-Tempo.compose(:precedes, :during)
-```
-
-```elixir
-iex> Tempo.Allen.meets?(~o"2026-06", ~o"2026-07")
-true
 iex> Tempo.Allen.during?(~o"2026-06-21", ~o"2026-06")
 true
-iex> Tempo.Allen.inverse(:precedes)
-:preceded_by
 iex> Tempo.Allen.compose(:precedes, :during)
 [:precedes, :meets, :overlaps, :starts, :during]
 ```
 
-`inverse/1` and `compose/2` also take a list of relations, for reasoning when the relation between two intervals is known only to be one of several.
+## One function for certainty
 
-## Containment and sameness have one name each
-
-`Tempo.within?/3` takes over from `subset?/3`, and answers for any two values, sets included, by the instants they cover — as its mirror `contains?/3` always has. `Tempo.Interval.equivalent?/2` is removed; `Tempo.equal?/3` asks whether two values cover the same instants.
+The eleven functions `certainly_before?/2`, `possibly_within?/2`, `overlap_certainty/2` and their like are three, which take the predicate as their first argument and so cover every predicate and every Allen relation.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-Tempo.subset?(holidays, december)
-Tempo.Interval.equivalent?(june, first_to_first)
+# 1.6
+Tempo.certainly_before?(~o"2026-06~", ~o"2026-08")
+Tempo.overlap_certainty(~o"2026-06~", ~o"2026-06-15")
 ```
 
 ```elixir
-iex> {:ok, holidays} = Tempo.union(~o"2026-12-25", ~o"2026-12-26")
-iex> Tempo.within?(holidays, ~o"2026-12")
+iex> Tempo.certainly?(:before, ~o"2026-06~", ~o"2026-08")
 true
-iex> Tempo.equal?(~o"2026-06", ~o"2026-06-01/2026-07-01")
-true
+iex> Tempo.certainty(:overlaps, ~o"2026-06~", ~o"2026-06-15")
+:certain
 ```
 
-> *"Christmas and Boxing Day both fall **within** December. June is **equal** to the span from the first of June to the first of July."*
-
-`Tempo.Interval.within?/2` stays, for a single interval: Allen's `:equals`, `:starts`, `:during` or `:finishes`.
+> *"About June is **certainly before** August."*
 
 ## Today is a date
 
-`Tempo.today/1` and `Tempo.utc_today/0` return the calendar date with no zone, where 1.x returned the zoned day. A date written without a zone — a holiday, a birthday — compares with it directly, where the zoned day raised `Tempo.FloatingTempoError`. `Tempo.now/1` is still the zoned instant.
-
-<!-- guides:skip -->
+`Tempo.today/1` and `Tempo.utc_today/0` are the calendar date with no zone, where 1.6 gave the zoned day. A date written without a zone (a holiday, a birthday) relates to it directly, where the zoned day raised `Tempo.FloatingTempoError`. `Tempo.now/1` is still the zoned instant.
 
 ```elixir
-# 1.x — raises: a zoned day against a floating date
-Tempo.relation(Tempo.today("Australia/Sydney"), ~o"2026-12-25")
-```
-
-```elixir
-iex> Tempo.today("Australia/Sydney")
-...> |> Tempo.floating?()
+iex> {:ok, today} = Tempo.today("Australia/Sydney")
+iex> Tempo.floating?(today)
+true
+iex> {:ok, now} = Tempo.now("Australia/Sydney")
+iex> Tempo.zoned?(now)
 true
 ```
 
-For the zoned day, place today's date in the zone:
+For the zoned day, place the date in the zone with `Tempo.in_zone/2`.
 
-```elixir
-iex> {:ok, zoned} = Tempo.in_zone(Tempo.today("Australia/Sydney"), "Australia/Sydney")
-iex> Tempo.floating?(zoned)
-false
-```
+## Floating and zoned do not mix
 
-`Tempo.duration/2` refuses a zoned value against a floating one, as `relation/2` always has, where 1.x measured the floating one as though it were in UTC:
-
-```elixir
-iex> Tempo.duration(~o"2026-09-28T09:00:00[Australia/Sydney]", ~o"2026-11-03")
-{:error, %Tempo.FloatingTempoError{operation: :measure, value: ~o"2026Y11M3D"}}
-```
-
-## A zone on an interval's start applies to its end
-
-An interval written with a zone or offset on its start and none on its end ends in that zone too, as ISO 8601-1 §5.5.1 says. In 1.x its end was floating, so the span straddled the zoned and floating time lines and measuring it treated the end as UTC. `Tempo.Interval.new/1` follows the same rule.
+A value with no zone is a reading of a clock, in no particular place; a value with a zone is a moment. 1.6 read the floating one as UTC in some functions and raised in others. 3.0 refuses the pair everywhere with one error, and the caller says which zone the floating value is in.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x — the end is floating
-{:ok, iv} = Tempo.from_iso8601("2018-01-15T10:00+05:00/2018-02-20T10:00")
-{_from, to} = Tempo.Interval.endpoints(iv)
-Tempo.floating?(to)
-#=> true
+# 1.6: the floating date is measured as though it were in UTC
+Tempo.duration(~o"2026-09-28T09:00:00[Australia/Sydney]", ~o"2026-11-03")
+#=> {:ok, ~o"PT3114000S"}
 ```
 
 ```elixir
-iex> {:ok, iv} = Tempo.from_iso8601("2018-01-15T10:00+05:00/2018-02-20T10:00")
-iex> {_from, to} = Tempo.Interval.endpoints(iv)
-iex> Tempo.floating?(to)
-false
+iex> {:error, error} = Tempo.duration(~o"2026-09-28[Australia/Sydney]", ~o"2026-11-03")
+iex> error.reason
+:floating_and_zoned
+iex> {:ok, election_day} = Tempo.in_zone(~o"2026-11-03", "Australia/Sydney")
+iex> Tempo.duration(~o"2026-09-28[Australia/Sydney]", election_day)
+{:ok, ~o"P36D"}
 ```
 
-## Metadata belongs to the value
+> *"A day in Sydney and a day in no zone share no time line to be measured on. **In** Sydney's **zone**, the two are thirty-six days apart."*
 
-In 1.x `Tempo.new/1`'s `:metadata` was written into the value's ISO 8601 form as IXDTF suffix tags. In 2.0 it is the caller's own data, carried with the value and read with `Tempo.metadata/1`, and the tags have their own option, `:tags`:
+## One expression, one calendar, one zone
 
-```elixir
-iex> {:ok, christmas} = Tempo.new(year: 2026, month: 12, day: 25, metadata: %{name: "Christmas Day"})
-iex> Tempo.metadata(christmas)
-%{name: "Christmas Day"}
-iex> Tempo.to_iso8601(christmas)
-{:ok, "2026Y12M25D"}
-
-iex> {:ok, tagged} = Tempo.new(year: 2026, month: 6, day: 15, tags: %{"x-source" => "hr"})
-iex> Tempo.to_iso8601(tagged)
-{:ok, "2026Y6M15D[x-source=hr]"}
-```
-
-Converting a value moves its metadata to the interval or intervals it becomes, so a holiday's name travels with its day through the set operations.
-
-## A value without a year is placed with at and on
-
-`Tempo.anchor/2` is removed, and `at/2` and `on/2` do its work: the value with a year keeps it, the other supplies what it lacks, and either order gives the same value, so the code reads the way the sentence does. They return `{:ok, value}`, where `anchor/2` returned the value itself; `at!/2` and `on!/2` return it bare.
+An IXDTF suffix (`[Europe/Paris]`, `[u-ca=hebrew]`, `[key=value]`) is written once, after the whole expression, and is the zone and the calendar of all of it. 1.6 read a suffix on either end of an interval and on a member of a set, and kept each end in its own.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-Tempo.anchor(~o"T17", ~o"2026-06-15")
-#=> ~o"2026Y6M15DT17H"
+# 1.6
+Tempo.from_iso8601("2026-06-15T10:00[Europe/Paris]/2026-06-15T12:00[Europe/Paris]")
 ```
 
 ```elixir
-iex> Tempo.on(~o"T17", ~o"2026-06-15")
-{:ok, ~o"2026Y6M15DT17H"}
-iex> Tempo.at(~o"2026-06-15", ~o"T17")
-{:ok, ~o"2026Y6M15DT17H"}
+iex> Tempo.from_iso8601("2026-06-15T10:00/2026-06-15T12:00[Europe/Paris]")
+{:ok, ~o"2026Y6M15DT10H0M/T12H0M[Europe/Paris]"}
+iex> {:error, error} = Tempo.from_iso8601("2026-06-15T10:00[Europe/Paris]/2026-06-15T12:00")
+iex> error.reason
+"a zone, a calendar or a tag is written once, after the whole expression"
 ```
 
-> *"Five in the afternoon **on** the fifteenth of June is the fifteenth of June **at** five in the afternoon."*
-
-`Tempo.UnanchoredError` replaces `Tempo.NonAnchoredError` and `Tempo.RequiresAnchorError`. Every operation that needs a year and is given a value without one returns it, with a message that names the value and says to place it on a date with `Tempo.at/2` or `Tempo.on/2`:
+`Tempo.Interval.new/1` returns an error for two ends in different zones or calendars; convert one with `Tempo.shift_zone/2` or `Tempo.to_calendar/2` first. A set is brought to its first member's calendar and zone. A time shift (`+02:00`, `Z`) is not a suffix: ISO 8601 writes one on each end, and each end keeps its own.
 
 ```elixir
-iex> {:error, %Tempo.UnanchoredError{} = error} = Tempo.shift(~o"2M28D", day: 1)
-iex> Exception.message(error) =~ "Place the value on a date first"
-true
+iex> {:error, error} = Tempo.Interval.new(from: ~o"2026-06-15[Europe/Paris]", to: ~o"2026-06-20[America/New_York]")
+iex> error.reason
+:zones
 ```
 
-"Anchored" now means one thing, that a value has a year. A recurrence whose rule names no start has an open start, and converting one with no `:within` window returns `Tempo.IntervalEndpointsError` with `reason: :open_start`, where 1.x said `:unanchored`.
+## The window
 
-## Zoned is the pair of floating
-
-A value with a zone or an offset is zoned, and a value with neither is floating — the calendaring words, as in RFC 5545's floating time and Temporal's `ZonedDateTime`. `Tempo.zoned?/1` replaces `grounded?/1`, and `Tempo.ZonedTempoError`, which `in_zone/2` returns for a value that already has a zone, replaces `GroundedTempoError`.
+`:within` replaces `:bound` everywhere. It keeps every occurrence that overlaps the window, for every kind of expression. In 1.6 a recurrence with a start read `:bound` as an upper limit and returned every occurrence from its start.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-Tempo.grounded?(~o"2026-06-15T09:00[Europe/Paris]")
-#=> true
+# 1.6: every year from 2020 up to the bound
+Tempo.to_interval(~o"R/2020-01-01/P1Y", bound: ~o"2026")
 ```
 
 ```elixir
-iex> Tempo.zoned?(~o"2026-06-15T09:00[Europe/Paris]")
-true
-iex> Tempo.floating?(~o"2026-06-15T09:00")
-true
+iex> {:ok, this_year} = Tempo.to_interval(~o"R/2020-01-01/P1Y", within: ~o"2026")
+iex> Tempo.IntervalSet.count(this_year)
+1
+iex> {:ok, since_2020} = Tempo.to_interval(~o"R/2020-01-01/P1Y", within: ~o"2020/2026")
+iex> Tempo.IntervalSet.count(since_2020)
+7
 ```
 
-> *"Nine in the morning in Paris is **zoned**; nine in the morning wherever you are is **floating**."*
+> *"The yearly occurrence **within** 2026 is 2026's own. For every year since 2020, the window starts in 2020."*
 
-## Datetime is one word
+A window also places a value with no year, which 1.6 returned unplaced:
 
-The conversions to and from Elixir's `DateTime` and `NaiveDateTime` write "datetime" as one word, as Elixir does and as `Tempo.parse_datetime/2` already did: `to_datetime/1`, `from_datetime/1`, `to_naive_datetime/1` and `from_naive_datetime/1`. `to_calendar/1`, deprecated since `to_elixir/1` arrived, is removed.
+```elixir
+iex> Tempo.to_interval(~o"6M15D", within: ~o"2026")
+{:ok, ~o"2026Y6M15D/2026Y6M15D"}
+```
+
+## Selection
+
+`Tempo.select/3` selects in every period of its base, where 1.6 selected in the first alone, and what it selects are values of the selector's own resolution, where 1.6 gave intervals.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-Tempo.to_date_time(meeting)
-Tempo.to_calendar(birthday)
+# 1.6
+Tempo.select(~o"2026/2029", ~o"12M25D") |> elem(1) |> Tempo.IntervalSet.count()
+#=> 1
 ```
 
 ```elixir
-iex> Tempo.to_datetime(~o"2026-06-15T09:00:00[Europe/Paris]")
-{:ok, #DateTime<2026-06-15 09:00:00+02:00 CEST Europe/Paris>}
-iex> Tempo.to_elixir(~o"2026-06-15")
-{:ok, ~D[2026-06-15]}
-```
-
-## The format modules parse
-
-The iCalendar and JSCalendar readers are `parse/2`, as Localize's and `URI`'s are, and an RRULE is written by `Tempo.RRule.to_string/1`, the pair of `Tempo.RRule.parse/2`. `Tempo.ICal.available/2` takes a calendar's text as well as a calendar already parsed.
-
-<!-- guides:skip -->
-
-```elixir
-# 1.x
-Tempo.ICal.from_ical(ics, within: week)
-Tempo.ICal.available_from_ical(ics, within: week)
-Tempo.JSCalendar.from_jscalendar(json)
-Tempo.to_rrule(interval)
-```
-
-```elixir
-iex> {:ok, rule} = Tempo.RRule.parse("FREQ=WEEKLY;COUNT=4")
-iex> Tempo.RRule.to_string(rule)
-{:ok, "FREQ=WEEKLY;COUNT=4"}
-```
-
-## Parse reads ISO 8601 and words
-
-`Tempo.parse/2` reads ISO 8601 first, with the whole grammar `Tempo.from_iso8601/2` reads, and a locale's own words after that; in 1.x it read words only, so an ISO 8601 datetime was an error. The typed parsers read the same, keeping only a value of their own kind:
-
-```elixir
-iex> Tempo.parse("2026-06-15T10:30", locale: :en)
-{:ok, ~o"2026Y6M15DT10H30M"}
-iex> Tempo.parse_date("15 June 2026", locale: :en)
-{:ok, ~o"2026Y6M15D"}
-```
-
-> *"A date field takes **15 June 2026** as readily as **2026-06-15**."*
-
-## One conversion error
-
-`Tempo.ConversionError` replaces `Tempo.MaterialisationError`, keeping its reasons (`:bare_duration`, `:one_of_set`, `:open_range`, …), so `to_interval/2` and the other conversions share one error. The engine behind them, the comparison of values, the ISO 8601 tokenizer and the RRULE expander among it, is no part of the documented API, and an RRULE's occurrences come from `Tempo.RRule.parse/2` and `Tempo.to_interval_set/2` rather than the expander:
-
-```elixir
-iex> {:error, %Tempo.ConversionError{reason: :bare_duration}} = Tempo.to_interval(~o"P1D")
-
-iex> {:ok, mondays} = Tempo.RRule.parse("FREQ=WEEKLY;BYDAY=MO;COUNT=4", from: ~o"2026-06-01")
-iex> {:ok, occurrences} = Tempo.to_interval_set(mondays)
-iex> Tempo.IntervalSet.count(occurrences)
+iex> {:ok, christmases} = Tempo.select(~o"2026/2029", ~o"12M25D")
+iex> Tempo.IntervalSet.count(christmases)
 4
+iex> Tempo.select(~o"2026-06", [1, 15])
+{:ok, ~o"{2026Y6M1D,2026Y6M15D}"}
 ```
+
+> *"**Select** the twenty-fifth of December in each year from 2026 through 2029: four Christmases."*
 
 ## Workdays
 
-The workday functions are named for the workday, and the weekend selector is plural, as `workdays/1` is: the workdays of June are `Tempo.select(~o"2026-06", Tempo.workdays(:AU))`, and `Tempo.weekends(:AU)` selects the weekends. `count_workdays/2` counts the workdays of any value `select/2` selects from. The functions return `{:error, reason}` for a value that is not a day or a territory they cannot resolve, where 1.x raised.
+A territory's workdays are a `Tempo.Workdays`, which holds its weekdays, its weekend and the days left out of them, where 1.6 gave a set of weekdays. The names say "workday" throughout.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
+# 1.6
 Tempo.add_working_days(~o"2026-06-12", 1, :US)
-Tempo.working_days_in(june, :US)
-Tempo.shift(start, ~o"P3D", skipping: Tempo.weekends(from: start))
+Tempo.select(~o"2026-06", Tempo.workdays(:US))
 ```
 
 ```elixir
 iex> Tempo.add_workdays(~o"2026-06-12", 1, :US)
-~o"2026Y6M15D"
+{:ok, ~o"2026Y6M15D"}
 iex> Tempo.count_workdays(~o"2026-06", :US)
+{:ok, 22}
+iex> {:ok, working} = Tempo.select(~o"2026-06", Tempo.workdays(:US))
+iex> Tempo.IntervalSet.count(working)
 22
 ```
 
-The weekend days from a date on, the lazy set 1.x's `weekends/1` built, are the weekends of a span with no end: `select/2` over an open-ended span selects period by period, only as far as the walk goes.
+> *"One **workday** after Friday the twelfth is Monday the fifteenth. June has twenty-two."*
+
+## Reading text
+
+`Tempo.from_iso8601/2` with a `:profile` replaces the typed parsers, and holds the text to the profile, where `Tempo.parse_date/2` read a date with a time.
 
 ```elixir
-iex> {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends(:US))
-iex> Tempo.shift(~o"2026-06-18T16:00", ~o"P3D", skipping: weekends)
-~o"2026Y6M23DT16H0M0S"
+iex> Tempo.from_iso8601("2026-06-15", profile: :date)
+{:ok, ~o"2026Y6M15D"}
+iex> {:error, error} = Tempo.from_iso8601("2026-06-15T10", profile: :date)
+iex> error.reason
+"not a date"
 ```
 
-> *"Three days of work from Thursday at four, skipping the weekends, finish on Tuesday at four."*
-
-A day shifted by days or weeks steps from free day to free day and lands on a day, as a day shifted by a day is the next day. 1.x counted days of free time and returned the instant they ran out, which for one day from a Friday was midnight on the Saturday.
+A value is kept as it is written, where 1.6 resolved some forms as it read them. A week date, an ordinal date and a season keep their own units and are written back as they were read:
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-Tempo.shift(~o"2026-06-12", ~o"P1D", skipping: Tempo.weekends(from: ~o"2026-06-12"))
-#=> ~o"2026Y6M13DT0H0M0S"
+# 1.6
+Tempo.from_iso8601("2026-W25-2")
+#=> {:ok, ~o"2026Y6M16D"}
+Tempo.from_iso8601("2026-166")
+#=> {:ok, ~o"2026Y6M15D"}
+Tempo.from_iso8601("2026-21")
+#=> {:ok, ~o"2026Y3M/5M"}
 ```
 
 ```elixir
-iex> {:ok, weekends} = Tempo.select(~o"2026-06-12/..", Tempo.weekends(:US))
-iex> Tempo.shift(~o"2026-06-12", ~o"P1D", skipping: weekends)
-~o"2026Y6M15D"
+iex> Tempo.from_iso8601("2026-W25-2")
+{:ok, ~o"2026Y25W2K"}
+iex> Tempo.from_iso8601("2026-166")
+{:ok, ~o"2026Y166O"}
+iex> Tempo.to_date(~o"2026-W25-2")
+{:ok, ~D[2026-06-16]}
+iex> Tempo.from_iso8601("2026-21")
+{:ok, ~o"2026Y21M"}
 ```
 
-> *"The next free day after Friday 12 June, skipping the weekend, is Monday 15 June."*
+A season has no dates of its own: spring is March to May in one hemisphere and September to November in the other, and 1.6 read the northern months everywhere. `Tempo.to_interval/2` of one is a `Tempo.ConversionError` whose reason is `:season`.
 
-A span is selected in each of its periods at its start's resolution, where 1.x selected in its first period alone: the Christmases of `~o"2026/2029"` are three, where 1.x found 2026's.
+Three texts 1.6 read are read otherwise:
+
+* **An end of one number** takes the start's last unit: `2026-06-15/20` is the fifteenth through the twentieth, where 1.6 read a century.
+
+* **A month and a day with no year** is written `6M15D`. `12-25` is twelve o'clock with a shift of minus twenty-five hours, and an error.
+
+* **A zone or a calendar inside an expression** is an error, as above.
 
 ```elixir
-iex> {:ok, christmases} = Tempo.select(~o"2026/2029", ~o"12-25")
-iex> Tempo.IntervalSet.count(christmases)
-3
+iex> Tempo.from_iso8601("2026-06-15/20")
+{:ok, ~o"2026Y6M15D/20D"}
 ```
 
-## Sets
+## Writing text
 
-An interval set's members have one name, `Tempo.IntervalSet.members/1`: `to_list/1` read like `Enum.to_list/1`, which walks the days inside the members. The time covered by at least some number of members is `covered/2`, beside `covered?/2`, and it returns a tuple. `Tempo.RecurrenceSet.new/2` returns `{:ok, set}` and checks its members, as every other constructor that takes input does, with `new!/2` for the struct.
+`Tempo.to_iso8601/1`, `Tempo.to_string/2` and `Tempo.to_relative_string/2` return a tuple. Interpolating a value writes its ISO 8601 text, where 1.6 wrote the locale's words; ask for the words with `Tempo.to_string/2`.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-Tempo.IntervalSet.to_list(set)
-Tempo.IntervalSet.overlapping(bookings, at_least: 2)
-holidays = Tempo.RecurrenceSet.new([christmas, new_year])
+# 1.6
+"#{~o"2026-06-15"}"
+#=> "Jun 15, 2026"
 ```
 
 ```elixir
-iex> bookings = Tempo.IntervalSet.new!([
-...>   ~o"2026-06-15T09:00:00/2026-06-15T11:00:00",
-...>   ~o"2026-06-15T10:00:00/2026-06-15T12:00:00"
-...> ])
-iex> {:ok, double_booked} = Tempo.IntervalSet.covered(bookings, at_least: 2)
-iex> Tempo.IntervalSet.members(double_booked)
-[~o"2026Y6M15DT10H0M0S/T11H0M0S"]
-iex> {:ok, holidays} = Tempo.RecurrenceSet.new([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
-iex> {:ok, occurrences} = Tempo.to_interval_set(holidays, within: ~o"2026Y")
-iex> Tempo.IntervalSet.count(occurrences)
-2
-```
-
-> *"The double-booked time is the time covered by at least two bookings."*
-
-## Span ends and the specialist modules
-
-A period in a network names its ends `:from` and `:to`, as an interval does. A scheduled task's early and late schedules are intervals, where 1.x had four dates, and `Schedule.task/3`'s `:earliest` says what it bounds, `:not_before`. The network solver's `propagate/1` shares its verb with `Tempo.Interval.RelationNetwork`. The builders report what they cannot read rather than ignoring or raising it, so a leftover 1.x option comes back from the solver as an error that names the 2.0 option.
-
-<!-- guides:skip -->
-
-```elixir
-# 1.x
-Network.add_period(network, :k1, start: {:not_before, ~o"1200Y"}, end: {:not_after, ~o"1300Y"})
-Tempo.Network.Solver.tighten(network)
-Tempo.Schedule.task(schedule, :a, duration: ~o"P2D", earliest: ~o"2026-06-10")
-{plan[:b].start, plan[:b].finish, plan[:b].latest_start, plan[:b].latest_finish}
-```
-
-```elixir
-iex> {:ok, plan} =
-...>   Tempo.Schedule.new()
-...>   |> Tempo.Schedule.task(:a, duration: ~o"P2D", not_before: ~o"2026-06-10")
-...>   |> Tempo.Schedule.task(:b, duration: ~o"P3D", after: :a, deadline: ~o"2026-06-20")
-...>   |> Tempo.Schedule.solve()
-iex> {plan[:b].early, plan[:b].late}
-{~o"2026Y6M12D/15D", ~o"2026Y6M17D/20D"}
-```
-
-> *"B can run from the 12th to the 15th at the earliest, and from the 17th to the 20th at the latest."*
-
-The instant helpers are gone. The day, week or month containing a value is `Tempo.trunc/2`, at its own resolution, and where it ends is the `to` of its span — under the half-open convention the start of the next one, as `end_of_month/1` answered:
-
-```elixir
-iex> Tempo.trunc(~o"2026-06-15T14:30", :month)
-~o"2026Y6M"
-iex> {:ok, june} = Tempo.to_interval(~o"2026Y6M")
-iex> Tempo.Interval.to(june)
-~o"2026Y7M"
-```
-
-## Writing ISO 8601 returns a tuple
-
-`Tempo.to_iso8601/1` returns `{:ok, string}`, as `from_iso8601/2` returns `{:ok, value}`, and an error for a value ISO 8601 has no form for: a set of intervals or of recurrences, a conditional member, a cron nearest weekday or day-of-month OR day-of-week union, a recurrence with an RFC 5545 `UNTIL`, a value in a calendar IXDTF cannot name (a fiscal year, say), or anything that is not a Tempo value. 1.x returned the string and raised for those, and wrote a value in another calendar without its calendar unless it had been parsed with one. `to_iso8601!/1` returns the string.
-
-<!-- guides:skip -->
-
-```elixir
-# 1.x
-Tempo.to_iso8601(~o"2026-12-25")
-#=> "2026Y12M25D"
-```
-
-```elixir
-iex> Tempo.to_iso8601(~o"2026-12-25")
-{:ok, "2026Y12M25D"}
-iex> {:ok, holidays} = Tempo.RecurrenceSet.new([~o"R/../P1Y/FL12M25DN", ~o"R/../P1Y/FL1M1DN"])
-iex> {:error, %Tempo.Iso8601EncodeError{}} = Tempo.to_iso8601(holidays)
-iex> holidays
-...> |> Tempo.RecurrenceSet.members()
-...> |> Enum.map(&Tempo.to_iso8601!/1)
-["R/../P1Y/FL12M25DN", "R/../P1Y/FL1M1DN"]
-```
-
-> *"Christmas is written 2026Y12M25D. A set of holidays has no one ISO 8601 form, so each holiday is written on its own."*
-
-## A relative time counts calendar periods
-
-`Tempo.to_relative_string/2` counts the calendar periods from `:from` to the value in the value's own calendar and on its own wall clock, as Localize counts them. 1.x measured the seconds between the two as UTC instants and divided them by a mean month or year. It returns `{:ok, string}`, as `to_iso8601/1` does, and an error for a value it cannot count from, where 1.x raised; `to_relative_string!/2` returns the string.
-
-<!-- guides:skip -->
-
-```elixir
-# 1.x — a day is less than a mean month
-Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
-#=> "this month"
-```
-
-```elixir
-iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
-{:ok, "next month"}
-iex> sydney = Tempo.from_iso8601!("2026-06-16T01:00[Australia/Sydney]")
-iex> Tempo.to_relative_string(sydney, from: Tempo.from_iso8601!("2026-06-15T13:00:00Z"), unit: :day)
-{:ok, "tomorrow"}
-```
-
-> *"The first of February is next month from the last day of January. One in the morning in Sydney is tomorrow from 13:00 UTC the day before, which is 23:00 in Sydney."*
-
-Without a `:unit`, a value is never counted in a unit finer than its own, so a year a few months away is next year:
-
-```elixir
-iex> Tempo.to_relative_string(~o"2027", from: ~o"2026-07-01")
-{:ok, "next year"}
-```
-
-A zoned value finer than a day is measured from a zoned `:from`, and a floating one is an error, a `Tempo.FloatingTempoError`, where 1.x read it as UTC.
-
-## Formatting returns a tuple
-
-`Tempo.to_string/2` returns `{:ok, string}`, as `to_relative_string/2` does, and an error for a value it cannot render, where 1.x raised: an open interval, a recurrence with no end and an interval set without an end have no last day to show. `to_string!/2` returns the string. Interpolation cannot return an error, so it writes such a value in its ISO 8601 form, where 1.x raised. A value naming several spans renders them as a list in the locale ("Jun 15, 2026 and Jul 4, 2026"), where 1.x joined them with commas.
-
-```elixir
+iex> "#{~o"2026-06-15"}"
+"2026Y6M15D"
 iex> Tempo.to_string(~o"2026-06-15")
 {:ok, "Jun 15, 2026"}
-iex> {:error, %Tempo.IntervalEndpointsError{}} = Tempo.to_string(~o"2026-06-15/..")
-iex> "Open from #{~o"2026-06-15/.."}"
-"Open from 2026Y6M15D/.."
+iex> Tempo.to_relative_string(~o"2026-12-25", from: ~o"2026-06-15")
+{:ok, "in 6 months"}
 ```
 
-> *"The fifteenth of June is written Jun 15, 2026. A booking open from the fifteenth has no last day to write, so it is an error, and in a sentence it is written in ISO 8601."*
+## Rounding
 
-## Rounding is to the nearest
-
-`Tempo.round/2` rounds a value to the start of the unit it is in or the start of the next, whichever its own start is nearer to, and half way rounds up, as `Kernel.round/1` rounds a half. 1.x rounded half an hour down, rounded a day to its month and then the month to its year, so that 16 June became the next year, and refused a date with a time. How far into a unit a value is, is measured in the unit as it is there: a month of 31 days, a day of 23 hours where the clocks go forward.
+`Tempo.round/2` is to the nearest boundary, half way up, for every unit. 1.6 rounded half an hour down and a day in mid-June up to the next year.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
+# 1.6
 Tempo.round(~o"T10:30", :hour)
 #=> ~o"T10H"
 Tempo.round(~o"2026-06-16", :year)
@@ -769,217 +617,117 @@ Tempo.round(~o"2026-06-16", :year)
 
 ```elixir
 iex> Tempo.round(~o"T10:30", :hour)
-~o"T11H"
+{:ok, ~o"T11H"}
 iex> Tempo.round(~o"2026-06-16", :year)
-~o"2026Y"
-iex> Tempo.round(~o"2026-06-15T12:00", :day)
-~o"2026Y6M16D"
+{:ok, ~o"2026Y"}
 ```
 
-> *"Half past ten is eleven o'clock to the nearest hour. The sixteenth of June is in the first half of its year. Noon is half way through the fifteenth, so it rounds to the sixteenth."*
+`Tempo.trunc/2` to a week gives the week, where 1.6 gave its first day:
 
-## A zone shift keeps the span
+```elixir
+iex> Tempo.trunc(~o"2026-06-15T14:30", :week)
+{:ok, ~o"2026Y25W"}
+```
 
-`Tempo.shift_zone/2` returns the span a value names, read on another zone's clock. A value written to the second is the same second there, as in 1.x, and now keeps a fraction of a second. A coarser value keeps its resolution where its span is one unit on the other clock, and is otherwise the interval it is there, where 1.x gave the one second it starts at.
+## Another zone's clock
+
+`Tempo.shift_zone/2` gives the span a value names on the other zone's clock: the same resolution where it is one unit there and otherwise an interval, where 1.6 gave the second it starts at.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x — a day became its first second
-{:ok, new_york} = Tempo.shift_zone(~o"2026-06-15[Europe/Paris]", "America/New_York")
-{Tempo.day(new_york), Tempo.hour(new_york), Tempo.minute(new_york), Tempo.second(new_york)}
-#=> {14, 18, 0, 0}
+# 1.6
+Tempo.shift_zone(~o"2026-06-15[Europe/Paris]", "America/New_York")
+#=> {:ok, ~o"2026Y6M14DT18H0M0SZ-4H[America/New_York][-04:00]"}
 ```
 
 ```elixir
-iex> {:ok, hour} = Tempo.shift_zone(~o"2026-06-15T14[Europe/Paris]", "America/New_York")
-iex> Tempo.to_iso8601!(hour)
-"2026Y6M15DT8HZ-4H[America/New_York]"
-iex> {:ok, day} = Tempo.shift_zone(~o"2026-06-15[Europe/Paris]", "America/New_York")
-iex> Tempo.to_iso8601!(day)
-"2026Y6M14DT18H0MZ-4H/15DT18H0MZ-4H[America/New_York]"
+iex> Tempo.shift_zone(~o"2026-06-15T10[Europe/Paris]", "America/New_York")
+{:ok, ~o"2026Y6M15DT4H[America/New_York]"}
+iex> Tempo.shift_zone(~o"2026-06-15[Europe/Paris]", "America/New_York")
+{:ok, ~o"2026Y6M14DT18H/15DT18H[America/New_York]"}
 ```
 
-> *"Two in the afternoon in Paris is eight in the morning in New York, the whole hour. The fifteenth in Paris runs from six in the evening of the fourteenth to six in the evening of the fifteenth in New York."*
+> *"Ten in Paris is four in New York. The fifteenth in Paris runs from six in the evening of the fourteenth to six in the evening of the fifteenth in New York."*
 
-## A whole second converts to a whole second
+## Elixir's own types
 
-`Tempo.to_time/1`, `to_naive_datetime/1`, `to_datetime/1` and `to_elixir/1` give a second with no fraction a precision of zero, as Elixir reads the same ISO 8601 text, and a fraction the digits it is written to. 1.x gave six digits, so `Tempo.from_elixir/1` of the result was a value to the microsecond.
+A whole second has a precision of zero, where 1.6 gave six digits, so a converted value equals the literal that names it.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-Tempo.to_naive_datetime(~o"2022-11-19T01:02:03")
-#=> {:ok, ~N[2022-11-19 01:02:03.000000]}
+# 1.6
+Tempo.to_elixir(~o"2026-06-15T10:00:00")
+#=> {:ok, ~N[2026-06-15 10:00:00.000000]}
 ```
 
 ```elixir
-iex> Tempo.to_naive_datetime(~o"2022-11-19T01:02:03")
-{:ok, ~N[2022-11-19 01:02:03]}
-iex> Tempo.to_time(~o"T14:30:00.25")
-{:ok, ~T[14:30:00.25]}
-iex> {:ok, naive} = Tempo.to_naive_datetime(~o"2022-11-19T01:02:03")
-iex> Tempo.from_elixir(naive)
-~o"2022Y11M19DT1H2M3S"
+iex> Tempo.to_elixir(~o"2026-06-15T10:00:00")
+{:ok, ~N[2026-06-15 10:00:00]}
+iex> Tempo.to_elixir(~o"2026-06-15T10:00:00Z")
+{:ok, ~U[2026-06-15 10:00:00Z]}
 ```
 
-> *"Three seconds past two minutes past one is that second, and converted back it is the value it was."*
+## Recurrences
 
-## The constructor builds what the parser reads
+A recurring interval's occurrences are consecutive, each ending where the next starts, as ISO 8601-1 defines one. From the 31st of January by months, 1.6 left three days between the second occurrence and the third.
 
-`Tempo.new/1` returns the value the same components are read as. A week and a day of it are the calendar date they name, as an ordinal date is; 1.x kept them as a week date, a value the parser never gives. A date with a `:zone` and no time of day is that day in the zone, where 1.x refused it, and `:microsecond` is a fraction of the second as Elixir's types hold one.
+```elixir
+iex> Tempo.to_interval(~o"R3/2026-01-31/P1M")
+{:ok, ~o"{2026Y1M31D/2M27D,2026Y2M28D/3M30D,2026Y3M31D/4M29D}"}
+```
+
+A rule read from an RRULE with a start is read as RFC 5545 reads it. A monthly rule from the 31st passes over the months with no 31st, where 1.6 gave the last day of each; a yearly rule with a day of the month is that day of every month, where 1.6 gave the start's month alone; and each occurrence is as long as the start is precise, where 1.6 gave occurrences a cadence long.
 
 <!-- guides:skip -->
 
 ```elixir
-# 1.x
-{:ok, day} = Tempo.new(year: 2026, week: 24, day_of_week: 3)
-day.time
-#=> [year: 2026, week: 24, day_of_week: 3]
+# 1.6
+Tempo.RRule.parse!("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01-31") |> Tempo.to_interval()
+#=> {:ok, #Tempo.IntervalSet<[~o"2026Y1M31D/2M28D", ~o"2026Y2M28D/3M28D", ~o"2026Y3M31D/4M30D"]>}
 ```
 
 ```elixir
-iex> Tempo.new(year: 2026, week: 24, day_of_week: 3)
-{:ok, ~o"2026Y6M10D"}
-iex> Tempo.new(year: 2026, month: 6, day: 15, zone: "Europe/Paris")
-{:ok, ~o"2026Y6M15D[Europe/Paris]"}
-iex> Tempo.new(hour: 10, minute: 30, second: 45, microsecond: {500_000, 1})
-{:ok, ~o"T10H30M45.5S"}
+iex> "FREQ=MONTHLY;COUNT=3" |> Tempo.RRule.parse!(from: ~o"2026-01-31") |> Enum.map(&Tempo.Interval.from/1)
+[~o"2026Y1M31D", ~o"2026Y3M31D", ~o"2026Y5M31D"]
+iex> "FREQ=YEARLY;BYMONTHDAY=15;COUNT=3" |> Tempo.RRule.parse!(from: ~o"2026-06-01") |> Enum.map(&Tempo.Interval.from/1)
+[~o"2026Y6M15D", ~o"2026Y7M15D", ~o"2026Y8M15D"]
 ```
 
-> *"The third day of week 24 of 2026 is the tenth of June. The fifteenth of June in Paris is that day in Paris."*
+> *"Monthly from the thirty-first: January, March and May, the months that have one."*
 
-## A value with no zone and one with a zone do not combine
+A recurrence with no end and no window is a `Tempo.ConversionError` whose reason is `:unbounded`, where 1.6 had `Tempo.UnboundedRecurrenceError`.
 
-A value with no zone has no place on the time line, so the set operations return a `Tempo.FloatingTempoError` for it and a zoned value, and `Tempo.compare/3` and the predicates raise it, where the floating one was read as UTC. `Tempo.relation/2` and the certainty functions return the error where they raised it. Place the floating value with `Tempo.in_zone/2` first.
+## Metadata
+
+Data of your own travels with a value as `Tempo.metadata/1`, on any expression, where 1.6 kept it on an interval alone. It is no part of the value's text. IXDTF tags read from a text are in it under `:ixdtf_tags`.
 
 ```elixir
-iex> {:error, %Tempo.FloatingTempoError{}} = Tempo.union(~o"2026-06-15T10", ~o"2026-06-15T10Z")
-iex> {:ok, in_utc} = Tempo.in_zone(~o"2026-06-15T10", "Etc/UTC")
-iex> {:ok, both} = Tempo.union(in_utc, ~o"2026-06-15T11Z")
-iex> Tempo.IntervalSet.count(both)
-2
+iex> ~o"2026-06-15" |> Tempo.put_metadata(%{source: "hr"}) |> Tempo.metadata()
+%{source: "hr"}
+iex> ~o"2026-06-15" |> Tempo.put_metadata(%{source: "hr"}) |> Tempo.to_iso8601()
+{:ok, "2026Y6M15D"}
 ```
 
-> *"Ten o'clock nowhere in particular and ten o'clock in UTC are not put together. Placed in UTC, ten o'clock joins eleven."*
+## Errors
 
-## An interval is walked by its finer end
+Twenty-four exception modules are eight, each with a `:reason` that says which case it is. A match on a 1.6 module no longer compiles; the [glossary](glossary.md#errors) lists the reasons.
 
-An interval whose ends are written to two resolutions is walked by the finer of them, so the values it yields are the interval and none runs past its end. It was walked by its start's unit.
+| 1.6 | 3.0 |
+|---|---|
+| `Tempo.InvalidDateError`, `InvalidTimeError`, `InvalidUnitError`, `ResolutionError`, `RoundingError` | `Tempo.InvalidDateError` for a value that names no date or time; `ArgumentError` for a unit that is none |
+| `Tempo.FloatingTempoError`, `GroundedTempoError`, `ZoneOffsetMismatchError` | `Tempo.FrameError` |
+| `Tempo.NonAnchoredError`, `RequiresAnchorError` | `Tempo.ConversionError` or `Tempo.FrameError`, reason `:needs_a_year` |
+| `Tempo.UnboundedRecurrenceError`, `UnboundedSetError`, `MaterialisationError` | `Tempo.ConversionError`, reason `:unbounded` among others |
+| `Tempo.UnknownZoneError`, `ZoneGapError`, `AmbiguousZoneError`, `DuplicateZoneError` | `Tempo.ZoneError` |
+| `Tempo.RRuleError`, `CronError` | `Tempo.ParseError` |
 
 ```elixir
-iex> Enum.to_list(~o"2026/2026-03")
-[~o"2026Y1M", ~o"2026Y2M"]
+iex> {:error, error} = Tempo.shift(~o"2M28D", day: 1)
+iex> {error.__struct__, error.reason}
+{Tempo.ConversionError, :needs_a_year}
+iex> {:error, error} = Tempo.from_iso8601("2026-03-08T02:30[America/New_York]")
+iex> {error.__struct__, error.reason}
+{Tempo.ZoneError, :gap}
 ```
-
-> *"From 2026 to March 2026 is January and February."*
-
-## An interval's bare end is the start's last unit
-
-An interval's end written as one bare number is the unit its start ends with, as ISO 8601-1 §5.5.1 lets an end leave out what it shares with its start. The number was read as what it is alone, a century, and the interval ran backwards. A century at an interval's end is written with its designator.
-
-```elixir
-iex> Tempo.from_iso8601!("2026-06-15/20") == Tempo.from_iso8601!("2026-06-15/2026-06-20")
-true
-iex> Tempo.from_iso8601!("2026-06-15T10:30/45") == Tempo.from_iso8601!("2026-06-15T10:30/2026-06-15T10:45")
-true
-```
-
-> *"The fifteenth to the twentieth. Half past ten to a quarter to eleven."*
-
-## Months, then days
-
-`Tempo.shift/3` applies a duration's years and months, brings the day into the month they land in, and then counts its days, as `Date.shift/2` does. A recurrence's occurrences are consecutive, each ending where the next starts, as ISO 8601-1 defines a recurring interval. Across the end of a short month both gave another answer.
-
-```elixir
-iex> Tempo.shift(~o"2026-07-29", month: -5, day: -1)
-~o"2026Y2M27D"
-iex> {:ok, months} = Tempo.to_interval(~o"R3/2026-01-31/P1M")
-iex> months
-...> |> Tempo.IntervalSet.members()
-...> |> Enum.map(&Tempo.Interval.to/1)
-[~o"2026Y2M28D", ~o"2026Y3M31D", ~o"2026Y4M30D"]
-```
-
-> *"Five months before the twenty-ninth of July is the end of February, and the day before that is the twenty-seventh. A month from the end of January ends at the end of February, the next at the end of March, and the third at the end of April."*
-
-## A span that ends where it starts
-
-A span with no year lies on a cycle: the day for a time of day, the week for a day of the week, the year for a month and a day. One that ends where it starts is once round, where it was empty. With a year, a span that ends where it starts is still empty.
-
-```elixir
-iex> Tempo.empty?(~o"T0H/T0H")
-false
-iex> Enum.count(~o"T0H/T0H")
-24
-iex> Tempo.empty?(~o"2026-06-15/2026-06-15")
-true
-```
-
-> *"Midnight to midnight is the whole day, twenty-four hours of it."*
-
-## A window takes the zone of what it bounds
-
-A `:within` window with no zone bounds a value in a zone in that zone, where it was read as UTC. A window written with a zone or an offset is the moments it names.
-
-```elixir
-iex> late_show = Tempo.from_iso8601!("R/2026-05-30T23:30/P1D[America/New_York]")
-iex> {:ok, shows} = Tempo.to_interval(late_show, within: ~o"2026-06-01/2026-06-03")
-iex> shows
-...> |> Tempo.IntervalSet.members()
-...> |> Enum.map(&Tempo.day(Tempo.Interval.from(&1)))
-[31, 1, 2]
-```
-
-> *"The shows within the first two days of June in New York are the one that runs into the first, and those that start on the first and the second."*
-
-## A time of day is on a day
-
-A time of day written under a year, a month or a week, with the day left out, is that time on the first day of what is written, and the value holds the day. 1.x kept the gap, and each function read it its own way: such a value compared as equal to any day of its year, and a day added to it was lost. `Tempo.at/2` places a time of day on a year or a month the same way, and under a group it is the first day of the group.
-
-```elixir
-iex> ~o"2026-06T17"
-~o"2026Y6M1DT17H"
-iex> Tempo.at(~o"2026", ~o"T17")
-{:ok, ~o"2026Y1M1DT17H"}
-iex> Tempo.shift(~o"2026YT17H", day: 1)
-~o"2026Y1M2DT17H"
-```
-
-> *"Five o'clock in June 2026 is five o'clock on the first of June. Five o'clock in 2026 is on the first of January, and a day later is the second."*
-
-ISO 8601 wants the date of a date and time complete, so reading such text at all is Tempo's own: the divergence is recorded in the [ISO 8601 conformance guide](iso8601-conformance.md). That time on each day of a month is written with the days named, `~o"2026Y6M{1..-1}DT17H"`.
-
-## A rule read from an RRULE states what it takes from its start
-
-`Tempo.RRule.parse/2` given a `:from` that is a calendar date writes into the rule what RFC 5545 takes from DTSTART, as ISO 8601-2 Annex C says a converted rule must: a weekly rule's weekday, a monthly rule's day of the month, a yearly rule's month and day. A day that a month lacks is then passed over, as RFC 5545 has it, where 1.x listed the month's last day, and each occurrence is as long as the start is precise (`FREQ=DAILY` from `2026-01-31T10` is the hour from 10:00 of each day), where it was a cadence long. `Tempo.ICal.parse/2` and `Tempo.JSCalendar.parse/2` list the same occurrences. An ISO 8601 recurrence is as it was: `~o"R3/2026-01-31/P1M"` is 31 January, 28 February and 31 March, and `Tempo.RRule.to_string/1` now writes it as the rule that lists those days, `FREQ=MONTHLY;COUNT=3;BYMONTHDAY=-1`, where it wrote `FREQ=MONTHLY;COUNT=3`.
-
-<!-- guides:skip -->
-
-```elixir
-# 1.x — the last day of February, and each occurrence a month long
-{:ok, monthly} = Tempo.RRule.parse("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01-31")
-monthly
-#=> ~o"R3/2026Y1M31D/P1M"
-{:ok, occurrences} = Tempo.to_interval(monthly)
-occurrences
-|> Tempo.IntervalSet.members()
-|> Enum.map(&Tempo.to_iso8601!/1)
-#=> ["2026Y1M31D/2M28D", "2026Y2M28D/3M31D", "2026Y3M31D/4M30D"]
-```
-
-```elixir
-iex> {:ok, monthly} = Tempo.RRule.parse("FREQ=MONTHLY;COUNT=3", from: ~o"2026-01-31")
-iex> monthly
-~o"R3/2026Y1M31D/P1M/FL31DN"
-iex> {:ok, occurrences} = Tempo.to_interval(monthly)
-iex> occurrences
-...> |> Tempo.IntervalSet.members()
-...> |> Enum.map(&Tempo.to_iso8601!/1)
-["2026Y1M31D/2M1D", "2026Y3M31D/4M1D", "2026Y5M31D/6M1D"]
-iex> Tempo.RRule.to_string(monthly)
-{:ok, "FREQ=MONTHLY;COUNT=3;BYMONTHDAY=31"}
-```
-
-> *"Every month on the thirty-first, three times: January, March and May, a day each. The rule says the thirty-first, since its start was one."*

@@ -20,6 +20,7 @@ defmodule Tempo.Shift do
     ConversionError,
     Duration,
     Expand,
+    Limit,
     Scale,
     Spans,
     Unit,
@@ -38,11 +39,20 @@ defmodule Tempo.Shift do
   @spec shift(expression(), Duration.t()) :: {:ok, expression()} | {:error, Exception.t()}
   def shift(%Tempo{form: {:value, units}} = value, %Duration{} = by) do
     cond do
-      Keyword.has_key?(units, :selection) -> {:error, conversion(value, :selection)}
-      Keyword.has_key?(units, :group) -> {:error, conversion(value, :group)}
-      Unit.anchored?(units) and Unit.concrete?(units) -> shift_one(value, by)
-      Unit.anchored?(units) -> shift_each(value, by)
-      true -> shift_unanchored(value, by)
+      Keyword.has_key?(units, :selection) ->
+        {:error, conversion(value, :selection)}
+
+      Keyword.has_key?(units, :group) ->
+        {:error, conversion(value, :group)}
+
+      Unit.anchored?(units) and Unit.concrete?(units) and Expand.one_span?(units) ->
+        shift_one(value, by)
+
+      Unit.anchored?(units) ->
+        shift_each(value, by)
+
+      true ->
+        shift_unanchored(value, by)
     end
   end
 
@@ -160,16 +170,22 @@ defmodule Tempo.Shift do
   @spec extended_to(Unit.units(), Unit.t(), module()) :: Unit.units()
   def extended_to(units, unit, calendar) do
     if Unit.compare(unit, Unit.grain(Unit.resolution(units))) == :gt do
-      filled = units |> as_years(calendar) |> Expand.filled_to(unit)
-      {last, _} = List.last(filled)
-
-      if Unit.grain(last) == unit,
-        do: filled,
-        else: filled ++ [{unit, Unit.minimum(unit)}]
+      units |> as_years(calendar) |> filled_down_to(unit)
     else
       units
     end
   end
+
+  # A century or a decade written as its first year is already at the year.
+  defp filled_down_to(units, unit) do
+    if written_to?(units, unit), do: units, else: with_first(Expand.filled_to(units, unit), unit)
+  end
+
+  defp with_first(filled, unit) do
+    if written_to?(filled, unit), do: filled, else: filled ++ [{unit, Unit.minimum(unit)}]
+  end
+
+  defp written_to?(units, unit), do: units |> List.last() |> elem(0) |> Unit.grain() == unit
 
   defp as_years([{unit, _} | _] = units, calendar) when unit in [:century, :decade] do
     case Expand.day_span(calendar, plain(units)) do
@@ -331,11 +347,29 @@ defmodule Tempo.Shift do
         [%Tempo{form: {:value, first}} | _] = shifted
         %{value | form: {:value, Enum.map(first, &kept(&1, units, plural))}}
 
+      as_written?(value, units, shifted) ->
+        %{value | form: {:value, as_written(units, shifted)}}
+
       mask?(units) ->
         one_of(value, one_unit_differs(value, Enum.uniq(shifted)))
 
       true ->
         one_unit_differs(value, Enum.uniq(shifted))
+    end
+  end
+
+  # The units a value was written with, holding what the first shifted value
+  # holds: a time on each day of June moved a month is that time on each day
+  # of July, where July's days are the shifted values and no others.
+  defp as_written(units, [%Tempo{form: {:value, first}} | _]),
+    do: Enum.map(units, fn {unit, held} -> {unit, Keyword.get(first, unit, held)} end)
+
+  defp as_written?(value, units, shifted) do
+    candidate = %{value | form: {:value, as_written(plain(units), shifted)}}
+
+    case Spans.members(candidate) do
+      {:ok, members} -> Enum.map(members, &plain_member/1) == Enum.map(shifted, &plain_member/1)
+      {:error, _} -> false
     end
   end
 
@@ -791,6 +825,13 @@ defmodule Tempo.Shift do
   defp every(unit) when unit in [:minute, :second], do: [0..59]
   defp every(:day_of_week), do: [1..7]
   defp every(_calendar), do: [1..-1//1]
+
+  # Several groups are several values: each is extended, and they are a set.
+  defp group_values(%Tempo{} = value, _prefix, nth, _unit, _size) when not is_integer(nth) do
+    with {:ok, members} <- Spans.members(value),
+         {:ok, extended} <- each(Enum.take(members, Limit.values()), &extend(&1, nil)),
+         do: {:ok, %{value | form: {:all, extended}}}
+  end
 
   defp group_values(%Tempo{} = value, prefix, nth, unit, size) do
     if Unit.concrete?(prefix) and Unit.anchored?(prefix) do

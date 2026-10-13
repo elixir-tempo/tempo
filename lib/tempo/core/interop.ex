@@ -133,6 +133,15 @@ defmodule Tempo.Interop do
   def to_datetime(%Tempo{zone: nil, shift: nil} = value),
     do: {:error, ConversionError.exception(value: value, reason: :floating)}
 
+  # A shift written beside a zone gives the moment (RFC 9557 §3.4), and the
+  # zone the clock that moment is shown on.
+  def to_datetime(%Tempo{zone: %Zone{name: name}, shift: shift} = value)
+      when is_binary(name) and is_list(shift) do
+    with {:ok, moment} <- to_datetime(%{value | zone: nil}) do
+      moment |> DateTime.shift_zone(name) |> named(value)
+    end
+  end
+
   def to_datetime(%Tempo{zone: %Zone{name: name}} = value) when is_binary(name) do
     with {:ok, naive} <- to_naive(value) do
       case DateTime.from_naive(naive, name) do

@@ -13,7 +13,7 @@ defmodule Tempo.Workdays do
 
   """
 
-  alias Tempo.{ConversionError, Duration, Limit, Shift, Spans}
+  alias Tempo.{ConversionError, Duration, Limit, Options, Shift, Spans, Territory}
 
   @conventions [:following, :preceding, :modified_following, :modified_preceding]
 
@@ -70,7 +70,8 @@ defmodule Tempo.Workdays do
   def new({:error, _} = error, _options), do: error
 
   def new(territory, options) do
-    with {:ok, territory} <- Tempo.Territory.resolve(territory) do
+    with :ok <- Options.check(options, [:except], "Tempo.workdays/2"),
+         {:ok, territory} <- Territory.resolve(territory) do
       {:ok,
        %__MODULE__{
          territory: territory,

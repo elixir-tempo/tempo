@@ -32,6 +32,7 @@ defmodule Tempo.Zone do
   defstruct [:name, :offset, critical: false]
 
   @second 1_000_000
+  @day 86_400 * @second
 
   @typedoc "A zone: an IANA name, or a fixed offset in minutes from UTC (`[+05:30]`), never both."
   @type t :: %__MODULE__{name: String.t() | nil, offset: integer() | nil, critical: boolean()}
@@ -52,6 +53,12 @@ defmodule Tempo.Zone do
   @doc "A zone of a fixed offset, in minutes from UTC."
   @spec fixed(integer()) :: %__MODULE__{name: nil, offset: integer(), critical: false}
   def fixed(minutes) when is_integer(minutes), do: %__MODULE__{offset: minutes}
+
+  @doc "An offset in ticks as a written shift: five hours behind UTC is `[hour: -5, minute: 0]`."
+  @spec shift_of(tick()) :: [{:hour, integer()} | {:minute, integer()}, ...]
+  def shift_of(offset) do
+    [hour: div(offset, 3600 * @second), minute: div(rem(offset, 3600 * @second), 60 * @second)]
+  end
 
   @doc "A written shift as ticks: `[hour: -5, minute: 30]` is five and a half hours behind UTC."
   @spec shift_ticks(shift()) :: tick()
@@ -80,6 +87,21 @@ defmodule Tempo.Zone do
       {:gap, {before, _}, {after_change, _}} -> {:gap, offset(before), offset(after_change)}
     end
   end
+
+  @doc """
+  Whether a zone's clock skips a whole day, as Samoa's skipped the 30th of
+  December 2011: a day no reading of which is ever shown.
+  """
+  @spec day_skipped?(t() | nil, shift() | nil, integer()) :: boolean()
+  def day_skipped?(%__MODULE__{name: name} = zone, nil, day) when is_binary(name) do
+    skipped?(zone, day * @day) and skipped?(zone, (day + 1) * @day - 1)
+  end
+
+  def day_skipped?(_zone, _shift, _day), do: false
+
+  @doc "Whether a zone's clock skips a wall reading."
+  @spec skipped?(t(), tick()) :: boolean()
+  def skipped?(%__MODULE__{} = zone, wall), do: match?({:gap, _, _}, offsets_at_wall(zone, wall))
 
   @doc "The offset, in ticks, a zone has at a UTC tick."
   @spec offset_at_utc(t(), tick()) :: tick()

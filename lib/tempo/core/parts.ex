@@ -5,7 +5,7 @@ defmodule Tempo.Parts do
   # day of the month of a week date, the week of a date), and nil where the
   # expression names several or none.
 
-  alias Tempo.{Calendar, ConversionError, Expand, Scale, Shift, Spans, Unit, Walk}
+  alias Tempo.{Calendar, ConversionError, Duration, Expand, Scale, Shift, Spans, Unit, Walk}
 
   @day 86_400_000_000
 
@@ -106,7 +106,7 @@ defmodule Tempo.Parts do
   end
 
   @doc "The unit an expression is written to: its finest end or member."
-  @spec resolution(Tempo.t() | Tempo.Duration.t()) :: Unit.t()
+  @spec resolution(Tempo.t() | Tempo.Duration.t()) :: Unit.t() | nil
   def resolution(%Tempo{form: {:value, units}}), do: Unit.resolution(units)
 
   def resolution(%Tempo{form: {:span, from, to}}),
@@ -119,7 +119,8 @@ defmodule Tempo.Parts do
 
   def resolution(%Tempo.Duration{units: units}), do: units |> List.last() |> elem(0)
 
-  defp finest(units), do: Enum.max_by(units, &index/1)
+  # An interval open at both ends is written to no unit.
+  defp finest(units), do: Enum.max_by(units, &index/1, fn -> nil end)
   defp index(unit), do: Enum.find_index(Unit.order(), &(&1 == Unit.grain(unit))) || 0
 
   @doc "Whether an expression has a year, so a place on the time line."
@@ -134,14 +135,19 @@ defmodule Tempo.Parts do
   end
 
   @doc "Whether every end an expression has is written: no open end, no sequence without one."
-  @spec bounded?(Tempo.t()) :: boolean()
+  @spec bounded?(Tempo.t() | Duration.t()) :: boolean()
   def bounded?(%Tempo{form: {:span, from, to}}), do: from != :open and to != :open
   def bounded?(%Tempo{form: {:every, _, bound, _}}), do: bound != :infinity
 
-  def bounded?(%Tempo{form: {kind, members}}) when kind in [:all, :one],
+  def bounded?(%Tempo{form: {kind, members}}) when kind in [:all, :one] and is_list(members),
     do: Enum.all?(members, &bounded?/1)
 
+  # A set whose members are a stream has no end that is written.
+  def bounded?(%Tempo{form: {kind, _stream}}) when kind in [:all, :one], do: false
   def bounded?(%Tempo{}), do: true
+
+  # A duration, as a member of a set of them, has no end to leave open.
+  def bounded?(%Duration{}), do: true
 
   @doc "Whether an expression covers no time: a set with no members, a span of no length."
   @spec empty?(Tempo.t()) :: boolean()

@@ -19,6 +19,7 @@ defmodule Tempo.Cron do
 
   """
 
+  alias Tempo.Options
   alias Tempo.RRule
 
   @aliases %{
@@ -74,7 +75,8 @@ defmodule Tempo.Cron do
   """
   @spec parse(String.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def parse(expression, options \\ []) when is_binary(expression) do
-    with {:ok, fields} <- fields(String.trim(expression)),
+    with :ok <- Options.check(options, [:from, :metadata], "Tempo.Cron.parse/2"),
+         {:ok, fields} <- fields(String.trim(expression)),
          {:ok, parsed} <- parse_fields(fields) do
       recurrences(parsed, options)
     end

@@ -24,8 +24,10 @@ defmodule Tempo do
   alias Tempo.FrameError
   alias Tempo.Interop
   alias Tempo.InvalidCalendarError
+  alias Tempo.LeapSeconds
   alias Tempo.Limit
   alias Tempo.Measure
+  alias Tempo.Options
   alias Tempo.Parts
   alias Tempo.Reader
   alias Tempo.Scale
@@ -39,6 +41,9 @@ defmodule Tempo do
   alias Tempo.Writer
   alias Tempo.Zone
   alias Tempo.ZoneError
+
+  # The options of the set operations: a window to place their operands in, and whose metadata a result carries.
+  @set_options [:within, :metadata]
 
   @enforce_keys [:form]
   defstruct form: nil,
@@ -157,8 +162,10 @@ defmodule Tempo do
   def from_iso8601(text, calendar) when is_binary(text) and is_atom(calendar),
     do: Reader.read(text, calendar: calendar)
 
-  def from_iso8601(text, options) when is_binary(text) and is_list(options),
-    do: Text.read(text, options)
+  def from_iso8601(text, options) when is_binary(text) and is_list(options) do
+    with :ok <- Options.check(options, [:calendar, :profile], "Tempo.from_iso8601/2"),
+         do: Text.read(text, options)
+  end
 
   @doc """
   Reads a text as `from_iso8601/2` does, returning the expression or raising.
@@ -278,7 +285,15 @@ defmodule Tempo do
 
   """
   @spec parse(String.t(), keyword()) :: {:ok, t() | Duration.t()} | {:error, error()}
-  def parse(text, options \\ []) when is_binary(text), do: Text.parse(text, options)
+  def parse(text, options \\ []) when is_binary(text) do
+    with :ok <-
+           Options.check(
+             options,
+             [:locale, :calendar, :profile, :reference_date],
+             "Tempo.parse/2"
+           ),
+         do: Text.parse(text, options)
+  end
 
   @doc """
   `parse/2`, returning the expression or raising.
@@ -473,7 +488,7 @@ defmodule Tempo do
       {:ok, ~o"{2026-01/2026-01,2026-03/2026-03}"}
 
       iex> Tempo.to_interval(~o"R3/2026-01-31/P1M")
-      {:ok, ~o"{2026-01-31/2026-02-27,2026-02-28/2026-03-27,2026-03-31/2026-04-29}"}
+      {:ok, ~o"{2026-01-31/2026-02-27,2026-02-28/2026-03-30,2026-03-31/2026-04-29}"}
 
       iex> Tempo.to_interval(~o"6M15D", within: ~o"2026")
       {:ok, ~o"2026-06-15/2026-06-15"}
@@ -484,18 +499,21 @@ defmodule Tempo do
 
   """
   @spec to_interval(t() | Duration.t(), keyword()) :: {:ok, t()} | {:error, error()}
-  def to_interval(expression, options \\ [])
+  def to_interval(expression, options \\ []) do
+    with :ok <- Options.check(options, [:within], "Tempo.to_interval/2"),
+         do: spanned(expression, options)
+  end
 
-  def to_interval(%Tempo.Duration{} = duration, _options),
+  defp spanned(%Tempo.Duration{} = duration, _options),
     do: {:error, ConversionError.exception(value: duration, reason: :bare_duration)}
 
-  def to_interval(%__MODULE__{form: {:every, first, :infinity, _}} = recurrence, options) do
+  defp spanned(%__MODULE__{form: {:every, first, :infinity, _}} = recurrence, options) do
     if Keyword.has_key?(options, :within) or domain?(first),
       do: plural_interval(recurrence, options),
       else: {:error, ConversionError.exception(value: recurrence, reason: :unbounded)}
   end
 
-  def to_interval(%__MODULE__{} = expression, options) do
+  defp spanned(%__MODULE__{} = expression, options) do
     if Spans.singular?(expression),
       do: singular_interval(expression, options),
       else: plural_interval(expression, options)
@@ -586,7 +604,9 @@ defmodule Tempo do
   """
   @spec members(t() | Duration.t(), keyword()) :: {:ok, [t()]} | {:error, error()}
   def members(expression, options \\ []) do
-    with {:ok, members} <- Spans.members(expression, options), do: bounded(members, expression)
+    with :ok <- Options.check(options, [:within], "Tempo.members/2"),
+         {:ok, members} <- Spans.members(expression, options),
+         do: bounded(members, expression)
   end
 
   @doc """
@@ -630,7 +650,10 @@ defmodule Tempo do
   """
   @spec walk(t(), Tempo.Unit.t() | {:microsecond, 1..6}, keyword()) ::
           {:ok, Enumerable.t()} | {:error, error()}
-  def walk(expression, unit, options \\ []), do: Spans.walk(expression, unit, options)
+  def walk(expression, unit, options \\ []) do
+    with :ok <- Options.check(options, [:within], "Tempo.walk/3"),
+         do: Spans.walk(expression, unit, options)
+  end
 
   # ── Set operations ────────────────────────────────────────────────────
 
@@ -677,13 +700,14 @@ defmodule Tempo do
   """
   @spec union(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def union(a, b, options \\ []) do
-    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+    with :ok <- Options.check(options, @set_options, "Tempo.union/3"),
+         {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
       members =
         Algebra.whole(pa ++ pb)
         |> Enum.sort_by(&{&1.start, &1.stop})
-        |> Enum.map(&in_frame(&1.span, frame))
+        |> Enum.map(& &1.span)
 
-      {:ok, set_of(members, %{a | calendar: frame.calendar, zone: frame.zone})}
+      Algebra.gathered(members, calendar: frame.calendar, zone: frame.zone, metadata: a.metadata)
     end
   end
 
@@ -731,7 +755,8 @@ defmodule Tempo do
 
   """
   @spec intersection(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
-  def intersection(a, b, options \\ []), do: operate(&Algebra.intersection/3, a, b, options)
+  def intersection(a, b, options \\ []),
+    do: operate(&Algebra.intersection/3, a, b, options, "Tempo.intersection/3")
 
   @doc """
   The difference of two expressions: every instant in the first and not the
@@ -761,7 +786,8 @@ defmodule Tempo do
 
   """
   @spec difference(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
-  def difference(a, b, options \\ []), do: operate(&Algebra.difference/3, a, b, options)
+  def difference(a, b, options \\ []),
+    do: operate(&Algebra.difference/3, a, b, options, "Tempo.difference/3")
 
   @doc """
   The symmetric difference of two expressions: every instant in exactly one
@@ -788,7 +814,7 @@ defmodule Tempo do
   """
   @spec symmetric_difference(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def symmetric_difference(a, b, options \\ []),
-    do: operate(&Algebra.symmetric_difference/3, a, b, options)
+    do: operate(&Algebra.symmetric_difference/3, a, b, options, "Tempo.symmetric_difference/3")
 
   @doc """
   The complement of an expression within a window: every instant of the
@@ -817,7 +843,7 @@ defmodule Tempo do
   def complement(a, options) do
     case Keyword.get(options, :within) do
       %__MODULE__{} = window ->
-        operate(&Algebra.difference/3, window, a, options)
+        operate(&Algebra.difference/3, window, a, options, "Tempo.complement/2")
 
       _ ->
         {:error, ConversionError.exception(value: a, reason: :unbounded)}
@@ -848,7 +874,8 @@ defmodule Tempo do
   """
   @spec members_overlapping(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def members_overlapping(a, b, options \\ []),
-    do: members_where(&Algebra.members_overlapping/2, a, b, options)
+    do:
+      members_where(&Algebra.members_overlapping/2, a, b, options, "Tempo.members_overlapping/3")
 
   @doc """
   The members of the first expression no instant of which is in the second,
@@ -862,7 +889,7 @@ defmodule Tempo do
   """
   @spec members_outside(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def members_outside(a, b, options \\ []),
-    do: members_where(&Algebra.members_outside/2, a, b, options)
+    do: members_where(&Algebra.members_outside/2, a, b, options, "Tempo.members_outside/3")
 
   @doc """
   The members of either expression no instant of which is in the other.
@@ -878,7 +905,8 @@ defmodule Tempo do
   """
   @spec members_in_exactly_one(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def members_in_exactly_one(a, b, options \\ []) do
-    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+    with :ok <- Options.check(options, @set_options, "Tempo.members_in_exactly_one/3"),
+         {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
       members =
         (Algebra.members_outside(pa, pb) ++ Algebra.members_outside(pb, pa))
         |> Algebra.whole()
@@ -889,15 +917,17 @@ defmodule Tempo do
     end
   end
 
-  defp operate(operation, a, b, options) do
-    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+  defp operate(operation, a, b, options, function) do
+    with :ok <- Options.check(options, @set_options, function),
+         {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
       spans = pa |> operation.(pb, frame) |> Enum.map(&Algebra.written(&1, frame, options))
       {:ok, set_of(spans, %{a | calendar: frame.calendar, zone: frame.zone})}
     end
   end
 
-  defp members_where(filter, a, b, options) do
-    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+  defp members_where(filter, a, b, options, function) do
+    with :ok <- Options.check(options, @set_options, function),
+         {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
       members = pa |> filter.(pb) |> Algebra.whole() |> Enum.map(&in_frame(&1.span, frame))
       {:ok, set_of(members, %{a | calendar: frame.calendar, zone: frame.zone})}
     end
@@ -981,6 +1011,8 @@ defmodule Tempo do
     """
     @spec unquote(name)(t(), t(), keyword()) :: boolean()
     def unquote(name)(a, b, options \\ []) do
+      Options.check!(options, [:within], "Tempo.#{unquote(name)}/3")
+
       case Algebra.aligned(a, b, options) do
         {:ok, frame, pa, pb} -> Algebra.holds?(unquote(predicate), pa, pb, frame)
         {:error, exception} -> raise exception
@@ -1018,6 +1050,8 @@ defmodule Tempo do
   """
   @spec compare(t(), t(), keyword()) :: :lt | :eq | :gt
   def compare(a, b, options \\ []) do
+    Options.check!(options, [:within], "Tempo.compare/3")
+
     case Algebra.aligned(a, b, options) do
       {:ok, _frame, [pa | _], [pb | _]} ->
         compare_positions({pa.start, pa.stop}, {pb.start, pb.stop})
@@ -1077,7 +1111,8 @@ defmodule Tempo do
   @spec certainty(Tempo.Allen.predicate() | Allen.relation(), t(), t()) ::
           :certain | :possible | :impossible | {:error, error()}
   def certainty(predicate, a, b) do
-    with {:ok, readings_a} <- Spans.readings(a),
+    with :ok <- one_frame(a, b),
+         {:ok, readings_a} <- Spans.readings(a),
          {:ok, readings_b} <- Spans.readings(b),
          :ok <- few_enough(readings_a, readings_b, a) do
       holds = for ra <- readings_a, rb <- readings_b, do: Allen.holds?(predicate, ra, rb)
@@ -1087,6 +1122,18 @@ defmodule Tempo do
         Enum.any?(holds) -> :possible
         true -> :impossible
       end
+    end
+  end
+
+  # Two expressions are compared on one frame (law 4): both with a year or
+  # both on the same cycle, both zoned or both floating.
+  defp one_frame(a, b) do
+    case {Spans.frame(a), Spans.frame(b)} do
+      {same, same} -> :ok
+      {{:cycle, _}, {:cycle, _}} -> {:error, FrameError.exception(a: a, b: b, reason: :cycles)}
+      {{:cycle, _}, _} -> {:error, FrameError.exception(a: a, b: b, reason: :needs_a_year)}
+      {_, {:cycle, _}} -> {:error, FrameError.exception(a: a, b: b, reason: :needs_a_year)}
+      _ -> {:error, FrameError.exception(a: a, b: b, reason: :floating_and_zoned)}
     end
   end
 
@@ -1229,9 +1276,9 @@ defmodule Tempo do
 
   * `{:ok, zoned}`.
 
-  * `{:error, %Tempo.ZoneError{}}` when the zone is not known, or
-    `{:error, %Tempo.FrameError{}}` when the expression is already zoned or
-    shifted (`shift_zone/2` moves one).
+  * `{:error, %Tempo.ZoneError{}}` when the zone is not known or its clock
+    skips the reading, or `{:error, %Tempo.FrameError{}}` when the expression
+    is already zoned or shifted (`shift_zone/2` moves one).
 
   ### Examples
 
@@ -1245,13 +1292,13 @@ defmodule Tempo do
   def in_zone(%__MODULE__{} = expression, zone) when is_binary(zone) do
     with :ok <- floating(expression),
          {:ok, zone} <- Zone.named(zone) do
-      {:ok, rezoned(expression, zone)}
+      Validate.run(rezoned(expression, zone))
     end
   end
 
   defp floating(%__MODULE__{} = expression) do
     if Spans.frame(expression) == :utc,
-      do: {:error, FrameError.exception(a: expression, b: nil, reason: :floating_and_zoned)},
+      do: {:error, FrameError.exception(a: expression, b: nil, reason: :zoned)},
       else: :ok
   end
 
@@ -1324,19 +1371,23 @@ defmodule Tempo do
   defp zoned(%__MODULE__{} = expression) do
     if Spans.frame(expression) == :utc,
       do: :ok,
-      else: {:error, FrameError.exception(a: expression, b: nil, reason: :floating_and_zoned)}
+      else: {:error, FrameError.exception(a: expression, b: nil, reason: :floating)}
   end
 
   # A span's ends read on the new zone's clock to the minute, or to the hour
   # where the minutes are zero and the end was no finer than an hour.
-  defp moved_span(%{start: start, stop: stop, span: %__MODULE__{form: {:span, from, to}}}, frame) do
+  defp moved_span(
+         %{start: start, stop: stop, span: %__MODULE__{form: {:span, from, to}} = span},
+         frame
+       ) do
     from_value = Spans.at_position(start, clock_model(from), :start, frame.calendar, frame.zone)
     to_value = Spans.at_position(stop, clock_model(to), :end, frame.calendar, frame.zone)
 
     %__MODULE__{
       form: {:span, trimmed(from_value, from), trimmed(to_value, to)},
       calendar: frame.calendar,
-      zone: frame.zone
+      zone: frame.zone,
+      metadata: span.metadata
     }
   end
 
@@ -1595,31 +1646,34 @@ defmodule Tempo do
   """
   @spec shift(t(), Duration.t() | keyword() | String.t(), keyword()) ::
           {:ok, t()} | {:error, error()}
-  def shift(expression, by, options \\ [])
+  def shift(expression, by, options \\ []) do
+    with :ok <- Options.check(options, [:skipping], "Tempo.shift/3"),
+         do: shift_by(expression, by, options)
+  end
 
-  def shift(expression, by, options) when is_list(by) do
+  defp shift_by(expression, by, options) when is_list(by) do
     {skipping, units} = Keyword.pop(by, :skipping)
 
     with {:ok, duration} <- Duration.new(units),
-         do: shift(expression, duration, Keyword.put_new(options, :skipping, skipping))
+         do: shift_by(expression, duration, Keyword.put_new(options, :skipping, skipping))
   end
 
-  def shift(expression, by, options) when is_binary(by) do
+  defp shift_by(expression, by, options) when is_binary(by) do
     case from_iso8601(by) do
-      {:ok, %Duration{} = duration} -> shift(expression, duration, options)
+      {:ok, %Duration{} = duration} -> shift_by(expression, duration, options)
       {:ok, other} -> {:error, ConversionError.exception(value: other, reason: :not_a_duration)}
       {:error, _} = error -> error
     end
   end
 
-  def shift(expression, %Duration{} = by, options) do
+  defp shift_by(expression, %Duration{} = by, options) do
     case Keyword.get(options, :skipping) do
       nil -> Shift.shift(expression, by)
       busy -> Shift.skipping(expression, by, busy_set(busy))
     end
   end
 
-  def shift(_expression, by, _options),
+  defp shift_by(_expression, by, _options),
     do: {:error, ConversionError.exception(value: by, reason: :not_a_duration)}
 
   defp busy_set(%__MODULE__{} = busy), do: busy
@@ -1864,14 +1918,29 @@ defmodule Tempo do
   times. Unlike an interval written between them, which runs through its
   last date, this measures start to start.
 
+  Given an expression and options, it is `duration/1` of the expression
+  with the options applied.
+
   ### Arguments
 
   * `from` and `to` are each a `t:t/0` with one span, on one frame, `to`
     after `from`.
 
+  * Or `expression`, a `t:t/0`, and `options`, a keyword list.
+
+  ### Options
+
+  * `:leap_seconds` is `true` to count the leap seconds the expression
+    spans (`Tempo.LeapSeconds.spanned/1`) into its length, a second for
+    each. The default is `false`: a length on the clock, in which every
+    minute is sixty seconds.
+
   ### Returns
 
-  * `{:ok, duration}`.
+  * `{:ok, duration}` for two values.
+
+  * A `t:Tempo.Duration.t/0`, `:infinity` or `{:error, exception}` for an
+    expression and options, as `duration/1` returns them.
 
   * `{:error, %Tempo.IntervalEndpointsError{}}` when `to` is not after
     `from`, and `{:error, %Tempo.FrameError{}}` when the two share no frame.
@@ -1884,9 +1953,39 @@ defmodule Tempo do
       iex> Tempo.duration(~o"2026-09-28T10", ~o"2026-09-29")
       {:ok, ~o"PT14H"}
 
+      iex> new_year = ~o"2016-12-31T23:59:00Z/2017-01-01T00:01:00Z"
+      iex> Tempo.duration(new_year)
+      ~o"PT120S"
+      iex> Tempo.duration(new_year, leap_seconds: true)
+      ~o"PT121S"
+
   """
   @spec duration(t(), t()) :: {:ok, Duration.t()} | {:error, error()}
+  @spec duration(t(), keyword()) :: Duration.t() | :infinity | {:error, error()}
+  def duration(expression, options) when is_list(options) do
+    case Keyword.validate(options, leap_seconds: false) do
+      {:ok, [leap_seconds: true]} ->
+        with_leap_seconds(expression)
+
+      {:ok, [leap_seconds: false]} ->
+        Measure.duration(expression)
+
+      _other ->
+        {:error,
+         ArgumentError.exception(":leap_seconds, true or false, is the one option of duration/2")}
+    end
+  end
+
   def duration(from, to), do: Measure.between(from, to)
+
+  defp with_leap_seconds(expression) do
+    case {Measure.duration(expression), LeapSeconds.count(expression)} do
+      {%Duration{} = duration, {:ok, 0}} -> duration
+      {%Duration{} = duration, {:ok, n}} -> Duration.add(duration, %Duration{units: [second: n]})
+      {%Duration{}, {:error, _} = error} -> error
+      {other, _count} -> other
+    end
+  end
 
   for {name, comparison, phrase} <- [
         {:at_least?, :at_least, "at least as long as"},
@@ -2084,10 +2183,22 @@ defmodule Tempo do
   interval's ends or a set's members. A value ending in a group is written
   to the group's unit.
 
+  ### Arguments
+
+  * `expression` is a `t:t/0` or a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * The unit, an atom; `nil` for an interval open at both ends, which is
+    written to none.
+
   ### Examples
 
       iex> Tempo.resolution(~o"2022-11")
       :month
+
+      iex> Tempo.resolution(~o"../..")
+      nil
 
       iex> Tempo.resolution(~o"2022Y1M2G3DU")
       :day
@@ -2096,7 +2207,7 @@ defmodule Tempo do
       :hour
 
   """
-  @spec resolution(t() | Duration.t()) :: Unit.t()
+  @spec resolution(t() | Duration.t()) :: Unit.t() | nil
   def resolution(expression), do: Parts.resolution(expression)
 
   @doc """
@@ -2156,7 +2267,16 @@ defmodule Tempo do
 
   @doc """
   Whether every end an expression has is written: an interval with an open
-  end is not bounded, nor a recurrence with no end.
+  end is not bounded, nor a recurrence with no end, nor a set that has no
+  last member (a selection over a span with no end).
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` or a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * `true` or `false`. A duration has no end to leave open and is bounded.
 
   ### Examples
 
@@ -2169,8 +2289,12 @@ defmodule Tempo do
       iex> Tempo.bounded?(~o"R/2026-01-15/P1D")
       false
 
+      iex> {:ok, mondays} = Tempo.select(~o"2026-06-01/..", ~o"1K")
+      iex> Tempo.bounded?(mondays)
+      false
+
   """
-  @spec bounded?(t()) :: boolean()
+  @spec bounded?(t() | Duration.t()) :: boolean()
   def bounded?(expression), do: Parts.bounded?(expression)
 
   @doc """
@@ -2320,7 +2444,8 @@ defmodule Tempo do
   """
   @spec select(t(), term(), keyword()) :: {:ok, t()} | {:error, error()}
   def select(%__MODULE__{} = base, selector, options \\ []) do
-    with {:ok, selector} <- selector(selector),
+    with :ok <- Options.check(options, [:within], "Tempo.select/3"),
+         {:ok, selector} <- selector(selector),
          {:ok, values} <- Select.select(base, selector, options) do
       {:ok, set_of(values, base)}
     end
@@ -2385,6 +2510,27 @@ defmodule Tempo do
   """
   @spec workdays(term(), keyword()) :: {:ok, Workdays.t()} | {:error, error()}
   def workdays(territory \\ nil, options \\ []), do: Workdays.new(territory, options)
+
+  @doc """
+  `workdays/2`, returning the workdays or raising: for a territory written
+  in the code, as in a module attribute.
+
+  ### Examples
+
+      iex> Tempo.workdays!(:SA).weekend
+      [5, 6]
+
+      iex> Tempo.workdays!(:US, except: ~o"2026-07-03").except
+      ~o"2026-07-03"
+
+  """
+  @spec workdays!(term(), keyword()) :: Workdays.t()
+  def workdays!(territory \\ nil, options \\ []) do
+    case workdays(territory, options) do
+      {:ok, workdays} -> workdays
+      {:error, exception} -> raise exception
+    end
+  end
 
   @doc """
   The weekend of a territory as a selector: the days of the week its
@@ -2537,7 +2683,8 @@ defmodule Tempo do
   @spec roll_to_workday(t(), term(), keyword()) ::
           {:ok, t()} | {:error, error()}
   def roll_to_workday(value, territory \\ nil, options \\ []) do
-    with {:ok, workdays} <- Workdays.new(territory),
+    with :ok <- Options.check(options, [:roll], "Tempo.roll_to_workday/3"),
+         {:ok, workdays} <- Workdays.new(territory),
          do: Workdays.roll(value, workdays, Keyword.get(options, :roll, :following))
   end
 
@@ -2604,7 +2751,10 @@ defmodule Tempo do
 
   """
   @spec from_elixir(term(), keyword()) :: {:ok, t() | Duration.t()} | {:error, error()}
-  def from_elixir(value, options \\ []), do: Interop.from(value, options)
+  def from_elixir(value, options \\ []) do
+    with :ok <- Options.check(options, [:resolution], "Tempo.from_elixir/2"),
+         do: Interop.from(value, options)
+  end
 
   @doc """
   `from_elixir/2`, returning the value or raising.
@@ -3082,8 +3232,6 @@ defmodule Tempo do
          "1"},
         {:difference, [quote(do: t()), quote(do: t())], quote(do: t()),
          ~s|Tempo.difference!(~o"2026", ~o"2026-06") \|> Tempo.IntervalSet.count()|, "2"},
-        {:workdays, [quote(do: term())], quote(do: Workdays.t()),
-         ~s|Tempo.workdays!(:SA).weekend|, "[5, 6]"},
         {:weekends, [quote(do: term())], quote(do: t()), ~s|Tempo.weekends!(:US)|, ~s|~o"{6,7}K"|}
       ] do
     bang = String.to_atom("#{name}!")

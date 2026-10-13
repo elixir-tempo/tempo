@@ -4,6 +4,7 @@ defmodule Tempo.MeasureTest do
   import Tempo.Sigils
 
   alias Tempo.ConversionError
+  alias Tempo.Duration
   alias Tempo.IntervalSet
 
   # Lengths: durations covered, durations between, the length predicates
@@ -118,6 +119,44 @@ defmodule Tempo.MeasureTest do
 
       assert {:error, %ArgumentError{}} =
                IntervalSet.slots(~o"2026-06-15T09:00/2026-06-15T12:00", ~o"P1M")
+    end
+  end
+
+  describe "fractions of a second" do
+    test "a length between two fractions is seconds and their fraction" do
+      assert Tempo.duration(~o"2024-06-15T12:00:00.1", ~o"2024-06-15T12:00:00.9") ==
+               {:ok, ~o"PT0.8S"}
+
+      assert Tempo.duration(~o"2024-06-15T12:00:00.1", ~o"2024-06-15T12:00:02.9") ==
+               {:ok, ~o"PT2.8S"}
+
+      assert Tempo.duration(~o"2024-06-15T12:00:00.25/2024-06-15T12:00:01.75") == ~o"PT1.50S"
+    end
+
+    test "a fraction carries into its second, and is written with one sign" do
+      assert Duration.multiply(~o"PT0.5S", 3) == ~o"PT1.5S"
+      assert Duration.add(~o"PT0.7S", ~o"PT0.6S") == ~o"PT1.3S"
+      assert inspect(Duration.negate(~o"PT1.5S")) == ~s(~o"PT-1.5S")
+      assert Tempo.from_iso8601("PT-1.5S") == {:ok, Duration.negate(~o"PT1.5S")}
+    end
+
+    test "a fraction of another unit is written as it is read" do
+      for text <- ["PT1.5H", "PT-1.5H", "P-0.5D", "P0.25Y"] do
+        {:ok, duration} = Tempo.from_iso8601(text)
+        assert Tempo.to_iso8601(duration) == {:ok, text}
+      end
+    end
+
+    test "the alternative format is read, by month and by day of the year" do
+      assert Tempo.from_iso8601("P0002-01-10T22:33:55") == {:ok, ~o"P2Y1M10DT22H33M55S"}
+      assert Tempo.from_iso8601("P00020110T223355") == {:ok, ~o"P2Y1M10DT22H33M55S"}
+      assert Tempo.from_iso8601("P0002-178T22:33:55") == {:ok, ~o"P2Y178DT22H33M55S"}
+      assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("P0002-01-10")
+    end
+
+    test "a microsecond is given with its precision" do
+      assert {:error, %ArgumentError{}} = Duration.new(second: 1, microsecond: 500_000)
+      assert Duration.new(second: 1, microsecond: {500_000, 1}) == {:ok, ~o"PT1.5S"}
     end
   end
 end

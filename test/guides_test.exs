@@ -175,9 +175,7 @@ defmodule Tempo.GuidesTest do
   `<!-- guides:run -->` is written before it (a setup the blocks after it
   use); any other block with no markers is an illustration and is not run.
 
-  Runs with `mix test --include guides`. The pages listed in `@pending`
-  are written for Tempo 2.0 and are reported, not failed, until they are
-  rewritten (`plans/architecture-redesign.md`, section 19).
+  Runs with `mix test --only guides`.
   """
   use ExUnit.Case, async: false
 
@@ -186,19 +184,10 @@ defmodule Tempo.GuidesTest do
   @moduletag :guides
 
   @pages ["README.md" | Path.wildcard("guides/*.md")]
-  @rewritten ["README.md"]
 
   for page <- @pages do
-    if page in @rewritten do
-      test "the code in #{page} runs and answers as written" do
-        assert GuidesRunner.failures(unquote(page)) == []
-      end
-    else
-      @tag :pending
-      test "the code in #{page} (written for 2.0, pending rewrite)" do
-        failures = GuidesRunner.failures(unquote(page))
-        IO.puts("#{unquote(page)}: #{length(failures)} examples to rewrite")
-      end
+    test "the code in #{page} runs and answers as written" do
+      assert GuidesRunner.failures(unquote(page)) == []
     end
   end
 end

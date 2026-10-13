@@ -3,7 +3,10 @@ defmodule Tempo.SelectTest do
 
   import Tempo.Sigils
 
+  alias Tempo.ConversionError
+  alias Tempo.Interval
   alias Tempo.IntervalSet
+  alias Tempo.RRule
 
   # Selection (`plans/architecture-redesign.md`, section 7.4 and section 18):
   # one engine for selectors, selections written in a value, repeat rules,
@@ -182,6 +185,125 @@ defmodule Tempo.SelectTest do
                18,
                21
              ]
+    end
+  end
+
+  describe "numbered weeks" do
+    test "a week of a year is selected from the year that numbers it" do
+      assert Tempo.select(~o"2026", ~o"1W") == {:ok, ~o"{2026Y1W}"}
+      assert Tempo.select(~o"2026", ~o"53W") == {:ok, ~o"{2026Y53W}"}
+      assert Tempo.select(~o"2026", ~o"-1W") == {:ok, ~o"{2026Y53W}"}
+      assert Tempo.select(~o"2026/2027", ~o"1W") == {:ok, ~o"{2026Y1W,2027Y1W}"}
+    end
+
+    test "a week that runs out of a period which is not its whole year is not selected" do
+      assert Tempo.select(~o"2026-06/2026-12", ~o"53W") == {:ok, ~o"{}"}
+      assert Tempo.select(~o"2026-06/2026-12", ~o"30W") == {:ok, ~o"{2026Y30W}"}
+    end
+
+    test "the weeks asked of a month are the weeks the calendar numbers in it" do
+      assert Tempo.select(~o"2026-06", ~o"1W") == {:ok, ~o"{2026Y6M1W}"}
+      assert Tempo.select(~o"2026-06", ~o"-1W") == {:ok, ~o"{2026Y6M4W}"}
+      assert Tempo.select(~o"2026-06", ~o"5W") == {:ok, ~o"{}"}
+
+      {:ok, first_of_july} = Tempo.select(~o"2026-07", ~o"1W")
+
+      assert Enum.map(IntervalSet.first(first_of_july), &Tempo.day/1) == [
+               29,
+               30,
+               1,
+               2,
+               3,
+               4,
+               5
+             ]
+    end
+  end
+
+  describe "windows and domains of a rule" do
+    defp starts(text, options) do
+      {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!(text), options)
+      IntervalSet.map(set, &Tempo.to_iso8601!(Interval.from(&1)))
+    end
+
+    test "a nested selection is made where the parts before it say" do
+      assert starts("R/../P1Y/FL11MLL1K1IN/P9DN2K1IN", within: ~o"2026") == ["2026Y11M3D"]
+      assert Tempo.select(~o"2026", ~o"L11MLL1K1IN/P9DN2K1IN") == {:ok, ~o"{2026Y11M3D}"}
+    end
+
+    test "a window of a negative length runs back from its date" do
+      assert starts("R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN", within: ~o"2026") == ["2026Y4M3D"]
+      assert Tempo.to_interval(~o"2026YLL(easter)eN/-P7DN") == {:ok, ~o"{2026Y3M29D/4M4D}"}
+    end
+
+    test "a window carries what it selects out of its period, into the window asked for" do
+      observed = "R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN"
+      assert starts(observed, within: ~o"2021") == ["2021Y12M31D"]
+      assert starts(observed, within: ~o"2022") == []
+    end
+
+    test "a traditional month is selected as its year numbers it" do
+      assert Tempo.select(~o"4662[u-ca=chinese]", ~o"8m15D") ==
+               {:ok, ~o"{4662Y8m15D}[u-ca=chinese]"}
+
+      assert Enum.count(Enum.take(~o"R/4662Y1M1D/P1Y/FL8m15DN[u-ca=chinese]", 2)) == 2
+    end
+
+    test "a domain of exclusions alone takes its periods from the window" do
+      assert starts("R/^2022Y/P1Y/FL12M25DN", within: ~o"2020/2023") ==
+               ["2020Y12M25D", "2021Y12M25D", "2023Y12M25D"]
+    end
+
+    test "a cadence of several units steps through a domain from its start" do
+      assert starts("R/{1848Y..}/P4Y/FL11MLL1K1IN/P9DN2K1IN", within: ~o"2019/2028") ==
+               ["2020Y11M3D", "2024Y11M5D", "2028Y11M7D"]
+
+      assert starts("R/{2020Y..2026Y}/P2Y/FL1M1DN", []) ==
+               ["2020Y1M1D", "2022Y1M1D", "2024Y1M1D", "2026Y1M1D"]
+
+      assert starts("R/{2000Y..}e/P1Y/FL11MLL1K1IN/P7DN2K-1IN", within: ~o"2025/2030") ==
+               ["2026Y11M3D", "2028Y11M7D", "2030Y11M5D"]
+    end
+
+    test "a solar term is found in a Gregorian rule, and a rule of another calendar in a Gregorian window" do
+      assert starts("R/../P1Y/FL(qingming)eN", within: ~o"2026") == ["2026Y4M5D"]
+
+      {:ok, new_year} =
+        Tempo.to_interval(~o"R/../P1Y/FL1M1DN[u-ca=islamic-umalqura]", within: ~o"2026")
+
+      assert IntervalSet.map(new_year, &Tempo.to_calendar!(&1, Calendrical.Gregorian)) == [
+               ~o"2026-06-16/2026-06-16[u-ca=gregorian]"
+             ]
+    end
+
+    test "a recurrence over a domain has no RRULE" do
+      assert {:error, %Tempo.ConversionError{reason: {:no_rrule, :domain}}} =
+               RRule.to_string(~o"R/{2025Y..2027Y}/P1Y/FL12M25DN")
+    end
+
+    test "a week of a selection begins on Monday" do
+      assert {:ok, _} = Tempo.from_iso8601("R/2026-01-01/P1W/FL2K1qN")
+
+      assert {:error, %Tempo.InvalidDateError{unit: :week_start}} =
+               Tempo.from_iso8601("R/2026-01-01/P1W/FL2K7qN")
+    end
+
+    test "an event no resolver knows is no value" do
+      assert {:error, %Tempo.InvalidDateError{unit: :event, reason: {:unknown_event, "nonsense"}}} =
+               Tempo.from_iso8601("R/../P1Y/FL(nonsense)eN")
+
+      assert {:ok, _} = Tempo.from_iso8601("R/../P1Y/FL(easter)eN")
+    end
+  end
+
+  describe "a base with no end and no year" do
+    test "needs a year, as a base with an end does" do
+      for base <- [~o"6M/..", ~o"T10H/..", ~o"1K/.."] do
+        assert {:error, %ConversionError{reason: :needs_a_year}} = Tempo.select(base, ~o"15D")
+
+        assert {:error, %ConversionError{reason: :needs_a_year}} =
+                 Tempo.select(base, Tempo.workdays!(:US))
+      end
     end
   end
 end

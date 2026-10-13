@@ -14,6 +14,8 @@ defmodule Tempo.Interval do
 
   alias Tempo.Duration
   alias Tempo.IntervalEndpointsError
+  alias Tempo.LeapSeconds
+  alias Tempo.Options
   alias Tempo.Validate
 
   @type endpoint :: Tempo.t() | Duration.t() | :open
@@ -62,11 +64,13 @@ defmodule Tempo.Interval do
   """
   @spec new(keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def new(options) when is_list(options) do
-    new(
-      Keyword.get(options, :from, :open),
-      Keyword.get(options, :to, :open),
-      Keyword.get(options, :metadata, %{})
-    )
+    with :ok <- Options.check(options, [:from, :to, :metadata], "Tempo.Interval.new/1") do
+      new(
+        Keyword.get(options, :from, :open),
+        Keyword.get(options, :to, :open),
+        Keyword.get(options, :metadata, %{})
+      )
+    end
   end
 
   @doc """
@@ -174,6 +178,65 @@ defmodule Tempo.Interval do
   """
   @spec endpoints(Tempo.t()) :: {endpoint(), endpoint()}
   def endpoints(%Tempo{form: {:span, from, to}}), do: {from, to}
+
+  @doc """
+  The leap seconds an interval spans, each as the UTC date it ends:
+  `Tempo.LeapSeconds.spanned/1`, returning the list or the error.
+
+  ### Arguments
+
+  * `interval` is a `t:Tempo.t/0` with a year and both its ends.
+
+  ### Returns
+
+  * A list of `{year, month, day}`, empty when it spans none.
+
+  * `{:error, %Tempo.ConversionError{}}` for an interval with no year or
+    with an open end.
+
+  ### Examples
+
+      iex> Tempo.Interval.leap_seconds_spanned(~o"2015-01-01/2017-12-31")
+      [{2015, 6, 30}, {2016, 12, 31}]
+
+  """
+  @spec leap_seconds_spanned(Tempo.t()) :: [LeapSeconds.date()] | {:error, Exception.t()}
+  def leap_seconds_spanned(%Tempo{} = interval) do
+    case LeapSeconds.spanned(interval) do
+      {:ok, dates} -> dates
+      {:error, _} = error -> error
+    end
+  end
+
+  @doc """
+  Whether an interval spans a leap second, so that its length in elapsed
+  seconds is not its length on the clock.
+
+  ### Arguments
+
+  * `interval` is a `t:Tempo.t/0` with a year and both its ends.
+
+  ### Returns
+
+  * `true` or `false`; raises a `Tempo.ConversionError` for an interval
+    with no year or with an open end.
+
+  ### Examples
+
+      iex> Tempo.Interval.spans_leap_second?(~o"2016-12-31T23:00:00Z/2017-01-01T01:00:00Z")
+      true
+
+      iex> Tempo.Interval.spans_leap_second?(~o"2026-06-15/2026-06-16")
+      false
+
+  """
+  @spec spans_leap_second?(Tempo.t()) :: boolean()
+  def spans_leap_second?(%Tempo{} = interval) do
+    case LeapSeconds.spanned(interval) do
+      {:ok, dates} -> dates != []
+      {:error, exception} -> raise exception
+    end
+  end
 
   defp validated(from, to, frame, metadata) do
     interval = %Tempo{
