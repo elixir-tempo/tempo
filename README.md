@@ -47,45 +47,51 @@ import Tempo.Sigils
 The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; no helper functions leak in. Treat this line as a prerequisite for every code block that follows in this README.
 
 ```elixir
-# A date is an interval
+# A date is an interval: a day is a day long, and holds its hours
 iex> ~o"2026-06-15"
 ~o"2026Y6M15D"
 
-# Its bounds are real — Tempo.to_interval converts it to that span.
-# Bounds keep the value's own resolution; `:unit` is the walk granularity.
-iex> {:ok, iv} = Tempo.to_interval(~o"2026-06-15")
-iex> {from, to} = Tempo.Interval.endpoints(iv)
-iex> {Tempo.year(from), Tempo.month(from), Tempo.day(from), Tempo.year(to), Tempo.month(to), Tempo.day(to), iv.unit}
-{2026, 6, 15, 2026, 6, 16, :hour}
+iex> Tempo.duration(~o"2026-06-15")
+~o"P1D"
 
-# Cross-zone set operations compare by UTC, preserve the first operand's zone
-iex> paris = Tempo.from_elixir(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))
-iex> utc_window = ~o"2026-06-15T07Z/2026-06-15T09Z"   # UTC 07:00..09:00
-iex> Tempo.overlaps?(paris, utc_window)
-true   # Paris 10:00 CEST == UTC 08:00 — inside the window
+iex> Enum.take(~o"2026-06-15", 3)
+[~o"2026Y6M15DT0H", ~o"2026Y6M15DT1H", ~o"2026Y6M15DT2H"]
 
-# Cross-calendar comparison, no manual conversion
+iex> ~o"2026-06-15T10:30" in ~o"2026-06-15"
+true
+
+# Values in different zones are compared on the one time line
+iex> paris = Tempo.from_elixir!(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))
+iex> Tempo.overlaps?(paris, ~o"2026-06-15T07Z/2026-06-15T09Z")
+true
+
+# Values in different calendars too, with no conversion by hand
 iex> hebrew = Tempo.new!(year: 5786, month: 9, day: 30, calendar: Calendrical.Hebrew)
 iex> Tempo.overlaps?(hebrew, ~o"2026-06-15")
-true   # Hebrew 5786-09-30 is Gregorian 2026-06-15
+true
 ```
+
+> *"The fifteenth of June is a day long and holds twenty-four hours, half past ten among them. Ten o'clock in Paris is **within** seven to nine in UTC. The thirtieth of Sivan 5786 **overlaps** the fifteenth of June 2026."*
 
 ### Three ways to construct a Tempo
 
-The `~o` sigil is ideal for literal values in source code. For runtime data — form inputs, database rows, API payloads — reach for `Tempo.new/1`, which takes any order of keyword components and validates them against the target calendar:
+The `~o` sigil is ideal for literal values in source code. For runtime data — form inputs, database rows, API payloads — reach for `Tempo.new/1`, which takes its units in any order and validates them against the calendar:
 
 ```elixir
-# Compile-time literal — the sigil
+# A literal, read when the module compiles
 iex> ~o"2026-06-15T14:30[Australia/Sydney]"
+~o"2026Y6M15DT14H30M[Australia/Sydney]"
 
-# Runtime components — `new/1` reorders any input shape coarse-to-fine
+# Units at runtime, in any order
 iex> Tempo.new!(day: 15, year: 2026, month: 6, hour: 14, minute: 30, zone: "Australia/Sydney")
+~o"2026Y6M15DT14H30M[Australia/Sydney]"
 
-# Bridging stdlib — `from_elixir/1` accepts Date / Time / NaiveDateTime / DateTime
+# Elixir's own Date, Time, NaiveDateTime and DateTime
 iex> Tempo.from_elixir(~U[2026-06-15 14:30:00Z])
+{:ok, ~o"2026Y6M15DT14H30M0SZ"}
 ```
 
-`Tempo.new/1` validates components against the target calendar (Gregorian's February only has 28 days in non-leap years, Hebrew has a 13th month in leap years, etc.), returns `{:ok, tempo}` or `{:error, exception}`, and has a `new!/1` bang variant that raises on invalid input. `Tempo.Interval.new/1` and `Tempo.Duration.new/1` follow the same contract.
+`Tempo.new/1` validates its units against the calendar (a Gregorian February has 28 days in a common year, a Hebrew leap year a thirteenth month), returns `{:ok, value}` or `{:error, exception}`, and has a `new!/1` that raises. `Tempo.Interval.new/1` and `Tempo.Duration.new/1` follow the same contract, as does every function that can fail.
 
 Now the playful side — what you actually get to write:
 
@@ -94,79 +100,86 @@ Now the playful side — what you actually get to write:
 iex> Enum.take(~o"156X", 5)
 [~o"1560Y", ~o"1561Y", ~o"1562Y", ~o"1563Y", ~o"1564Y"]
 
-# "The 15th of every month in 1985" — not one span, a real set of days
-iex> {:ok, set} = Tempo.to_interval(~o"1985-XX-15")
-iex> Tempo.IntervalSet.count(set)
+# "The 15th of some month of 1985": twelve days, not one span
+iex> {:ok, fifteenths} = Tempo.to_interval(~o"1985-XX-15")
+iex> Tempo.IntervalSet.count(fifteenths)
 12
 
-# Free time, accounting for meetings in a real schedule
-iex> {:ok, schedule} = Tempo.ICal.parse_file("~/work.ics")
-iex> {:ok, free} = Tempo.difference(~o"2026-06-15T09/2026-06-15T17", schedule)
+# "The last Friday of each month of 2026", written as ISO 8601-2 writes it
+iex> {:ok, fridays} = Tempo.to_interval(~o"R12/2026-01-01/P1M/FL5K-1IN")
+iex> Tempo.IntervalSet.map(fridays, &Tempo.day/1)
+[30, 27, 27, 24, 29, 26, 31, 28, 25, 30, 27, 25]
 ```
 
-The inspect output carries metadata inline — iCalendar events show their summary and location on every interval that survives set operations:
+A schedule read from iCalendar keeps each event's summary and location as metadata, on every interval that survives a set operation:
 
+<!-- guides:skip -->
 ```elixir
-iex> ics = File.read!("~/work.ics")
-iex> {:ok, schedule} = Tempo.ICal.parse(ics)
-iex> schedule
-#Tempo.IntervalSet<[
-  #Tempo.Interval<~o"2026Y6M15DT10HZ/2026Y6M15DT11HZ" · Design review @ Room 101>,
-  #Tempo.Interval<~o"2026Y6M16DT14HZ/2026Y6M16DT15HZ" · 1:1 with Ada>,
-  #Tempo.Interval<~o"2026Y6M17DT09HZ/2026Y6M17DT09HZ30MZ" · Standup>
-] · Work>
+{:ok, schedule} = Tempo.ICal.parse_file("work.ics")
+{:ok, free} = Tempo.difference(~o"2026-06-15T09/2026-06-15T17", schedule)
+
+Tempo.IntervalSet.map(schedule, &Tempo.metadata(&1).summary)
+#=> ["Design review", "1:1 with Ada", "Standup"]
 ```
+
+> *"My free time is the working day **minus** my schedule."*
 
 And when you're looking at an unfamiliar value in iex, ask it to explain itself:
 
 ```elixir
-iex> Tempo.explain(~o"156X")
-"""
-A masked year spanning the 1560s.
-Span: [1560, 1570).
-Iterates at :month granularity.
-Convert it to an interval with `Tempo.to_interval/1`.
-"""
+iex> Tempo.Explain.lines(~o"156X")
+[
+  "A value with unspecified digits, some one of the values they allow, written to the year: Jan 1560 – Dec 1569.",
+  "It is one of 10 values.",
+  "It is floating: a reading of a clock in no zone.",
+  "Walking it gives its members."
+]
 
-iex> Tempo.explain(~o"1984?/2004~")
-"""
-A closed interval.
-From: 1984.
-To:   2004 (exclusive — half-open `[from, to)`).
-"""
+iex> Tempo.Explain.lines(~o"1984?/2004~")
+[
+  "An interval: 1984 – 2004.",
+  "It covers 1984Y? through 2004Y~.",
+  "It is floating: a reading of a clock in no zone.",
+  "Walking it gives its years."
+]
 ```
 
-`Tempo.Explain.explain/1` returns a structured form with semantic part tags (`:headline`, `:span`, `:qualification`, `:metadata`, …); `to_string/1`, `to_ansi/1`, and `to_iodata/1` format it for terminal, coloured terminal, and HTML surfaces respectively.
+`Tempo.explain/1` joins the lines into one text for `IO.puts/1`, and `Tempo.to_string/2` gives a locale's words for any value (`"Jun 15, 2026"`, `"15 juin 2026"`).
 
-The `~o` sigil also does **pattern matching**. In `match?/2`, `case` clauses, `=`, and function heads, the same sigil expands to a structural pattern against a value's `:time` keyword list — prefix-matching the units you name and leaving everything else unconstrained:
+The `~o` sigil also does **pattern matching**. In `match?/2`, `case` clauses, `=` and function heads, the same sigil is a pattern that matches every value whose units begin with the units written, and constrains nothing else:
 
 ```elixir
-today = Tempo.new!(year: 2026, month: 4, day: 24)
+iex> today = ~o"2026-04-24"
+iex> match?(~o"2026", today)
+true
 
-iex> match?(~o[2026Y], today)       #=> true   — year prefix
-iex> match?(~o[2026Y4M], today)     #=> true   — year + month prefix
-iex> match?(~o[2025Y], today)       #=> false  — year disagrees
+iex> match?(~o"2026-04", today)
+true
 
-# Modifier letters after the delimiter bind matched units to variables
+iex> match?(~o"2025", today)
+false
+
 iex> case today do
-...>   ~o[2026Y]OD -> {month, day}
+...>   ~o"2026-04" -> :this_april
+...>   ~o"2026" -> :this_year
+...>   _ -> :another_time
 ...> end
-{4, 24}
+:this_april
 ```
 
-Full specification including modifier-binding, container patterns, and calendar-axis inference in the [Pattern matching with sigils](https://hexdocs.pm/ex_tempo/pattern-matching-with-sigils.html) guide.
+More in the [Pattern matching with sigils](https://hexdocs.pm/ex_tempo/pattern-matching-with-sigils.html) guide.
 
 ## Objectives
 
-* **One interval type; sets of them are derivations.** No more `Date` for days, `Time` for hours, `DateTime` for both, `NaiveDateTime` for "I don't know what I have" — one `%Tempo{}` represents any interval at any resolution. Collections (`Tempo.IntervalSet`, `Tempo.Set`) are *derivations* over that type, not new types; the one genuinely distinct companion is `Tempo.Duration`, a calendar-relative width — not an interval. Conversion from native Elixir types is `Tempo.from_elixir/2`.
+* **One type.** No more `Date` for days, `Time` for hours, `DateTime` for both, `NaiveDateTime` for "I don't know what I have" — one `%Tempo{}` holds a value at any resolution, an interval, a recurrence, a set of them or a choice among them. `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.RecurrenceSet` are constructors of that one struct, not types of their own; the one distinct companion is `Tempo.Duration`, a length with no place on the time line. Conversion from Elixir's types is `Tempo.from_elixir/2`.
 
-* **Correctness by construction.** Every value is a bounded interval under the half-open `[from, to)` convention. Adjacent intervals concatenate cleanly (`[a, b) ++ [b, c) == [a, c)`). "End of day" ambiguity, midnight off-by-ones, and DST-hour confusion vanish at the type level.
+* **Correctness by construction.** Every value denotes half-open spans `[from, to)` on the time line, so adjacent spans join cleanly (`[a, b)` and `[b, c)` are `[a, c)`). An interval is read as it is written: one written to a date runs through that date (`2026/2028` is three years), and one written to a time of day runs to that reading. "End of day" ambiguity, midnight off-by-ones and DST-hour confusion vanish at the type level.
 
 * **Full support for the time standards that matter.** ISO 8601 Parts 1 and 2, EDTF Levels 0–2, IXDTF. 100% of the `unt-libraries/edtf-validate` corpus passes. Leap seconds, long years (`Y17E8`), significant-digits notation, mask syntax, open-ended intervals, per-endpoint qualifications — all parsed and queryable.
 
 * **First-class set algebra on time.** Union, intersection, complement, difference, symmetric difference — plus the predicate set (`disjoint?`, `overlaps?`, `within?`, `contains?`, `equal?`) — all defined over any Tempo value. Cross-zone, cross-calendar, across resolutions.
 
-* **Constraint reasoning, not just representation.** `Tempo.Network` models a web of partially-known intervals — reigns, strata, project tasks — and computes the tightest dates each one can take (the ChronoLog scheme), with a plain-English trace for every bound. `Tempo.Schedule` applies the same solver to project scheduling: declare tasks, durations, and dependencies, and get each task's earliest/latest run plus the critical path.
+* **Constraint reasoning, in a companion package.** `Tempo.Network` models a web of partially-known intervals — reigns, strata, project tasks — and computes the tightest dates each one can take (the ChronoLog scheme), and `Tempo.Schedule` applies the same solver to project scheduling. Both live in the `tempo_network` package, which depends on this one.
 
 * **Business days and territory-aware calendars.** `Tempo.weekend?/2`, `Tempo.workday?/2`, `Tempo.add_workdays/3`, and `Tempo.count_workdays/2` answer "how many workdays until the deadline?" with CLDR-correct weekends per territory (the US weekends Saturday/Sunday, Saudi Arabia Friday/Saturday) and correct on any calendar, and `Tempo.roll_to_workday/3` moves a date that falls on a day off by a contract's business day convention.
 
@@ -188,7 +201,7 @@ Tempo draws on several bodies of work:
 
 * **Eric Evans' "Exploring Time"** talk. Evans makes the case for considering time as an interval rather than an instant in a domain-driven-design setting. His framing influenced the earliest design sketches of Tempo.
 
-* **PostgreSQL multirange types.** Postgres 14+ ships sorted, non-overlapping, coalesced interval sets. Tempo's `%Tempo.IntervalSet{}` follows the same conceptual model; set operations follow the same sweep-line algorithms.
+* **PostgreSQL multirange types.** Postgres 14+ ships sorted, non-overlapping, coalesced interval sets. The result of a Tempo set operation follows the same conceptual model, and is computed by the same sweep-line algorithm.
 
 * **Wojtek Mach's [`calendar_interval`](https://github.com/wojtekmach/calendar_interval).** A partial-but-elegant implementation of calendar intervals in Elixir. Concepts from this library informed Tempo's implicit-span semantics.
 
@@ -212,13 +225,13 @@ Tempo is **time zone database agnostic**: it works against Elixir's standard `Ca
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 ```
 
-Any implementation works — [`:tz`](https://hex.pm/packages/tz) (compile-time IANA data, no runtime downloads), [`:tzdata`](https://hex.pm/packages/tzdata), [`:time_zone_info`](https://hex.pm/packages/time_zone_info), or [`:zoneinfo`](https://hex.pm/packages/zoneinfo) (reads the OS zone files). Tempo can also be pointed at a database independently of the global Elixir setting with `config :ex_tempo, :time_zone_database, ...` — see `Tempo.TimeZoneDatabase`. Tempo's own dev and test environments use `:tz`.
+Any implementation works — [`:tz`](https://hex.pm/packages/tz) (compile-time IANA data, no runtime downloads), [`:tzdata`](https://hex.pm/packages/tzdata), [`:time_zone_info`](https://hex.pm/packages/time_zone_info), or [`:zoneinfo`](https://hex.pm/packages/zoneinfo) (reads the OS zone files). Tempo can also be pointed at a database independently of the global Elixir setting with `config :ex_tempo, :time_zone_database, ...`. Tempo's own dev and test environments use `:tz`.
 
 Without a configured database, parsing still works fully — zone names in IXDTF suffixes are accepted without registry validation — but any operation that needs the zone's rules (UTC projection, `Tempo.shift_zone/2`, DST-aware walks, offset validation) will error or degrade. iCalendar import also needs the database: the upstream `:ical` library only populates an event's `dtstart`/`dtend` fields when a default `Calendar.TimeZoneDatabase` is installed, so `DTSTART;TZID=...` events silently come through empty without one.
 
 ### The most values at once
 
-Tempo refuses a value that asks for more than 10,000 values at once — the members of a set, the spans a mask or a selection is converted to, the occurrences of a recurrence, of any one period of it and the periods its walk takes, the candidates a position picks among — so that a short string cannot ask for work without end: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S"` names 29 million seconds. The refusal is a `Tempo.ConversionError` whose reason is `:too_many_values`, or a `Tempo.UnboundedRecurrenceError` for a recurrence, and `Enum` and `Stream` still take such a value's values one at a time. The limit is read when Tempo is compiled:
+Tempo refuses a value that asks for more than 10,000 values at once — the members of a set, the spans a mask or a selection is converted to, the occurrences of a recurrence — so that a short text cannot ask for work without end: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S"` names 29 million seconds. The refusal is a `Tempo.ConversionError` whose reason is `:too_many_values`, and `Enum` and `Stream` still take such a value's values one at a time. The limit is `Tempo.Limit.values/0`, which the application may set:
 
 ```elixir
 # config/config.exs

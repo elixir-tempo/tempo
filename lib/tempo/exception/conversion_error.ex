@@ -22,6 +22,9 @@ defmodule Tempo.ConversionError do
           | :exclusion
           | :repeat_rule
           | :no_such_value
+          | :group
+          | :several
+          | :conditions
           | term()
 
   @type t :: %__MODULE__{value: term(), reason: reason()}
@@ -58,6 +61,12 @@ defmodule Tempo.ConversionError do
     do: "has a repeat rule, which is read in a later phase of the redesign"
 
   defp describe(:no_such_value), do: "names a value its calendar has no room for"
+  defp describe(:group), do: "holds a group, which names a span of values and none to count from"
+  defp describe(:several), do: "names several spans, where one is asked for"
+
+  defp describe(:conditions),
+    do: "has conditions, which are read in a later phase of the redesign"
+
   defp describe(reason) when is_binary(reason), do: reason
   defp describe(reason), do: inspect(reason)
 end

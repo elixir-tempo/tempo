@@ -24,19 +24,31 @@ defimpl Enumerable, for: Tempo do
   # A singular expression walked at a clock unit has a closed count.
   @impl Enumerable
   def count(%Tempo{} = expression) do
-    with true <- Spans.singular?(expression),
-         unit when unit in [:hour, :minute, :second] <- Spans.child_unit(expression),
-         {:ok, {start, stop}} when is_integer(start) and is_integer(stop) <-
-           Spans.extent(expression),
-         {:ok, count} <- Walk.count({start, stop}, unit, Spans.frame_of(expression)) do
-      {:ok, count}
-    else
-      _no_closed_form -> {:error, __MODULE__}
+    unit = Spans.singular?(expression) and Spans.child_unit(expression)
+
+    case {unit in [:hour, :minute, :second], Spans.extent(expression)} do
+      {true, {:ok, {start, stop}}} when is_integer(start) and is_integer(stop) ->
+        closed_count(Walk.count({start, stop}, unit, Spans.frame_of(expression)))
+
+      _no_closed_form ->
+        {:error, __MODULE__}
     end
   end
 
+  defp closed_count({:ok, count}), do: {:ok, count}
+  defp closed_count({:error, _}), do: {:error, __MODULE__}
+
+  # A value is a member of an expression when the expression covers it: the
+  # 16th of June is in its week, and in the days of June (law 1).
   @impl Enumerable
-  def member?(_expression, _element), do: {:error, __MODULE__}
+  def member?(%Tempo{} = expression, %Tempo{} = element) do
+    case Tempo.Algebra.aligned(element, expression, []) do
+      {:ok, frame, pe, px} -> {:ok, pe != [] and Tempo.Algebra.holds?(:within, pe, px, frame)}
+      {:error, _} -> {:ok, false}
+    end
+  end
+
+  def member?(_expression, _element), do: {:ok, false}
 
   @impl Enumerable
   def slice(_expression), do: {:error, __MODULE__}

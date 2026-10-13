@@ -32,12 +32,18 @@ defmodule Tempo.Reader.EdtfCorpusTest do
   # §5.5.1), an interval with a time of day at an end, which EDTF does not
   # have, and an interval of an expanded and a plain year, which ISO 8601-2
   # §4.7 does not forbid.
+  # The last four run to the end of a date end, as law 9 of the redesign reads
+  # a written interval: the 3rd of January through January is a span.
   @iso8601_not_edtf [
     "2000/12-12",
     "2005-07-25T10:10:10Z/2006-01-01T10:10:10Z",
     "2005-07-25T10:10:10Z/2006-01",
     "2005-07-25/2006-01-01T10:10:10Z",
-    "Y-61000/-2000"
+    "Y-61000/-2000",
+    "0000-01-03/0000-01",
+    "0000-02/0000",
+    "2004-06-11%/2004-%06",
+    "2004-06-11%/2004-06~"
   ]
 
   # RFC 3339 §5.6 lets `T` and `Z` be lower case; EDTF does not.

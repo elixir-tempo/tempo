@@ -7,6 +7,15 @@ defmodule TempoTest do
   doctest Tempo.Duration
   doctest Tempo.Interval
   doctest Tempo.IntervalSet
+  doctest Tempo.Event
+  doctest Tempo.RRule
+  doctest Tempo.Cron
+  doctest Tempo.ICal
+  doctest Tempo.JSCalendar
+  doctest Tempo.RecurrenceSet
+  doctest Tempo.Explain
+  doctest Tempo.Clock
+  doctest Tempo.Workdays
   doctest Tempo.Sigils
   doctest Tempo.Unit
   doctest Tempo.Calendar

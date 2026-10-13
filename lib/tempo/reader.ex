@@ -314,6 +314,12 @@ defmodule Tempo.Reader do
       [from, to, <<"F", rule::binary>>] ->
         recurrence(count, from, to, rule, text)
 
+      [from, to, until] when from != "" ->
+        recurrence(count, from, to, nil, until, text)
+
+      [from, to, until, <<"F", rule::binary>>] when from != "" ->
+        recurrence(count, from, to, rule, until, text)
+
       _ ->
         {:error,
          ParseError.exception(
@@ -330,6 +336,25 @@ defmodule Tempo.Reader do
          {:ok, parts} <- rule(rule, text) do
       {:ok, %Tempo{form: {:every, %Tempo{form: {:span, from, to}}, count, parts}}}
     end
+  end
+
+  # An until (Tempo's own, RFC 5545's UNTIL): a value after the interval the
+  # occurrences run up to, in place of a count.
+  defp recurrence(:infinity, from, to, rule, until, text) do
+    with {:ok, %Tempo{form: {:every, first, _, parts}}} <-
+           recurrence(:infinity, from, to, rule, text),
+         {:ok, %Tempo{form: {:value, _}} = until} <- interval_end(until, nil, text) do
+      {:ok, %Tempo{form: {:every, first, until, parts}}}
+    end
+  end
+
+  defp recurrence(_count, _from, _to, _rule, until, text) do
+    {:error,
+     ParseError.exception(
+       text: text,
+       rest: until,
+       reason: "a recurrence has a count or an until, not both"
+     )}
   end
 
   # A start may be a domain: a set of years with exclusions and a filter.
@@ -399,6 +424,9 @@ defmodule Tempo.Reader do
         {:error, ParseError.exception(text: text, rest: rest, reason: "a set is not closed")}
     end
   end
+
+  # An empty set, `{}`, is what a set operation leaves when nothing is shared.
+  defp members("", _text), do: {:ok, []}
 
   defp members(inside, text) do
     inside

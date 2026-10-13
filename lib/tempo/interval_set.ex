@@ -8,7 +8,13 @@ defmodule Tempo.IntervalSet do
 
   """
 
+  alias Tempo.Algebra
+  alias Tempo.Allen
+  alias Tempo.Duration
   alias Tempo.IntervalEndpointsError
+  alias Tempo.Limit
+  alias Tempo.Shift
+  alias Tempo.Spans
 
   @doc """
   Builds a set from its members.
@@ -66,6 +72,300 @@ defmodule Tempo.IntervalSet do
   end
 
   @doc """
+  Builds a set as `new/2` does, returning it or raising.
+
+  ### Examples
+
+      iex> Tempo.IntervalSet.new!([~o"2026-01", ~o"2026-03"])
+      ~o"{2026-01,2026-03}"
+
+  """
+  @spec new!([Tempo.t()], keyword()) :: Tempo.t()
+  def new!(members, options \\ []) do
+    case new(members, options) do
+      {:ok, set} -> set
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Cuts each span an expression has into consecutive slots of a fixed length:
+  the bookable windows in a region of free time.
+
+  Within each span, slots of the duration are laid from its start, each
+  starting one `:every` after the last, and kept when they fit inside the
+  span. Each slot carries its span's metadata. The spans stay distinct: the
+  result is not coalesced.
+
+  ### Arguments
+
+  * `expression` is a `t:Tempo.t/0` that has spans: an interval, a set, a
+    bounded recurrence or a value.
+
+  * `duration` is the slot length, an exact `t:Tempo.Duration.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:every` is the spacing between slot starts, an exact
+    `t:Tempo.Duration.t/0`. The default is the slot length, so slots are
+    adjacent; a smaller spacing overlaps them, a larger leaves gaps.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:Tempo.t/0` of the `:all` form holding the slots in
+    order.
+
+  * `{:error, %ArgumentError{}}` when a duration has a month or a year, which
+    has no fixed length, and `{:error, exception}` when the expression has no
+    spans.
+
+  ### Examples
+
+      iex> work = ~o"2026-06-15T09:00/2026-06-15T12:00"
+      iex> {:ok, slots} = Tempo.IntervalSet.slots(work, ~o"PT1H")
+      iex> Tempo.IntervalSet.count(slots)
+      3
+
+      iex> work = ~o"2026-06-15T09:00/2026-06-15T12:00"
+      iex> {:ok, slots} = Tempo.IntervalSet.slots(work, ~o"PT1H", every: ~o"PT30M")
+      iex> Tempo.IntervalSet.count(slots)
+      5
+
+  """
+  @spec slots(Tempo.t(), Duration.t(), keyword()) ::
+          {:ok, Tempo.t()} | {:error, Exception.t()}
+  def slots(%Tempo{} = expression, %Duration{} = duration, options \\ []) do
+    with {:ok, length} <- Duration.to_microseconds(duration),
+         {:ok, step} <- Duration.to_microseconds(Keyword.get(options, :every, duration)),
+         :ok <- positive(step, duration),
+         {:ok, spans} <- Spans.spans(expression) do
+      slots =
+        spans
+        |> Enum.take(Limit.values())
+        |> Enum.flat_map(&cut(&1, length, step, duration))
+
+      {:ok, %Tempo{form: {:all, slots}, calendar: expression.calendar, zone: expression.zone}}
+    end
+  end
+
+  defp positive(step, _duration) when step > 0, do: :ok
+
+  defp positive(_step, duration),
+    do:
+      {:error,
+       ArgumentError.exception("the spacing of slots must be positive, not #{inspect(duration)}")}
+
+  defp cut(%Tempo{form: {:span, from, _to}} = span, length, step, duration) do
+    case Spans.extent(span) do
+      {:ok, {start, stop}} when is_integer(stop) ->
+        model = %{
+          from
+          | form: {:value, Shift.extended_to(elem(from.form, 1), finest(duration), from.calendar)}
+        }
+
+        start
+        |> Stream.iterate(&(&1 + step))
+        |> Stream.take_while(&(&1 + length <= stop))
+        |> Enum.map(fn at -> slot(at, at + length, model, span) end)
+
+      _open_or_error ->
+        []
+    end
+  end
+
+  defp finest(%Duration{units: units}) do
+    case List.last(units) do
+      {:week, _} -> :day
+      {unit, _} -> unit
+    end
+  end
+
+  defp slot(start, stop, model, %Tempo{calendar: calendar, zone: zone} = span) do
+    %{
+      span
+      | form:
+          {:span, Spans.at_position(start, model, :start, calendar, zone),
+           Spans.at_position(stop, model, :end, calendar, zone)}
+    }
+  end
+
+  @doc """
+  The members of a set merged into the time they cover: touching and
+  overlapping members become one span, in order; a result is in canonical
+  form, sorted and disjoint with no two members meeting.
+
+  ### Arguments
+
+  * `set` is a `t:Tempo.t/0` that has spans.
+
+  * `options` is a keyword list; `:within` as for `Tempo.union/3`.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:Tempo.t/0` of the `:all` form.
+
+  * `{:error, exception}` as for `Tempo.union/3`.
+
+  ### Examples
+
+      iex> {:ok, both} = Tempo.union(~o"2026-01", ~o"2026-02")
+      iex> Tempo.IntervalSet.coalesce(both)
+      {:ok, ~o"{2026-01/2026-02}"}
+
+  """
+  @spec coalesce(Tempo.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def coalesce(set, options \\ []), do: covered(set, Keyword.put_new(options, :at_least, 1))
+
+  @doc """
+  The time covered by at least so many members of a set at once, as spans.
+
+  ### Arguments
+
+  * `set` is a `t:Tempo.t/0` that has spans.
+
+  * `options` is a keyword list: `:at_least`, the number of members (the
+    default is 1); `:within` as for `Tempo.union/3`.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:Tempo.t/0` of the `:all` form.
+
+  ### Examples
+
+      iex> {:ok, busy} = Tempo.IntervalSet.new([~o"T09/T12", ~o"T11/T14", ~o"T13/T17"])
+      iex> Tempo.IntervalSet.covered(busy, at_least: 2)
+      {:ok, ~o"{T11/T12,T13/T14}"}
+
+  """
+  @spec covered(Tempo.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def covered(set, options \\ []) do
+    with {:ok, frame, positioned} <- Algebra.positioned(set, options) do
+      spans =
+        positioned
+        |> Algebra.covered(Keyword.get(options, :at_least, 1), frame)
+        |> Enum.map(&Algebra.written(&1, frame, options))
+
+      {:ok,
+       %Tempo{
+         form: {:all, spans},
+         calendar: frame.calendar,
+         zone: frame.zone,
+         metadata: set.metadata
+       }}
+    end
+  end
+
+  @doc """
+  Whether a set covers every instant of a value.
+
+  ### Examples
+
+      iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-01", ~o"2026-03"])
+      iex> Tempo.IntervalSet.covered?(set, ~o"2026-01-15")
+      true
+      iex> Tempo.IntervalSet.covered?(set, ~o"2026-02-15")
+      false
+
+  """
+  @spec covered?(Tempo.t(), Tempo.t()) :: boolean()
+  def covered?(set, value), do: Tempo.within?(value, set)
+
+  @doc """
+  Allen's relation of every member of one set to every member of another.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:Tempo.t/0` that has spans.
+
+  ### Returns
+
+  * `{:ok, rows}`, one row per member of `a`, each a list of the relations to
+    the members of `b` in order.
+
+  * `{:error, exception}` as for `Tempo.union/3`.
+
+  ### Examples
+
+      iex> Tempo.IntervalSet.relation_matrix(~o"{2026-01,2026-03}", ~o"{2026-02,2026-03}")
+      {:ok, [[:meets, :precedes], [:met_by, :equals]]}
+
+  """
+  @spec relation_matrix(Tempo.t(), Tempo.t()) ::
+          {:ok, [[Allen.relation()]]} | {:error, Exception.t()}
+  def relation_matrix(a, b) do
+    with {:ok, _frame, pa, pb} <- Algebra.aligned(a, b, []) do
+      {:ok,
+       for(
+         x <- pa,
+         do: for(y <- pb, do: Allen.relation({x.start, x.stop}, {y.start, y.stop}))
+       )}
+    end
+  end
+
+  @doc """
+  The members a function keeps.
+
+  ### Examples
+
+      iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-01", ~o"2026-03"])
+      iex> Tempo.IntervalSet.filter(set, &Tempo.before?(&1, ~o"2026-02"))
+      ~o"{2026-01}"
+
+  """
+  @spec filter(Tempo.t(), (Tempo.t() -> as_boolean(term()))) :: Tempo.t()
+  def filter(%Tempo{} = set, fun) when is_function(fun, 1),
+    do: %{set | form: {:all, Enum.filter(members(set), fun)}}
+
+  @doc """
+  A function applied to each member, giving its answers.
+
+  ### Examples
+
+      iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-01", ~o"2026-03"])
+      iex> Tempo.IntervalSet.map(set, &Tempo.to_iso8601!/1)
+      ["2026Y1M", "2026Y3M"]
+
+  """
+  @spec map(Tempo.t(), (Tempo.t() -> term())) :: [term()]
+  def map(%Tempo{} = set, fun) when is_function(fun, 1), do: Enum.map(members(set), fun)
+
+  @doc """
+  The spans of a set's members, lazily and in order: what the set covers,
+  member by member.
+
+  ### Examples
+
+      iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-01", ~o"2026-03"])
+      iex> set |> Tempo.IntervalSet.walk() |> Enum.map(&Tempo.to_iso8601!/1)
+      ["2026Y1M/2026Y1M", "2026Y3M/2026Y3M"]
+
+  """
+  @spec walk(Tempo.t()) :: Enumerable.t()
+  def walk(%Tempo{} = set) do
+    case Spans.spans(set) do
+      {:ok, spans} -> spans
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  A set whose members are read from an enumerable as they are asked for, so
+  a long or endless source is a set.
+
+  ### Examples
+
+      iex> set = Tempo.IntervalSet.from_stream(Stream.map([~o"2026-01", ~o"2026-03"], & &1))
+      iex> Enum.count(set)
+      2
+
+  """
+  @spec from_stream(Enumerable.t(), keyword()) :: Tempo.t()
+  def from_stream(enumerable, options \\ []),
+    do: %Tempo{form: {:all, enumerable}, metadata: Keyword.get(options, :metadata, %{})}
+
+  @doc """
   The members of a set, or of any expression: a singular expression is its
   own one member.
 
@@ -80,7 +380,19 @@ defmodule Tempo.IntervalSet do
   """
   @spec members(Tempo.t()) :: [Tempo.t()]
   def members(%Tempo{form: {:all, members}}) when is_list(members), do: members
-  def members(%Tempo{form: {:all, members}}), do: Enum.to_list(members)
+
+  def members(%Tempo{form: {:all, members}} = set) do
+    limit = Limit.values()
+
+    case Enum.take(members, limit + 1) do
+      taken when length(taken) > limit ->
+        raise Tempo.ConversionError, value: set, reason: :too_many_values
+
+      taken ->
+        taken
+    end
+  end
+
   def members(%Tempo{} = expression), do: [expression]
 
   @doc """
@@ -105,6 +417,7 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec first(Tempo.t()) :: Tempo.t() | nil
+  def first(%Tempo{form: {:all, members}}), do: members |> Enum.take(1) |> List.first()
   def first(expression), do: expression |> members() |> List.first()
 
   @doc """

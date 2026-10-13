@@ -10,6 +10,7 @@ defmodule Tempo.Validate do
 
   alias Tempo.Calendar
   alias Tempo.Duration
+  alias Tempo.Expand
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
   alias Tempo.Scale
@@ -255,28 +256,35 @@ defmodule Tempo.Validate do
 
   # ── An interval's ends ────────────────────────────────────────────────
 
-  # Two values both of which have a place on the scale must be in order:
-  # the end may equal the start (one unit, law 9) and may not precede it.
-  defp ordered(%Tempo{form: {:value, from}} = a, %Tempo{form: {:value, to}} = b, expression) do
+  # Two values both of which have a place on the scale must be in order: the
+  # span from the start of the first to where the second ends, after its last
+  # unit for a date and at its reading for a time of day (law 9), is not
+  # empty and does not run backwards. On a cycle an end at or before the start
+  # runs on through the cycle's end, so any order is a span.
+  defp ordered(%Tempo{form: {:value, from}} = a, %Tempo{form: {:value, to}} = b, _expression) do
     with {:ok, {start, _}} <- position(from, a),
-         {:ok, {finish, _}} <- position(to, b) do
-      if Scale.compare(start, finish) == :gt,
+         {:ok, {to_start, to_stop}} <- position(to, b) do
+      finish = if Unit.clock?(Unit.resolution(to)), do: to_start, else: to_stop
+
+      if Unit.anchored?(from) and Scale.compare(start, finish) != :lt,
         do: {:error, IntervalEndpointsError.exception(from: a, to: b, reason: :order)},
         else: :ok
     end
-    |> order_result(expression)
+    |> order_result()
     |> seasons_ordered(a, b)
   end
 
   defp ordered(_from, _to, _expression), do: :ok
 
-  defp order_result({:error, %IntervalEndpointsError{}} = error, _expression), do: error
-  defp order_result(_other, _expression), do: :ok
+  defp order_result({:error, %IntervalEndpointsError{}} = error), do: error
+  defp order_result(_other), do: :ok
 
+  # A value with one value in each unit has a place, a count from the end or a group included.
   defp position(units, %Tempo{calendar: calendar, zone: zone, shift: shift}) do
-    if Unit.plain?(units) and Unit.anchored?(units),
-      do: Scale.extent(units, calendar, zone, shift),
-      else: :skip
+    if Unit.concrete?(units) and not Keyword.has_key?(units, :season) and
+         not Keyword.has_key?(units, :selection),
+       do: Expand.extent(units, %{calendar: calendar, zone: zone, shift: shift}),
+       else: :skip
   end
 
   # Two seasons of one numbering (the four of 21 to 24, the northern 25 to 28,

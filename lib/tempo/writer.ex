@@ -40,6 +40,10 @@ defmodule Tempo.Writer do
           {:ok, String.t()} | {:error, Iso8601EncodeError.t()}
   def to_iso8601(%Duration{} = duration), do: {:ok, IO.iodata_to_binary(duration(duration))}
 
+  def to_iso8601(%Tempo{form: {kind, members}} = expression)
+      when kind in [:all, :one] and not is_list(members),
+      do: {:error, Iso8601EncodeError.exception(value: expression, reason: :lazy_set)}
+
   def to_iso8601(%Tempo{} = expression) do
     with :ok <- one_frame(expression),
          {:ok, identifier} <- calendar_identifier(expression) do
@@ -71,7 +75,7 @@ defmodule Tempo.Writer do
   end
 
   def body(%Tempo{form: {:every, first, bound, rule}}) do
-    ["R", count(bound), "/", body(first), rule(rule, bound)]
+    ["R", count(bound), "/", body(first), until(bound), rule(rule, bound)]
   end
 
   def body(%Tempo{form: {:all, members}}), do: ["{", members(members), "}"]
@@ -343,6 +347,9 @@ defmodule Tempo.Writer do
 
   defp count(count) when is_integer(count), do: Integer.to_string(count)
   defp count(_bound), do: ""
+
+  defp until(%Tempo{} = until), do: ["/", body(until)]
+  defp until(_bound), do: ""
 
   defp rule(nil, _bound), do: ""
   defp rule(parts, _bound), do: ["/F", "L", selection(parts), "N"]

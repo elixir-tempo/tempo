@@ -132,6 +132,24 @@ defmodule Tempo.Expand do
   defp filler(:week), do: :day_of_week
   defp filler(unit), do: Unit.child(unit)
 
+  @doc """
+  A prefix with the units between its last and a unit filled with their first
+  values: `[year: 2026, month: 6]` down to `:hour` is the first day's clock.
+  """
+  @spec filled_to(Unit.units(), Unit.t()) :: Unit.units()
+  def filled_to(prefix, unit) do
+    {last, _} = List.last(prefix) || {nil, nil}
+
+    if last == nil or contains?(last, Keyword.get(prefix, last), unit) do
+      prefix
+    else
+      case filler(last) do
+        nil -> prefix
+        child -> filled_to(prefix ++ [{child, Unit.minimum(child)}], unit)
+      end
+    end
+  end
+
   # ── The day span of a concrete prefix ─────────────────────────────────
 
   @doc """
@@ -568,7 +586,7 @@ defmodule Tempo.Expand do
     step = Integer.pow(10, 6 - precision)
 
     for tick <- Stream.iterate(start, &(&1 + step)) |> Stream.take_while(&(&1 < stop)),
-        do: {{rem(tick, 1_000_000), precision}, {tick, tick + step}}
+        do: {{Integer.mod(tick, 1_000_000), precision}, {tick, tick + step}}
   end
 
   defp tick_children(start, stop, unit, _prefix, %{zone: zone, shift: shift}) do
@@ -580,9 +598,9 @@ defmodule Tempo.Expand do
     end
   end
 
-  defp reading(wall, :hour), do: rem(div(wall, Unit.ticks(:hour)), 24)
-  defp reading(wall, :minute), do: rem(div(wall, Unit.ticks(:minute)), 60)
-  defp reading(wall, :second), do: rem(div(wall, Unit.ticks(:second)), 60)
+  defp reading(wall, :hour), do: Integer.mod(Integer.floor_div(wall, Unit.ticks(:hour)), 24)
+  defp reading(wall, :minute), do: Integer.mod(Integer.floor_div(wall, Unit.ticks(:minute)), 60)
+  defp reading(wall, :second), do: Integer.mod(Integer.floor_div(wall, Unit.ticks(:second)), 60)
 
   # A second's children are its tenths; a fraction's the next decimal place.
   defp next_precision(prefix) do

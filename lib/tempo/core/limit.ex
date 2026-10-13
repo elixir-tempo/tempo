@@ -5,11 +5,16 @@ defmodule Tempo.Limit do
   Tempo walks lazily, one value at a time, and converts eagerly, all at
   once; the bounds here say how far either goes before it stops with a
   `Tempo.ConversionError` whose reason is `:too_many_values`, rather than
-  running without end.
+  running without end. A short text can ask for a great deal:
+  `2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S` names 29 million seconds.
+
+  The bound is 10,000 unless the application sets another:
+
+      config :ex_tempo, max_values_at_once: 100_000
 
   """
 
-  @values 10_000
+  @default 10_000
 
   @doc """
   The most spans an expression is converted to at once, and the most
@@ -21,6 +26,6 @@ defmodule Tempo.Limit do
       10000
 
   """
-  @spec values() :: 10_000
-  def values, do: @values
+  @spec values() :: pos_integer()
+  def values, do: Application.get_env(:ex_tempo, :max_values_at_once, @default)
 end

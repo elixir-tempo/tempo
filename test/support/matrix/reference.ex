@@ -119,11 +119,12 @@ defmodule Tempo.Matrix.Reference do
   """
   @spec between(point(), point()) :: {:ok, extent()} | :none
   def between(from, to) do
-    with {:ok, line, from} <- start(from),
-         {:ok, ^line, to} <- start(to) do
-      {:ok, %{line: line, spans: nonempty(from, to), whole?: true}}
-    else
-      _no_place -> :none
+    case {start(from), start(to)} do
+      {{:ok, line, from}, {:ok, line, to}} ->
+        {:ok, %{line: line, spans: nonempty(from, to), whole?: true}}
+
+      _no_place ->
+        :none
     end
   end
 
@@ -645,11 +646,9 @@ defmodule Tempo.Matrix.Reference do
   end
 
   def datetime(%{zone: {:zone, name}} = point) do
-    with {:ok, naive} <- naive(point),
-         {:ok, datetime} <- DateTime.from_naive(naive, name) do
-      {:ok, datetime}
-    else
-      _no_one_moment -> :none
+    case naive(point) do
+      {:ok, naive} -> one_moment(DateTime.from_naive(naive, name))
+      _no_date -> :none
     end
   end
 
@@ -660,6 +659,9 @@ defmodule Tempo.Matrix.Reference do
       |> DateTime.from_naive("Etc/UTC")
     end
   end
+
+  defp one_moment({:ok, datetime}), do: {:ok, datetime}
+  defp one_moment(_no_one_moment), do: :none
 
   defp offset_seconds(:utc) do
     0

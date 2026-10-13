@@ -14,13 +14,28 @@ defmodule Tempo do
 
   """
 
+  alias Tempo.Algebra
+  alias Tempo.Allen
   alias Tempo.ConversionError
+  alias Tempo.Duration
+  alias Tempo.Expand
+  alias Tempo.Explain
+  alias Tempo.Format
+  alias Tempo.FrameError
+  alias Tempo.Interop
   alias Tempo.InvalidCalendarError
   alias Tempo.Limit
+  alias Tempo.Measure
+  alias Tempo.Parts
   alias Tempo.Reader
+  alias Tempo.Scale
+  alias Tempo.Select
+  alias Tempo.Shift
   alias Tempo.Spans
+  alias Tempo.Text
   alias Tempo.Unit
   alias Tempo.Validate
+  alias Tempo.Workdays
   alias Tempo.Writer
   alias Tempo.Zone
   alias Tempo.ZoneError
@@ -58,7 +73,7 @@ defmodule Tempo do
   """
   @type form ::
           {:value, Unit.units()}
-          | {:span, t() | Tempo.Duration.t() | :open, t() | Tempo.Duration.t() | :open}
+          | {:span, t() | Duration.t() | :open, t() | Duration.t() | :open}
           | {:every, t(), pos_integer() | :infinity | t(), Unit.selection() | nil}
           | {:all, [t()] | Enumerable.t()}
           | {:one, [t()]}
@@ -99,6 +114,11 @@ defmodule Tempo do
   * `:calendar` is the calendar a text that names none is in. A text that
     names its calendar (`[u-ca=hebrew]`) is read in that one.
 
+  * `:profile` is the kind of text the caller declares it to be: `:date`,
+    `:time`, `:datetime`, `:interval` or `:duration`. A text of another
+    kind is an error, where without a profile it would be read as the kind
+    it is.
+
   ### Returns
 
   * `{:ok, expression}`, a `t:t/0`, or a `t:Tempo.Duration.t/0` for a
@@ -120,20 +140,25 @@ defmodule Tempo do
       iex> Tempo.from_iso8601("P1Y2M")
       {:ok, ~o"P1Y2M"}
 
+      iex> Tempo.from_iso8601("2026-06-15", profile: :date)
+      {:ok, ~o"2026-06-15"}
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2026-06-15T10:30", profile: :date)
+
       iex> {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026-02-30")
 
       iex> {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("tomorrow")
 
   """
   @spec from_iso8601(String.t(), module() | keyword()) ::
-          {:ok, t() | Tempo.Duration.t()} | {:error, error()}
+          {:ok, t() | Duration.t()} | {:error, error()}
   def from_iso8601(text, calendar_or_options \\ [])
 
   def from_iso8601(text, calendar) when is_binary(text) and is_atom(calendar),
     do: Reader.read(text, calendar: calendar)
 
   def from_iso8601(text, options) when is_binary(text) and is_list(options),
-    do: Reader.read(text, options)
+    do: Text.read(text, options)
 
   @doc """
   Reads a text as `from_iso8601/2` does, returning the expression or raising.
@@ -144,7 +169,7 @@ defmodule Tempo do
       ~o"2026-06"
 
   """
-  @spec from_iso8601!(String.t(), module() | keyword()) :: t() | Tempo.Duration.t()
+  @spec from_iso8601!(String.t(), module() | keyword()) :: t() | Duration.t()
   def from_iso8601!(text, calendar_or_options \\ []) do
     case from_iso8601(text, calendar_or_options) do
       {:ok, expression} -> expression
@@ -182,7 +207,7 @@ defmodule Tempo do
       {:ok, "2026Y6M1D/30D"}
 
   """
-  @spec to_iso8601(t() | Tempo.Duration.t()) :: {:ok, String.t()} | {:error, error()}
+  @spec to_iso8601(t() | Duration.t()) :: {:ok, String.t()} | {:error, error()}
   def to_iso8601(expression), do: Writer.to_iso8601(expression)
 
   @doc """
@@ -194,13 +219,106 @@ defmodule Tempo do
       "P1Y2M"
 
   """
-  @spec to_iso8601!(t() | Tempo.Duration.t()) :: String.t()
+  @spec to_iso8601!(t() | Duration.t()) :: String.t()
   def to_iso8601!(expression) do
     case to_iso8601(expression) do
       {:ok, text} -> text
       {:error, exception} -> raise exception
     end
   end
+
+  @doc """
+  Reads a text written in ISO 8601 or in a locale's own words.
+
+  ISO 8601 is read first, with the whole grammar `from_iso8601/2` reads. A
+  text it does not describe is then read as the locale's words for a date,
+  a time or a range of them (`"May 16, 2026"`, `"2:30 PM"`,
+  `"May 5 – May 10, 2026"`), through `Calendrical.parse/2`, so one text
+  field can take either form.
+
+  ### Arguments
+
+  * `text` is the text.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:locale` is the locale whose words are read; the default is
+    Localize's.
+
+  * `:calendar` is the calendar the text is read in.
+
+  * `:profile` is as for `from_iso8601/2`, for the ISO 8601 reading.
+
+  * `:reference_date` is the day two-digit years and partial dates are
+    read against.
+
+  ### Returns
+
+  * `{:ok, expression}`.
+
+  * `{:error, %Tempo.ParseError{}}` for a text that is neither.
+
+  ### Examples
+
+      iex> Tempo.parse("2026-06-15")
+      {:ok, ~o"2026-06-15"}
+
+      iex> Tempo.parse("May 16, 2026", locale: :en)
+      {:ok, ~o"2026-05-16"}
+
+      iex> Tempo.parse("15 juin 2026", locale: :fr)
+      {:ok, ~o"2026-06-15"}
+
+      iex> Tempo.parse("May 5 – May 10, 2026", locale: :en)
+      {:ok, ~o"2026-05-05/2026-05-10"}
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse("whenever")
+
+  """
+  @spec parse(String.t(), keyword()) :: {:ok, t() | Duration.t()} | {:error, error()}
+  def parse(text, options \\ []) when is_binary(text), do: Text.parse(text, options)
+
+  @doc """
+  `parse/2`, returning the expression or raising.
+
+  ### Examples
+
+      iex> Tempo.parse!("15 June 2026", locale: :en)
+      ~o"2026-06-15"
+
+  """
+  @spec parse!(String.t(), keyword()) :: t() | Duration.t()
+  def parse!(text, options \\ []) do
+    case parse(text, options) do
+      {:ok, expression} -> expression
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  Reads a text that must be an ISO 8601 duration and nothing else: an
+  iCalendar `DURATION`, a configured timeout. A date read where a duration
+  was meant is an error here, where `from_iso8601/2` would succeed with a
+  value of the wrong kind.
+
+  ### Returns
+
+  * `{:ok, duration}`, a `t:Tempo.Duration.t/0`.
+
+  * `{:error, %Tempo.ParseError{}}` for any other text.
+
+  ### Examples
+
+      iex> Tempo.parse_duration("PT1H")
+      {:ok, ~o"PT1H"}
+
+      iex> {:error, %Tempo.ParseError{}} = Tempo.parse_duration("2026-06-15")
+
+  """
+  @spec parse_duration(String.t()) :: {:ok, Duration.t()} | {:error, error()}
+  def parse_duration(text) when is_binary(text), do: Text.read(text, profile: :duration)
 
   # ── Construction ──────────────────────────────────────────────────────
 
@@ -365,14 +483,14 @@ defmodule Tempo do
       iex> {:error, %Tempo.ConversionError{reason: :unbounded}} = Tempo.to_interval(~o"R/2026-01-01/P1Y")
 
   """
-  @spec to_interval(t() | Tempo.Duration.t(), keyword()) :: {:ok, t()} | {:error, error()}
+  @spec to_interval(t() | Duration.t(), keyword()) :: {:ok, t()} | {:error, error()}
   def to_interval(expression, options \\ [])
 
   def to_interval(%Tempo.Duration{} = duration, _options),
     do: {:error, ConversionError.exception(value: duration, reason: :bare_duration)}
 
-  def to_interval(%__MODULE__{form: {:every, _, :infinity, _}} = recurrence, options) do
-    if Keyword.has_key?(options, :within),
+  def to_interval(%__MODULE__{form: {:every, first, :infinity, _}} = recurrence, options) do
+    if Keyword.has_key?(options, :within) or domain?(first),
       do: plural_interval(recurrence, options),
       else: {:error, ConversionError.exception(value: recurrence, reason: :unbounded)}
   end
@@ -421,6 +539,23 @@ defmodule Tempo do
     }
 
   @doc """
+  `to_interval/2`, returning the interval or set or raising.
+
+  ### Examples
+
+      iex> Tempo.to_interval!(~o"2026-06-15")
+      ~o"2026-06-15/2026-06-15"
+
+  """
+  @spec to_interval!(t(), keyword()) :: t()
+  def to_interval!(expression, options \\ []) do
+    case to_interval(expression, options) do
+      {:ok, interval} -> interval
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
   The members of an expression (law 6): the values a value with a set, a
   mask or a group in a unit allows; the members of a set; the occurrences
   of a recurrence; a singular expression itself.
@@ -449,7 +584,7 @@ defmodule Tempo do
       {:ok, [~o"2026-06"]}
 
   """
-  @spec members(t() | Tempo.Duration.t(), keyword()) :: {:ok, [t()]} | {:error, error()}
+  @spec members(t() | Duration.t(), keyword()) :: {:ok, [t()]} | {:error, error()}
   def members(expression, options \\ []) do
     with {:ok, members} <- Spans.members(expression, options), do: bounded(members, expression)
   end
@@ -496,6 +631,2482 @@ defmodule Tempo do
   @spec walk(t(), Tempo.Unit.t() | {:microsecond, 1..6}, keyword()) ::
           {:ok, Enumerable.t()} | {:error, error()}
   def walk(expression, unit, options \\ []), do: Spans.walk(expression, unit, options)
+
+  # ── Set operations ────────────────────────────────────────────────────
+
+  @doc """
+  The union of two expressions: every member of either, kept whole with its
+  own metadata, in order of start. Two members that cover one time stay two;
+  `Tempo.IntervalSet.coalesce/1` merges them.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0` that has spans: a value, an interval, a
+    recurrence, a set.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window the operation works in: a value with
+    no year is placed on each of its periods, and a recurrence with no end
+    is bounded by it. Required when one operand has a year and the other
+    none. A recurrence with no end and no window is bounded by the other
+    operand.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form.
+
+  * `{:error, %Tempo.FrameError{}}` when the operands share no frame: one
+    zoned and one not, one with a year and one without and no window, two
+    with no year on different cycles.
+
+  * `{:error, %Tempo.ConversionError{}}` for a duration, a one-of set, an
+    open end, or more spans than `Tempo.Limit.values/0`.
+
+  ### Examples
+
+      iex> Tempo.union(~o"2026-01", ~o"2026-03")
+      {:ok, ~o"{2026-01/2026-01,2026-03/2026-03}"}
+
+      iex> {:ok, both} = Tempo.union(~o"2026-01", ~o"2026-02")
+      iex> Tempo.IntervalSet.count(both)
+      2
+
+  """
+  @spec union(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def union(a, b, options \\ []) do
+    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+      members =
+        Algebra.whole(pa ++ pb)
+        |> Enum.sort_by(&{&1.start, &1.stop})
+        |> Enum.map(&in_frame(&1.span, frame))
+
+      {:ok, set_of(members, %{a | calendar: frame.calendar, zone: frame.zone})}
+    end
+  end
+
+  # A member kept whole is brought to the result's calendar, as the sweep's results are.
+  # A recurrence over a domain (`R/{2020Y..2024Y}/P1Y/F…`) is bounded by it.
+  defp domain?(%__MODULE__{form: {:span, %__MODULE__{form: form}, _}}),
+    do: elem(form, 0) in [:all, :when]
+
+  defp domain?(_first), do: false
+
+  defp in_frame(%__MODULE__{calendar: calendar} = span, %{calendar: calendar}), do: span
+
+  defp in_frame(%__MODULE__{} = span, %{calendar: calendar}) do
+    case to_calendar(span, calendar) do
+      {:ok, converted} -> converted
+      {:error, _} -> span
+    end
+  end
+
+  @doc """
+  The intersection of two expressions: every instant in both, as spans
+  trimmed to the overlap, each carrying the first operand's metadata.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0` that has spans.
+
+  * `options` is a keyword list; `:within` as for `union/3`, and `:metadata`,
+    which member's metadata a result carries: `:first` (the default),
+    `:second`, `:merge`, or a function of the two.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form, empty when nothing is shared.
+
+  * `{:error, exception}` as for `union/3`.
+
+  ### Examples
+
+      iex> Tempo.intersection(~o"2026", ~o"2026-06-15")
+      {:ok, ~o"{2026-06-15/2026-06-15}"}
+
+      iex> Tempo.intersection(~o"2026-06-15T09/2026-06-15T17", ~o"2026-06-15T12/2026-06-15T13")
+      {:ok, ~o"{2026-06-15T12/2026-06-15T13}"}
+
+  """
+  @spec intersection(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def intersection(a, b, options \\ []), do: operate(&Algebra.intersection/3, a, b, options)
+
+  @doc """
+  The difference of two expressions: every instant in the first and not the
+  second, as spans trimmed to what is left, each carrying the first
+  operand's metadata.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0` that has spans.
+
+  * `options` is a keyword list; `:within` and `:metadata` as for
+    `intersection/3`.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form.
+
+  * `{:error, exception}` as for `union/3`.
+
+  ### Examples
+
+      iex> Tempo.difference(~o"2026", ~o"2026-06")
+      {:ok, ~o"{2026/2026-05,2026-07/2026}"}
+
+      iex> Tempo.difference(~o"2026-06-15T09/2026-06-15T17", ~o"2026-06-15T12/2026-06-15T13")
+      {:ok, ~o"{2026-06-15T09/2026-06-15T12,2026-06-15T13/2026-06-15T17}"}
+
+  """
+  @spec difference(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def difference(a, b, options \\ []), do: operate(&Algebra.difference/3, a, b, options)
+
+  @doc """
+  The symmetric difference of two expressions: every instant in exactly one
+  of them, as spans.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0` that has spans.
+
+  * `options` is a keyword list; `:within` and `:metadata` as for
+    `intersection/3`.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form.
+
+  * `{:error, exception}` as for `union/3`.
+
+  ### Examples
+
+      iex> Tempo.symmetric_difference(~o"2026-01/2026-06", ~o"2026-04/2026-09")
+      {:ok, ~o"{2026-01/2026-03,2026-07/2026-09}"}
+
+  """
+  @spec symmetric_difference(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def symmetric_difference(a, b, options \\ []),
+    do: operate(&Algebra.symmetric_difference/3, a, b, options)
+
+  @doc """
+  The complement of an expression within a window: every instant of the
+  window not covered by it.
+
+  ### Arguments
+
+  * `a` is a `t:t/0` that has spans.
+
+  * `options` is a keyword list; `:within`, the window, is required.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form.
+
+  * `{:error, exception}` as for `union/3`, and a `Tempo.ConversionError`
+    with `:unbounded` when no window is given.
+
+  ### Examples
+
+      iex> Tempo.complement(~o"2026-06", within: ~o"2026")
+      {:ok, ~o"{2026/2026-05,2026-07/2026}"}
+
+  """
+  @spec complement(t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def complement(a, options) do
+    case Keyword.get(options, :within) do
+      %__MODULE__{} = window ->
+        operate(&Algebra.difference/3, window, a, options)
+
+      _ ->
+        {:error, ConversionError.exception(value: a, reason: :unbounded)}
+    end
+  end
+
+  @doc """
+  The members of the first expression some instant of which is in the
+  second, each kept whole with its metadata.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0` that has spans.
+
+  * `options` is a keyword list; `:within` as for `union/3`.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form.
+
+  * `{:error, exception}` as for `union/3`.
+
+  ### Examples
+
+      iex> Tempo.members_overlapping(~o"{2026-01,2026-03}", ~o"2026-03-15")
+      {:ok, ~o"{2026-03/2026-03}"}
+
+  """
+  @spec members_overlapping(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def members_overlapping(a, b, options \\ []),
+    do: members_where(&Algebra.members_overlapping/2, a, b, options)
+
+  @doc """
+  The members of the first expression no instant of which is in the second,
+  each kept whole with its metadata.
+
+  ### Examples
+
+      iex> Tempo.members_outside(~o"{2026-01,2026-03}", ~o"2026-03-15")
+      {:ok, ~o"{2026-01/2026-01}"}
+
+  """
+  @spec members_outside(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def members_outside(a, b, options \\ []),
+    do: members_where(&Algebra.members_outside/2, a, b, options)
+
+  @doc """
+  The members of either expression no instant of which is in the other.
+
+  ### Examples
+
+      iex> Tempo.members_in_exactly_one(~o"2020", ~o"2022")
+      {:ok, ~o"{2020/2020,2022/2022}"}
+
+      iex> Tempo.members_in_exactly_one(~o"2026-01/2026-06", ~o"2026-04/2026-09")
+      {:ok, ~o"{}"}
+
+  """
+  @spec members_in_exactly_one(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def members_in_exactly_one(a, b, options \\ []) do
+    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+      members =
+        (Algebra.members_outside(pa, pb) ++ Algebra.members_outside(pb, pa))
+        |> Algebra.whole()
+        |> Enum.sort_by(&{&1.start, &1.stop})
+        |> Enum.map(&in_frame(&1.span, frame))
+
+      {:ok, set_of(members, %{a | calendar: frame.calendar, zone: frame.zone})}
+    end
+  end
+
+  defp operate(operation, a, b, options) do
+    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+      spans = pa |> operation.(pb, frame) |> Enum.map(&Algebra.written(&1, frame, options))
+      {:ok, set_of(spans, %{a | calendar: frame.calendar, zone: frame.zone})}
+    end
+  end
+
+  defp members_where(filter, a, b, options) do
+    with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+      members = pa |> filter.(pb) |> Algebra.whole() |> Enum.map(&in_frame(&1.span, frame))
+      {:ok, set_of(members, %{a | calendar: frame.calendar, zone: frame.zone})}
+    end
+  end
+
+  # ── Relations and predicates ──────────────────────────────────────────
+
+  @doc """
+  Allen's relation of one singular expression to another: one of the thirteen
+  `t:Tempo.Allen.relation/0` atoms.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0` with one span: a value or an interval.
+
+  ### Returns
+
+  * The relation.
+
+  * `{:error, %Tempo.FrameError{}}` when either has several spans or none, or
+    the two share no frame.
+
+  ### Examples
+
+      iex> Tempo.relation(~o"2026-06-15", ~o"2026-06-16")
+      :meets
+
+      iex> Tempo.relation(~o"2026-06-01/2026-06-10", ~o"2026-06-05/2026-06-15")
+      :overlaps
+
+      iex> Tempo.relation(~o"2026", ~o"2026-06-15")
+      :contains
+
+  """
+  @spec relation(t(), t()) :: Allen.relation() | {:error, error()}
+  def relation(a, b) do
+    with {:ok, _frame, pa, pb} <- Algebra.aligned(a, b, []),
+         {:ok, sa} <- Algebra.single(pa, a, b),
+         {:ok, sb} <- Algebra.single(pb, a, b) do
+      Allen.relation(sa, sb)
+    end
+  end
+
+  for {name, doc} <- [
+        before?:
+          "ends no later than the second begins: an eleven o'clock meeting is before a noon lunch",
+        after?: "begins no earlier than the second ends",
+        adjacent?: "meets the second: one ends as the other begins",
+        within?: "covers no instant outside the second",
+        contains?: "covers every instant of the second",
+        overlaps?: "shares an instant with the second",
+        disjoint?: "shares no instant with the second",
+        equal?: "covers the same instants as the second"
+      ] do
+    predicate = name |> Atom.to_string() |> String.trim_trailing("?") |> String.to_atom()
+
+    @doc """
+    Whether the first expression #{doc}. Both are read as the time they
+    cover, so either may be plural; for two single spans this is a set of
+    Allen's relations (`Tempo.Allen.predicate/1`).
+
+    ### Arguments
+
+    * `a` and `b` are each a `t:t/0` that has spans.
+
+    * `options` is a keyword list; `:within` as for `union/3`.
+
+    ### Returns
+
+    * `true` or `false`; raises the error `union/3` would return for operands
+      that share no frame or have no spans.
+
+    ### Examples
+
+        iex> Tempo.#{name}(~o"2026-01", ~o"2026-03")
+        #{name in [:before?, :disjoint?]}
+
+        iex> Tempo.#{name}(~o"2026-06", ~o"2026")
+        #{name in [:within?, :overlaps?]}
+
+    """
+    @spec unquote(name)(t(), t(), keyword()) :: boolean()
+    def unquote(name)(a, b, options \\ []) do
+      case Algebra.aligned(a, b, options) do
+        {:ok, frame, pa, pb} -> Algebra.holds?(unquote(predicate), pa, pb, frame)
+        {:error, exception} -> raise exception
+      end
+    end
+  end
+
+  @doc """
+  Orders two expressions by where they begin, ties by where they end, so that
+  `Tempo` sorts as `Date` does: `Enum.sort(values, Tempo)`. A plural
+  expression is placed by its first span.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0` on one frame.
+
+  * `options` is a keyword list; `:within` as for `union/3`.
+
+  ### Returns
+
+  * `:lt`, `:eq` or `:gt`; raises a `Tempo.FrameError` for two expressions
+    that share no frame.
+
+  ### Examples
+
+      iex> Tempo.compare(~o"2026-06-15", ~o"2026-06-16")
+      :lt
+
+      iex> Tempo.compare(~o"2026-06-15T09:00Z", ~o"2026-06-15T10:00+01:00")
+      :eq
+
+      iex> Enum.sort([~o"2026-06-16", ~o"2026-06-15"], Tempo)
+      [~o"2026-06-15", ~o"2026-06-16"]
+
+  """
+  @spec compare(t(), t(), keyword()) :: :lt | :eq | :gt
+  def compare(a, b, options \\ []) do
+    case Algebra.aligned(a, b, options) do
+      {:ok, _frame, [pa | _], [pb | _]} ->
+        compare_positions({pa.start, pa.stop}, {pb.start, pb.stop})
+
+      {:ok, _frame, _, _} ->
+        raise FrameError.exception(a: a, b: b, reason: :several)
+
+      {:error, exception} ->
+        raise exception
+    end
+  end
+
+  defp compare_positions({start, stop}, {start, other_stop}),
+    do: Scale.compare(stop, other_stop)
+
+  defp compare_positions({start, _}, {other_start, _}),
+    do: Scale.compare(start, other_start)
+
+  # ── Certainty ─────────────────────────────────────────────────────────
+
+  @doc """
+  Whether a predicate holds between two expressions however their uncertain
+  parts are read: `:certain` when it holds for every reading, `:impossible`
+  when for none, `:possible` otherwise. A reading is a member of a one-of set,
+  a placing of a year with a margin, or a value a mask allows; an expression
+  with no uncertainty has one.
+
+  ### Arguments
+
+  * `predicate` is an everyday predicate (`:before`, `:after`, `:adjacent`,
+    `:within`, `:contains`, `:overlaps`, `:disjoint`, `:equal`) or one of
+    Allen's relations (`t:Tempo.Allen.relation/0`).
+
+  * `a` and `b` are each a `t:t/0`.
+
+  ### Returns
+
+  * `:certain`, `:possible` or `:impossible`.
+
+  * `{:error, exception}` as for `relation/2`.
+
+  ### Examples
+
+      iex> Tempo.certainty(:before, ~o"1984?", ~o"2004~")
+      :certain
+
+      iex> Tempo.certainty(:overlaps, ~o"2018±2Y", ~o"2019")
+      :possible
+
+      iex> Tempo.certainty(:within, ~o"[2026,2027]", ~o"2026")
+      :possible
+
+      iex> Tempo.certainty(:overlaps, ~o"2018±2Y", ~o"2030")
+      :impossible
+
+  """
+  @spec certainty(Tempo.Allen.predicate() | Allen.relation(), t(), t()) ::
+          :certain | :possible | :impossible | {:error, error()}
+  def certainty(predicate, a, b) do
+    with {:ok, readings_a} <- Spans.readings(a),
+         {:ok, readings_b} <- Spans.readings(b),
+         :ok <- few_enough(readings_a, readings_b, a) do
+      holds = for ra <- readings_a, rb <- readings_b, do: Allen.holds?(predicate, ra, rb)
+
+      cond do
+        Enum.all?(holds) -> :certain
+        Enum.any?(holds) -> :possible
+        true -> :impossible
+      end
+    end
+  end
+
+  @doc """
+  Whether a predicate holds between two expressions for every reading of them.
+
+  ### Examples
+
+      iex> Tempo.certainly?(:before, ~o"2018±2Y", ~o"2021")
+      true
+
+      iex> Tempo.certainly?(:before, ~o"2018±2Y", ~o"2020")
+      false
+
+  """
+  @spec certainly?(Tempo.Allen.predicate() | Allen.relation(), t(), t()) :: boolean()
+  def certainly?(predicate, a, b), do: verdict(certainty(predicate, a, b)) == :certain
+
+  @doc """
+  Whether a predicate holds between two expressions for some reading of them.
+
+  ### Examples
+
+      iex> Tempo.possibly?(:overlaps, ~o"2018±2Y", ~o"2020")
+      true
+
+      iex> Tempo.possibly?(:overlaps, ~o"2018±2Y", ~o"2030")
+      false
+
+  """
+  @spec possibly?(Tempo.Allen.predicate() | Allen.relation(), t(), t()) :: boolean()
+  def possibly?(predicate, a, b), do: verdict(certainty(predicate, a, b)) in [:certain, :possible]
+
+  # Every pairing of readings is judged, so there may be no more pairings than values at once.
+  defp few_enough(readings_a, readings_b, expression) do
+    if length(readings_a) * length(readings_b) > Limit.values(),
+      do: {:error, ConversionError.exception(value: expression, reason: :too_many_values)},
+      else: :ok
+  end
+
+  defp verdict({:error, exception}), do: raise(exception)
+  defp verdict(verdict), do: verdict
+
+  # ── Frames ────────────────────────────────────────────────────────────
+
+  @doc """
+  An expression in another calendar: the same spans, their dates written in
+  that calendar. A date keeps its time of day; a value written to a month or
+  a year becomes the span of dates it covers, a month of one calendar being
+  no month of another; a set converts member by member.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` that has spans.
+
+  * `calendar` is a calendar module.
+
+  ### Returns
+
+  * `{:ok, converted}`, a `t:t/0` in `calendar`.
+
+  * `{:error, %Tempo.InvalidCalendarError{}}` when `calendar` is not one, or
+    the error `to_interval/2` gives for an expression with no spans.
+
+  ### Examples
+
+      iex> Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
+      {:ok, ~o"5786-09-30[u-ca=hebrew]"}
+
+      iex> Tempo.to_calendar(~o"2026-06-15T09:30", Calendrical.Hebrew)
+      {:ok, ~o"5786-09-30T09:30[u-ca=hebrew]"}
+
+      iex> Tempo.to_calendar(~o"5786-09[u-ca=hebrew]", Calendar.ISO)
+      {:ok, ~o"2026-05-17/2026-06-15"}
+
+  """
+  @spec to_calendar(t(), module()) :: {:ok, t()} | {:error, error()}
+  def to_calendar(%__MODULE__{calendar: calendar} = expression, calendar), do: {:ok, expression}
+
+  def to_calendar(%__MODULE__{} = expression, calendar) do
+    with {:ok, calendar} <- calendar_of(calendar),
+         {:ok, _frame, positioned} <- Algebra.positioned(expression, []) do
+      frame = %{calendar: calendar, zone: expression.zone}
+      converted = Enum.map(positioned, &converted_span(&1, frame))
+
+      case {expression.form, converted} do
+        {{:value, _}, [one]} -> {:ok, as_value(one, expression)}
+        {{:span, _, _}, [one]} -> {:ok, one}
+        _ -> {:ok, set_of(converted, %{expression | calendar: calendar})}
+      end
+    end
+  end
+
+  # A span's ends written in the calendar at day resolution, or at the clock's where they have one.
+  defp converted_span(
+         %{start: start, stop: stop, span: %__MODULE__{form: {:span, from, to}}},
+         frame
+       ) do
+    %__MODULE__{
+      form:
+        {:span, Spans.at_position(start, from, :start, frame.calendar, frame.zone),
+         Spans.at_position(stop, to, :end, frame.calendar, frame.zone)},
+      calendar: frame.calendar,
+      zone: frame.zone
+    }
+  end
+
+  # A converted or moved value is one value again where the result is one
+  # unit of its own resolution, read at its start: a Paris hour is a New York
+  # hour, but half past the hour in Kolkata is a span of minutes.
+  defp as_value(%__MODULE__{form: {:span, _, _}} = span, %__MODULE__{} = original) do
+    case Spans.extent(span) do
+      {:ok, {start, _} = extent} when is_integer(start) ->
+        candidate = Spans.at_position(start, original, :start, span.calendar, span.zone)
+        if same_extent?(candidate, extent), do: candidate, else: span
+
+      _ ->
+        span
+    end
+  end
+
+  defp same_extent?(candidate, extent) do
+    case Spans.as_span(candidate) do
+      {:ok, candidate_span} -> Spans.extent(candidate_span) == {:ok, extent}
+      {:error, _} -> false
+    end
+  end
+
+  @doc """
+  A floating expression placed in a time zone, its readings unchanged: the
+  runtime form of writing `[zone]` after it.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` with no zone and no shift.
+
+  * `zone` is a time zone name the database knows.
+
+  ### Returns
+
+  * `{:ok, zoned}`.
+
+  * `{:error, %Tempo.ZoneError{}}` when the zone is not known, or
+    `{:error, %Tempo.FrameError{}}` when the expression is already zoned or
+    shifted (`shift_zone/2` moves one).
+
+  ### Examples
+
+      iex> Tempo.in_zone(~o"2026-06-15T10", "Europe/Paris")
+      {:ok, ~o"2026-06-15T10[Europe/Paris]"}
+
+      iex> {:error, %Tempo.FrameError{}} = Tempo.in_zone(~o"2026-06-15T10Z", "Europe/Paris")
+
+  """
+  @spec in_zone(t(), String.t()) :: {:ok, t()} | {:error, error()}
+  def in_zone(%__MODULE__{} = expression, zone) when is_binary(zone) do
+    with :ok <- floating(expression),
+         {:ok, zone} <- Zone.named(zone) do
+      {:ok, rezoned(expression, zone)}
+    end
+  end
+
+  defp floating(%__MODULE__{} = expression) do
+    if Spans.frame(expression) == :utc,
+      do: {:error, FrameError.exception(a: expression, b: nil, reason: :floating_and_zoned)},
+      else: :ok
+  end
+
+  defp rezoned(%__MODULE__{form: form} = expression, zone) do
+    %{expression | zone: zone, form: rezoned_form(form, zone)}
+  end
+
+  defp rezoned_form({:value, _} = form, _zone), do: form
+
+  defp rezoned_form({:span, from, to}, zone),
+    do: {:span, rezoned_end(from, zone), rezoned_end(to, zone)}
+
+  defp rezoned_form({:every, first, bound, rule}, zone),
+    do: {:every, rezoned(first, zone), rezoned_end(bound, zone), rule}
+
+  defp rezoned_form({kind, members}, zone) when kind in [:all, :one] and is_list(members),
+    do: {kind, Enum.map(members, &rezoned_end(&1, zone))}
+
+  defp rezoned_form(form, _zone), do: form
+
+  defp rezoned_end(%__MODULE__{} = value, zone), do: rezoned(value, zone)
+  defp rezoned_end(other, _zone), do: other
+
+  @doc """
+  A zoned expression moved to another time zone: the same instants, read on
+  that zone's clock. A value whose span is one reading there stays a value;
+  a day in Paris is a span from six in the evening to six in New York.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` with a zone or a shift.
+
+  * `zone` is a time zone name the database knows.
+
+  ### Returns
+
+  * `{:ok, moved}`, a `t:t/0` in `zone`.
+
+  * `{:error, %Tempo.FrameError{}}` when the expression is floating
+    (`in_zone/2` places one), or `{:error, %Tempo.ZoneError{}}`.
+
+  ### Examples
+
+      iex> Tempo.shift_zone(~o"2026-06-15T14:00[Europe/Paris]", "America/New_York")
+      {:ok, ~o"2026-06-15T08:00[America/New_York]"}
+
+      iex> Tempo.shift_zone(~o"2026-06-15[Europe/Paris]", "America/New_York")
+      {:ok, ~o"2026-06-14T18/2026-06-15T18[America/New_York]"}
+
+      iex> Tempo.shift_zone(~o"2026-06-15T14[Europe/Paris]", "Asia/Kolkata")
+      {:ok, ~o"2026-06-15T17:30/2026-06-15T18:30[Asia/Kolkata]"}
+
+  """
+  @spec shift_zone(t(), String.t()) :: {:ok, t()} | {:error, error()}
+  def shift_zone(%__MODULE__{} = expression, zone) when is_binary(zone) do
+    with :ok <- zoned(expression),
+         {:ok, zone} <- Zone.named(zone),
+         {:ok, _frame, positioned} <- Algebra.positioned(expression, []) do
+      frame = %{calendar: expression.calendar, zone: zone}
+      moved = Enum.map(positioned, &moved_span(&1, frame))
+
+      case {expression.form, moved} do
+        {{:value, _}, [one]} -> {:ok, as_value(one, expression)}
+        {{:span, _, _}, [one]} -> {:ok, one}
+        _ -> {:ok, set_of(moved, %{expression | zone: zone})}
+      end
+    end
+  end
+
+  defp zoned(%__MODULE__{} = expression) do
+    if Spans.frame(expression) == :utc,
+      do: :ok,
+      else: {:error, FrameError.exception(a: expression, b: nil, reason: :floating_and_zoned)}
+  end
+
+  # A span's ends read on the new zone's clock to the minute, or to the hour
+  # where the minutes are zero and the end was no finer than an hour.
+  defp moved_span(%{start: start, stop: stop, span: %__MODULE__{form: {:span, from, to}}}, frame) do
+    from_value = Spans.at_position(start, clock_model(from), :start, frame.calendar, frame.zone)
+    to_value = Spans.at_position(stop, clock_model(to), :end, frame.calendar, frame.zone)
+
+    %__MODULE__{
+      form: {:span, trimmed(from_value, from), trimmed(to_value, to)},
+      calendar: frame.calendar,
+      zone: frame.zone
+    }
+  end
+
+  defp trimmed(%__MODULE__{form: {:value, units}} = value, %__MODULE__{form: {:value, original}}) do
+    coarse? = Unit.compare(Unit.resolution(original), :minute) == :lt
+
+    case List.last(units) do
+      {:minute, 0} when coarse? -> %{value | form: {:value, Enum.drop(units, -1)}}
+      _ -> value
+    end
+  end
+
+  # An end moved between zones is read to the minute, or finer where it was:
+  # a date's edges fall within days there, an hour's within hours.
+  defp clock_model(%__MODULE__{form: {:value, units}} = model) do
+    clock = Unit.clock_units(units)
+
+    clock =
+      cond do
+        clock == [] -> [hour: 0, minute: 0]
+        Keyword.has_key?(clock, :minute) -> clock
+        true -> clock ++ [minute: 0]
+      end
+
+    %{model | form: {:value, Unit.date_units(units) ++ clock}, shift: nil}
+  end
+
+  @doc """
+  One value placed on another: a date at a time of day, a time of day on a
+  date, a month and a day. The value with a year keeps it and the other
+  supplies the finer units it lacks; a unit between the two that neither
+  names is its first. An interval is placed end by end.
+
+  ### Arguments
+
+  * `value` and `other` are each a `t:t/0`, at most one of them with a year,
+    or one of them an interval whose ends are placed on the other.
+
+  ### Returns
+
+  * `{:ok, placed}`, a `t:t/0`.
+
+  * `{:error, exception}` when both have a year, or the result is no date or
+    time the calendar and zone have.
+
+  ### Examples
+
+      iex> Tempo.at(~o"2026-06-15", ~o"T17")
+      {:ok, ~o"2026-06-15T17"}
+
+      iex> Tempo.at(~o"T17", ~o"2026-06-15")
+      {:ok, ~o"2026-06-15T17"}
+
+      iex> Tempo.at(~o"3M", ~o"2D")
+      {:ok, ~o"3M2D"}
+
+      iex> Tempo.at(~o"2026-06-15", ~o"T09/T17")
+      {:ok, ~o"2026-06-15T09/2026-06-15T17"}
+
+      iex> Tempo.at(~o"2026-06", ~o"T17")
+      {:ok, ~o"2026-06-01T17"}
+
+  """
+  @spec at(t(), t()) :: {:ok, t()} | {:error, error()}
+  def at(%__MODULE__{form: {:span, from, to}} = span, %__MODULE__{form: {:value, _}} = other) do
+    with {:ok, from} <- placed_end(from, other),
+         {:ok, to} <- placed_end(to, other) do
+      placed = %{
+        span
+        | form: {:span, from, to},
+          calendar: other.calendar,
+          zone: span.zone || other.zone
+      }
+
+      Validate.run(placed)
+    end
+  end
+
+  def at(%__MODULE__{form: {:value, _}} = value, %__MODULE__{form: {:span, _, _}} = span),
+    do: at(span, value)
+
+  def at(%__MODULE__{form: {:value, a}} = value, %__MODULE__{form: {:value, b}} = other) do
+    case {Unit.anchored?(a), Unit.anchored?(b)} do
+      {true, true} -> {:error, FrameError.exception(a: value, b: other, reason: :several)}
+      {false, true} -> at(other, value)
+      _ when value == other -> {:ok, value}
+      _ -> composed(value, other)
+    end
+  end
+
+  def at(%__MODULE__{form: {:every, first, bound, rule}} = recurrence, %__MODULE__{} = other) do
+    with {:ok, first} <- at(first, other),
+         {:ok, bound} <- placed_end(bound, other) do
+      Validate.run(%{recurrence | form: {:every, first, bound, rule}, calendar: other.calendar})
+    end
+  end
+
+  def at(%__MODULE__{form: {kind, members}} = set, %__MODULE__{} = other)
+      when kind in [:all, :one] do
+    with {:ok, members} <- each_at(members, other) do
+      Validate.run(%{set | form: {kind, members}, calendar: other.calendar})
+    end
+  end
+
+  def at(%__MODULE__{} = value, %__MODULE__{form: {kind, _, _, _}} = recurrence)
+      when kind == :every,
+      do: at(recurrence, value)
+
+  def at(%__MODULE__{} = value, %__MODULE__{form: {kind, _}} = set) when kind in [:all, :one],
+    do: at(set, value)
+
+  def at(a, b), do: {:error, FrameError.exception(a: a, b: b, reason: :several)}
+
+  defp each_at(members, other) do
+    Enum.reduce_while(members, {:ok, []}, fn member, {:ok, acc} ->
+      case at(member, other) do
+        {:ok, placed} -> {:cont, {:ok, acc ++ [placed]}}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp placed_end(%__MODULE__{} = value, other), do: at(other, value)
+  defp placed_end(other, _value), do: {:ok, other}
+
+  # The coarser value's units above the finer's first unit, the chain between
+  # filled with its first values, then the finer's units whole. A finer value
+  # of any year alone (`X*Y`) adds nothing to the other.
+  defp composed(
+         %__MODULE__{form: {:value, coarse}} = value,
+         %__MODULE__{form: {:value, b}} = other
+       ) do
+    case Unit.cyclic(b) do
+      [] ->
+        {:ok, value}
+
+      fine ->
+        first = Unit.coarsest(fine)
+
+        if Unit.label?(first) and not Expand.one_span?(coarse ++ fine) do
+          {:error, ConversionError.exception(value: other, reason: :selection)}
+        else
+          composed_units(value, other, coarse, fine, first)
+        end
+    end
+  end
+
+  defp composed_units(value, other, coarse, fine, first) do
+    filled =
+      coarse
+      |> Enum.take_while(fn {unit, _} -> Unit.compare(unit, first) == :lt end)
+      |> Expand.filled_to(first)
+      |> Kernel.++(fine)
+
+    Validate.run(%{
+      value
+      | form: {:value, filled},
+        zone: value.zone || other.zone,
+        shift: value.shift || other.shift
+    })
+  end
+
+  @doc """
+  `at/2` with its arguments the other way round, so that the code reads as
+  English does: *10:30 on 4 January*.
+
+  ### Examples
+
+      iex> Tempo.on(~o"T10:30", ~o"2026-01-04")
+      {:ok, ~o"2026-01-04T10:30"}
+
+  """
+  @spec on(t(), t()) :: {:ok, t()} | {:error, error()}
+  def on(value, other), do: at(other, value)
+
+  # ── Arithmetic ────────────────────────────────────────────────────────
+
+  @doc """
+  An expression moved by a duration.
+
+  A value is shifted at its own resolution, extended to the duration's
+  finest unit where that is finer: a year a day on is its second day. Years
+  and months are counted first, through the calendar, with the day clamped
+  to the month landed in as `Date.shift/2` clamps it; then weeks and days;
+  then the units of the clock as elapsed time, so an hour across a change
+  of the clocks is an hour. A value stays on its own axis: a week date a day
+  on is a week date. An interval is moved end by end, and keeps its length
+  when the duration has a month or a year; a set is moved member by member;
+  a recurrence by its first span and its end.
+
+  A value with no year is shifted when the answer is the same in every
+  year: the thirty-first of January a day on is the first of February, but a
+  month on it has no answer, and a year on it is itself.
+
+  A value that names several (`2026Y6M{1,15}D`, a mask) is each value it
+  names shifted, written as one value where its units can hold them all,
+  and as a set of values where they cannot. A mask the shift carries is one
+  of the values it lands on.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  * `by` is a `t:Tempo.Duration.t/0`, its ISO 8601 text, or a keyword list
+    of units and amounts such as `[month: 1, day: -5]`; amounts may be
+    negative.
+
+  * `options` is a keyword list of options, which may ride in the keyword
+    form of `by`.
+
+  ### Options
+
+  * `:skipping` is a busy set the shift jumps over: a `t:t/0` with spans,
+    or a list of them. The duration is consumed from free time only, so a
+    busy span costs nothing to cross, and an origin inside one first moves
+    to its edge. The duration must be exact (weeks, days and units of the
+    clock); a month or a year of free time has no fixed length. A date
+    shifted by days or weeks steps from free day to free day.
+
+  ### Returns
+
+  * `{:ok, expression}`, the expression moved.
+
+  * `{:error, %Tempo.ConversionError{}}` with reason `:needs_a_year` when
+    the answer depends on a year the value has not, `:group` when the value
+    ends in a group, `{:inexact, unit}` when `:skipping` is given a month or
+    a year, and `:selection` when the value holds a selection; and
+    `{:error, exception}` when `by` is not a duration.
+
+  ### Examples
+
+      iex> Tempo.shift(~o"2026-06-15", ~o"P1D")
+      {:ok, ~o"2026-06-16"}
+
+      iex> Tempo.shift(~o"2026-01-31", month: 1)
+      {:ok, ~o"2026-02-28"}
+
+      iex> Tempo.shift(~o"2026", "P1D")
+      {:ok, ~o"2026-01-02"}
+
+      iex> Tempo.shift(~o"2026-W25", day: 1)
+      {:ok, ~o"2026Y25W2K"}
+
+      iex> Tempo.shift(~o"2026Y6M{1,15}D", day: 1)
+      {:ok, ~o"2026Y6M{2,16}D"}
+
+      iex> Tempo.shift(~o"1M31D", day: 1)
+      {:ok, ~o"2M1D"}
+
+      iex> {:error, %Tempo.ConversionError{reason: :needs_a_year}} = Tempo.shift(~o"1M31D", month: 1)
+
+      iex> meeting = ~o"2026-06-15T10:00/2026-06-15T11:00"
+      iex> Tempo.shift(~o"2026-06-15T09:30", ~o"PT1H", skipping: meeting)
+      {:ok, ~o"2026-06-15T11:30"}
+
+  """
+  @spec shift(t(), Duration.t() | keyword() | String.t(), keyword()) ::
+          {:ok, t()} | {:error, error()}
+  def shift(expression, by, options \\ [])
+
+  def shift(expression, by, options) when is_list(by) do
+    {skipping, units} = Keyword.pop(by, :skipping)
+
+    with {:ok, duration} <- Duration.new(units),
+         do: shift(expression, duration, Keyword.put_new(options, :skipping, skipping))
+  end
+
+  def shift(expression, by, options) when is_binary(by) do
+    case from_iso8601(by) do
+      {:ok, %Duration{} = duration} -> shift(expression, duration, options)
+      {:ok, other} -> {:error, ConversionError.exception(value: other, reason: :not_a_duration)}
+      {:error, _} = error -> error
+    end
+  end
+
+  def shift(expression, %Duration{} = by, options) do
+    case Keyword.get(options, :skipping) do
+      nil -> Shift.shift(expression, by)
+      busy -> Shift.skipping(expression, by, busy_set(busy))
+    end
+  end
+
+  def shift(_expression, by, _options),
+    do: {:error, ConversionError.exception(value: by, reason: :not_a_duration)}
+
+  defp busy_set(%__MODULE__{} = busy), do: busy
+
+  defp busy_set([%__MODULE__{} = first | _] = members),
+    do: %__MODULE__{form: {:all, members}, calendar: first.calendar, zone: first.zone}
+
+  defp busy_set(other), do: other
+
+  @doc """
+  An expression written to a coarser unit: its units through that one, so
+  a date and time truncated to the day is the date.
+
+  A unit the value is not written in names the period of it the value
+  starts in: a date truncated to the week is its week, written as a week
+  date. The ends of an interval and the members of a set are truncated
+  each. A unit finer than the value is written to leaves it as it is.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  * `unit` is a unit; the default is `:day`.
+
+  ### Returns
+
+  * `{:ok, expression}`.
+
+  * `{:error, %Tempo.ConversionError{}}` when a unit the value is not
+    written in is asked of a value that names several periods, or has no
+    year.
+
+  ### Examples
+
+      iex> Tempo.trunc(~o"2022-11-21T09:30:00")
+      {:ok, ~o"2022-11-21"}
+
+      iex> Tempo.trunc(~o"2022-11-21T09:30:00", :minute)
+      {:ok, ~o"2022-11-21T09:30"}
+
+      iex> Tempo.trunc(~o"2026-08-16T10:00:00", :week)
+      {:ok, ~o"2026-W33"}
+
+      iex> Tempo.trunc(~o"2026Y6M{1,15}D", :month)
+      {:ok, ~o"2026-06"}
+
+  """
+  @spec trunc(t(), Unit.t()) :: {:ok, t()} | {:error, error()}
+  def trunc(expression, unit \\ :day), do: Shift.trunc(expression, unit)
+
+  @doc """
+  A value rounded to the nearest period of a unit: the period it starts in,
+  or the next when its start is past the midpoint, measured in elapsed
+  time. Half way rounds up, as `Kernel.round/1` does.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` that is one value, or an interval or set of
+    them, rounded end by end and member by member.
+
+  * `unit` is a unit no finer than the value is written to; the default is
+    `:day`.
+
+  ### Returns
+
+  * `{:ok, expression}` at the unit's resolution.
+
+  * `{:error, %Tempo.ConversionError{}}` with reason
+    `{:finer_than_written, unit}` when the unit is finer than the value,
+    and `:several` when the value names several.
+
+  ### Examples
+
+      iex> Tempo.round(~o"2022-11-21T13:30:00")
+      {:ok, ~o"2022-11-22"}
+
+      iex> Tempo.round(~o"2022-11-21", :month)
+      {:ok, ~o"2022-12"}
+
+      iex> Tempo.round(~o"2026-02-15", :month)
+      {:ok, ~o"2026-03"}
+
+      iex> Tempo.round(~o"T23:45", :hour)
+      {:ok, ~o"T0H"}
+
+  """
+  @spec round(t(), Unit.t()) :: {:ok, t()} | {:error, error()}
+  def round(expression, unit \\ :day), do: Shift.round(expression, unit)
+
+  @doc """
+  A value with its next finer unit written as the values that unit takes:
+  a year as its months, a month as its days, a day in a zone as the hours
+  its clock shows, a group as the values it names.
+
+  Under a value that names several, the finer unit is written from its
+  first value to its last (`{1..-1}`). With a unit given, the value is
+  extended level by level down to it.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  * `unit` is the unit to extend to, or `nil` for one level.
+
+  ### Returns
+
+  * `{:ok, expression}`.
+
+  * `{:error, %Tempo.ConversionError{reason: :no_finer_unit}}` for a value
+    written to the second or finer.
+
+  ### Examples
+
+      iex> Tempo.extend(~o"2020")
+      {:ok, ~o"2020Y{1..12}M"}
+
+      iex> Tempo.extend(~o"2026-06")
+      {:ok, ~o"2026Y6M{1..30}D"}
+
+      iex> Tempo.extend(~o"2026Y{6,7}M")
+      {:ok, ~o"2026Y{6,7}M{1..-1}D"}
+
+      iex> Tempo.extend(~o"2026Y2G3MU")
+      {:ok, ~o"2026Y{4..6}M"}
+
+      iex> Tempo.extend(~o"2026-03-29[Europe/Paris]")
+      {:ok, ~o"2026Y3M29DT{0..1,3..23}H[Europe/Paris]"}
+
+  """
+  @spec extend(t(), Unit.t() | nil) :: {:ok, t()} | {:error, error()}
+  def extend(expression, unit \\ nil), do: Shift.extend(expression, unit)
+
+  @doc """
+  A value written at a unit: truncated to a coarser one as `trunc/2`
+  truncates, and extended to a finer one with the first value of each unit
+  between.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  * `unit` is a unit.
+
+  ### Returns
+
+  * `{:ok, expression}`, or `{:error, exception}` as for `trunc/2`.
+
+  ### Examples
+
+      iex> Tempo.at_resolution(~o"2020Y", :day)
+      {:ok, ~o"2020Y1M1D"}
+
+      iex> Tempo.at_resolution(~o"2020Y6M15DT10H", :day)
+      {:ok, ~o"2020Y6M15D"}
+
+      iex> Tempo.at_resolution(~o"2026-W25", :hour)
+      {:ok, ~o"2026Y25W1KT0H"}
+
+  """
+  @spec at_resolution(t(), Unit.t()) :: {:ok, t()} | {:error, error()}
+  def at_resolution(expression, unit), do: Shift.at_resolution(expression, unit)
+
+  @doc """
+  A value split into its date and its time of day, each keeping the value's
+  calendar, zone, qualifications and metadata, so that `at/2` of the two is
+  the value.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` that is one value.
+
+  ### Returns
+
+  * `{date, time}`, either `nil` when the value has none.
+
+  * `{:error, exception}` for an expression that is not a value.
+
+  ### Examples
+
+      iex> Tempo.split(~o"2026-06-15T14:30:00")
+      {~o"2026Y6M15D", ~o"T14H30M0S"}
+
+      iex> Tempo.split(~o"2026-06-15T14:30[Europe/Paris]")
+      {~o"2026Y6M15D[Europe/Paris]", ~o"T14H30M[Europe/Paris]"}
+
+      iex> Tempo.split(~o"2026-06-15")
+      {~o"2026Y6M15D", nil}
+
+  """
+  @spec split(t()) :: {t() | nil, t() | nil} | {:error, error()}
+  def split(value), do: Shift.split(value)
+
+  # ── Lengths ───────────────────────────────────────────────────────────
+
+  @doc """
+  The duration an expression covers, in the unit it is written to.
+
+  A value is one unit of its resolution long: a month is `P1M`, whichever
+  month. An interval is measured between its ends in their finer unit, days
+  between two dates and elapsed hours between two times, so a day across a
+  change of the clocks is 23 or 25 hours. A set, a recurrence or a value
+  that names several is the time it covers once, summed.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  ### Returns
+
+  * A `t:Tempo.Duration.t/0`, or `:infinity` for an open end or a
+    recurrence with none.
+
+  * `{:error, %Tempo.ConversionError{}}` with reason `:needs_a_year` for an
+    interval or set of dates with no year, whose length is its year's, and
+    `:bare_duration` for a duration.
+
+  ### Examples
+
+      iex> Tempo.duration(~o"2026-06-15T09:00/2026-06-15T10:30")
+      ~o"PT90M"
+
+      iex> Tempo.duration(~o"2026-06")
+      ~o"P1M"
+
+      iex> Tempo.duration(~o"2026-06-15/2026-06-20")
+      ~o"P6D"
+
+      iex> Tempo.duration(~o"T22/T02")
+      ~o"PT4H"
+
+      iex> bookings = Tempo.IntervalSet.new!([~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-15T10/2026-06-15T12"])
+      iex> Tempo.duration(bookings)
+      ~o"PT3H"
+
+  """
+  @spec duration(t() | Duration.t()) :: Duration.t() | :infinity | {:error, error()}
+  def duration(expression), do: Measure.duration(expression)
+
+  @doc """
+  The duration from the start of one value to the start of another, in
+  their finer unit: days between two dates, elapsed hours between two
+  times. Unlike an interval written between them, which runs through its
+  last date, this measures start to start.
+
+  ### Arguments
+
+  * `from` and `to` are each a `t:t/0` with one span, on one frame, `to`
+    after `from`.
+
+  ### Returns
+
+  * `{:ok, duration}`.
+
+  * `{:error, %Tempo.IntervalEndpointsError{}}` when `to` is not after
+    `from`, and `{:error, %Tempo.FrameError{}}` when the two share no frame.
+
+  ### Examples
+
+      iex> Tempo.duration(~o"2026-09-28", ~o"2026-11-03")
+      {:ok, ~o"P36D"}
+
+      iex> Tempo.duration(~o"2026-09-28T10", ~o"2026-09-29")
+      {:ok, ~o"PT14H"}
+
+  """
+  @spec duration(t(), t()) :: {:ok, Duration.t()} | {:error, error()}
+  def duration(from, to), do: Measure.between(from, to)
+
+  for {name, comparison, phrase} <- [
+        {:at_least?, :at_least, "at least as long as"},
+        {:at_most?, :at_most, "no longer than"},
+        {:exactly?, :exactly, "exactly as long as"},
+        {:longer_than?, :longer, "longer than"},
+        {:shorter_than?, :shorter, "shorter than"}
+      ] do
+    @doc """
+    Whether an expression is #{phrase} a duration.
+
+    The expression is measured as `duration/1` measures it, as the time it
+    covers; the duration is laid from the expression's start, so a month is
+    as long as the month it starts in. An open end is longer than any
+    duration.
+
+    ### Arguments
+
+    * `expression` is a `t:t/0`.
+
+    * `duration` is a `t:Tempo.Duration.t/0`.
+
+    ### Returns
+
+    * `true` or `false`.
+
+    * `{:error, exception}` as for `duration/1`.
+
+    ### Examples
+
+        iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
+        iex> Tempo.#{name}(meeting, ~o"PT1H")
+        #{comparison in [:at_least, :longer]}
+
+        iex> meeting = ~o"2026-06-15T09:00/2026-06-15T10:30"
+        iex> Tempo.#{name}(meeting, ~o"PT90M")
+        #{comparison in [:at_least, :at_most, :exactly]}
+
+    """
+    @spec unquote(name)(t(), Duration.t()) :: boolean() | {:error, error()}
+    def unquote(name)(expression, duration),
+      do: Measure.holds?(unquote(comparison), expression, duration)
+  end
+
+  # ── Parts ─────────────────────────────────────────────────────────────
+
+  for {name, unit, example, answer, none} <- [
+        {:year, :year, ~s(~o"2026-06-15"), 2026, ~s(~o"202XY")},
+        {:month, :month, ~s(~o"2026-06-15"), 6, ~s(~o"2026")},
+        {:day, :day, ~s(~o"2026-06-15"), 15, ~s(~o"2026-06")},
+        {:hour, :hour, ~s(~o"2026-06-15T10:30"), 10, ~s(~o"2026-06-15")},
+        {:minute, :minute, ~s(~o"2026-06-15T10:30"), 30, ~s(~o"2026-06-15T10")},
+        {:second, :second, ~s(~o"T10:30:45"), 45, ~s(~o"T10:30")},
+        {:week, :week, ~s(~o"2026-W32"), 32, ~s(~o"2026-06")}
+      ] do
+    @doc """
+    The #{unit} an expression names, as a number.
+
+    A unit the value is written in is read as written. One the value is not
+    written in, but lies within one period of, is read through the calendar:
+    the day of the month of a week date, the week of a date. An interval or a
+    set answers when every end or member answers the same.
+
+    ### Arguments
+
+    * `expression` is a `t:t/0`.
+
+    ### Returns
+
+    * The number, or `nil` when the expression names no #{unit} or several.
+
+    ### Examples
+
+        iex> Tempo.#{name}(#{example})
+        #{answer}
+
+        iex> Tempo.#{name}(#{none})
+        nil
+
+    """
+    @spec unquote(name)(t()) :: integer() | nil
+    def unquote(name)(expression), do: Parts.part(expression, unquote(unit))
+  end
+
+  @doc """
+  The day of the week an expression names, 1 to 7, Monday first by default.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`: a date, a week date, or an interval or set
+    within one day.
+
+  * `starting_on` is the day numbered 1: `:default` or `:monday` (the
+    default), `:tuesday`, `:wednesday`, `:thursday`, `:friday`, `:saturday`
+    or `:sunday`.
+
+  ### Returns
+
+  * The day of the week, or `nil` when the expression names no day or
+    several.
+
+  ### Examples
+
+      iex> Tempo.day_of_week(~o"2026-06-15")
+      1
+
+      iex> Tempo.day_of_week(~o"2026-06-15", :sunday)
+      2
+
+      iex> Tempo.day_of_week(~o"2026-06")
+      nil
+
+  """
+  @spec day_of_week(t(), atom()) :: 1..7 | nil
+  def day_of_week(expression, starting_on \\ :default),
+    do: Parts.weekday(Parts.part(expression, :day_of_week), starting_on)
+
+  @doc """
+  The day of the year an expression names, counted from the year's first
+  day.
+
+  ### Examples
+
+      iex> Tempo.day_of_year(~o"2026-06-15")
+      166
+
+      iex> Tempo.day_of_year(~o"2026-06")
+      nil
+
+  """
+  @spec day_of_year(t()) :: pos_integer() | nil
+  def day_of_year(expression), do: Parts.part(expression, :day_of_year)
+
+  @doc """
+  The quarter of the year an expression lies in, 1 to 4.
+
+  ### Examples
+
+      iex> Tempo.quarter_of_year(~o"2026-06-15")
+      2
+
+      iex> Tempo.quarter_of_year(~o"2026")
+      nil
+
+  """
+  @spec quarter_of_year(t()) :: 1..4 | nil
+  def quarter_of_year(expression), do: Parts.part(expression, :quarter)
+
+  @doc """
+  Whether the year an expression names is a leap year of its calendar.
+
+  ### Returns
+
+  * `true` or `false`.
+
+  * `{:error, %Tempo.ConversionError{reason: :needs_a_year}}` when the
+    expression names no year or several.
+
+  ### Examples
+
+      iex> Tempo.leap_year?(~o"2024")
+      true
+
+      iex> Tempo.leap_year?(~o"2025-06-15")
+      false
+
+  """
+  @spec leap_year?(t()) :: boolean() | {:error, error()}
+  def leap_year?(expression), do: Parts.leap_year?(expression)
+
+  @doc """
+  The number of days in the month an expression names, in its calendar.
+
+  ### Returns
+
+  * `{:ok, days}`.
+
+  * `{:error, %Tempo.ConversionError{reason: :needs_a_month}}` when the
+    expression names no year and month, or several.
+
+  ### Examples
+
+      iex> Tempo.days_in_month(~o"2024-02-15")
+      {:ok, 29}
+
+      iex> Tempo.days_in_month(~o"2025-02")
+      {:ok, 28}
+
+  """
+  @spec days_in_month(t()) :: {:ok, pos_integer()} | {:error, error()}
+  def days_in_month(expression), do: Parts.days_in_month(expression)
+
+  @doc """
+  The unit an expression is written to: the finest unit of a value, of an
+  interval's ends or a set's members. A value ending in a group is written
+  to the group's unit.
+
+  ### Examples
+
+      iex> Tempo.resolution(~o"2022-11")
+      :month
+
+      iex> Tempo.resolution(~o"2022Y1M2G3DU")
+      :day
+
+      iex> Tempo.resolution(~o"2026-06-15T10/2026-06-16")
+      :hour
+
+  """
+  @spec resolution(t() | Duration.t()) :: Unit.t()
+  def resolution(expression), do: Parts.resolution(expression)
+
+  @doc """
+  Whether an expression has a year, so a place on the time line. A value
+  with an unspecified year (`X*Y`) has none.
+
+  ### Examples
+
+      iex> Tempo.anchored?(~o"2022")
+      true
+
+      iex> Tempo.anchored?(~o"2M")
+      false
+
+      iex> Tempo.anchored?(~o"X*Y2M")
+      false
+
+  """
+  @spec anchored?(t()) :: boolean()
+  def anchored?(expression), do: Parts.anchored?(expression)
+
+  @doc """
+  Whether an expression is floating: a reading of a clock with no zone and
+  no time shift, which names a civil time but not whose. The complement of
+  `zoned?/1`.
+
+  ### Examples
+
+      iex> Tempo.floating?(~o"2024-01-01")
+      true
+
+      iex> Tempo.floating?(~o"2024-01-01T10Z")
+      false
+
+      iex> Tempo.floating?(~o"2024-01-01[Australia/Sydney]")
+      false
+
+  """
+  @spec floating?(t()) :: boolean()
+  def floating?(expression), do: not Parts.zoned?(expression)
+
+  @doc """
+  Whether an expression carries a zone or a time shift, so a place on the
+  universal time line. The complement of `floating?/1`.
+
+  ### Examples
+
+      iex> Tempo.zoned?(~o"2024-01-01[Australia/Sydney]")
+      true
+
+      iex> Tempo.zoned?(~o"2024-01-01")
+      false
+
+  """
+  @spec zoned?(t()) :: boolean()
+  def zoned?(expression), do: Parts.zoned?(expression)
+
+  @doc """
+  Whether every end an expression has is written: an interval with an open
+  end is not bounded, nor a recurrence with no end.
+
+  ### Examples
+
+      iex> Tempo.bounded?(~o"2026-06-15")
+      true
+
+      iex> Tempo.bounded?(~o"2026-01-15/..")
+      false
+
+      iex> Tempo.bounded?(~o"R/2026-01-15/P1D")
+      false
+
+  """
+  @spec bounded?(t()) :: boolean()
+  def bounded?(expression), do: Parts.bounded?(expression)
+
+  @doc """
+  Whether an expression covers no time: a set with no members.
+
+  ### Examples
+
+      iex> Tempo.empty?(~o"{}")
+      true
+
+      iex> Tempo.empty?(~o"2026-06-15")
+      false
+
+  """
+  @spec empty?(t()) :: boolean()
+  def empty?(expression), do: Parts.empty?(expression)
+
+  @doc """
+  The qualifications of a value: which of its units are uncertain (`?`),
+  approximate (`~`) or both (`%`), as a map from unit to qualification,
+  `nil` when the value has none; with a unit, that unit's.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`.
+
+  * `unit` is a unit.
+
+  ### Returns
+
+  * A map, or `nil`; with a unit, `:uncertain`, `:approximate`, `:both` or
+    `nil`.
+
+  ### Examples
+
+      iex> Tempo.qualification(~o"2026-06~-15")
+      %{year: :approximate, month: :approximate}
+
+      iex> Tempo.qualification(~o"2026-06~-15", :month)
+      :approximate
+
+      iex> Tempo.qualification(~o"2026-06-15")
+      nil
+
+  """
+  @spec qualification(t()) :: qualifications()
+  def qualification(%__MODULE__{qualifications: qualifications}), do: qualifications
+
+  @spec qualification(t(), Unit.t()) :: :uncertain | :approximate | :both | nil
+  def qualification(%__MODULE__{qualifications: nil}, _unit), do: nil
+
+  def qualification(%__MODULE__{qualifications: qualifications}, unit),
+    do: Map.get(qualifications, unit)
+
+  @doc """
+  The metadata an expression carries: a map, empty by default.
+
+  ### Examples
+
+      iex> Tempo.metadata(~o"2026-06-15")
+      %{}
+
+      iex> ~o"2026-06-15" |> Tempo.put_metadata(%{room: "A"}) |> Tempo.metadata()
+      %{room: "A"}
+
+  """
+  @spec metadata(t()) :: map()
+  def metadata(%__MODULE__{metadata: metadata}), do: metadata
+
+  @doc """
+  An expression with metadata merged into what it carries.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  * `metadata` is a map.
+
+  ### Examples
+
+      iex> ~o"2026-06-15" |> Tempo.put_metadata(%{room: "A"}) |> Tempo.put_metadata(%{owner: "Ann"}) |> Tempo.metadata()
+      %{room: "A", owner: "Ann"}
+
+  """
+  @spec put_metadata(t(), map()) :: t()
+  def put_metadata(%__MODULE__{metadata: existing} = expression, metadata) when is_map(metadata),
+    do: %{expression | metadata: Map.merge(existing, metadata)}
+
+  # ── Selection ─────────────────────────────────────────────────────────
+
+  @doc """
+  The values a selector picks in each span of an expression: the Fridays of
+  June, Christmas Day in each year of a span, half past ten in a working
+  day, a territory's workdays in a term.
+
+  ### Arguments
+
+  * `base` is a `t:t/0` with spans: a value, an interval, a set, a bounded
+    recurrence. Each span is a period the selector is applied in.
+
+  * `selector` is one of: a `t:t/0` with no year, whose units are the parts
+    selected (`~o"12M25D"`, `~o"5K"`, `~o"T02"`, `~o"L1K1IN"`); a span with
+    no year, placed in each period it begins in (`~o"T22/T02"`); a
+    recurrence, whose occurrences within each period are selected; a
+    `t:Tempo.Workdays.t/0` from `workdays/2`, or `weekends/1`; a list or a
+    range of integers, the days of the month; a list of selectors, each
+    applied; or a function given each period that answers with a selector
+    for it, or `{:error, reason}`.
+
+  * `options` is a keyword list; `:within` bounds a base with no end.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form holding the values picked in
+    order, each with its period's metadata.
+
+  * `{:error, %ArgumentError{}}` for a selector of no recognised shape, and
+    `{:error, exception}` when the base has no spans or an open start.
+
+  ### Examples
+
+      iex> {:ok, days} = Tempo.select(~o"2026-02", [1, 15])
+      iex> Tempo.IntervalSet.map(days, &Tempo.day/1)
+      [1, 15]
+
+      iex> {:ok, fridays} = Tempo.select(~o"2026-06", ~o"5K")
+      iex> Tempo.IntervalSet.map(fridays, &Tempo.day/1)
+      [5, 12, 19, 26]
+
+      iex> {:ok, christmases} = Tempo.select(~o"2026/2028", ~o"12M25D")
+      iex> Tempo.IntervalSet.map(christmases, &Tempo.year/1)
+      [2026, 2027, 2028]
+
+      iex> {:ok, first_monday} = Tempo.select(~o"2026-06", ~o"L1K1IN")
+      iex> Tempo.IntervalSet.members(first_monday)
+      [~o"2026-06-01"]
+
+      iex> {:ok, workdays} = Tempo.select(~o"2026-02", Tempo.workdays(:US))
+      iex> Tempo.IntervalSet.count(workdays)
+      20
+
+      iex> clocks_go_forward = ~o"2024-03-10[America/New_York]"
+      iex> {:ok, skipped} = Tempo.select(clocks_go_forward, ~o"T02")
+      iex> Tempo.IntervalSet.count(skipped)
+      0
+
+  """
+  @spec select(t(), term(), keyword()) :: {:ok, t()} | {:error, error()}
+  def select(%__MODULE__{} = base, selector, options \\ []) do
+    with {:ok, selector} <- selector(selector),
+         {:ok, values} <- Select.select(base, selector, options) do
+      {:ok, set_of(values, base)}
+    end
+  end
+
+  # A selector may be given as the `{:ok, _}` that `workdays/2` and `weekends/1` return.
+  defp selector({:ok, selector}), do: {:ok, selector}
+  defp selector({:error, _} = error), do: error
+  defp selector(selector), do: {:ok, selector}
+
+  @doc """
+  `select/3`, returning the set or raising.
+
+  ### Examples
+
+      iex> ~o"2026-06" |> Tempo.select!(~o"5K") |> Tempo.IntervalSet.count()
+      4
+
+  """
+  @spec select!(t(), term(), keyword()) :: t()
+  def select!(base, selector, options \\ []) do
+    case select(base, selector, options) do
+      {:ok, set} -> set
+      {:error, exception} -> raise exception
+    end
+  end
+
+  # ── Workdays ──────────────────────────────────────────────────────────
+
+  @doc """
+  The workdays of a territory, less any days off: a selector for `select/3`
+  and the calendar the workday functions step through.
+
+  ### Arguments
+
+  * `territory` is a territory code (`:US`, `:SA`, `:IN`), whose weekdays
+    and weekend come from CLDR through Localize; `nil` is the configured
+    `:default_territory`, or the world's when none is configured.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:except` is a `t:t/0` with spans, the days off: a set of dates, a
+    recurrence, a holiday set.
+
+  ### Returns
+
+  * `{:ok, %Tempo.Workdays{}}`, or `{:error, %ArgumentError{}}` for a
+    territory Localize does not know.
+
+  ### Examples
+
+      iex> {:ok, workdays} = Tempo.workdays(:SA)
+      iex> workdays.weekend
+      [5, 6]
+
+      iex> {:ok, school_days} = Tempo.workdays(:AU, except: ~o"{2026-01-26,2026-04-25}")
+      iex> Tempo.count_workdays(~o"2026-01-19/2026-02-01", school_days)
+      {:ok, 9}
+
+  """
+  @spec workdays(term(), keyword()) :: {:ok, Workdays.t()} | {:error, error()}
+  def workdays(territory \\ nil, options \\ []), do: Workdays.new(territory, options)
+
+  @doc """
+  The weekend of a territory as a selector: the days of the week its
+  weekend falls on.
+
+  ### Examples
+
+      iex> {:ok, weekends} = Tempo.weekends(:US)
+      iex> {:ok, days} = Tempo.select(~o"2026-06-15/2026-06-21", weekends)
+      iex> Tempo.IntervalSet.map(days, &Tempo.day/1)
+      [20, 21]
+
+  """
+  @spec weekends(term()) :: {:ok, t()} | {:error, error()}
+  def weekends(territory \\ nil) do
+    with {:ok, %Workdays{weekend: weekend}} <- Workdays.new(territory),
+         do: {:ok, %__MODULE__{form: {:value, [day_of_week: weekend]}}}
+  end
+
+  for {name, phrase} <- [
+        {:workday?, "falls on a workday of a territory: a weekday that is not a day off"},
+        {:weekend?, "falls on the weekend of a territory"}
+      ] do
+    @doc """
+    Whether a value, a day or finer, #{phrase}.
+
+    ### Arguments
+
+    * `value` is a `t:t/0` within one day.
+
+    * `territory` is a territory code, a `t:Tempo.Workdays.t/0` or `nil`,
+      as for `workdays/2`.
+
+    ### Returns
+
+    * `true` or `false`, or `{:error, exception}` for a value that names
+      several days or a territory Localize does not know.
+
+    ### Examples
+
+        iex> Tempo.#{name}(~o"2026-06-13", :US)
+        #{name == :weekend?}
+
+        iex> Tempo.#{name}(~o"2026-06-15", :US)
+        #{name == :workday?}
+
+    """
+    @spec unquote(name)(t(), term()) :: boolean() | {:error, error()}
+    def unquote(name)(value, territory \\ nil) do
+      with {:ok, workdays} <- Workdays.new(territory),
+           do: Workdays.unquote(name)(value, workdays)
+    end
+  end
+
+  @doc """
+  A value moved by a number of workdays, forward for a positive count and
+  back for a negative one, stepping over the weekend and the days off.
+
+  ### Examples
+
+      iex> Tempo.add_workdays(~o"2026-06-12", 3, :US)
+      {:ok, ~o"2026-06-17"}
+
+      iex> Tempo.add_workdays(~o"2026-06-15", -1, :US)
+      {:ok, ~o"2026-06-12"}
+
+  """
+  @spec add_workdays(t(), integer(), term()) ::
+          {:ok, t()} | {:error, error()}
+  def add_workdays(value, count, territory \\ nil) do
+    with {:ok, workdays} <- Workdays.new(territory), do: Workdays.add(value, count, workdays)
+  end
+
+  @doc """
+  The first workday after a value.
+
+  ### Examples
+
+      iex> Tempo.next_workday(~o"2026-06-12", :US)
+      {:ok, ~o"2026-06-15"}
+
+  """
+  @spec next_workday(t(), term()) :: {:ok, t()} | {:error, error()}
+  def next_workday(value, territory \\ nil) do
+    with {:ok, workdays} <- Workdays.new(territory), do: Workdays.step(value, 1, workdays)
+  end
+
+  @doc """
+  The last workday before a value.
+
+  ### Examples
+
+      iex> Tempo.previous_workday(~o"2026-06-15", :US)
+      {:ok, ~o"2026-06-12"}
+
+  """
+  @spec previous_workday(t(), term()) :: {:ok, t()} | {:error, error()}
+  def previous_workday(value, territory \\ nil) do
+    with {:ok, workdays} <- Workdays.new(territory), do: Workdays.step(value, -1, workdays)
+  end
+
+  @doc """
+  The nearest workday to a value: the value itself when it is one, else the
+  closer of the next and the previous, the next on a tie.
+
+  ### Examples
+
+      iex> Tempo.nearest_workday(~o"2026-06-13", :US)
+      {:ok, ~o"2026-06-12"}
+
+      iex> Tempo.nearest_workday(~o"2026-06-14", :US)
+      {:ok, ~o"2026-06-15"}
+
+  """
+  @spec nearest_workday(t(), term()) :: {:ok, t()} | {:error, error()}
+  def nearest_workday(value, territory \\ nil) do
+    with {:ok, workdays} <- Workdays.new(territory), do: Workdays.nearest(value, workdays)
+  end
+
+  @doc """
+  A value rolled to a workday by a business day convention: itself when it
+  is a workday, else the workday the convention names.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` within one day.
+
+  * `territory` is as for `workdays/2`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:roll` is `:following` (the default), `:preceding`,
+    `:modified_following` or `:modified_preceding`; the modified
+    conventions turn back when the roll would leave the month.
+
+  ### Examples
+
+      iex> Tempo.roll_to_workday(~o"2026-05-30", :US)
+      {:ok, ~o"2026-06-01"}
+
+      iex> Tempo.roll_to_workday(~o"2026-05-30", :US, roll: :modified_following)
+      {:ok, ~o"2026-05-29"}
+
+      iex> Tempo.roll_to_workday(~o"2026-11-01", :US, roll: :modified_preceding)
+      {:ok, ~o"2026-11-02"}
+
+  """
+  @spec roll_to_workday(t(), term(), keyword()) ::
+          {:ok, t()} | {:error, error()}
+  def roll_to_workday(value, territory \\ nil, options \\ []) do
+    with {:ok, workdays} <- Workdays.new(territory),
+         do: Workdays.roll(value, workdays, Keyword.get(options, :roll, :following))
+  end
+
+  @doc """
+  How many workdays an expression's days hold.
+
+  ### Examples
+
+      iex> Tempo.count_workdays(~o"2026-06", :US)
+      {:ok, 22}
+
+  """
+  @spec count_workdays(t(), term()) ::
+          {:ok, non_neg_integer()} | {:error, error()}
+  def count_workdays(expression, territory \\ nil) do
+    with {:ok, workdays} <- Workdays.new(territory), do: Workdays.count(expression, workdays)
+  end
+
+  # ── Elixir's dates and times ──────────────────────────────────────────
+
+  @doc """
+  A Tempo value from one of Elixir's date and time structs.
+
+  A `Date` is a day, a `Time` a second, a `NaiveDateTime` a floating
+  second, a `DateTime` a second in its zone (UTC as `Z`), each in the
+  struct's calendar; a `Date.Range` is the span of its days; an Elixir
+  `Duration` a `t:Tempo.Duration.t/0`.
+
+  ### Arguments
+
+  * `value` is a `t:Date.t/0`, `t:Time.t/0`, `t:NaiveDateTime.t/0`,
+    `t:DateTime.t/0`, `t:Date.Range.t/0` or `t:Duration.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:resolution` is a unit the value is written at, as `at_resolution/2`
+    writes it.
+
+  ### Returns
+
+  * `{:ok, value}`.
+
+  * `{:error, %Tempo.ConversionError{}}` for anything else, and for a
+    stepped or descending range.
+
+  ### Examples
+
+      iex> Tempo.from_elixir(~D[2022-06-15])
+      {:ok, ~o"2022-06-15"}
+
+      iex> Tempo.from_elixir(~N[2022-06-15 10:30:00])
+      {:ok, ~o"2022-06-15T10:30:00"}
+
+      iex> Tempo.from_elixir(~U[2022-06-15 10:30:00Z])
+      {:ok, ~o"2022-06-15T10:30:00Z"}
+
+      iex> Tempo.from_elixir(Date.range(~D[2026-07-01], ~D[2026-07-31]))
+      {:ok, ~o"2026-07-01/2026-07-31"}
+
+      iex> Tempo.from_elixir(~N[2022-06-15 10:30:00], resolution: :day)
+      {:ok, ~o"2022-06-15"}
+
+  """
+  @spec from_elixir(term(), keyword()) :: {:ok, t() | Duration.t()} | {:error, error()}
+  def from_elixir(value, options \\ []), do: Interop.from(value, options)
+
+  @doc """
+  `from_elixir/2`, returning the value or raising.
+
+  ### Examples
+
+      iex> Tempo.from_elixir!(~T[10:30:00])
+      ~o"T10:30:00"
+
+  """
+  @spec from_elixir!(term(), keyword()) :: t() | Duration.t()
+  def from_elixir!(value, options \\ []) do
+    case from_elixir(value, options) do
+      {:ok, tempo} -> tempo
+      {:error, exception} -> raise exception
+    end
+  end
+
+  for {name, struct, example, answer} <- [
+        {:from_date, Date, "~D[2022-06-15]", ~s(~o"2022-06-15")},
+        {:from_time, Time, "~T[10:30:00]", ~s(~o"T10:30:00")},
+        {:from_naive_datetime, NaiveDateTime, "~N[2022-06-15 10:30:00]",
+         ~s(~o"2022-06-15T10:30:00")},
+        {:from_datetime, DateTime, "~U[2022-06-15 10:30:00Z]", ~s(~o"2022-06-15T10:30:00Z")}
+      ] do
+    @doc """
+    A Tempo value from a `#{inspect(struct)}`, as `from_elixir/2` reads one.
+
+    ### Examples
+
+        iex> Tempo.#{name}(#{example})
+        #{answer}
+
+    """
+    @spec unquote(name)(unquote(struct).t()) :: t()
+    def unquote(name)(%unquote(struct){} = value), do: from_elixir!(value)
+  end
+
+  @doc """
+  The Elixir struct a value fills: a `Date` for a day, a `Time` for a time
+  of day, a `NaiveDateTime` for a floating date and time, a `DateTime` for
+  one with a zone or a shift, and an Elixir `Duration` for a duration.
+
+  ### Returns
+
+  * `{:ok, struct}`.
+
+  * `{:error, %Tempo.ConversionError{}}` for a value coarser than a day, a
+    value that names several, or an expression that is no value.
+
+  ### Examples
+
+      iex> Tempo.to_elixir(~o"2026-06-15")
+      {:ok, ~D[2026-06-15]}
+
+      iex> Tempo.to_elixir(~o"2026-06-15T10:30")
+      {:ok, ~N[2026-06-15 10:30:00]}
+
+      iex> Tempo.to_elixir(~o"2026-06-15T10:30:00Z")
+      {:ok, ~U[2026-06-15 10:30:00Z]}
+
+      iex> Tempo.to_elixir(~o"PT8H")
+      {:ok, Duration.new!(hour: 8)}
+
+      iex> {:error, %Tempo.ConversionError{}} = Tempo.to_elixir(~o"2026-06")
+
+  """
+  @spec to_elixir(t() | Duration.t()) :: {:ok, struct()} | {:error, error()}
+  def to_elixir(value), do: Interop.to(value)
+
+  @doc """
+  The `Date` of a value written to the day or finer, on any axis.
+
+  ### Examples
+
+      iex> Tempo.to_date(~o"2026-06-15T10:30")
+      {:ok, ~D[2026-06-15]}
+
+      iex> Tempo.to_date(~o"2026-W25-3")
+      {:ok, ~D[2026-06-17]}
+
+  """
+  @spec to_date(t()) :: {:ok, Date.t()} | {:error, error()}
+  def to_date(value), do: Interop.to_date(value)
+
+  @doc """
+  The `Time` of a value with a time of day; units it does not write are zero.
+
+  ### Examples
+
+      iex> Tempo.to_time(~o"2026-06-15T10:30")
+      {:ok, ~T[10:30:00]}
+
+  """
+  @spec to_time(t()) :: {:ok, Time.t()} | {:error, error()}
+  def to_time(value), do: Interop.to_time(value)
+
+  @doc """
+  The `NaiveDateTime` of a value written to the day or finer; units it does
+  not write are zero, and a zone is dropped.
+
+  ### Examples
+
+      iex> Tempo.to_naive_datetime(~o"2026-06-15")
+      {:ok, ~N[2026-06-15 00:00:00]}
+
+  """
+  @spec to_naive_datetime(t()) :: {:ok, NaiveDateTime.t()} | {:error, error()}
+  def to_naive_datetime(value), do: Interop.to_naive(value)
+
+  @doc """
+  The `DateTime` of a value with a zone or a time shift.
+
+  ### Returns
+
+  * `{:ok, datetime}`, in the value's zone, or in UTC for a shift.
+
+  * `{:error, %Tempo.ConversionError{reason: :floating}}` for a value with
+    neither.
+
+  ### Examples
+
+      iex> {:ok, paris} = Tempo.to_datetime(~o"2026-06-15T10:30[Europe/Paris]")
+      iex> {paris.time_zone, paris.hour}
+      {"Europe/Paris", 10}
+
+      iex> {:error, %Tempo.ConversionError{reason: :floating}} = Tempo.to_datetime(~o"2026-06-15T10:30")
+
+  """
+  @spec to_datetime(t()) :: {:ok, DateTime.t()} | {:error, error()}
+  def to_datetime(value), do: Interop.to_datetime(value)
+
+  # ── Now ───────────────────────────────────────────────────────────────
+
+  @doc """
+  The current second in a zone, from the configured `Tempo.Clock`.
+
+  ### Arguments
+
+  * `zone` is an IANA zone name; the default is `"Etc/UTC"`.
+
+  ### Returns
+
+  * `{:ok, value}`, a `t:t/0` at second resolution in the zone.
+
+  * `{:error, %Tempo.ZoneError{}}` for a zone the database does not know.
+
+  ### Examples
+
+      iex> {:ok, now} = Tempo.now("Europe/London")
+      iex> Tempo.resolution(now)
+      :second
+
+      iex> {:error, %Tempo.ZoneError{}} = Tempo.now("Continent/Imaginary")
+
+  """
+  @spec now(String.t()) :: {:ok, t()} | {:error, error()}
+  def now(zone \\ "Etc/UTC"), do: Interop.now(zone)
+
+  @doc """
+  The current second in UTC.
+
+  ### Examples
+
+      iex> Tempo.zoned?(Tempo.utc_now())
+      true
+
+  """
+  @spec utc_now() :: t()
+  def utc_now do
+    {:ok, now} = now("Etc/UTC")
+    now
+  end
+
+  @doc """
+  Today's date in a zone: a floating day.
+
+  ### Examples
+
+      iex> {:ok, today} = Tempo.today("Australia/Sydney")
+      iex> Tempo.resolution(today)
+      :day
+
+  """
+  @spec today(String.t()) :: {:ok, t()} | {:error, error()}
+  def today(zone \\ "Etc/UTC") do
+    with {:ok, now} <- now(zone),
+         {:ok, day} <- trunc(now, :day),
+         do: {:ok, %{day | zone: nil, shift: nil}}
+  end
+
+  @doc """
+  Today's date in UTC.
+
+  ### Examples
+
+      iex> Tempo.floating?(Tempo.utc_today())
+      true
+
+  """
+  @spec utc_today() :: t()
+  def utc_today do
+    {:ok, today} = today("Etc/UTC")
+    today
+  end
+
+  # ── Words ─────────────────────────────────────────────────────────────
+
+  @doc """
+  A locale's words for an expression, through Localize and CLDR.
+
+  An expression is shown as the time it covers. A value written to the day
+  is that day, one written coarser runs from the first to the last of the
+  next unit down (a year its months, a month or a week its days), and one
+  written to a clock unit is its date and time. An interval runs from its
+  first end to its last as the finer of the two is written. An expression
+  of several spans is their list, and a one-of set its alternatives. A
+  duration is its units. A year before 1 is shown with its era.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` or a `t:Tempo.Duration.t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:locale` is a CLDR locale; the default is Localize's.
+
+  * `:format` is a CLDR format (`:short`, `:medium`, `:long`, `:full`) or a
+    skeleton (`:yMMMd`).
+
+  * `:within` is a `t:t/0`, the window an expression with no year or no end
+    is placed in.
+
+  ### Returns
+
+  * `{:ok, words}`.
+
+  * `{:error, exception}`: a `Tempo.ConversionError` with reason `:open`
+    for an interval with an open end and `:needs_a_year` for an expression
+    with no year that the units alone cannot show, or Localize's own error.
+
+  ### Examples
+
+      iex> Tempo.to_string(~o"2026-06-15")
+      {:ok, "Jun 15, 2026"}
+
+      iex> Tempo.to_string(~o"2026-06")
+      {:ok, "Jun 1 –30, 2026" |> String.replace("–30", "– 30")}
+
+      iex> Tempo.to_string(~o"2026-06-15", format: :long, locale: "fr")
+      {:ok, "15 juin 2026"}
+
+      iex> Tempo.to_string(~o"2026/2028")
+      {:ok, "2026 – 2028"}
+
+      iex> Tempo.to_string(~o"R3/2026-06-15/P1D")
+      {:ok, "Jun 15, 2026, Jun 16, 2026, and Jun 17, 2026"}
+
+      iex> Tempo.to_string(~o"[2026-06-15,2026-07-04]")
+      {:ok, "Jun 15, 2026 or Jul 4, 2026"}
+
+      iex> Tempo.to_string(~o"-0044-03-15")
+      {:ok, "Mar 15, 45 BC"}
+
+      iex> Tempo.to_string(~o"P1Y6M")
+      {:ok, "1 year, 6 months"}
+
+      iex> {:error, %Tempo.ConversionError{reason: :open}} = Tempo.to_string(~o"2026-06-15/..")
+
+  """
+  @spec to_string(t() | Duration.t(), keyword()) :: {:ok, String.t()} | {:error, error()}
+  def to_string(expression, options \\ []), do: Format.to_string(expression, options)
+
+  @doc """
+  `to_string/2`, returning the words or raising.
+
+  ### Examples
+
+      iex> Tempo.to_string!(~o"2026-06-15")
+      "Jun 15, 2026"
+
+  """
+  @spec to_string!(t() | Duration.t(), keyword()) :: String.t()
+  def to_string!(expression, options \\ []) do
+    case to_string(expression, options) do
+      {:ok, words} -> words
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
+  A locale's words for where an expression starts relative to another:
+  yesterday, in 3 hours, next year.
+
+  The difference is counted in the first unit the two starts differ in, on
+  the expression's own clock: 1 February is next month from 31 January.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` with a year.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:from` is the `t:t/0` the words are relative to; the default is
+    `utc_now/0`.
+
+  * `:unit` is the unit counted in: `:year`, `:quarter`, `:month`, `:week`,
+    `:day`, `:hour`, `:minute` or `:second`.
+
+  * `:format` is `:standard` (the default), `:short` or `:narrow`, and
+    `:locale` a CLDR locale.
+
+  ### Returns
+
+  * `{:ok, words}`.
+
+  * `{:error, %Tempo.ConversionError{reason: :needs_a_year}}` when either
+    has no year, and `:open` when the expression has no start.
+
+  ### Examples
+
+      iex> now = ~o"2026-06-15T12:00:00Z"
+      iex> Tempo.to_relative_string(~o"2026-06-14T12:00:00Z", from: now)
+      {:ok, "yesterday"}
+
+      iex> now = ~o"2026-06-15T12:00:00Z"
+      iex> Tempo.to_relative_string(~o"2026-06-15T15:00:00Z", from: now)
+      {:ok, "in 3 hours"}
+
+      iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
+      {:ok, "next month"}
+
+      iex> {:error, %Tempo.ConversionError{reason: :needs_a_year}} = Tempo.to_relative_string(~o"T10:30", from: ~o"2026-06-15")
+
+  """
+  @spec to_relative_string(t(), keyword()) :: {:ok, String.t()} | {:error, error()}
+  def to_relative_string(expression, options \\ []),
+    do: Format.to_relative_string(expression, options)
+
+  @doc """
+  A description of an expression in prose: what it is, the time it covers,
+  the frame it is in, and what walking it gives.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` or a `t:Tempo.Duration.t/0`.
+
+  ### Returns
+
+  * A string of several lines; `Tempo.Explain.lines/1` gives them one by one.
+
+  ### Examples
+
+      iex> Tempo.explain(~o"2026-06-15") |> String.split("\\n") |> hd()
+      "A value written to the day: Jun 15, 2026."
+
+      iex> Tempo.explain(~o"1984/1986") |> String.split("\\n") |> Enum.take(2)
+      ["An interval: 1984 – 1986.", "It covers 1984Y through 1986Y."]
+
+  """
+  @spec explain(term()) :: String.t()
+  def explain(expression), do: expression |> Explain.lines() |> Enum.join("\n")
+
+  # ── Mapping ───────────────────────────────────────────────────────────
+
+  @doc """
+  A function applied to each member of an enumerable of expressions, the
+  results gathered into a set: `Enum.map/2` that answers a `t:t/0`.
+
+  The function may answer a `t:t/0` or `{:ok, t}`, as the functions of
+  this module do, so they map directly.
+
+  ### Arguments
+
+  * `enumerable` is an enumerable of `t:t/0`: a list, a set, a value walked.
+
+  * `fun` is a function of one member.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form holding the results in order.
+
+  * `{:error, exception}`, the first error the function answers.
+
+  ### Examples
+
+      iex> independence_days = [~o"2025-07-04", ~o"2026-07-04", ~o"2027-07-04"]
+      iex> {:ok, observed} = Tempo.try_map(independence_days, &Tempo.nearest_workday(&1, :US))
+      iex> Tempo.IntervalSet.map(observed, &Tempo.day/1)
+      [4, 3, 5]
+
+      iex> {:error, %Tempo.ConversionError{}} = Tempo.try_map([~o"2026"], &Tempo.nearest_workday(&1, :US))
+
+  """
+  @spec try_map(Enumerable.t(), (t() -> t() | {:ok, t()} | {:error, error()})) ::
+          {:ok, t()} | {:error, error()}
+  def try_map(enumerable, fun) when is_function(fun, 1) do
+    enumerable
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
+      case fun.(member) do
+        {:ok, %__MODULE__{} = result} ->
+          {:cont, {:ok, [result | acc]}}
+
+        %__MODULE__{} = result ->
+          {:cont, {:ok, [result | acc]}}
+
+        {:error, _} = error ->
+          {:halt, error}
+
+        other ->
+          {:halt, {:error, ConversionError.exception(value: other, reason: :not_an_expression)}}
+      end
+    end)
+    |> mapped()
+  end
+
+  defp mapped({:ok, []}), do: {:ok, %__MODULE__{form: {:all, []}, calendar: Calendar.ISO}}
+
+  defp mapped({:ok, reversed}) do
+    [first | _] = results = Enum.reverse(reversed)
+    {:ok, %__MODULE__{form: {:all, results}, calendar: first.calendar, zone: first.zone}}
+  end
+
+  defp mapped(error), do: error
+
+  @doc """
+  `try_map/2`, returning the set or raising.
+
+  ### Examples
+
+      iex> [~o"2025-07-04", ~o"2026-07-04"] |> Tempo.map(&Tempo.nearest_workday(&1, :US)) |> Tempo.IntervalSet.count()
+      2
+
+  """
+  @spec map(Enumerable.t(), (t() -> t() | {:ok, t()} | {:error, error()})) :: t()
+  def map(enumerable, fun) when is_function(fun, 1) do
+    case try_map(enumerable, fun) do
+      {:ok, set} -> set
+      {:error, exception} -> raise exception
+    end
+  end
+
+  # ── Raising forms ─────────────────────────────────────────────────────
+
+  for {name, argument_types, answer_type, example, answer} <- [
+        {:at, [quote(do: t()), quote(do: t())], quote(do: t()),
+         ~s|Tempo.at!(~o"2026-01-04", ~o"T10:30")|, ~s|~o"2026-01-04T10:30"|},
+        {:on, [quote(do: t()), quote(do: t())], quote(do: t()),
+         ~s|Tempo.on!(~o"T10:30", ~o"2026-01-04")|, ~s|~o"2026-01-04T10:30"|},
+        {:shift, [quote(do: t()), quote(do: Duration.t() | keyword() | String.t())],
+         quote(do: t()), ~s|Tempo.shift!(~o"2026-06-15", day: 1)|, ~s|~o"2026-06-16"|},
+        {:trunc, [quote(do: t()), quote(do: Unit.t())], quote(do: t()),
+         ~s|Tempo.trunc!(~o"2026-06-15T10:30", :day)|, ~s|~o"2026-06-15"|},
+        {:round, [quote(do: t()), quote(do: Unit.t())], quote(do: t()),
+         ~s|Tempo.round!(~o"2026-06-15T13:30", :day)|, ~s|~o"2026-06-16"|},
+        {:extend, [quote(do: t())], quote(do: t()), ~s|Tempo.extend!(~o"2020")|,
+         ~s|~o"2020Y{1..12}M"|},
+        {:at_resolution, [quote(do: t()), quote(do: Unit.t())], quote(do: t()),
+         ~s|Tempo.at_resolution!(~o"2020", :day)|, ~s|~o"2020-01-01"|},
+        {:to_calendar, [quote(do: t()), quote(do: module())], quote(do: t()),
+         ~s|Tempo.to_calendar!(~o"2026-06-15", Calendrical.Hebrew)|,
+         ~s|~o"5786Y9M30D[u-ca=hebrew]"|},
+        {:duration, [quote(do: t()), quote(do: t())], quote(do: Duration.t()),
+         ~s|Tempo.duration!(~o"2026-09-28", ~o"2026-11-03")|, ~s|~o"P36D"|},
+        {:to_relative_string, [quote(do: t()), quote(do: keyword())], quote(do: String.t()),
+         ~s|Tempo.to_relative_string!(~o"2027", from: ~o"2026-07-01")|, ~s|"next year"|},
+        {:union, [quote(do: t()), quote(do: t())], quote(do: t()),
+         ~s|Tempo.union!(~o"2026-01", ~o"2026-03") \|> Tempo.IntervalSet.count()|, "2"},
+        {:intersection, [quote(do: t()), quote(do: t())], quote(do: t()),
+         ~s|Tempo.intersection!(~o"2026-01/2026-03", ~o"2026-03/2026-05") \|> Tempo.IntervalSet.count()|,
+         "1"},
+        {:difference, [quote(do: t()), quote(do: t())], quote(do: t()),
+         ~s|Tempo.difference!(~o"2026", ~o"2026-06") \|> Tempo.IntervalSet.count()|, "2"},
+        {:workdays, [quote(do: term())], quote(do: Workdays.t()),
+         ~s|Tempo.workdays!(:SA).weekend|, "[5, 6]"},
+        {:weekends, [quote(do: term())], quote(do: t()), ~s|Tempo.weekends!(:US)|, ~s|~o"{6,7}K"|}
+      ] do
+    bang = String.to_atom("#{name}!")
+    arity = length(argument_types)
+    arguments = Macro.generate_arguments(arity, __MODULE__)
+
+    @doc """
+    `#{name}/#{arity}`, returning its answer or raising the error.
+
+    ### Examples
+
+        iex> #{example}
+        #{answer}
+
+    """
+    @spec unquote(bang)(unquote_splicing(argument_types)) :: unquote(answer_type)
+    def unquote(bang)(unquote_splicing(arguments)) do
+      case unquote(name)(unquote_splicing(arguments)) do
+        {:ok, answer} -> answer
+        {:error, exception} -> raise exception
+      end
+    end
+  end
 
   defp calendar_of(calendar) do
     if Tempo.Calendar.calendar?(calendar),

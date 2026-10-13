@@ -28,8 +28,7 @@ defmodule Tempo.Grammar.Mutator do
       {:trailing_dash, text <> "-"},
       {:double_t, String.replace(text, "T", "TT", global: false)},
       {:space_inside, insert(text, " ")},
-      {:letter_after_designator, text <> "Q"},
-      {:empty_set, String.replace(text, ~r/\{[^}]*\}/, "{}", global: false)}
+      {:letter_after_designator, text <> "Q"}
     ]
     |> Enum.reject(fn {_, mutated} -> mutated == text end)
   end

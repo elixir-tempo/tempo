@@ -1,0 +1,137 @@
+defmodule Tempo.CalendarsTest do
+  use ExUnit.Case, async: true
+
+  import Tempo.Sigils
+
+  alias Tempo.{ICal, IntervalSet, JSCalendar, RecurrenceSet}
+
+  # iCalendar, JSCalendar and recurrence sets read through the one
+  # occurrences engine (`plans/architecture-redesign.md`, section 18).
+
+  defp ics(event_lines) do
+    """
+    BEGIN:VCALENDAR
+    VERSION:2.0
+    PRODID:-//Test//Test//EN
+    BEGIN:VEVENT
+    UID:event-1
+    DTSTAMP:20260101T000000Z
+    #{Enum.join(event_lines, "\n")}
+    END:VEVENT
+    END:VCALENDAR
+    """
+  end
+
+  defp texts({:ok, set}), do: IntervalSet.map(set, &Tempo.to_iso8601!/1)
+
+  describe "Tempo.ICal" do
+    test "an all-day event is a span of days, written to its last day" do
+      assert texts(
+               ICal.parse(
+                 ics([
+                   "DTSTART;VALUE=DATE:20260615",
+                   "DTEND;VALUE=DATE:20260618",
+                   "SUMMARY:Offsite"
+                 ])
+               )
+             ) ==
+               ["2026Y6M15D/17D"]
+
+      assert texts(ICal.parse(ics(["DTSTART;VALUE=DATE:20260615"]))) == [
+               "2026Y6M15D/2026Y6M15D"
+             ]
+    end
+
+    test "a recurring event gives its occurrences, with RDATE added and EXDATE removed" do
+      lines = [
+        "DTSTART:20260601T090000Z",
+        "DTEND:20260601T100000Z",
+        "RRULE:FREQ=DAILY;COUNT=4",
+        "EXDATE:20260602T090000Z",
+        "RDATE:20260610T090000Z",
+        "SUMMARY:Standup"
+      ]
+
+      {:ok, set} = ICal.parse(ics(lines))
+      assert IntervalSet.map(set, &Tempo.day/1) == [1, 3, 4, 10]
+      assert IntervalSet.map(set, &Tempo.metadata(&1).summary) |> Enum.uniq() == ["Standup"]
+      assert Tempo.metadata(set).prodid == "-//Test//Test//EN"
+    end
+
+    test "an endless rule needs a window, and a window keeps what overlaps it" do
+      lines = ["DTSTART:20260601T090000Z", "DTEND:20260601T100000Z", "RRULE:FREQ=WEEKLY"]
+      assert {:error, %Tempo.ConversionError{reason: :unbounded}} = ICal.parse(ics(lines))
+      {:ok, set} = ICal.parse(ics(lines), within: ~o"2026-06-01T00Z/2026-06-16T00Z")
+      assert IntervalSet.map(set, &Tempo.day/1) == [1, 8, 15]
+    end
+
+    test "events are busy time that availability is cut by" do
+      {:ok, busy} = ICal.parse(ics(["DTSTART:20260601T090000Z", "DTEND:20260601T100000Z"]))
+      {:ok, free} = Tempo.difference(~o"2026-06-01T08:00:00Z/2026-06-01T12:00:00Z", busy)
+      assert texts({:ok, free}) == ["2026Y6M1DT8H0M0SZ/T9H0M0SZ", "2026Y6M1DT10H0M0SZ/T12H0M0SZ"]
+    end
+  end
+
+  describe "Tempo.JSCalendar" do
+    test "a recurring event gives its occurrences in its zone" do
+      json = ~s({
+        "@type": "Event", "uid": "standup", "updated": "2026-06-01T09:00:00Z", "title": "Standup",
+        "start": "2026-06-01T09:00:00", "timeZone": "Europe/Paris", "duration": "PT30M",
+        "recurrenceRules": [{"@type": "RecurrenceRule", "frequency": "weekly", "count": 3}]
+      })
+
+      {:ok, set} = JSCalendar.parse(json)
+      assert IntervalSet.map(set, &Tempo.day/1) == [1, 8, 15]
+      assert texts({:ok, set}) |> hd() == "2026Y6M1DT9H0M0S/T30M0S[Europe/Paris]"
+    end
+
+    test "a task takes no time, and a rule Tempo does not read is an error" do
+      task =
+        ~s({"@type": "Task", "uid": "t", "updated": "2026-06-01T09:00:00Z", "title": "Do it"})
+
+      assert texts(JSCalendar.parse(task)) == []
+
+      json = ~s({
+        "@type": "Event", "uid": "e", "updated": "2026-06-01T09:00:00Z", "start": "2026-06-01T09:00:00",
+        "recurrenceRules": [{"@type": "RecurrenceRule", "frequency": "yearly", "rscale": "hebrew"}]
+      })
+
+      assert {:error, %Tempo.ConversionError{reason: {:unsupported, :rscale}}} =
+               JSCalendar.parse(json)
+    end
+  end
+
+  describe "Tempo.RecurrenceSet" do
+    test "its occurrences within a window are its members', each with its metadata" do
+      {:ok, holidays} =
+        RecurrenceSet.new([
+          Tempo.put_metadata(~o"R/2020-01-01/P1Y/FL12M25DN", %{name: "Christmas"}),
+          Tempo.put_metadata(~o"R/2020-01-01/P1Y/FL(easter)eN", %{name: "Easter"})
+        ])
+
+      {:ok, days} = Tempo.to_interval(holidays, within: ~o"2026")
+
+      assert IntervalSet.map(days, &{Tempo.month(&1), Tempo.day(&1), Tempo.metadata(&1).name}) ==
+               [{12, 25, "Christmas"}, {4, 5, "Easter"}]
+    end
+
+    test "is the days off of a territory's workdays" do
+      {:ok, holidays} = RecurrenceSet.new([~o"R/2020-01-01/P1Y/FL12M25DN"])
+      {:ok, workdays} = Tempo.workdays(:US, except: holidays)
+      assert Tempo.next_workday(~o"2026-12-24", workdays) == {:ok, ~o"2026-12-28"}
+    end
+
+    test "a bridge day is kept only between two holidays" do
+      bridge =
+        RecurrenceSet.keep_when(~o"2026-09-22",
+          at: [~o"-P1D", ~o"P1D"],
+          falls_on: %{type: :public}
+        )
+
+      {:ok, lone} =
+        RecurrenceSet.new([Tempo.put_metadata(~o"2026-09-21", %{type: :public}), bridge])
+
+      assert IntervalSet.map(elem(Tempo.to_interval(lone), 1), &Tempo.day/1) == [21]
+    end
+  end
+end
