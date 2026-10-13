@@ -29,8 +29,6 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ### Decisions for the user
 
-* [ ] **A solar term on a value with no calendar.** `Localize.Calendar.ISO` answers `{:error, :undefined}` to `solar_term/2`, as Localize has no astronomy, so `Tempo.Calendar.solar_term/3` asks `Calendrical.Gregorian` for `Calendar.ISO`: the one calendar the adapter still names for a question (marked TODO there). To decide: keep that, make such a term an error unless a calendar is written, or have another module answer for `Calendar.ISO` (section 19).
-
 * [ ] **A selection by a list of selectors** answers in the list's order, not time's (section 19).
 
 * [ ] **`Tempo.Cron.parse/2` with no `:from`** starts at the first minute of 2000, where an open start would say "no start" as `Tempo.RRule.parse/2` does (section 19).
@@ -67,6 +65,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Done since the rewrite
 
+* [x] **A solar term on a value with no calendar** is the Gregorian calendar's, asked for by the adapter (`Tempo.Calendar.solar_term/3`), since `Localize.Calendar.ISO` has no astronomy. Decided 2026-10-14.
 * [x] The redesign, phases 0 to 8 (sections 12 to 20 of the plan).
 * [x] The migration guide and the changelog, from the published 1.6.4.
 * [x] The golden comparison retired; the corpus kept for the totality check.

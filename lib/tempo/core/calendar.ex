@@ -88,9 +88,9 @@ defmodule Tempo.Calendar do
   """
   @spec solar_term(module(), pos_integer(), Calendar.year()) ::
           {:ok, Date.t()} | {:error, term()}
-  # TODO: `Localize.Calendar.ISO` answers no solar term (Localize has no
-  # astronomy), so the default calendar is asked as the Gregorian until the
-  # user rules on who answers for it. See TODO.md.
+  # `Localize.Calendar.ISO` answers no solar term, as Localize has no
+  # astronomy, so the default calendar is asked as the Gregorian, which
+  # reckons the terms at the traditional reference (decided 2026-10-14).
   def solar_term(Calendar.ISO, number, year), do: solar_term(Calendrical.Gregorian, number, year)
   def solar_term(calendar, number, year), do: impl(calendar).solar_term(number, year)
 
