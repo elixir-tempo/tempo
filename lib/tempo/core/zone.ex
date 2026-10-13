@@ -54,6 +54,9 @@ defmodule Tempo.Zone do
 
   @doc "An offset in ticks as a written shift: five hours behind UTC is `[hour: -5, minute: 0]`."
   @spec shift_of(tick()) :: [{:hour, integer()} | {:minute, integer()}, ...]
+  # No shift from UTC is held as it is read from `Z`.
+  def shift_of(0), do: [hour: 0]
+
   def shift_of(offset) do
     [hour: div(offset, 3600 * @second), minute: div(rem(offset, 3600 * @second), 60 * @second)]
   end
@@ -141,6 +144,88 @@ defmodule Tempo.Zone do
   def wall_of_utc(%__MODULE__{} = zone, nil, utc) do
     offset = offset_at_utc(zone, utc)
     {utc + offset, offset}
+  end
+
+  @doc """
+  The UTC tick at which a zone's clock first shows a reading or, where the
+  clock skips it, the first reading after it: the moment the clock goes
+  forward. An hour whose start is skipped is shown from there, where a part
+  of it is shown at all.
+  """
+  @spec first_shown(t(), tick()) :: tick()
+  def first_shown(%__MODULE__{name: name} = zone, wall) when is_binary(name) do
+    case offsets_at_wall(zone, wall) do
+      {:gap, before, after_change} ->
+        first_change(zone, before, wall - after_change, wall - before)
+
+      [offset | _] ->
+        wall - offset
+    end
+  end
+
+  def first_shown(zone, wall), do: utc_of_wall(zone, nil, wall)
+
+  @doc """
+  Where the unit of the clock that is showing at a UTC tick ends: an hour,
+  a minute or a second of `step` ticks, as the zone's clock shows it.
+
+  With no change of the clock that is the next whole unit. Where the clock
+  goes forward past the unit's end it ends there, having shown a part of
+  the unit (the half hour from 23:00 where the clock goes from 23:30 to
+  midnight). Where the clock goes back to within the unit without coming to
+  its start again it runs on through the second showing (an hour and a half
+  from 01:00 where the clock goes from 02:00 back to 01:30); where it goes
+  back to the unit's start, the unit ends and is shown again. A fixed
+  offset has no changes.
+  """
+  @spec unit_end(t() | nil, shift() | nil, tick(), pos_integer()) :: tick()
+  def unit_end(%__MODULE__{name: name} = zone, shift, utc, step) when is_binary(name) do
+    offset = offset_at_utc(zone, utc)
+
+    if shift == nil or shift_ticks(shift) == offset,
+      do: shown_until(zone, offset, utc, step),
+      else: unit_end(nil, shift, utc, step)
+  end
+
+  def unit_end(_zone, _shift, utc, step) when is_integer(utc) and is_integer(step),
+    do: utc + step
+
+  # A shift written beside a zone says which of two showings a reading is,
+  # and is then the zone's offset there; one that is not the zone's gives a
+  # moment the zone's clock did not show so, which is one unit long.
+  defp shown_until(zone, offset, utc, step) do
+    unit_start = Integer.floor_div(utc + offset, step) * step
+    whole = unit_start + step - offset
+
+    if offset_at_utc(zone, whole) == offset,
+      do: whole,
+      else: ended_by_a_change(zone, first_change(zone, offset, utc, whole), unit_start, step)
+  end
+
+  # The clock changes at a tick within the unit, or as it would have ended:
+  # the unit runs on where the clock then shows a later part of it.
+  defp ended_by_a_change(zone, change, unit_start, step) do
+    shown = change + offset_at_utc(zone, change)
+
+    if shown > unit_start and shown < unit_start + step,
+      do: unit_end(zone, nil, change, step),
+      else: change
+  end
+
+  # The first tick after `from`, and no later than `to`, at which the zone's
+  # offset is no longer what it was: found to the second by halving.
+  defp first_change(zone, offset, from, to) do
+    halve(zone, offset, seconds(from), Integer.floor_div(to + @second - 1, @second)) * @second
+  end
+
+  defp halve(_zone, _offset, same, changed) when changed - same <= 1, do: changed
+
+  defp halve(zone, offset, same, changed) do
+    middle = same + div(changed - same, 2)
+
+    if offset_at_utc(zone, middle * @second) == offset,
+      do: halve(zone, offset, middle, changed),
+      else: halve(zone, offset, same, middle)
   end
 
   # ── The zone database ─────────────────────────────────────────────────

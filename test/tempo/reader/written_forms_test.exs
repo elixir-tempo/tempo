@@ -18,6 +18,14 @@ defmodule Tempo.Reader.WrittenFormsTest do
     {"R/{2020Y..2030Y}o/P1Y/FL7M4DN", "R/{2020Y..2030Y}o/P1Y/FL7M4DN"},
     {"R/{2020Y..2030Y}l/P1Y/FL7M4DN", "R/{2020Y..2030Y}l/P1Y/FL7M4DN"},
     {"R/{2020Y..2030Y}c/P1Y/FL7M4DN", "R/{2020Y..2030Y}c/P1Y/FL7M4DN"},
+    # A member of a set with an open end: "and later" is written back as the
+    # interval it is, which is read as it was written.
+    {"{2026-06-03..}", "{2026Y6M3D/..}"},
+    {"{2026-06-03/..}", "{2026Y6M3D/..}"},
+    {"{..2026-06-03}", "{../2026Y6M3D}"},
+    {"{../2026-06-03}", "{../2026Y6M3D}"},
+    {"{2026-06-01,2026-06-03/..}", "{2026Y6M1D,2026Y6M3D/..}"},
+    {"{../..}", "{../..}"},
     # Rules: an event in a zone, a week start.
     {"R/../P1Y/FL(march-equinox@+09:00)eN", "R/../P1Y/FL(march-equinox@+09:00)eN"},
     {"R/2026-01-01/P1W/FL1KN[u-fw=sun]", "R/2026Y1M1D/P1W/FL1KN[u-fw=sun]"},

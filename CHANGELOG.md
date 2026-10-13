@@ -122,6 +122,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* An hour or a minute in a zone runs from where the clock comes to it to where the clock leaves it. Where a clock changes by half an hour or at a quarter to (Lord Howe Island, the Chatham Islands) the hours were each sixty minutes and overlapped; `Enum.count/1` of such a day counts the hours the clock shows.
+
+* An interval with an open end is read as a member of a set (`{2026-06-03/..}`), as "and later" is written back; it was misread, and raised when asked for its spans.
+
 * A leap month (`5+m`, Adar I) is the month it is where a value is given its day; it was read as the month before it. A yearly rule from a start in a lunisolar calendar keeps to the month as it is named, so Passover stays in Nisan in a leap year.
 
 * A reading a zone's clock skips is refused wherever a value is read, built or placed, and an hour a clock shows twice is two values in a walk.

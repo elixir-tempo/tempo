@@ -15,6 +15,7 @@ defmodule Tempo.Walk do
   alias Tempo.Zone
 
   @day Scale.ticks_per_day()
+  @second 1_000_000
 
   @type frame :: %{
           :calendar => module(),
@@ -47,6 +48,14 @@ defmodule Tempo.Walk do
   @doc "How many values of a unit a span holds, by the closed form where there is one."
   @spec count({Scale.position(), Scale.position()}, Unit.t(), frame()) ::
           {:ok, non_neg_integer()} | {:error, term()}
+  # In a named zone a unit of the clock is not always one unit long, so the
+  # units are counted as the clock shows them (`counted/5`).
+  def count({start, stop}, unit, %{zone: %Zone{name: name} = zone, shift: shift})
+      when is_integer(start) and is_integer(stop) and unit in [:hour, :minute, :second] and
+             is_binary(name) do
+    {:ok, counted(start, stop, Unit.ticks(unit), {zone, shift}, 0)}
+  end
+
   def count({start, stop}, unit, _frame)
       when is_integer(start) and is_integer(stop) and unit in [:hour, :minute, :second] do
     {:ok, div(stop - start, Unit.ticks(unit))}
@@ -54,6 +63,25 @@ defmodule Tempo.Walk do
 
   def count(span, unit, frame) do
     with {:ok, steps} <- steps(span, unit, frame), do: {:ok, Enum.count(steps)}
+  end
+
+  # The units of the clock from a tick to an end, counted a day at a time.
+  # Through a day in which the zone's offset does not change the units are
+  # whole and are counted by their length; through a day in which it does,
+  # each is stepped to where the clock leaves it.
+  defp counted(tick, stop, _step, _zone, count) when tick >= stop, do: count
+
+  defp counted(tick, stop, step, {zone, shift} = in_zone, count) do
+    day_end = min(tick + @day, stop)
+    offset = Zone.offset_at_utc(zone, tick)
+    first_end = tick + step - Integer.mod(tick + offset, step)
+
+    if Zone.offset_at_utc(zone, day_end) == offset and first_end <= day_end do
+      whole = div(day_end - first_end, step)
+      counted(first_end + whole * step, stop, step, in_zone, count + 1 + whole)
+    else
+      counted(Zone.unit_end(zone, shift, tick, step), stop, step, in_zone, count + 1)
+    end
   end
 
   # ── Values at a place on the scale ────────────────────────────────────
@@ -152,10 +180,18 @@ defmodule Tempo.Walk do
     step = step_of(unit)
 
     start
-    |> Stream.iterate(&(&1 + step))
+    |> Stream.iterate(&next_tick(&1, step, frame))
     |> Stream.take_while(fn tick -> stop == nil or tick < stop end)
     |> Stream.map(fn tick -> reading(tick, written_unit(unit), calendar, frame) end)
   end
+
+  # The next reading is where the clock leaves this one: one unit on, except
+  # where a zone's clock changes within the unit (`Tempo.Zone.unit_end/4`).
+  # A part of a second is below any change of a clock.
+  defp next_tick(tick, step, %{zone: zone, shift: shift}) when step >= @second,
+    do: Zone.unit_end(zone, shift, tick, step)
+
+  defp next_tick(tick, step, _frame), do: tick + step
 
   # A reading a named zone's clock shows twice is given with the offset it
   # had, `{:shifted, units, shift}`, so the two are two values; any other is

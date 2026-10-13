@@ -1202,9 +1202,31 @@ defmodule Tempo.Spans do
         %{value | form: {:value, units}, qualifications: nil}
 
       _line ->
-        %{value | form: {:value, clock_end_units(units, stop, value)}, qualifications: nil}
+        ended = %{
+          value
+          | form: {:value, clock_end_units(units, stop, value)},
+            qualifications: nil
+        }
+
+        if begins_at?(ended, stop), do: ended, else: as_the_zone_shows(value, units, stop)
     end
   end
+
+  defp begins_at?(%Tempo{} = value, position), do: match?({:ok, {^position, _}}, extent(value))
+
+  # A reading that ends where its zone's clock changes may end on no reading
+  # of its own unit at its own shift: the half hour from midnight that ends
+  # as the clock goes back to midnight. Its end is then the reading the zone
+  # shows there, with the offset it has there.
+  defp as_the_zone_shows(%Tempo{zone: %Zone{name: name} = zone} = value, units, stop)
+       when is_binary(name) do
+    {wall, offset} = Zone.wall_of_utc(zone, nil, stop)
+    shown = Walk.at_tick(wall, written_unit(units), value.calendar)
+    %{value | form: {:value, shown}, qualifications: nil, shift: Zone.shift_of(offset)}
+  end
+
+  defp as_the_zone_shows(value, units, stop),
+    do: %{value | form: {:value, clock_end_units(units, stop, value)}, qualifications: nil}
 
   defp clock_end_units(units, stop, value) do
     if own_axis?(units),

@@ -29,6 +29,7 @@ defmodule Tempo.Scale do
   alias Tempo.Zone
 
   @day 86_400_000_000
+  @ticks_in_a_second 1_000_000
 
   @type frame :: :utc | :floating | {:cycle, Unit.t()}
   @type position :: integer()
@@ -114,16 +115,31 @@ defmodule Tempo.Scale do
 
   defp line_extent_of({first, after_last}, clock_units, zone, shift, frame) do
     start_wall = first * @day + clock_ticks(clock_units)
-    start = placed(start_wall, zone, shift, frame)
+    start = clock_start(start_wall, clock_units, zone, shift, frame)
 
     stop =
       case clock_units do
         [] -> placed(after_last * @day, zone, shift, frame)
-        _ -> start + resolution_ticks(clock_units)
+        _ -> clock_end(start, resolution_ticks(clock_units), zone, shift, frame)
       end
 
     {start, stop}
   end
+
+  # A reading of the clock begins where the clock first shows it, which for
+  # an hour whose start a zone's clock skips is where the clock comes out of
+  # the gap. A written shift says the moment itself.
+  defp clock_start(wall, [_ | _], %Zone{} = zone, nil, :utc), do: Zone.first_shown(zone, wall)
+  defp clock_start(wall, _clock_units, zone, shift, frame), do: placed(wall, zone, shift, frame)
+
+  # A reading of the clock ends where the clock leaves it, which in a zone
+  # is not always one unit on: the clock may skip a part of it, or show a
+  # part of it twice (`Tempo.Zone.unit_end/4`). A part of a second is below
+  # any change of a clock.
+  defp clock_end(start, ticks, zone, shift, :utc) when ticks >= @ticks_in_a_second,
+    do: Zone.unit_end(zone, shift, start, ticks)
+
+  defp clock_end(start, ticks, _zone, _shift, _frame), do: start + ticks
 
   defp placed(wall, _zone, _shift, :floating), do: wall
   defp placed(wall, zone, shift, :utc), do: Zone.utc_of_wall(zone, shift, wall)

@@ -509,9 +509,21 @@ defmodule Tempo.Reader do
     with {:ok, [member]} <- member(rest, text), do: {:ok, [{:except, member}]}
   end
 
+  # A member that is an interval with an open end, `2026-06-03/..` and
+  # `../2026-06-03`, is that interval: its `..` is the end's, and no range's.
+  # It is what "and later" (`2026-06-03..`) is written back as.
   defp member(body, text) do
     case split_top(body, "..") do
       [_single] ->
+        with {:ok, expression} <- expression(body, text), do: {:ok, [expression]}
+
+      [<<_, _::binary>> = lower, ""] when binary_part(lower, byte_size(lower), -1) == "/" ->
+        with {:ok, expression} <- expression(body, text), do: {:ok, [expression]}
+
+      ["", <<"/", _::binary>>] ->
+        with {:ok, expression} <- expression(body, text), do: {:ok, [expression]}
+
+      ["", "/", ""] ->
         with {:ok, expression} <- expression(body, text), do: {:ok, [expression]}
 
       ["", upper] ->
@@ -524,6 +536,9 @@ defmodule Tempo.Reader do
 
       [lower, upper] ->
         range(lower, upper, text)
+
+      _several_ranges ->
+        range_error(body, text)
     end
   end
 

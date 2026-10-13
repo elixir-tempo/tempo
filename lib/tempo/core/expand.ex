@@ -609,13 +609,23 @@ defmodule Tempo.Expand do
         do: {{Integer.mod(tick, 1_000_000), precision}, {tick, tick + step}}
   end
 
+  # The hours, minutes or seconds of a span, each from where the clock comes
+  # to it to where the clock leaves it: an hour is sixty minutes long except
+  # where a zone's clock changes within it (`Tempo.Zone.unit_end/4`).
   defp tick_children(start, stop, unit, _prefix, %{zone: zone, shift: shift}) do
     step = Unit.ticks(unit)
 
-    for tick <- Stream.iterate(start, &(&1 + step)) |> Stream.take_while(&(&1 < stop)) do
-      {wall, _offset} = Zone.wall_of_utc(zone, shift, tick)
-      {reading(wall, unit), {tick, tick + step}}
-    end
+    start
+    |> Stream.unfold(fn
+      tick when tick >= stop ->
+        nil
+
+      tick ->
+        ends = min(Zone.unit_end(zone, shift, tick, step), stop)
+        {wall, _offset} = Zone.wall_of_utc(zone, shift, tick)
+        {{reading(wall, unit), {tick, ends}}, ends}
+    end)
+    |> Enum.to_list()
   end
 
   defp reading(wall, :hour), do: Integer.mod(Integer.floor_div(wall, Unit.ticks(:hour)), 24)

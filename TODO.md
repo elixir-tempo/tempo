@@ -14,8 +14,10 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
     * [x] iCalendar and JSCalendar import, with the fixtures (`ical_test.exs`, `ical_availability_test.exs`, `jscalendar_test.exs`).
     * [x] Computed events, `explain/1`, reading text and profiles, conversions, intervals, territories (new files, from the lines no test ran).
     * [ ] The rule tests beside the RFC's examples (`rrule/*_test.exs`, 30 files), for the cases the examples leave out.
-    * [ ] Allen's axioms as properties (`allen_axioms_test.exs`), and the set operations held to a measure written apart (`set_operations_measure_test.exs`).
-    * [ ] Zones: a change of the clock, a day a zone left out, a fixed offset (`change_of_the_clock_test.exs`, `day_left_out_test.exs`, `fixed_offset_test.exs`, `zone_validation_test.exs`).
+    * [x] Allen's axioms (`allen_axioms_test.exs`): the composition table held to what three spans give, meeting one way, and a chain of spans that meet as one.
+    * [ ] The set operations held to a measure written apart (`set_operations_measure_test.exs`).
+    * [x] Zones: a change of the clock (`change_of_the_clock_test.exs`), twenty-one days of twelve zones held to what `DateTime` says the clock showed.
+    * [ ] Zones: a day a zone left out, a fixed offset, and what a zone refuses (`day_left_out_test.exs`, `fixed_offset_test.exs`, `zone_validation_test.exs`).
     * [ ] Words: `to_string/2` and `to_relative_string/2` (`format_test.exs`, `to_relative_string_test.exs`).
     * [ ] Calendars other than `Calendar.ISO`: weeks, composites, a year that starts in March (`week_calendar_test.exs`, `composite_calendar_test.exs`, `year_start_test.exs`).
 
@@ -33,9 +35,9 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ### Defects and gaps
 
-* [ ] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused.
+* [ ] **An hour a fall-back shows in two parts.** The Chatham Islands' clock goes from 03:45 back to 02:45 (5 April 2026), so the hour from 02:00 is shown for an hour, and an hour later for fifteen minutes more. The walk steps through both, and the value of the second (`T2H` with the offset it then has) is given the whole hour from 02:00 at that offset, forty-five minutes of which the clock showed as 03:00. It is the one day left out of `change_of_the_clock_test.exs`. To decide: what such a value is.
 
-* [ ] **An interval with an open end is misread as a member of a set**: `~o"{2026-06-03/..}"` is read as `2026Y6M3D/../..`, the `..` taken twice, and what asks it for its spans raises (`Tempo.Spans.value_at/4` has no clause). EDTF writes "and later" in a set as `{2026-06-03..}`; the reader should read one or refuse the other, and nothing should raise.
+* [ ] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused.
 
 * [ ] **A solar term of a year before 0 is a day late**: `Tempo.Event.date("qingming", -3000, Calendrical.Chinese)` is 7 April and the moment is on the 6th. Calendrical's `solar_term/3` takes `trunc/1` of the moment where it wants `floor/1`. Upstream.
 
@@ -54,6 +56,8 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ## Done since the rewrite
 
+* [x] An hour of a zone's clock is from where the clock comes to it to where the clock leaves it (2026-10-14): thirty minutes where the clock skips half of it, ninety where it shows half of it twice. The hours of a day with such a change were each a whole hour long and ran over one another.
+* [x] An interval with an open end is read as a member of a set (`{2026-06-03/..}`), as "and later" is written back; a member with several ranges is an error where it raised (2026-10-14).
 * [x] Two defects (2026-10-14): a month by its name that its year lacks is refused as it is read, and an exclusion that cannot be given its spans is the error where a rule's occurrences are made (no test reaches the second: every exclusion the reader gives has spans in a window).
 * [x] Decision 13 built (2026-10-14): RFC 7529's `RSCALE` and `SKIP` are read and written, with a leap month as `5L`; every decision of `plans/decisions.md` is built.
 * [x] Decisions 14 and 24 built (2026-10-14), and the `WKST` of decision 13: the day a week begins on is written `[u-fw=sun]` for the whole expression, and `nq` is gone.
