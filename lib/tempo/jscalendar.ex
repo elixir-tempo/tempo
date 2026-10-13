@@ -89,7 +89,15 @@ if Code.ensure_loaded?(JSCalendar) do
     * `object` is a `JSCalendar.Event`, `JSCalendar.Task` or
       `JSCalendar.Group`.
 
-    * `options` is as for `parse/2`.
+    * `options` is a keyword list of options.
+
+    ### Options
+
+    * `:within` is as for `parse/2`.
+
+    ### Returns
+
+    * `{:ok, set}` or `{:error, exception}`, as for `parse/2`.
 
     """
     @spec from_jscalendar(struct(), keyword()) :: {:ok, Tempo.t()} | {:error, term()}

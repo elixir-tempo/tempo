@@ -53,11 +53,66 @@ defmodule Tempo do
             qualifications: nil,
             metadata: %{}
 
+  @typedoc "A unit a value is written in, or a label a day carries."
+  @type unit ::
+          :century
+          | :decade
+          | :year
+          | :month
+          | :week
+          | :day
+          | :hour
+          | :minute
+          | :second
+          | :microsecond
+          | :day_of_week
+          | :day_of_year
+          | :quarter
+          | :season
+          | :traditional_month
+
+  @typedoc """
+  A value's units, coarsest first, each with what it holds.
+  """
+  @type units :: [{unit(), held()}]
+
+  @typedoc """
+  The parts of a selection (`L…N`): the units selected, each with what it
+  holds; `instance`, `week_start`, `event`, `window`, and a nested
+  `selection`.
+  """
+  @type selection :: [{unit() | :instance | :week_start | :event | :window | :selection, term()}]
+
+  @typedoc """
+  What a unit holds in a written value: a whole number; a list of whole
+  numbers and ranges, a negative counting from the end; a mask of digits,
+  `:x` for one unspecified; a group, the nth of a size; a number with its
+  significant digits or its margin of error; a traditional leap month.
+  """
+  @type held ::
+          integer()
+          | [integer() | Range.t()]
+          | {:mask, [0..9 | :x | :negative]}
+          | :any
+          | {:group, held(), pos_integer()}
+          | {integer(), [significant: pos_integer()]}
+          | {integer(), [margin: pos_integer()]}
+          | {integer(), :leap}
+
+  @typedoc """
+  The zone of an expression: a name the zone database knows, or a fixed
+  offset from UTC in minutes, with RFC 9557's critical flag.
+  """
+  @type zone :: %Zone{name: String.t() | nil, offset: integer() | nil, critical: boolean()}
+
+  @typedoc "A written time shift: whole hours, minutes and seconds, the sign on the first that is not zero."
+  @type shift :: [{:hour, integer()} | {:minute, integer()} | {:second, integer()}]
+
   @typedoc """
   What an expression is, as written.
 
   * `{:value, units}` — a written value, its units coarsest first, each with
-    what it holds (`t:Tempo.Unit.held/0`).
+    what it holds (`t:held/0`).
 
   * `{:span, from, to}` — an interval: two ends, each a value, a duration
     (one of the two) or `:open`.
@@ -77,9 +132,9 @@ defmodule Tempo do
 
   """
   @type form ::
-          {:value, Unit.units()}
+          {:value, units()}
           | {:span, t() | Duration.t() | :open, t() | Duration.t() | :open}
-          | {:every, t(), pos_integer() | :infinity | t(), Unit.selection() | nil}
+          | {:every, t(), pos_integer() | :infinity | t(), selection() | nil}
           | {:all, [t()] | Enumerable.t()}
           | {:one, [t()]}
           | {:when, t(), [term()]}
@@ -88,13 +143,13 @@ defmodule Tempo do
   A mark that a component is uncertain (`?`), approximate (`~`) or both (`%`),
   held for each unit it qualifies.
   """
-  @type qualifications :: %{optional(Unit.t()) => :uncertain | :approximate | :both} | nil
+  @type qualifications :: %{optional(unit()) => :uncertain | :approximate | :both} | nil
 
   @type t :: %__MODULE__{
           form: form(),
           calendar: module(),
-          zone: Zone.t() | nil,
-          shift: Zone.shift() | nil,
+          zone: zone() | nil,
+          shift: shift() | nil,
           qualifications: qualifications(),
           metadata: map()
         }
@@ -345,7 +400,7 @@ defmodule Tempo do
   * `components` is a keyword list or a map of units (`:year`, `:month`,
     `:day`, `:week`, `:day_of_week`, `:day_of_year`, `:quarter`, `:season`,
     `:hour`, `:minute`, `:second`, `:microsecond`), in any order, each holding
-    what a written unit holds (`t:Tempo.Unit.held/0`), with these keys beside
+    what a written unit holds (`t:held/0`), with these keys beside
     them:
 
     * `:calendar` is the calendar the value is in. The default is
@@ -471,7 +526,7 @@ defmodule Tempo do
 
   * `{:error, %Tempo.ConversionError{}}` for a duration, a one-of set, a
     recurrence with no count and no window, a value with no year and no
-    window, or more members than `Tempo.Limit.values/0` allows at once.
+    window, or more than 10,000 members at once (the application's `:max_values_at_once`).
 
   ### Examples
 
@@ -582,7 +637,12 @@ defmodule Tempo do
 
   * `expression` is a `t:t/0`.
 
-  * `options` is a keyword list; `:within` as for `to_interval/2`.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
 
   ### Returns
 
@@ -620,11 +680,16 @@ defmodule Tempo do
 
   * `expression` is a `t:t/0`.
 
-  * `unit` is a unit of `Tempo.Unit`: `:year`, `:month`, `:week`, `:day`,
+  * `unit` is a `t:unit/0`: `:year`, `:month`, `:week`, `:day`,
     `:hour`, `:minute`, `:second`, or `{:microsecond, precision}` for a part
     of a second.
 
-  * `options` is a keyword list; `:within` as for `to_interval/2`.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
 
   ### Returns
 
@@ -648,7 +713,7 @@ defmodule Tempo do
       ["2026Y23W", "2026Y24W", "2026Y25W", "2026Y26W", "2026Y27W"]
 
   """
-  @spec walk(t(), Tempo.Unit.t() | {:microsecond, 1..6}, keyword()) ::
+  @spec walk(t(), unit() | {:microsecond, 1..6}, keyword()) ::
           {:ok, Enumerable.t()} | {:error, error()}
   def walk(expression, unit, options \\ []) do
     with :ok <- Options.check(options, [:within], "Tempo.walk/3"),
@@ -686,7 +751,7 @@ defmodule Tempo do
     with no year on different cycles.
 
   * `{:error, %Tempo.ConversionError{}}` for a duration, a one-of set, an
-    open end, or more spans than `Tempo.Limit.values/0`.
+    open end, or more than 10,000 spans (the application's `:max_values_at_once`).
 
   ### Examples
 
@@ -735,9 +800,15 @@ defmodule Tempo do
 
   * `a` and `b` are each a `t:t/0` that has spans.
 
-  * `options` is a keyword list; `:within` as for `union/3`, and `:metadata`,
-    which member's metadata a result carries: `:first` (the default),
-    `:second`, `:merge`, or a function of the two.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
+
+  * `:metadata` says which member's metadata a result carries: `:first` (the
+    default), `:second`, `:merge`, or a function of the two.
 
   ### Returns
 
@@ -767,8 +838,15 @@ defmodule Tempo do
 
   * `a` and `b` are each a `t:t/0` that has spans.
 
-  * `options` is a keyword list; `:within` and `:metadata` as for
-    `intersection/3`.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
+
+  * `:metadata` says which member's metadata a result carries: `:first` (the
+    default), `:second`, `:merge`, or a function of the two.
 
   ### Returns
 
@@ -797,8 +875,15 @@ defmodule Tempo do
 
   * `a` and `b` are each a `t:t/0` that has spans.
 
-  * `options` is a keyword list; `:within` and `:metadata` as for
-    `intersection/3`.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
+
+  * `:metadata` says which member's metadata a result carries: `:first` (the
+    default), `:second`, `:merge`, or a function of the two.
 
   ### Returns
 
@@ -824,7 +909,15 @@ defmodule Tempo do
 
   * `a` is a `t:t/0` that has spans.
 
-  * `options` is a keyword list; `:within`, the window, is required.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window the complement is taken in. It is
+    required.
+
+  * `:metadata` says which member's metadata a result carries: `:first` (the
+    default), `:second`, `:merge`, or a function of the two.
 
   ### Returns
 
@@ -858,7 +951,12 @@ defmodule Tempo do
 
   * `a` and `b` are each a `t:t/0` that has spans.
 
-  * `options` is a keyword list; `:within` as for `union/3`.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
 
   ### Returns
 
@@ -881,6 +979,23 @@ defmodule Tempo do
   The members of the first expression no instant of which is in the second,
   each kept whole with its metadata.
 
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0` that has spans.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form.
+
+  * `{:error, exception}` as for `union/3`.
+
   ### Examples
 
       iex> Tempo.members_outside(~o"{2026-01,2026-03}", ~o"2026-03-15")
@@ -893,6 +1008,23 @@ defmodule Tempo do
 
   @doc """
   The members of either expression no instant of which is in the other.
+
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0` that has spans.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
+
+  ### Returns
+
+  * `{:ok, set}`, a `t:t/0` of the `:all` form.
+
+  * `{:error, exception}` as for `union/3`.
 
   ### Examples
 
@@ -993,7 +1125,12 @@ defmodule Tempo do
 
     * `a` and `b` are each a `t:t/0` that has spans.
 
-    * `options` is a keyword list; `:within` as for `union/3`.
+    * `options` is a keyword list of options.
+
+    ### Options
+
+    * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
 
     ### Returns
 
@@ -1029,7 +1166,12 @@ defmodule Tempo do
 
   * `a` and `b` are each a `t:t/0` on one frame.
 
-  * `options` is a keyword list; `:within` as for `union/3`.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
 
   ### Returns
 
@@ -1721,7 +1863,7 @@ defmodule Tempo do
       {:ok, ~o"2026-06"}
 
   """
-  @spec trunc(t(), Unit.t()) :: {:ok, t()} | {:error, error()}
+  @spec trunc(t(), unit()) :: {:ok, t()} | {:error, error()}
   def trunc(expression, unit \\ :day), do: Shift.trunc(expression, unit)
 
   @doc """
@@ -1760,7 +1902,7 @@ defmodule Tempo do
       {:ok, ~o"T0H"}
 
   """
-  @spec round(t(), Unit.t()) :: {:ok, t()} | {:error, error()}
+  @spec round(t(), unit()) :: {:ok, t()} | {:error, error()}
   def round(expression, unit \\ :day), do: Shift.round(expression, unit)
 
   @doc """
@@ -1803,7 +1945,7 @@ defmodule Tempo do
       {:ok, ~o"2026Y3M29DT{0..1,3..23}H[Europe/Paris]"}
 
   """
-  @spec extend(t(), Unit.t() | nil) :: {:ok, t()} | {:error, error()}
+  @spec extend(t(), unit() | nil) :: {:ok, t()} | {:error, error()}
   def extend(expression, unit \\ nil), do: Shift.extend(expression, unit)
 
   @doc """
@@ -1833,7 +1975,7 @@ defmodule Tempo do
       {:ok, ~o"2026Y25W1KT0H"}
 
   """
-  @spec at_resolution(t(), Unit.t()) :: {:ok, t()} | {:error, error()}
+  @spec at_resolution(t(), unit()) :: {:ok, t()} | {:error, error()}
   def at_resolution(expression, unit), do: Shift.at_resolution(expression, unit)
 
   @doc """
@@ -2207,7 +2349,7 @@ defmodule Tempo do
       :hour
 
   """
-  @spec resolution(t() | Duration.t()) :: Unit.t() | nil
+  @spec resolution(t() | Duration.t()) :: unit() | nil
   def resolution(expression), do: Parts.resolution(expression)
 
   @doc """
@@ -2343,7 +2485,7 @@ defmodule Tempo do
   @spec qualification(t()) :: qualifications()
   def qualification(%__MODULE__{qualifications: qualifications}), do: qualifications
 
-  @spec qualification(t(), Unit.t()) :: :uncertain | :approximate | :both | nil
+  @spec qualification(t(), unit()) :: :uncertain | :approximate | :both | nil
   def qualification(%__MODULE__{qualifications: nil}, _unit), do: nil
 
   def qualification(%__MODULE__{qualifications: qualifications}, unit),
@@ -2404,7 +2546,12 @@ defmodule Tempo do
     applied; or a function given each period that answers with a selector
     for it, or `{:error, reason}`.
 
-  * `options` is a keyword list; `:within` bounds a base with no end.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window a base with no end of its own or no
+    year is placed in.
 
   ### Returns
 
@@ -3210,13 +3357,13 @@ defmodule Tempo do
          ~s|Tempo.on!(~o"T10:30", ~o"2026-01-04")|, ~s|~o"2026-01-04T10:30"|},
         {:shift, [quote(do: t()), quote(do: Duration.t() | keyword() | String.t())],
          quote(do: t()), ~s|Tempo.shift!(~o"2026-06-15", day: 1)|, ~s|~o"2026-06-16"|},
-        {:trunc, [quote(do: t()), quote(do: Unit.t())], quote(do: t()),
+        {:trunc, [quote(do: t()), quote(do: unit())], quote(do: t()),
          ~s|Tempo.trunc!(~o"2026-06-15T10:30", :day)|, ~s|~o"2026-06-15"|},
-        {:round, [quote(do: t()), quote(do: Unit.t())], quote(do: t()),
+        {:round, [quote(do: t()), quote(do: unit())], quote(do: t()),
          ~s|Tempo.round!(~o"2026-06-15T13:30", :day)|, ~s|~o"2026-06-16"|},
         {:extend, [quote(do: t())], quote(do: t()), ~s|Tempo.extend!(~o"2020")|,
          ~s|~o"2020Y{1..12}M"|},
-        {:at_resolution, [quote(do: t()), quote(do: Unit.t())], quote(do: t()),
+        {:at_resolution, [quote(do: t()), quote(do: unit())], quote(do: t()),
          ~s|Tempo.at_resolution!(~o"2020", :day)|, ~s|~o"2020-01-01"|},
         {:to_calendar, [quote(do: t()), quote(do: module())], quote(do: t()),
          ~s|Tempo.to_calendar!(~o"2026-06-15", Calendrical.Hebrew)|,

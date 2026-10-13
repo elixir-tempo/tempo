@@ -1,16 +1,15 @@
 defmodule Tempo.Unit do
-  @moduledoc """
-  The units a value is written in, and what each holds.
+  @moduledoc false
 
-  A value's units run from the coarsest to the finest: a century, a decade or
-  a year; a month, a week, a day of the year, a quarter or a season; a day or
-  a day of the week; the clock's hour, minute, second and part of a second.
-  Each holds what the text wrote (`t:held/0`): a whole number, a set of them,
-  a mask, a group or a selection. This module orders the units, tells a
-  calendar unit from a clock unit, and says which unit may follow which in a
-  value and which an abbreviated end inherits.
-
-  """
+  # The units a value is written in, and what each holds.
+  #
+  # A value's units run from the coarsest to the finest: a century, a decade or
+  # a year; a month, a week, a day of the year, a quarter or a season; a day or
+  # a day of the week; the clock's hour, minute, second and part of a second.
+  # Each holds what the text wrote (`t:held/0`): a whole number, a set of them,
+  # a mask, a group or a selection. This module orders the units, tells a
+  # calendar unit from a clock unit, and says which unit may follow which in a
+  # value and which an abbreviated end inherits.
 
   # The one module that knows Tempo's own units: their order, which are of
   # the calendar and which of the clock, which are labels of a day rather
@@ -108,50 +107,11 @@ defmodule Tempo.Unit do
     hour: 3_600_000_000
   }
 
-  @type t ::
-          :century
-          | :decade
-          | :year
-          | :month
-          | :week
-          | :day
-          | :hour
-          | :minute
-          | :second
-          | :microsecond
-          | :day_of_week
-          | :day_of_year
-          | :quarter
-          | :season
-          | :traditional_month
-
-  @typedoc """
-  A value's units, coarsest first, each with what it holds.
-  """
-  @type units :: [{t(), held()}]
-
-  @typedoc """
-  The parts of a selection (`L…N`): the units selected, each with what it
-  holds; `instance`, `week_start`, `event`, `window`, and a nested
-  `selection`.
-  """
-  @type selection :: [{t() | :instance | :week_start | :event | :window | :selection, term()}]
-
-  @typedoc """
-  What a unit holds in a written value: a whole number; a list of whole
-  numbers and ranges, a negative counting from the end; a mask of digits,
-  `:x` for one unspecified; a group, the nth of a size; a number with its
-  significant digits or its margin of error; a traditional leap month.
-  """
-  @type held ::
-          integer()
-          | [integer() | Range.t()]
-          | {:mask, [0..9 | :x | :negative]}
-          | :any
-          | {:group, held(), pos_integer()}
-          | {integer(), [significant: pos_integer()]}
-          | {integer(), [margin: pos_integer()]}
-          | {integer(), :leap}
+  # The types are `Tempo`'s, where a value's form is documented.
+  @type t :: Tempo.unit()
+  @type units :: Tempo.units()
+  @type selection :: Tempo.selection()
+  @type held :: Tempo.held()
 
   @doc "Whether a unit is counted by the calendar: a year, a month, a week or a day."
   @spec calendar?(t()) :: boolean()

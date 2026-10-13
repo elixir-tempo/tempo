@@ -10,6 +10,8 @@ defmodule Tempo.Explain do
 
   alias Tempo.{Duration, Format, Parts, Spans, Unit}
 
+  @weekdays ~w(Monday Tuesday Wednesday Thursday Friday Saturday Sunday)
+
   @doc """
   The lines that describe an expression.
 
@@ -82,9 +84,8 @@ defmodule Tempo.Explain do
   defp what(%Tempo{form: {:span, _, :open}}), do: "An interval with an open end."
   defp what(%Tempo{form: {:span, _, _}} = span), do: "An interval#{worded(span)}."
 
-  defp what(%Tempo{form: {:every, _, bound, rule}}) do
-    "A recurrence#{bound_words(bound)}#{if rule, do: ", with a rule that selects within each repeat", else: ""}."
-  end
+  defp what(%Tempo{form: {:every, first, bound, rule}}),
+    do: "A recurrence#{bound_words(bound)}#{rule_words(rule, first)}."
 
   defp what(%Tempo{form: {:all, members}}),
     do: "A set of #{length(members)} members, all of which it names."
@@ -94,6 +95,61 @@ defmodule Tempo.Explain do
 
   defp what(%Tempo{form: {:when, _, _}}),
     do: "A member of a set whose occurrences depend on the other members'."
+
+  # What a rule selects in each repeat, part by part as it is written.
+  defp rule_words(nil, _first), do: ""
+
+  defp rule_words(rule, first),
+    do: ". In each repeat#{cadence_words(first)} it selects #{parts_words(rule)}"
+
+  defp cadence_words(%Tempo{form: {:span, _, %Duration{} = cadence}}), do: " of #{words(cadence)}"
+  defp cadence_words(%Tempo{form: {:span, %Duration{} = cadence, _}}), do: " of #{words(cadence)}"
+  defp cadence_words(_first), do: ""
+
+  defp parts_words(parts), do: Enum.map_join(parts, ", ", &part_words/1)
+
+  defp part_words({:day_of_week, held}), do: held_words(held, &weekday/1)
+  defp part_words({:instance, held}), do: "the #{held_words(held, &nth/1)} of them"
+  defp part_words({:event, {name, _}}), do: "the day of #{name}"
+  defp part_words({:selection, parts}), do: "(#{parts_words(parts)})"
+  defp part_words({:window, %Duration{} = length}), do: "a window of #{Tempo.to_iso8601!(length)}"
+  defp part_words({:day_of_year, held}), do: "day #{held_words(held, &counted/1)} of the year"
+  defp part_words({unit, n}) when is_integer(n) and n < 0, do: "#{counted(n)} #{unit_name(unit)}"
+  defp part_words({unit, held}), do: "#{unit_name(unit)} #{held_words(held, &counted/1)}"
+
+  # What a part holds, in words: one value, or a list of values and ranges.
+  defp held_words(held, word) when is_list(held),
+    do: held |> Enum.map(&run_words(&1, word)) |> listed()
+
+  defp held_words(held, word), do: run_words(held, word)
+
+  defp run_words(%Range{first: first, last: last}, word), do: "#{word.(first)} to #{word.(last)}"
+  defp run_words(value, word), do: word.(value)
+
+  defp listed([one]), do: one
+
+  defp listed(several),
+    do: Enum.join(Enum.drop(several, -1), ", ") <> " and " <> List.last(several)
+
+  defp weekday(day) when day in 1..7, do: Enum.at(@weekdays, day - 1)
+  defp weekday(day), do: counted(day)
+
+  # A count from the end is said from the end.
+  defp counted(-1), do: "the last"
+  defp counted(n) when is_integer(n) and n < 0, do: "the #{ordinal(-n)} from the last"
+  defp counted(n) when is_integer(n), do: Integer.to_string(n)
+  defp counted(other), do: inspect(other)
+
+  defp nth(-1), do: "last"
+  defp nth(n) when is_integer(n) and n < 0, do: "#{ordinal(-n)} from the last"
+  defp nth(n) when is_integer(n), do: ordinal(n)
+  defp nth(other), do: inspect(other)
+
+  defp ordinal(n) when rem(n, 100) in 11..13, do: "#{n}th"
+  defp ordinal(n) when rem(n, 10) == 1, do: "#{n}st"
+  defp ordinal(n) when rem(n, 10) == 2, do: "#{n}nd"
+  defp ordinal(n) when rem(n, 10) == 3, do: "#{n}rd"
+  defp ordinal(n), do: "#{n}th"
 
   defp masked?(units),
     do: Enum.any?(units, fn {_, held} -> held == :any or match?({:mask, _}, held) end)

@@ -1,18 +1,17 @@
 defmodule Tempo.Limit do
-  @moduledoc """
-  The one place every bound on work is set.
+  @moduledoc false
 
-  Tempo walks lazily, one value at a time, and converts eagerly, all at
-  once; the bounds here say how far either goes before it stops with a
-  `Tempo.ConversionError` whose reason is `:too_many_values`, rather than
-  running without end. A short text can ask for a great deal:
-  `2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S` names 29 million seconds.
-
-  The bound is 10,000 unless the application sets another:
-
-      config :ex_tempo, max_values_at_once: 100_000
-
-  """
+  # The one place every bound on work is set.
+  #
+  # Tempo walks lazily, one value at a time, and converts eagerly, all at
+  # once; the bounds here say how far either goes before it stops with a
+  # `Tempo.ConversionError` whose reason is `:too_many_values`, rather than
+  # running without end. A short text can ask for a great deal:
+  # `2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S` names 29 million seconds.
+  #
+  # The bound is 10,000 unless the application sets another:
+  #
+  #     config :ex_tempo, max_values_at_once: 100_000
 
   @default 10_000
 

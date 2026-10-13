@@ -18,7 +18,7 @@ import Tempo.Sigils
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 3.0"},
+    {:ex_tempo, "~> 2.0"},
     {:ical, "~> 3.2"}
   ]
 end

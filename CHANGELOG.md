@@ -1,8 +1,8 @@
 # Changelog
 
-## [v3.0.0] — Unreleased
+## [v2.0.0] — Unreleased
 
-Tempo 3.0 is a new implementation on one struct and nine stated laws. The [migration guide](https://hexdocs.pm/ex_tempo/migration.html) takes each change below with its 1.6 form and its 3.0 form.
+Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migration guide](https://hexdocs.pm/ex_tempo/migration.html) takes each change below with its 1.6 form and its 3.0 form.
 
 ### Breaking changes
 

@@ -1,7 +1,12 @@
 defmodule Tempo.MixProject do
   use Mix.Project
 
-  @version "3.0.0-dev"
+  # Erlang/OTP 27 is the oldest release Tempo is built and tested on.
+  if String.to_integer(System.otp_release()) < 27 do
+    Mix.raise("ex_tempo requires Erlang/OTP 27 or later: OTP #{System.otp_release()} detected.")
+  end
+
+  @version "2.0.0-dev"
 
   def project do
     [
@@ -25,7 +30,6 @@ defmodule Tempo.MixProject do
           ~r/Error$/,
           ~r/^Tempo\.Matrix\./,
           ~r/^Tempo\.Grammar\./,
-          Tempo.Golden,
           Tempo.Iso
         ]
       ],
@@ -91,7 +95,7 @@ defmodule Tempo.MixProject do
       formatters: ["html", "markdown"],
       groups_for_modules: groups_for_modules(),
       groups_for_extras: groups_for_extras(),
-      # The two pages that name what Tempo 1 had and 3.0 does not.
+      # The two pages that name what Tempo 1 had and 2.0 does not.
       skip_undefined_reference_warnings_on: ["CHANGELOG.md", "guides/migration.md"]
     ]
   end
@@ -108,8 +112,8 @@ defmodule Tempo.MixProject do
       Core: ~r/^Tempo(?:\.(Interval|IntervalSet|RecurrenceSet|Duration|Sigils))?$/,
       "Relations and selection": ~r/^Tempo\.(Allen|Workdays|Territory|Event|Event\.Resolver)$/,
       "Recurrence rules and calendar formats": ~r/^Tempo\.(RRule|Cron|ICal|JSCalendar)$/,
-      "Clock, zones and leap seconds": ~r/^Tempo\.(Clock|Clock\.System|Zone|LeapSeconds)$/,
-      "Units and limits": ~r/^Tempo\.(Unit|Scale|Limit|Explain)$/,
+      "Clock, leap seconds and explanation":
+        ~r/^Tempo\.(Clock|Clock\.System|LeapSeconds|Explain)$/,
       Exceptions: ~r/^Tempo\.\w+Error$/
     ]
   end

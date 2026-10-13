@@ -4,7 +4,7 @@ defmodule Tempo.TotalTest do
   # Every operation on every shape of value answers, or returns or raises a
   # named error. The corpus is every class of value the grammar reads, each
   # shape in each position of each form, and every generated selection
-  # (`Tempo.Matrix.Corpus`); the operations are those of `Tempo.Golden`.
+  # (`Tempo.Matrix.Corpus`); the operations are those of `Tempo.Matrix.Cells`.
   #
   # A function may return a value, `{:ok, value}` or `{:error, exception}`.
   # A predicate, a part, a walk and a bang form may raise one of Tempo's own
@@ -14,12 +14,12 @@ defmodule Tempo.TotalTest do
   #
   # The run takes minutes, so it is excluded by default: `mix test --only total`.
 
-  alias Tempo.Golden
+  alias Tempo.Matrix.Cells
 
   @moduletag :total
   @moduletag timeout: :infinity
 
-  @groups [:walk, :convert, :compare, :combine, :arithmetic, :measure, :parts, :select, :format]
+  @groups Cells.groups()
 
   # What Elixir raises for a duration, which names no span and is not walked.
   @allowed ["Protocol.UndefinedError"]
@@ -33,7 +33,7 @@ defmodule Tempo.TotalTest do
   for group <- @groups do
     test "#{group}: an answer or a named error, for every value" do
       unnamed =
-        for %{out: %{"raised" => module}} = cell <- Golden.cells(unquote(group)),
+        for %{out: %{"raised" => module}} = cell <- Cells.cells(unquote(group)),
             not String.starts_with?(module, "Tempo."),
             module not in @allowed,
             not not_an_expression?(cell, module) do

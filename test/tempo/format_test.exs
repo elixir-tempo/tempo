@@ -93,7 +93,12 @@ defmodule Tempo.FormatTest do
              ]
 
       assert hd(Explain.lines(~o"R/2026-01-01/P1Y/FL12M25DN")) ==
-               "A recurrence with no end, with a rule that selects within each repeat."
+               "A recurrence with no end. In each repeat of 1 year it selects month 12, day 25."
+
+      assert hd(Explain.lines(~o"R/2026-01-01/P1M/FL{1..5}K-1IN")) ==
+               "A recurrence with no end. In each repeat of 1 month it selects Monday to Friday, the last of them."
+
+      assert hd(Explain.lines(~o"R3/2026-06-01/P1W")) == "A recurrence of 3 occurrences."
 
       assert "Its month is approximate." in Explain.lines(~o"2026Y6~M15D")
 

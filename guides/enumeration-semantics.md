@@ -186,7 +186,7 @@ iex> ~o"5786[u-ca=hebrew]" |> Enum.count()
 
 ## 8. Bounds on work
 
-A walk is lazy: it gives one value at a time and holds none, so `Enum.take/2` on a stream with no end returns at once. Functions that need every value at once (`Enum.count/1`, `Enum.to_list/1`, `Tempo.to_interval/2`, the set operations) stop at `Tempo.Limit.values/0`, ten thousand unless the application sets another, with a `Tempo.ConversionError` whose reason is `:too_many_values`:
+A walk is lazy: it gives one value at a time and holds none, so `Enum.take/2` on a stream with no end returns at once. Functions that need every value at once (`Enum.count/1`, `Enum.to_list/1`, `Tempo.to_interval/2`, the set operations) stop at ten thousand, unless the application sets another limit (`config :ex_tempo, max_values_at_once: 100_000`), with a `Tempo.ConversionError` whose reason is `:too_many_values`:
 
 ```elixir
 iex> Enum.count(~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S")

@@ -1,13 +1,12 @@
 defmodule Tempo.Scale do
-  @moduledoc """
-  Positions on the time line and on the cycles: where a value's span begins
-  and ends, as ticks (microseconds) from 0000-01-01 on the UTC or the
-  floating line, or from a cycle's start for a value with no year; the frame a
-  value lies on; and the comparison of two positions. Every relation and set
-  operation works on these positions, asking the calendar and the zone once
-  per end.
+  @moduledoc false
 
-  """
+  # Positions on the time line and on the cycles: where a value's span begins
+  # and ends, as ticks (microseconds) from 0000-01-01 on the UTC or the
+  # floating line, or from a cycle's start for a value with no year; the frame a
+  # value lies on; and the comparison of two positions. Every relation and set
+  # operation works on these positions, asking the calendar and the zone once
+  # per end.
 
   # Positions and frames: where a value's span begins and ends, on the
   # frame it lies on.

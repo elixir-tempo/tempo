@@ -1,16 +1,15 @@
 defmodule Tempo.Zone do
-  @moduledoc """
-  A time zone as a value carries it: a name the zone database knows
-  (`Europe/Paris`), or a fixed offset from UTC in minutes, with RFC 9557's
-  critical flag.
+  @moduledoc false
 
-  A zone is the frame of an expression (law 4): every part of an expression
-  is in one zone. A written time shift (`+02:00`, `Z2H`) is not a zone; it is
-  held on each end as `t:shift/0`. This module answers the offsets a zone's
-  clock shows at a wall reading, the reading at an instant, and the gaps and
-  folds between them.
-
-  """
+  # A time zone as a value carries it: a name the zone database knows
+  # (`Europe/Paris`), or a fixed offset from UTC in minutes, with RFC 9557's
+  # critical flag.
+  #
+  # A zone is the frame of an expression (law 4): every part of an expression
+  # is in one zone. A written time shift (`+02:00`, `Z2H`) is not a zone; it is
+  # held on each end as `t:shift/0`. This module answers the offsets a zone's
+  # clock shows at a wall reading, the reading at an instant, and the gaps and
+  # folds between them.
 
   # A named time zone or a fixed offset, as an IXDTF suffix writes one, and
   # the one place the core reads the zone database: the offsets a wall
@@ -35,12 +34,11 @@ defmodule Tempo.Zone do
   @day 86_400 * @second
 
   @typedoc "A zone: an IANA name, or a fixed offset in minutes from UTC (`[+05:30]`), never both."
-  @type t :: %__MODULE__{name: String.t() | nil, offset: integer() | nil, critical: boolean()}
+  @type t :: Tempo.zone()
 
   @type tick :: integer()
 
-  @typedoc "A written time shift: whole hours, minutes and seconds, the sign on the first that is not zero."
-  @type shift :: [{:hour, integer()} | {:minute, integer()} | {:second, integer()}]
+  @type shift :: Tempo.shift()
 
   @doc "A named zone, checked against the zone database."
   @spec named(String.t(), keyword()) :: {:ok, t()} | {:error, Exception.t()}

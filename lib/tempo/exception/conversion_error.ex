@@ -4,7 +4,7 @@ defmodule Tempo.ConversionError do
   reason: a duration has no place on the time line, a one-of set has
   readings and no spans, a value with no year needs one, a sequence with
   no end needs a `:within` window, or more values were asked for at once
-  than `Tempo.Limit.values/0` allows.
+  than the application's `:max_values_at_once` allows (10,000 unless it is set).
 
   """
 
@@ -49,7 +49,7 @@ defmodule Tempo.ConversionError do
     do: "has an open end, which has no place to walk from, relate or combine; give it both ends"
 
   defp describe(:too_many_values),
-    do: "names more values than Tempo.Limit.values/0 allows at once"
+    do: "names more values than :max_values_at_once allows at once"
 
   defp describe(:season), do: "is a season, whose dates no calendar Tempo asks yet gives"
 

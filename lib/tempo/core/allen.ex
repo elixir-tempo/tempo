@@ -15,7 +15,6 @@ defmodule Tempo.Allen do
   """
 
   alias Tempo.Allen.Classifier
-  alias Tempo.Scale
 
   @relations [
     :precedes,
@@ -80,7 +79,7 @@ defmodule Tempo.Allen do
           :before | :after | :adjacent | :within | :contains | :disjoint | :overlaps | :equal
 
   @typedoc "A span as two positions on one frame, `{from, to}`, half-open."
-  @type span :: {Scale.position(), Scale.position()}
+  @type span :: {integer(), integer()}
 
   @doc "The thirteen relations, in Allen's order."
   @spec relations() :: [relation(), ...]

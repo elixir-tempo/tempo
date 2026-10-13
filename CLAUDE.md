@@ -10,41 +10,41 @@ Tempo treats **date and time as intervals, not as instants**. Every value repres
 
 * We **never run the risk of invalid dates** because every value is a bounded interval — partial specifications like `2022Y` or `2022Y-11M` are intervals spanning the whole year or month, not uncertain instants.
 
-## Architecture — implicit vs explicit spans
+## Architecture — one struct, written forms, half-open spans
 
-Every Tempo value is a span on the time line. Spans come in two forms and the distinction matters for iteration, comparison, and set operations.
+The design is `plans/architecture-redesign.md`: nine laws (section 4) and the modules written to them (section 5). A behaviour that does not follow from the laws is not Tempo's. In short:
 
-### Implicit span
+### One struct
 
-A single ISO 8601 datetime **is** an interval. Its span runs from the stated datetime to the same datetime incremented by one unit **at the next-higher-resolution-that-is-not-defined**. For example:
+Every expression is a `%Tempo{}`, and what it is is its `:form`: `{:value, units}`, `{:span, from, to}`, `{:every, first, bound, rule}`, `{:all, members}`, `{:one, members}` or `{:when, member, conditions}`. `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.RecurrenceSet` are modules of functions over that struct, not structs. A duration is a `%Tempo.Duration{}`: a length, not an expression.
 
-* `2026` → `2026-01-01 .. 2027-01-01` (year resolution, span of one year)
+### Resolution is meaning
 
-* `2026-01` → `2026-01-01 .. 2026-02-01` (month resolution, span of one month)
+A value written to a resolution denotes one unit of it: `2026` is the year, `2026-06` the month, `2026-06-15` the day, `2026-06-15T10` the hour. The written units are kept as written; nothing drills into them. There is no `:unit` field: an interval made from a value (`Tempo.to_interval/2`) is a different expression with the same extent, and a caller who wants an extent walked at a unit says so with `Tempo.walk/3`.
 
-* `2026-01-15` → `2026-01-15 .. 2026-01-16` (day resolution, span of one day)
+### Spans are half-open; written ends are read as they are said
 
-* `2026-01-15T10` → `2026-01-15T10:00 .. 2026-01-15T11:00` (hour resolution, span of one hour)
+Underneath, **every span is `[first, last)`**: inclusive of the first instant, exclusive of the last. Adjacent spans concatenate with no gap and no overlap, and every set operation and Allen relation is exact on those positions. Code that treats the *stored* upper bound as inclusive is a bug.
 
-Map and reduce on implicit spans is already implemented. The iteration unit is the **next-higher-resolution below what is stated** — e.g., iterating over `2026-01` yields days, iterating over `2026` yields months (or weeks, depending on calendar).
+What is *written* is read as it is said aloud (law 9):
 
-### Explicit span
+* An end written to a **calendar unit** (a year, a month, a week, a date) is read **through**: `2026-06-15/2026-06-20` is six days and holds the 20th; `2026/2028` is three years.
 
-An explicit span is a pair of datetimes written with a range operator, such as `2026-01-01..2026-02-01`. By default it is iterated at **its own highest resolution** — the resolution of the boundaries. Iterating `2026-01-01..2026-02-01` yields days, not months.
+* An end written to a **clock unit** (an hour, a minute, a second) is a **boundary**: `T09/T17` is eight hours and ends as five begins.
 
-The exception is an explicit iteration unit: `%Tempo.Interval{}` carries a `:unit` field that, when set, overrides the derived granularity. Materialising an implicit span sets it — `Tempo.to_interval(~o"2025-07-04")` yields bounds `2025-07-04/2025-07-05` (the value's own resolution, per *resolution = meaning*) with `unit: :hour`, so the materialised span still walks hours like its implicit twin. The walk fills the anchor down to the unit at iteration time; the bounds never carry drilled components. An interval has three separable properties: **extent** (the half-open span), **resolution** (how precisely the bounds are stated), and **granularity** (`:unit`, the unit a walk yields).
+The reader makes the half-open bound and the writer writes a span back as it was read. `Tempo.to_interval(~o"2026-06")` is therefore `~o"2026-06/2026-06"`, June through June.
 
-### Half-open convention
+### Enumeration
 
-**Every span is inclusive of the first boundary and exclusive of the last boundary** — `[first, last)`. This is deliberate, not incidental. It:
+`Enum` over a singular expression (one span) yields its children: the unit below a value's resolution, or the finer of an interval's two ends'. Over a plural expression (a set, a recurrence, a value with a list, a mask or a selection in it) it yields its members. `Tempo.members/2` gives the spans of either.
 
-* Makes map/reduce work uniformly regardless of the iteration resolution.
+### Frames, and refusal
 
-* Makes adjacent spans concatenate cleanly: `[a, b)` followed by `[b, c)` is exactly `[a, c)` with no overlap or gap.
+A span lies on the UTC line (a year and a zone or a shift), the floating line (a year, no zone) or a cycle (no year). Two spans relate, compare or combine only on one frame; a floating value beside a zoned one is a `Tempo.FrameError`. What Tempo cannot answer by the laws is a named error, never a guess: an option a function does not take, a reading a zone's clock skips, a base with no year.
 
-* Matches the implicit-span semantics above (`2026-01` ends just before `2026-02-01`, not on it).
+### The API and the engine
 
-Any new span, interval, comparison, or set-operation code **must honour this convention**. Code that treats the upper bound as inclusive is a bug.
+`Tempo` is the API: each operation is documented there, validates its arguments and calls one engine function. The engine is under `lib/tempo/core/` (`Tempo.Unit`, `Scale`, `Zone`, `Limit`, `Spans`, `Algebra`, `Select`, `Shift` and the rest) and is `@moduledoc false`: it is no part of the public API, and public docs do not refer to it.
 
 ## One expression, one calendar — extensions come last
 
@@ -103,10 +103,10 @@ The three parts reinforce each other — nouns, verbs, prose.
 
 If any of these appear in user-facing examples, it's a signal that an abstraction is missing:
 
-* **`to_utc_seconds/1`** or other raw second counting — add a duration predicate instead (`at_least?`, `exactly?`, `shorter_than?`, …).
-* **Struct field accessors** like `set.intervals`, `iv.from.time[:hour]` — add a named helper (`IntervalSet.members/1`, a predicate, or a query function).
+* **Raw second counting** (`Tempo.Duration.to_unit(d, :second)` compared with a number) — add a duration predicate instead (`at_least?`, `exactly?`, `shorter_than?`, …).
+* **Struct field accessors** like `value.form`, `value.zone.name` — add a named helper (`IntervalSet.members/1`, a predicate, or a query function).
 * **Magic numbers** for durations (`3600`, `86_400`) — use an ISO 8601 duration literal (`~o"PT1H"`, `~o"P1D"`).
-* **Hand-rolled geometric checks** like `compare_endpoints(a + d, b) in [:earlier, :same]` — add a predicate that names the concept.
+* **Hand-rolled geometric checks** on an interval's ends (shift one end, compare it with another) — add a predicate that names the concept.
 * **Pattern-matching on Allen relation lists inline** like `Tempo.relation(a, b) in [:equals, :starts, :during, :finishes]` — name that set (`Tempo.within?/2` does exactly this). Note `Tempo.relation/2` returns the Allen relation; `Tempo.compare/3` is the separate stdlib-ternary sorter callback returning `:lt | :eq | :gt`.
 
 When writing a new example and one of these patterns appears, stop and add the missing abstraction first. The codebase already models this — `within?/2`, `at_least?/2`, `adjacent?/2` all exist because geometric checks and inline-relation-lists were recurring in examples.
@@ -178,6 +178,6 @@ The following documents are **critical** when working on this project. Consult t
 
 * **ISO 8601 standards** — the canonical PDFs live in this repository at `standards/iso8601/` (`ISO_8601-1_2019(en).PDF` and `ISO_8601-2_2019(en).PDF`; read them with `pdftotext -layout`). They are git-ignored, never committed or packaged. These are the source of truth for ISO 8601 Part 1 (date/time representations) and Part 2 (extensions), which Tempo implements.
 
-* **RFC 9557 (IXDTF)** — vendored at `standards/rfc/rfc9557.txt` (<https://www.rfc-editor.org/rfc/rfc9557>), the published form of draft-ietf-sedate-datetime-extended. The other RFCs Tempo implements (3339, 5234, 5545, 7529, 8984) are beside it; `standards/README.md` lists them. Defines the extended information suffix syntax (`[zone]`, `[u-ca=calendar]`, `[key=value]`, critical `!` flag) parsed by `Tempo.Iso8601.Tokenizer.Extended`.
+* **RFC 9557 (IXDTF)** — vendored at `standards/rfc/rfc9557.txt` (<https://www.rfc-editor.org/rfc/rfc9557>), the published form of draft-ietf-sedate-datetime-extended. The other RFCs Tempo implements (3339, 5234, 5545, 7529, 8984) are beside it; `standards/README.md` lists them. Defines the extended information suffix syntax (`[zone]`, `[u-ca=calendar]`, `[key=value]`, critical `!` flag) read by `Tempo.Reader.Suffix`.
 
-* **Allen's Interval Algebra** — <https://ics.uci.edu/~alspaugh/cls/shr/allen.html>. The 13 base relations (`precedes`, `meets`, `overlaps`, `finished_by`, `contains`, `starts`, `equals`, and their inverses, plus `preceded_by`) used by `Tempo.relation/2` (delegating to `Tempo.Interval.relation/2`) when comparing intervals. For ordering rather than relating, `Tempo.compare/3` returns `:lt | :eq | :gt` and makes `Tempo` usable as an `Enum` sorter module.
+* **Allen's Interval Algebra** — <https://ics.uci.edu/~alspaugh/cls/shr/allen.html>. The 13 base relations (`precedes`, `meets`, `overlaps`, `finished_by`, `contains`, `starts`, `equals`, and their inverses, plus `preceded_by`) used by `Tempo.relation/2` and, as predicates under Allen's own names, by `Tempo.Allen`. For ordering rather than relating, `Tempo.compare/3` returns `:lt | :eq | :gt` and makes `Tempo` usable as an `Enum` sorter module.

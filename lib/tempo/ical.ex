@@ -112,7 +112,11 @@ if Code.ensure_loaded?(ICal) do
 
     * `path` is the path of an `.ics` file.
 
-    * `options` is as for `parse/2`.
+    * `options` is a keyword list of options.
+
+    ### Options
+
+    * `:within` is as for `parse/2`.
 
     ### Returns
 
@@ -139,7 +143,15 @@ if Code.ensure_loaded?(ICal) do
 
     * `calendar` is an `%ICal{}`.
 
-    * `options` is as for `parse/2`.
+    * `options` is a keyword list of options.
+
+    ### Options
+
+    * `:within` is as for `parse/2`.
+
+    ### Returns
+
+    * `{:ok, set}` or `{:error, exception}`, as for `parse/2`.
 
     """
     @spec from_ical(ICal.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
@@ -167,7 +179,12 @@ if Code.ensure_loaded?(ICal) do
 
     * `ics` is iCalendar text or an `%ICal{}`.
 
-    * `options` is a keyword list; `:within`, a `t:Tempo.t/0`, is required.
+    * `options` is a keyword list of options.
+
+    ### Options
+
+    * `:within` is a `t:Tempo.t/0`, the window the time offered is taken in.
+      It is required.
 
     ### Returns
 

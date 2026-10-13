@@ -20,7 +20,7 @@ defmodule Tempo.RRule do
 
   import Kernel, except: [to_string: 1]
 
-  alias Tempo.{ConversionError, Duration, Options, Unit, Validate}
+  alias Tempo.{ConversionError, Duration, Options, Validate}
 
   @weekdays %{"MO" => 1, "TU" => 2, "WE" => 3, "TH" => 4, "FR" => 5, "SA" => 6, "SU" => 7}
   @weekday_codes Map.new(@weekdays, fn {code, n} -> {n, code} end)
@@ -63,7 +63,7 @@ defmodule Tempo.RRule do
 
   @typedoc "A rule as the vocabularies share it: the keys RFC 5545 names, lower-cased."
   @type rule :: %{
-          optional(:freq) => Unit.t(),
+          optional(:freq) => Tempo.unit(),
           optional(:interval) => pos_integer(),
           optional(:count) => pos_integer(),
           optional(:until) => Tempo.t(),
@@ -279,7 +279,27 @@ defmodule Tempo.RRule do
 
   @doc """
   A recurrence from a rule in the shared vocabulary (`t:rule/0`), as
-  `Tempo.Cron` and `Tempo.JSCalendar` build one; options as for `parse/2`.
+  `Tempo.Cron` and `Tempo.JSCalendar` build one.
+
+  ### Arguments
+
+  * `rule` is a `t:rule/0` with a frequency.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:from`, `:duration` and `:metadata` are as for `parse/2`.
+
+  ### Returns
+
+  * `{:ok, recurrence}` or `{:error, exception}`, as for `parse/2`.
+
+  ### Examples
+
+      iex> Tempo.RRule.from_rule(%{freq: :week, count: 3}, from: ~o"2026-06-01")
+      {:ok, ~o"R3/2026-06-01/P1W/FL1KN"}
+
   """
   @spec from_rule(rule(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def from_rule(%{freq: freq} = rule, options) do

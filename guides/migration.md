@@ -1,17 +1,17 @@
-# Migrating from Tempo 1.6 to 3.0
+# Migrating from Tempo 1.6 to 2.0
 
-Tempo 3.0 is a new implementation of the same idea: every date and time is a span on the time line. It keeps the words of the 1.6 API and gives each one meaning, and it removes what 1.6 needed only because of how it was built: five structs, twenty-four error modules, and several functions that did one thing under two names.
+Tempo 2.0 is a new implementation of the same idea: every date and time is a span on the time line. It keeps the words of the 1.6 API and gives each one meaning, and it removes what 1.6 needed only because of how it was built: five structs, twenty-four error modules, and several functions that did one thing under two names.
 
 Most of an upgrade is mechanical. A call to a function that no longer exists fails when it is compiled, and an option a function does not take is an error that names the option. Three changes are not mechanical, because code written for 1.6 still compiles and answers something else. They come first.
 
-Every 3.0 example on this page is run by the test suite. The 1.6 examples were run against the published 1.6.4.
+Every 2.0 example on this page is run by the test suite. The 1.6 examples were run against the published 1.6.4.
 
 ## Updating the dependency
 
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 3.0"}
+    {:ex_tempo, "~> 2.0"}
   ]
 end
 ```
@@ -20,7 +20,7 @@ end
 
 ## A written end is read through
 
-This is the change to read every call site for. In 1.6 an interval written with two dates ended at the start of its second date: `2026-06-15/2026-06-20` was five days and did not hold the 20th. In 3.0 a date names a period of the calendar, and an interval written to a date runs through that date, as it does when it is said aloud and as EDTF and ISO 8601-2 read it.
+This is the change to read every call site for. In 1.6 an interval written with two dates ended at the start of its second date: `2026-06-15/2026-06-20` was five days and did not hold the 20th. In 2.0 a date names a period of the calendar, and an interval written to a date runs through that date, as it does when it is said aloud and as EDTF and ISO 8601-2 read it.
 
 <!-- guides:skip -->
 
@@ -60,7 +60,7 @@ What to look for:
 
 * **Back-to-back bookings written with dates**, each ending on the date the next begins. They now overlap by a day. End each on its last day, or write the ends as times of day.
 
-* **A `Date.Range` brought in with `Tempo.from_elixir/2`** needs no change. A range holds its last date, and 3.0 writes it as it is.
+* **A `Date.Range` brought in with `Tempo.from_elixir/2`** needs no change. A range holds its last date, and 2.0 writes it as it is.
 
 ```elixir
 iex> Tempo.equal?(~o"2026-06", ~o"2026-06-01/2026-06-30")
@@ -89,7 +89,7 @@ iex> Tempo.Interval.to(june)
 
 ## One struct
 
-1.6 had a struct for each kind of thing: `%Tempo{}`, `%Tempo.Interval{}`, `%Tempo.IntervalSet{}`, `%Tempo.Set{}` and `%Tempo.Range{}`. In 3.0 every expression is a `%Tempo{}`, and what kind it is is its `:form`. The modules `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.RecurrenceSet` keep their functions and return a `%Tempo{}`.
+1.6 had a struct for each kind of thing: `%Tempo{}`, `%Tempo.Interval{}`, `%Tempo.IntervalSet{}`, `%Tempo.Set{}` and `%Tempo.Range{}`. In 2.0 every expression is a `%Tempo{}`, and what kind it is is its `:form`. The modules `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.RecurrenceSet` keep their functions and return a `%Tempo{}`.
 
 <!-- guides:skip -->
 
@@ -111,7 +111,7 @@ iex> {Tempo.year(~o"2026-06"), Tempo.month(~o"2026-06")}
 {2026, 6}
 ```
 
-| 1.6 | 3.0 |
+| 1.6 | 2.0 |
 |---|---|
 | `%Tempo.Interval{from: f, to: t}` | `Tempo.Interval.endpoints/1`, `from/1`, `to/1` |
 | `set.intervals` | `Tempo.IntervalSet.members/1` |
@@ -129,7 +129,7 @@ iex> Tempo.union(~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-16T09/2026-06-16T11
 
 ## A function that can fail returns a tuple
 
-In 1.6 some functions that could fail returned a bare value and raised, and others returned a tuple. In 3.0 every function that can fail returns `{:ok, value}` or `{:error, exception}`, and has a `!` form that returns the value or raises.
+In 1.6 some functions that could fail returned a bare value and raised, and others returned a tuple. In 2.0 every function that can fail returns `{:ok, value}` or `{:error, exception}`, and has a `!` form that returns the value or raises.
 
 <!-- guides:skip -->
 
@@ -156,7 +156,7 @@ These now return a tuple where 1.6 returned the value: `shift/3`, `trunc/2`, `ro
 
 The compiler finds every one of these.
 
-| 1.6 | 3.0 |
+| 1.6 | 2.0 |
 |---|---|
 | the `:bound` option | `:within` |
 | `Tempo.subset?/3` | `Tempo.within?/3` |
@@ -202,7 +202,7 @@ grep -rnE 'bound:|subset\?|grounded\?|Tempo\.(anchor|merge|meets\?|during\?|comp
 
 ## An option a function does not take is an error
 
-1.6 passed over an option it did not know. 3.0 refuses it, so a misspelt window is not read as no window, and the 1.6 name of an option says what it became.
+1.6 passed over an option it did not know. 2.0 refuses it, so a misspelt window is not read as no window, and the 1.6 name of an option says what it became.
 
 ```elixir
 iex> Tempo.to_interval(~o"R/2020-01-01/P1Y", bound: ~o"2026")
@@ -211,7 +211,7 @@ iex> Tempo.to_interval(~o"R/2020-01-01/P1Y", bound: ~o"2026")
 
 ## A value that names no calendar is in Calendar.ISO
 
-In 1.6 a value written with no calendar was in `Calendrical.Gregorian`. In 3.0 it is in `Calendar.ISO`, Elixir's own, so its dates are the ones the standard library gives and takes. `Calendrical.Gregorian` is a calendar like any other, read from `[u-ca=gregory]`.
+In 1.6 a value written with no calendar was in `Calendrical.Gregorian`. In 2.0 it is in `Calendar.ISO`, Elixir's own, so its dates are the ones the standard library gives and takes. `Calendrical.Gregorian` is a calendar like any other, read from `[u-ca=gregory]`.
 
 ```elixir
 iex> (~o"2026-06-15").calendar
@@ -224,7 +224,7 @@ Calendrical.Gregorian
 
 ## Walking a plural expression gives its members
 
-`Enum` over one span gives the units below it, as before: a month its days, a day its hours. Over an expression that is several spans (a set, a recurrence, a value with a list in it) 1.6 had two rules, and a recurrence was walked by the units inside its occurrences. In 3.0 a plural expression gives its members, always.
+`Enum` over one span gives the units below it, as before: a month its days, a day its hours. Over an expression that is several spans (a set, a recurrence, a value with a list in it) 1.6 had two rules, and a recurrence was walked by the units inside its occurrences. In 2.0 a plural expression gives its members, always.
 
 <!-- guides:skip -->
 
@@ -267,7 +267,7 @@ iex> Enum.to_list(~o"2026/2026-03")
 
 ## A duration is counted in its ends' unit
 
-In 1.6 `Tempo.duration/1` and `duration/2` answered in seconds. In 3.0 they answer in the unit the ends are written in: days between two days, months between two months, hours between two hours. Years, months, weeks and days are counted on the calendar; hours, minutes and seconds are elapsed time.
+In 1.6 `Tempo.duration/1` and `duration/2` answered in seconds. In 2.0 they answer in the unit the ends are written in: days between two days, months between two months, hours between two hours. Years, months, weeks and days are counted on the calendar; hours, minutes and seconds are elapsed time.
 
 <!-- guides:skip -->
 
@@ -307,7 +307,7 @@ iex> Tempo.duration(bookings)
 
 ## A zoned value's hours are time on the time line
 
-In 1.6 `Tempo.shift/2` added every unit to a zoned value's wall clock, so five hours after 23:00 on the night New York springs forward was 04:00, four hours later. In 3.0 hours, minutes and seconds are elapsed time, and the answer is the reading the clock shows then. Years, months, weeks and days still step the calendar, so a day after noon is noon.
+In 1.6 `Tempo.shift/2` added every unit to a zoned value's wall clock, so five hours after 23:00 on the night New York springs forward was 04:00, four hours later. In 2.0 hours, minutes and seconds are elapsed time, and the answer is the reading the clock shows then. Years, months, weeks and days still step the calendar, so a day after noon is noon.
 
 <!-- guides:skip -->
 
@@ -405,7 +405,7 @@ For the zoned day, place the date in the zone with `Tempo.in_zone/2`.
 
 ## Floating and zoned do not mix
 
-A value with no zone is a reading of a clock, in no particular place; a value with a zone is a moment. 1.6 read the floating one as UTC in some functions and raised in others. 3.0 refuses the pair everywhere with one error, and the caller says which zone the floating value is in.
+A value with no zone is a reading of a clock, in no particular place; a value with a zone is a moment. 1.6 read the floating one as UTC in some functions and raised in others. 2.0 refuses the pair everywhere with one error, and the caller says which zone the floating value is in.
 
 <!-- guides:skip -->
 
@@ -714,7 +714,7 @@ iex> ~o"2026-06-15" |> Tempo.put_metadata(%{source: "hr"}) |> Tempo.to_iso8601()
 
 Twenty-four exception modules are eight, each with a `:reason` that says which case it is. A match on a 1.6 module no longer compiles; the [glossary](glossary.md#errors) lists the reasons.
 
-| 1.6 | 3.0 |
+| 1.6 | 2.0 |
 |---|---|
 | `Tempo.InvalidDateError`, `InvalidTimeError`, `InvalidUnitError`, `ResolutionError`, `RoundingError` | `Tempo.InvalidDateError` for a value that names no date or time; `ArgumentError` for a unit that is none |
 | `Tempo.FloatingTempoError`, `GroundedTempoError`, `ZoneOffsetMismatchError` | `Tempo.FrameError` |

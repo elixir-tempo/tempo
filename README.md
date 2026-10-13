@@ -11,14 +11,14 @@ This conceptual shift — *time as interval, not instant* — removes a surprisi
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 3.0"},
+    {:ex_tempo, "~> 2.0"},
     # Optional but recommended - needed for iCalendar import.
     {:ical, "~> 3.2"}
   ]
 end
 ```
 
-Tempo is tested on Elixir 1.17 and later, on Erlang/OTP 27 and later.
+Tempo requires Elixir 1.17 or later and Erlang/OTP 27 or later.
 
 ## Why intervals, not instants
 
@@ -229,7 +229,7 @@ Without a configured database, parsing still works fully — zone names in IXDTF
 
 ### The most values at once
 
-Tempo refuses a value that asks for more than 10,000 values at once — the members of a set, the spans a mask or a selection is converted to, the occurrences of a recurrence — so that a short text cannot ask for work without end: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S"` names 29 million seconds. The refusal is a `Tempo.ConversionError` whose reason is `:too_many_values`, and `Enum` and `Stream` still take such a value's values one at a time. The limit is `Tempo.Limit.values/0`, which the application may set:
+Tempo refuses a value that asks for more than 10,000 values at once — the members of a set, the spans a mask or a selection is converted to, the occurrences of a recurrence — so that a short text cannot ask for work without end: `~o"2026Y{1..12}M{1..28}DT{0..23}H{0..59}M{0..59}S"` names 29 million seconds. The refusal is a `Tempo.ConversionError` whose reason is `:too_many_values`, and `Enum` and `Stream` still take such a value's values one at a time. The application may set the limit:
 
 ```elixir
 # config/config.exs
@@ -250,7 +250,7 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 
 ## Guides
 
-* [Migrating from Tempo 1.6 to 3.0](https://hexdocs.pm/ex_tempo/migration.html) — each change, with its 1.6 form and its 3.0 form.
+* [Migrating from Tempo 1.6 to 2.0](https://hexdocs.pm/ex_tempo/migration.html) — each change, with its 1.6 form and its 2.0 form.
 
 * [Tutorial: build a booking-availability service](https://hexdocs.pm/ex_tempo/tutorial-booking-availability.html) — the journey-shaped introduction: one small system, every core concept.
 

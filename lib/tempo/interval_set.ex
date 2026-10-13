@@ -188,7 +188,12 @@ defmodule Tempo.IntervalSet do
 
   * `set` is a `t:Tempo.t/0` that has spans.
 
-  * `options` is a keyword list; `:within` as for `Tempo.union/3`.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:Tempo.t/0`, the window an expression with no end of its
+    own (a recurrence with no count) or no year is placed in.
 
   ### Returns
 
@@ -213,8 +218,15 @@ defmodule Tempo.IntervalSet do
 
   * `set` is a `t:Tempo.t/0` that has spans.
 
-  * `options` is a keyword list: `:at_least`, the number of members (the
-    default is 1); `:within` as for `Tempo.union/3`.
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:at_least` is how many members must cover a time for it to be kept. The
+    default is 1.
+
+  * `:within` is a `t:Tempo.t/0`, the window an expression with no end of its
+    own (a recurrence with no count) or no year is placed in.
 
   ### Returns
 
@@ -343,6 +355,21 @@ defmodule Tempo.IntervalSet do
   @doc """
   A set whose members are read from an enumerable as they are asked for, so
   a long or endless source is a set.
+
+  ### Arguments
+
+  * `enumerable` is an `Enumerable` of `t:Tempo.t/0`, in order of start.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:metadata` is the set's own metadata. The default is `%{}`.
+
+  ### Returns
+
+  * A `t:Tempo.t/0` of the `:all` form, whose members are read as they are
+    asked for.
 
   ### Examples
 
