@@ -126,6 +126,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * A set operation with an operand that has no end is as bounded as it makes its answer: an intersection lies within the other operand, and a union or a difference from the endless operand is a set with no last member. Two operands with no end have a union and need `:within` for anything else.
 
+* A predicate with an operand that has no end is answered where the answer follows from the ends: every Monday for ever is not `within?/2` June. Two operands with no end need `:within`.
+
 * A set has ISO 8601 text and is inspected as it, where `Tempo.to_iso8601/1` raised on one.
 
 ## [v1.6.4] — 2026-09-03

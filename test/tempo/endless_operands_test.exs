@@ -119,6 +119,60 @@ defmodule Tempo.EndlessOperandsTest do
     end
   end
 
+  describe "a predicate" do
+    # Every Monday from 1 June 2026, for ever; June; and the May before it,
+    # which ends as the Mondays begin.
+    @mondays ~o"R/2026-06-01/P1W/FL1KN"
+    @june ~o"2026-06"
+    @may ~o"2026-05"
+
+    test "is false where what has no end would have to fit in what has one" do
+      refute Tempo.within?(@mondays, @june)
+      refute Tempo.contains?(@june, @mondays)
+      refute Tempo.equal?(@mondays, @june)
+      refute Tempo.equal?(@june, @mondays)
+      refute Tempo.before?(@mondays, @june)
+      refute Tempo.after?(@june, @mondays)
+    end
+
+    test "is answered within the operand that has an end, where the answer lies there" do
+      assert Tempo.overlaps?(@mondays, @june)
+      assert Tempo.overlaps?(@june, @mondays)
+      refute Tempo.disjoint?(@mondays, @june)
+      assert Tempo.disjoint?(@mondays, @may)
+
+      refute Tempo.within?(@june, @mondays)
+      assert Tempo.within?(@june, @weeks)
+      assert Tempo.contains?(@weeks, @june)
+      refute Tempo.contains?(@mondays, @june)
+    end
+
+    test "is answered by where what has no end begins" do
+      assert Tempo.after?(@mondays, @may)
+      assert Tempo.before?(@may, @mondays)
+      assert Tempo.adjacent?(@may, @mondays)
+      assert Tempo.adjacent?(@mondays, @may)
+
+      refute Tempo.after?(@mondays, @june)
+      refute Tempo.before?(@june, @mondays)
+      refute Tempo.adjacent?(@mondays, ~o"2026-04")
+    end
+
+    test "is the same for a set read from a stream" do
+      refute Tempo.within?(fifteenths(), ~o"2026")
+      assert Tempo.overlaps?(fifteenths(), ~o"2026")
+      assert Tempo.after?(fifteenths(), @may)
+    end
+
+    test "of two operands with no end needs a window" do
+      for predicate <- [&Tempo.within?/2, &Tempo.overlaps?/2, &Tempo.equal?/2, &Tempo.before?/2] do
+        assert_raise ConversionError, fn -> predicate.(@weeks, @other_days) end
+      end
+
+      assert Tempo.overlaps?(@weeks, @other_days, within: ~o"2026-06")
+    end
+  end
+
   describe "the sweep one result at a time" do
     # The same operands swept whole and swept one result at a time cover the
     # same time: the second keeps apart what the first joins where members

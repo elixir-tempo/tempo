@@ -726,6 +726,57 @@ defmodule Tempo.Algebra do
       (elem(List.last(ca), 1) == elem(hd(cb), 0) or elem(List.last(cb), 1) == elem(hd(ca), 0))
   end
 
+  @doc """
+  What a predicate answers where an operand has no end and no window is
+  given, without its being searched for: `{:ok, answer}` where the answer
+  follows from the ends (what has no end is within nothing that has one,
+  equals it never and is before it never; it is after it, or meets it,
+  where it begins at or after the other's end), `:compare` where the answer
+  lies within the operand that has an end and `holds?/4` gives it with the
+  other taken there, and an error for two operands with no end.
+  """
+  @spec decided(atom(), Tempo.t(), Tempo.t(), keyword()) ::
+          {:ok, boolean()} | :compare | {:error, Exception.t()}
+  def decided(predicate, a, b, options) do
+    with :ok <- operable(a, b) do
+      if options[:within],
+        do: :compare,
+        else: by_end(predicate, endless?(a), endless?(b), a, b)
+    end
+  end
+
+  defp by_end(_predicate, false, false, _a, _b), do: :compare
+
+  defp by_end(_predicate, true, true, a, _b),
+    do: {:error, ConversionError.exception(value: a, reason: :unbounded)}
+
+  defp by_end(predicate, true, false, _a, _b) when predicate in [:within, :equal, :before],
+    do: {:ok, false}
+
+  defp by_end(predicate, false, true, _a, _b) when predicate in [:contains, :equal, :after],
+    do: {:ok, false}
+
+  defp by_end(:after, true, false, a, b), do: begins_after(a, b, &>=/2)
+  defp by_end(:before, false, true, a, b), do: begins_after(b, a, &>=/2)
+  defp by_end(:adjacent, true, false, a, b), do: begins_after(a, b, &==/2)
+  defp by_end(:adjacent, false, true, a, b), do: begins_after(b, a, &==/2)
+  defp by_end(_predicate, _a_endless?, _b_endless?, _a, _b), do: :compare
+
+  # Whether what has no end begins where what has one ends, or after it.
+  defp begins_after(endless, ended, compare) do
+    with {:ok, _frame} <- frames_agree(endless, ended, []),
+         {:ok, positioned} <- operand(ended, nil, :a, []),
+         {:ok, spans} <- Spans.spans(endless, []) do
+      {:ok, begins?(Enum.at(spans, 0), positioned, compare)}
+    end
+  end
+
+  defp begins?(nil, _positioned, _compare), do: false
+  defp begins?(_first, [], _compare), do: false
+
+  defp begins?(%Tempo{} = first, positioned, compare),
+    do: compare.(positioned!(first, :b).start, last_stop(positioned))
+
   defp extents(results), do: Enum.map(results, &{&1.start, &1.stop})
   defp last_stop(positioned), do: positioned |> Enum.map(& &1.stop) |> Enum.max()
   defp first_start(positioned), do: positioned |> Enum.map(& &1.start) |> Enum.min()

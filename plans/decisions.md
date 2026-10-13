@@ -279,3 +279,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 3.
 
 * **State.** Built: with `:territory` or `:locale`, `Tempo.from_iso8601/2` and `Tempo.parse/2` give each season its months before the order of the ends is held to. `Tempo.from_iso8601("2026-23/2026-21", territory: :AU)` is `~o"2026Y3M/11M"`; the same text with no territory, and the `~o` sigil, which has none, are errors as in EDTF. `test/tempo/season_test.exs`.
+
+## 26. A predicate with an operand that has no end
+
+* **Question.** What do `within?/2`, `contains?/2`, `overlaps?/2`, `disjoint?/2`, `equal?/2`, `before?/2`, `after?/2` and `adjacent?/2` answer when an operand has no end?
+
+* **Context.** The predicates did what the set operations did before decision 9: they took the operand with no end within the other operand's extent and compared what was left. That was sometimes right and sometimes wrong: `Tempo.within?(~o"R/2026-06-01/P1W/FL1KN", ~o"2026-06")`, every Monday for ever within June, was `true`. With E the operand with no end and B the one with an end, every case has an answer that needs no search: `within?(E, B)`, `contains?(B, E)`, `equal?`, `before?(E, B)` and `after?(B, E)` are false, what has no end not fitting in what has one; `overlaps?`, `disjoint?`, `within?(B, E)` and `contains?(E, B)` are decided within B's extent, where taking E there is exact; `after?(E, B)`, `before?(B, E)` and `adjacent?` are decided by where E begins. The options: (1) answer by that table, and refuse two operands with no end without `:within`; (2) refuse any predicate with such an operand without `:within`; (3) leave it and say so.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built: `Tempo.Algebra.decided/4`, `test/tempo/endless_operands_test.exs`. Two operands with no end raise a `Tempo.ConversionError` (`:unbounded`) without a window.

@@ -33,8 +33,6 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ### Defects and gaps
 
-* [ ] **A predicate with an operand that has no end takes it within the other operand**, as the set operations did before decision 9: `Tempo.within?(~o"R/2026-06-01/P1W/FL1KN", ~o"2026-06")` is true, every Monday for ever being read as June's Mondays. `within?/2`, `contains?/2`, `equal?/2`, `before?/2`, `after?/2` and `adjacent?/2` want the rule the operations have: an answer where one follows from the ends, and an error where it would be searched for.
-
 * [ ] **RFC 7529's `RSCALE` and `SKIP`, and a significant `WKST`, are read: decided 2026-10-14, to build.** In an RRULE and a JSCalendar rule: `RSCALE` is the recurrence's calendar, `SKIP` a new part of a rule, and the week start as decision 14 rules. With them RFC 5545's three unread examples are read, and RFC 7529's leap-month notation (`BYMONTH=5L`). See `plans/decisions.md`, 13.
 
 * [ ] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused.

@@ -1368,10 +1368,19 @@ defmodule Tempo do
     * `:within` is a `t:t/0`, the window an expression with no end of its own (a
     recurrence with no count) or no year is placed in.
 
+    ### An operand with no end
+
+    With no window, a recurrence with no count or a set with no last member
+    is answered for where the answer follows from the ends: it is within
+    nothing that has an end, equals it never and is before it never; whether
+    it overlaps a span, contains it or begins after it is answered within
+    that span. Two operands with no end need a window.
+
     ### Returns
 
     * `true` or `false`; raises the error `union/3` would return for operands
-      that share no frame or have no spans.
+      that share no frame or have no spans, and a `Tempo.ConversionError`
+      for two operands with no end and no window.
 
     ### Examples
 
@@ -1386,10 +1395,18 @@ defmodule Tempo do
     def unquote(name)(a, b, options \\ []) do
       Options.check!(options, [:within], "Tempo.#{unquote(name)}/3")
 
-      case Algebra.aligned(a, b, options) do
-        {:ok, frame, pa, pb} -> Algebra.holds?(unquote(predicate), pa, pb, frame)
+      case Algebra.decided(unquote(predicate), a, b, options) do
+        {:ok, answer} -> answer
+        :compare -> compared(unquote(predicate), a, b, options)
         {:error, exception} -> raise exception
       end
+    end
+  end
+
+  defp compared(predicate, a, b, options) do
+    case Algebra.aligned(a, b, options) do
+      {:ok, frame, pa, pb} -> Algebra.holds?(predicate, pa, pb, frame)
+      {:error, exception} -> raise exception
     end
   end
 
