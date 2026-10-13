@@ -34,6 +34,10 @@ defmodule Tempo.InvalidDateError do
     do: "#{value}, outside the #{low} to #{high} its calendar gives it"
 
   defp describe(:no_such_date), do: "a date the calendar does not have"
+
+  defp describe({:no_such_date, day}),
+    do: "#{day}, a day the calendar does not have in that month"
+
   defp describe(:skipped_by_the_clock), do: "a reading the zone's clock skips"
   defp describe(:needs_a_year), do: "a value that cannot be told without a year"
   defp describe(reason) when is_binary(reason), do: reason

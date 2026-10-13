@@ -62,6 +62,11 @@ defmodule Tempo.Validate do
   defp member(%Tempo{} = member), do: form(member.form, member)
   defp member(%Duration{}), do: :ok
 
+  # A clock end of a span may be written 24:00 where the day cycle has no next day to begin.
+  defp end_of(%Tempo{form: {:value, [{:hour, 24} | finer]}} = value, _expression)
+       when finer == [] or finer == [minute: 0] or finer == [minute: 0, second: 0],
+       do: form({:value, [{:hour, 23} | finer]}, value)
+
   defp end_of(%Tempo{form: form} = value, _expression), do: form(form, value)
   defp end_of(_duration_or_open_or_count, _expression), do: :ok
 
@@ -97,6 +102,7 @@ defmodule Tempo.Validate do
   defp unit(unit, held, units, calendar) do
     case bounds(unit, held, units, calendar) do
       nil -> :ok
+      {:dates, year, month} -> within(held, {:dates, year, month}, calendar)
       {low, high} -> within(held, low, high)
     end
   end
@@ -113,11 +119,13 @@ defmodule Tempo.Validate do
   defp bounds(:traditional_month, _held, units, calendar),
     do: bounds(:month, nil, units, calendar)
 
+  # A day of a known month is a date the calendar has or has not: a reform
+  # calendar's September 1752 has the 2nd and the 14th and none between.
   defp bounds(:day, _held, units, calendar) do
     case {whole(units, :year), whole(units, :month)} do
       {year, month} when is_integer(year) and is_integer(month) ->
         if month in 1..Calendar.months_in_year(calendar, year),
-          do: {1, Calendar.days_in_month(calendar, year, month)},
+          do: {:dates, year, month},
           else: nil
 
       {_year, month} when is_integer(month) ->
@@ -194,6 +202,18 @@ defmodule Tempo.Validate do
 
   # ── What a unit holds, against its bounds ─────────────────────────────
 
+  defp within(n, {:dates, year, month}, calendar) when is_integer(n) and n > 0 do
+    if Calendar.valid_date?(calendar, year, month, n),
+      do: :ok,
+      else: {:error, {:no_such_date, n}}
+  end
+
+  defp within(n, {:dates, year, month}, calendar) when is_integer(n) and n < 0 do
+    if -n <= Calendar.days_in_month(calendar, year, month),
+      do: :ok,
+      else: {:error, {:out_of_range, n, 1..Calendar.days_in_month(calendar, year, month)}}
+  end
+
   defp within(n, low, high) when is_integer(n) do
     cond do
       n >= low and n <= high -> :ok
@@ -216,6 +236,13 @@ defmodule Tempo.Validate do
   end
 
   defp within(_shape, _low, _high), do: :ok
+
+  defp member_within(%Range{first: first, last: last}, {:dates, _, _} = dates, calendar) do
+    case within(first, dates, calendar) do
+      :ok -> within(last, dates, calendar)
+      error -> error
+    end
+  end
 
   defp member_within(%Range{first: first, last: last}, low, high) do
     case within(first, low, high) do

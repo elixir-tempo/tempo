@@ -82,21 +82,23 @@ defmodule Tempo.Core.ScaleTest do
     assert Scale.frame([year: 2026], nil, nil) == :floating
     assert Scale.frame([year: 2026], nil, hour: 2) == :utc
 
-    assert {:ok, {{10, 0, 0, 0}, {11, 0, 0, 0}}} =
-             Scale.extent([hour: 10], Calendar.ISO, nil, nil)
+    # A position on a cycle is ticks from the cycle's start, on the longest
+    # cycle: the months before June have 152 days at most, the whole year 366.
+    hour = 3600 * @second
 
-    assert {:ok, {{6, 15, 0, 0, 0, 0}, {6, 16, 0, 0, 0, 0}}} =
-             Scale.extent([month: 6, day: 15], Calendar.ISO, nil, nil)
+    assert Scale.extent([hour: 10], Calendar.ISO, nil, nil) == {:ok, {10 * hour, 11 * hour}}
 
-    assert {:ok, {{12, 31, 0, 0, 0, 0}, {12, 32, 0, 0, 0, 0}}} =
-             Scale.extent([month: 12, day: 31], Calendar.ISO, nil, nil)
+    assert Scale.extent([month: 6, day: 15], Calendar.ISO, nil, nil) ==
+             {:ok, {166 * @day, 167 * @day}}
 
-    assert {:ok, {{23, 59, 0, 0}, {23, 60, 0, 0}}} =
-             Scale.extent([hour: 23, minute: 59], Calendar.ISO, nil, nil)
+    assert Scale.extent([month: 12, day: 31], Calendar.ISO, nil, nil) ==
+             {:ok, {365 * @day, 366 * @day}}
 
-    assert {:ok, {{3, 0, 0, 0, 0}, {4, 0, 0, 0, 0}}} =
-             Scale.extent([day_of_week: 3], Calendar.ISO, nil, nil)
+    assert Scale.extent([hour: 23, minute: 59], Calendar.ISO, nil, nil) ==
+             {:ok, {23 * hour + 59 * 60 * @second, 24 * hour}}
 
-    assert Scale.compare({22, 0, 0, 0}, {23, 0, 0, 0}) == :lt
+    assert Scale.extent([day_of_week: 3], Calendar.ISO, nil, nil) == {:ok, {2 * @day, 3 * @day}}
+    assert Scale.cycle_length(:month, Calendar.ISO) == {:ok, 366 * @day}
+    assert Scale.compare(22 * hour, 23 * hour) == :lt
   end
 end

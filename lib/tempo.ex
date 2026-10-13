@@ -14,8 +14,11 @@ defmodule Tempo do
 
   """
 
+  alias Tempo.ConversionError
   alias Tempo.InvalidCalendarError
+  alias Tempo.Limit
   alias Tempo.Reader
+  alias Tempo.Spans
   alias Tempo.Unit
   alias Tempo.Validate
   alias Tempo.Writer
@@ -302,6 +305,197 @@ defmodule Tempo do
       {:error, exception} -> raise exception
     end
   end
+
+  # ── Spans, members and walks ──────────────────────────────────────────
+
+  @doc """
+  The interval an expression denotes: a singular expression's one span, or
+  a set of the spans of a plural one.
+
+  A value is the span from itself through itself when written to a calendar
+  unit, and to the next reading when written to a clock unit (law 3). A
+  written interval has its duration end made a value, and an open end placed
+  by the `:within` window if one is given. A recurrence, a set and a value
+  with a set, a mask or a group in a unit are a set of the spans of their
+  members, in order.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a singular expression whose extent bounds a sequence with no
+    end of its own (a recurrence with no count) and places a value with no
+    year on each of its periods.
+
+  ### Returns
+
+  * `{:ok, interval}`, a `t:t/0` of the `:span` form, or of the `:all` form
+    for a plural expression.
+
+  * `{:error, %Tempo.ConversionError{}}` for a duration, a one-of set, a
+    recurrence with no count and no window, a value with no year and no
+    window, or more members than `Tempo.Limit.values/0` allows at once.
+
+  ### Examples
+
+      iex> Tempo.to_interval(~o"2026-06")
+      {:ok, ~o"2026-06/2026-06"}
+
+      iex> Tempo.to_interval(~o"2026-06-15T10")
+      {:ok, ~o"2026-06-15T10/2026-06-15T11"}
+
+      iex> Tempo.to_interval(~o"2026-06-01/P1M")
+      {:ok, ~o"2026-06-01/2026-06-30"}
+
+      iex> Tempo.to_interval(~o"2026Y{1,3}M")
+      {:ok, ~o"{2026-01/2026-01,2026-03/2026-03}"}
+
+      iex> Tempo.to_interval(~o"R3/2026-01-31/P1M")
+      {:ok, ~o"{2026-01-31/2026-02-27,2026-02-28/2026-03-27,2026-03-31/2026-04-29}"}
+
+      iex> Tempo.to_interval(~o"6M15D", within: ~o"2026")
+      {:ok, ~o"2026-06-15/2026-06-15"}
+
+      iex> {:error, %Tempo.ConversionError{reason: :bare_duration}} = Tempo.to_interval(~o"P1M")
+
+      iex> {:error, %Tempo.ConversionError{reason: :unbounded}} = Tempo.to_interval(~o"R/2026-01-01/P1Y")
+
+  """
+  @spec to_interval(t() | Tempo.Duration.t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def to_interval(expression, options \\ [])
+
+  def to_interval(%Tempo.Duration{} = duration, _options),
+    do: {:error, ConversionError.exception(value: duration, reason: :bare_duration)}
+
+  def to_interval(%__MODULE__{form: {:every, _, :infinity, _}} = recurrence, options) do
+    if Keyword.has_key?(options, :within),
+      do: plural_interval(recurrence, options),
+      else: {:error, ConversionError.exception(value: recurrence, reason: :unbounded)}
+  end
+
+  def to_interval(%__MODULE__{} = expression, options) do
+    if Spans.singular?(expression),
+      do: singular_interval(expression, options),
+      else: plural_interval(expression, options)
+  end
+
+  defp singular_interval(expression, options) do
+    with {:ok, spans} <- Spans.spans(expression, options) do
+      case Enum.to_list(spans) do
+        [span] -> {:ok, span}
+        spans -> {:ok, set_of(spans, expression)}
+      end
+    end
+  end
+
+  defp plural_interval(expression, options) do
+    with {:ok, spans} <- Spans.spans(expression, options),
+         {:ok, spans} <- bounded(spans, expression) do
+      {:ok, set_of(spans, expression)}
+    end
+  end
+
+  # At most `Tempo.Limit.values/0` of a sequence, or the error that says there are more.
+  defp bounded(enumerable, expression) do
+    limit = Limit.values()
+
+    case Enum.take(enumerable, limit + 1) do
+      taken when length(taken) > limit ->
+        {:error, ConversionError.exception(value: expression, reason: :too_many_values)}
+
+      taken ->
+        {:ok, taken}
+    end
+  end
+
+  defp set_of(spans, expression),
+    do: %__MODULE__{
+      form: {:all, spans},
+      calendar: expression.calendar,
+      zone: expression.zone,
+      metadata: expression.metadata
+    }
+
+  @doc """
+  The members of an expression (law 6): the values a value with a set, a
+  mask or a group in a unit allows; the members of a set; the occurrences
+  of a recurrence; a singular expression itself.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  * `options` is a keyword list; `:within` as for `to_interval/2`.
+
+  ### Returns
+
+  * `{:ok, members}`, a list of `t:t/0`.
+
+  * `{:error, %Tempo.ConversionError{}}` as for `to_interval/2`.
+
+  ### Examples
+
+      iex> Tempo.members(~o"2026Y{1,3}M")
+      {:ok, [~o"2026-01", ~o"2026-03"]}
+
+      iex> Tempo.members(~o"{2026-06,2026-08}")
+      {:ok, [~o"2026-06", ~o"2026-08"]}
+
+      iex> Tempo.members(~o"2026-06")
+      {:ok, [~o"2026-06"]}
+
+  """
+  @spec members(t() | Tempo.Duration.t(), keyword()) :: {:ok, [t()]} | {:error, error()}
+  def members(expression, options \\ []) do
+    with {:ok, members} <- Spans.members(expression, options), do: bounded(members, expression)
+  end
+
+  @doc """
+  An expression walked at a unit: the values of that unit its extent holds,
+  lazily and in order, half-open. A calendar unit steps on the day scale
+  through the calendar's periods; a clock unit on the tick scale, each tick
+  shown as a wall reading of the zone, so a day across a change of the clock
+  has 23 or 25 hours. A plural expression is each member walked in turn.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  * `unit` is a unit of `Tempo.Unit`: `:year`, `:month`, `:week`, `:day`,
+    `:hour`, `:minute`, `:second`, or `{:microsecond, precision}` for a part
+    of a second.
+
+  * `options` is a keyword list; `:within` as for `to_interval/2`.
+
+  ### Returns
+
+  * `{:ok, stream}`, an `Enumerable` of `t:t/0` values.
+
+  * `{:error, %Tempo.ConversionError{}}` for an expression with an open
+    start, no year, or no spans.
+
+  ### Examples
+
+      iex> {:ok, days} = Tempo.walk(~o"2026-06", :day)
+      iex> Enum.count(days)
+      30
+
+      iex> {:ok, hours} = Tempo.walk(~o"2026-03-29[Europe/Paris]", :hour)
+      iex> Enum.count(hours)
+      23
+
+      iex> {:ok, weeks} = Tempo.walk(~o"2026-06-01/2026-06-30", :week)
+      iex> Enum.map(weeks, &Tempo.to_iso8601!/1)
+      ["2026Y23W", "2026Y24W", "2026Y25W", "2026Y26W", "2026Y27W"]
+
+  """
+  @spec walk(t(), Tempo.Unit.t() | {:microsecond, 1..6}, keyword()) ::
+          {:ok, Enumerable.t()} | {:error, error()}
+  def walk(expression, unit, options \\ []), do: Spans.walk(expression, unit, options)
 
   defp calendar_of(calendar) do
     if Tempo.Calendar.calendar?(calendar),

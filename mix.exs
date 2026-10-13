@@ -212,14 +212,8 @@ defmodule Tempo.MixProject do
   defp deps do
     [
       {:nimble_parsec, "~> 1.0"},
-      # As for calendrical below: `Localize.Calendar.ISO` gains the five
-      # callbacks of the redesign's calendar contract in the local checkout
-      # until they are pushed.
-      {:localize, path: "../../localize/localize", override: true},
-      # Phase 0 of the redesign added callbacks to Calendrical that are not yet
-      # committed upstream; the branch reads the local checkout until they are
-      # pushed, when this returns to the github dependency pinned by mix.lock.
-      {:calendrical, path: "../../localize/calendrical", override: true},
+      {:localize, github: "elixir-localize/localize", branch: "main", override: true},
+      {:calendrical, github: "elixir-localize/calendrical", branch: "main", override: true},
       {:astro, "~> 2.7"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},

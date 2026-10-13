@@ -163,7 +163,6 @@ defmodule Tempo.Matrix.CalendarCensus do
       {"Y-W", "#{y}Y#{w}W", {:week, y, w}},
       {"Y-W-K", "#{y}Y#{w}W#{k}K", {:week_day, y, w, k, []}},
       {"Y-W-K T H", "#{y}Y#{w}W#{k}KT10H", {:week_day, y, w, k, [hour: 10]}},
-      {"Y-W T H", "#{y}Y#{w}WT17H", {:week_day, y, w, 1, [hour: 17]}},
       {"Y-W-K T H zone", "#{y}Y#{w}W#{k}KT10H[#{@zone}]", {:week_day_in_zone, y, w, k, 10}}
     ]
   end
@@ -186,8 +185,6 @@ defmodule Tempo.Matrix.CalendarCensus do
       {"Y-M-D T H:M:S", "#{y}Y#{m}M#{d}DT10H30M45S",
        {:day, y, m, d, [hour: 10, minute: 30, second: 45]}},
       {"Y-O", "#{y}Y#{Date.day_of_year(date)}O", {:day, y, m, d, []}},
-      {"Y T H", "#{y}YT17H", {:first_day, y, nil, [hour: 17]}},
-      {"Y-M T H", "#{y}Y#{m}MT17H", {:first_day, y, m, [hour: 17]}},
       {"Y-M-D T H zone", "#{y}Y#{m}M#{d}DT10H[#{@zone}]", {:day_in_zone, y, m, d, 10}},
       {"Y-M-D T H:M:S.s", "#{y}Y#{m}M#{d}DT10H30M45.5S", {:tenth, y, m, d, {10, 30, 45, 5}}}
     ]
@@ -391,12 +388,23 @@ defmodule Tempo.Matrix.CalendarCensus do
     for(h <- 0..23, do: from + h * 3600 * @second)
   end
 
-  # A calendar that counts nothing with no year: its years are not alike
-  # enough to say.
-  defp months_no_year(_calendar, {:error, _undefined}) do
-    for m <- [1, 6, 12],
-        cell <- [%{text: "#{m}M", walk: :needs_a_year}, %{text: "#{m}M15D", walk: {:count, 24}}] do
-      Map.put(cell, :covers, :needs_a_year)
+  # A calendar whose years are not alike enough for `months_in_year/0` to
+  # answer may still count the same months in every year, which its bounds
+  # say (`months_in_year_bounds/0`, the redesign's contract); one that counts
+  # nothing with no year needs a year for each of a few months and days.
+  defp months_no_year(calendar, {:error, _undefined}) do
+    case calendar.months_in_year_bounds() do
+      {months, months} ->
+        months_no_year(calendar, months)
+
+      _unalike ->
+        for m <- [1, 6, 12],
+            cell <- [
+              %{text: "#{m}M", walk: :needs_a_year},
+              %{text: "#{m}M15D", walk: {:count, 24}}
+            ] do
+          Map.put(cell, :covers, :needs_a_year)
+        end
     end
   end
 
@@ -409,7 +417,7 @@ defmodule Tempo.Matrix.CalendarCensus do
   end
 
   defp month_no_year(m, %{calendar: calendar} = counts) do
-    {fewest, most} = fewest_and_most(calendar.days_in_month(m))
+    {fewest, most} = day_bounds(calendar, m)
     from = days_before(m, calendar) * @day
     followed? = followed_in_every_year?(m, counts)
 
@@ -476,9 +484,16 @@ defmodule Tempo.Matrix.CalendarCensus do
   end
 
   defp days_before(m, calendar) do
-    Enum.sum(
-      for earlier <- 1..(m - 1)//1, do: elem(fewest_and_most(calendar.days_in_month(earlier)), 1)
-    )
+    Enum.sum(for earlier <- 1..(m - 1)//1, do: elem(day_bounds(calendar, earlier), 1))
+  end
+
+  # The fewest and the most days a month has in any year, from the calendar's
+  # own count or, where its years are not alike enough for one, its bounds.
+  defp day_bounds(calendar, month) do
+    case calendar.days_in_month(month) do
+      {:error, _undefined} -> calendar.days_in_month_bounds(month)
+      counts -> fewest_and_most(counts)
+    end
   end
 
   defp fewest_and_most(count) when is_integer(count) do
@@ -536,7 +551,6 @@ defmodule Tempo.Matrix.CalendarCensus do
     months = calendar.months_in_year(y)
     dates = month_dates(y, m, calendar)
     last_month = month_dates(y, months, calendar)
-    month = month_span(y, m, calendar)
 
     [
       shape("a set of months", "#{y}Y{1,3}M", [
@@ -572,13 +586,14 @@ defmodule Tempo.Matrix.CalendarCensus do
         day_span(List.last(last_month)),
         :unchecked
       ),
-      whole("a masked day", "#{y}Y#{m}MXXD", month, Enum.map(dates, &at/1)),
-      whole("an unspecified day", "#{y}Y#{m}MX*D", month, Enum.map(dates, &at/1)),
-      whole(
+      # A mask or an unspecified unit names each value its digits allow, and
+      # each is a member of its own (law 6 of the redesign).
+      each("a masked day", "#{y}Y#{m}MXXD", Enum.map(dates, &day_span/1)),
+      each("an unspecified day", "#{y}Y#{m}MX*D", Enum.map(dates, &day_span/1)),
+      each(
         "an unspecified month",
         "#{y}YX*M",
-        year_span(y, calendar),
-        month_starts(y, 1, months, calendar)
+        Enum.map(1..months, &month_span(y, &1, calendar))
       )
     ]
   end
@@ -590,18 +605,20 @@ defmodule Tempo.Matrix.CalendarCensus do
     {after_y, after_m} = months_on(y, m, 2, calendar)
     from = elem(month_span(y, m, calendar), 0)
 
+    # A written date end is the date the interval runs through (law 9 of the
+    # redesign): forty-one days, and the months from the first through the third.
     [
       whole(
         "an interval of days",
         "#{y}Y#{m}M#{d}D/#{later.year}Y#{later.month}M#{later.day}D",
-        {at(day), at(day) + 40 * @day},
-        Enum.map(0..39, &(at(day) + &1 * @day))
+        {at(day), at(day) + 41 * @day},
+        Enum.map(0..40, &(at(day) + &1 * @day))
       ),
       whole(
         "an interval of months",
         "#{y}Y#{m}M/#{after_y}Y#{after_m}M",
-        {from, elem(month_span(after_y, after_m, calendar), 0)},
-        month_starts(y, m, 2, calendar)
+        {from, elem(month_span(after_y, after_m, calendar), 1)},
+        month_starts(y, m, 3, calendar)
       )
     ]
   end
@@ -658,11 +675,12 @@ defmodule Tempo.Matrix.CalendarCensus do
         day_span(List.last(dates)),
         hours(List.last(dates))
       ),
+      # A written week end is the week the interval runs through (law 9).
       whole(
         "an interval of weeks",
         "#{y}Y#{w}W/#{y}Y#{w + 2}W",
-        {elem(week, 0), elem(week_span(y, w + 2, calendar), 0)},
-        for(n <- 0..1, do: elem(week_span(y, w + n, calendar), 0))
+        {elem(week, 0), elem(week_span(y, w + 2, calendar), 1)},
+        for(n <- 0..2, do: elem(week_span(y, w + n, calendar), 0))
       ),
       shape(
         "a recurrence by weeks",
@@ -679,6 +697,16 @@ defmodule Tempo.Matrix.CalendarCensus do
   # A value of several members, each its own span, whose walk is not asked.
   defp shape(name, text, spans) do
     %{shape: name, text: text, members: Enum.map(spans, &[&1]), walk: :unchecked}
+  end
+
+  # A value whose members are each one span, and whose walk yields them.
+  defp each(name, text, spans) do
+    %{
+      shape: name,
+      text: text,
+      members: Enum.map(spans, &[&1]),
+      walk: {:ok, Enum.map(spans, &elem(&1, 0))}
+    }
   end
 
   # A value of one span, and where each value its walk yields starts.

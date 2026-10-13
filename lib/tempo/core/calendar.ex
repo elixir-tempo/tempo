@@ -239,7 +239,13 @@ defmodule Tempo.Calendar do
 
   @doc "The weeks in a year of the calendar's own week system."
   @spec weeks_in_year(module(), Calendar.year()) :: pos_integer() | {:error, term()}
-  def weeks_in_year(calendar, year), do: impl(calendar).weeks_in_year(year)
+  def weeks_in_year(calendar, year) do
+    case impl(calendar).weeks_in_year(year) do
+      {:error, _} = error -> error
+      {weeks, _days_in_last_week} -> weeks
+      weeks when is_integer(weeks) -> weeks
+    end
+  end
 
   @doc "The days in a year."
   @spec days_in_year(module(), Calendar.year()) :: pos_integer() | {:error, term()}
@@ -271,10 +277,12 @@ defmodule Tempo.Calendar do
   def first_day(calendar, year: year, week: week),
     do: first_of(period(calendar, :week, year, week))
 
+  # The nth day of the week's own days, whatever day the calendar's week begins on.
   def first_day(calendar, year: year, week: week, day_of_week: day_of_week) do
-    with {:ok, {first, _}} <- period(calendar, :week, year, week) do
-      {y, m, d} = date(calendar, first)
-      {:ok, first + Integer.mod(day_of_week - day_of_week(calendar, y, m, d), 7)}
+    with {:ok, {first, after_last}} <- period(calendar, :week, year, week) do
+      if day_of_week in 1..(after_last - first)//1,
+        do: {:ok, first + day_of_week - 1},
+        else: {:error, :invalid_date}
     end
   end
 
@@ -282,9 +290,10 @@ defmodule Tempo.Calendar do
     do: first_of(month_week(calendar, year, month, week))
 
   def first_day(calendar, year: year, month: month, week: week, day_of_week: day_of_week) do
-    with {:ok, {first, _}} <- month_week(calendar, year, month, week) do
-      {y, m, d} = date(calendar, first)
-      {:ok, first + Integer.mod(day_of_week - day_of_week(calendar, y, m, d), 7)}
+    with {:ok, {first, after_last}} <- month_week(calendar, year, month, week) do
+      if day_of_week in 1..(after_last - first)//1,
+        do: {:ok, first + day_of_week - 1},
+        else: {:error, :invalid_date}
     end
   end
 

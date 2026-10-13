@@ -328,13 +328,17 @@ defmodule Tempo.Writer do
   defp same_marks?(from, to, units),
     do: Map.take(from.qualifications || %{}, units) == Map.take(to.qualifications || %{}, units)
 
+  # A second is not split from its fraction: `T10H30M45.5S/T45.6S`, not `/T0.6S`.
+  defp shared_prefix([{:second, held} | _], [{:second, held} | [{:microsecond, _}]], _previous),
+    do: 0
+
   defp shared_prefix([{unit, held} | from], [{unit, held} | to], previous) do
     if chained?(unit, previous), do: 1 + shared_prefix(from, to, unit), else: 0
   end
 
   defp shared_prefix(_from, _to, _previous), do: 0
 
-  defp chained?(unit, nil), do: unit in [:century, :decade, :year]
+  defp chained?(_unit, nil), do: true
   defp chained?(unit, previous), do: Unit.child(previous) == unit
 
   defp count(count) when is_integer(count), do: Integer.to_string(count)

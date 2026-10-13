@@ -146,7 +146,8 @@ defmodule Tempo.Unit do
   @type held ::
           integer()
           | [integer() | Range.t()]
-          | {:mask, [0..9 | :x]}
+          | {:mask, [0..9 | :x | :negative]}
+          | :any
           | {:group, held(), pos_integer()}
           | {integer(), [significant: pos_integer()]}
           | {integer(), [margin: pos_integer()]}
@@ -218,8 +219,7 @@ defmodule Tempo.Unit do
 
   defp chained([{unit, held} | rest], first, previous) do
     if compare(unit, first) == :lt and
-         ((previous == nil and unit in [:century, :decade, :year]) or
-            (previous != nil and follows?(unit, previous))),
+         (previous == nil or follows?(unit, previous)),
        do: [{unit, held} | chained(rest, first, unit)],
        else: []
   end
@@ -331,14 +331,20 @@ defmodule Tempo.Unit do
 
   @doc "The coarsest unit a value is written to."
   @spec coarsest(units()) :: t()
+  def coarsest([{:group, {_nth, [{unit, _size}]}} | _]), do: unit
   def coarsest(units), do: units |> hd() |> elem(0)
 
   @doc "Whether a value has a year, a decade or a century, and so a place on the time line."
   @spec anchored?(units()) :: boolean()
-  def anchored?(units),
-    do:
-      Keyword.has_key?(units, :year) or Keyword.has_key?(units, :decade) or
-        Keyword.has_key?(units, :century)
+  def anchored?(units) do
+    (Keyword.has_key?(units, :year) and Keyword.get(units, :year) != :any) or
+      Keyword.has_key?(units, :decade) or Keyword.has_key?(units, :century)
+  end
+
+  @doc "The units with an unspecified year (`X*Y6M`) left off: what places a value on a cycle."
+  @spec cyclic(units()) :: units()
+  def cyclic([{:year, :any} | rest]), do: rest
+  def cyclic(units), do: units
 
   @doc "Whether what a unit holds names one value, as a whole number does."
   @spec singular?(held()) :: boolean()
