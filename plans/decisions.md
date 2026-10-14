@@ -678,3 +678,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Option 1.
 
 * **State.** Designed and prototyped: `plans/carried-position.md`. A daily occurrence is about a quarter placing values and a fifth building them, so a second representation through the engine has a ceiling of about a quarter, at the cost decision 57 declined. The prototype builds plain recurrences with the rule walk's builder (`occurrence_at/4`), the first start placed once and each next start kept: 36 to 50% faster, one builder where two were in use. The design recommends keeping it, and a rule for review in place of a second representation: a step that finds a position hands it to the next step that needs it, within its module.
+
+## 63. What is kept of decision 62
+
+* **Question.** The design and prototype of decision 62 (`plans/carried-position.md`) measured a second representation of a value through the engine at a ceiling of about a quarter of an occurrence, and found plain recurrences built by a builder that placed their unchanging first start twice an occurrence. What is kept?
+
+* **Context.** The options were (1) keep the prototype, build no second representation, and hold the design's rule in review: a step that finds a position hands it to the next step that needs it, within its module; (2) keep the prototype and build the second representation; (3) revert the prototype.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** The prototype is kept: plain recurrences are built with the rule walk's builder, 36 to 50% faster. The rule is stated in `plans/carried-position.md` for reviews to hold.
