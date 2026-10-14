@@ -488,6 +488,24 @@ iex> ~o"2026-06" |> on(:monday) |> at(hour: 9)
 
 **Why.** One struct means every step can return a real expression: the pipeline can stop at any step and what it holds is usable, inspectable and writable, which a plan is not. A result passed on keeps Tempo's contract of returning its errors while still reading as one pipeline, and a value holds a selection as a recurrence does, so `on` and `at` mean one thing in both. The steps are English words because the test of an example is that it reads as a sentence a product manager would say.
 
+### What a value says of itself (decisions 49, 50 and 51)
+
+**The question.** A value can be uncertain or approximate, hold a group ("the second three months"), or leave a unit unspecified. Which of these are steps of the builder?
+
+**The alternatives.** For marks: `uncertain/2` and `approximate/2`, or one `qualified/3` step taking the mark; an interval's ends marked before they are joined, or in place by an option. For groups: a `grouped/3` step, or groups left to `Tempo.new/1`. For the rarer shapes: a step for an unspecified unit only, or steps for masks, margins and significant digits too.
+
+**The choice.** `uncertain/2` and `approximate/2`, marking the whole value or the units named, the two together `%`, and an interval's ends marked before they are joined; `grouped/3`; and `some/2` for an unspecified unit, with masks, margins and significant digits built by `Tempo.new/1`.
+
+```elixir
+iex> import Tempo.Builder
+iex> ~o"2026-06-15" |> uncertain() |> approximate()
+{:ok, ~o"2026Y6M15D%"}
+iex> grouped(~o"2026", 2, month: 3)
+{:ok, ~o"2026Y2G3MU"}
+```
+
+**Why.** Each step says a word a person says ("uncertain", "approximately", "the second three months", "some day"), and each makes the form the reader makes for the text that says it. A mark belongs to a value, so an interval's are given to its ends, as ISO 8601-2 writes them. The rarer shapes are left where their held form is already: a step for each would be a word nobody reaches for.
+
 ## Errors
 
 ### An argument that is no expression (decision 39)

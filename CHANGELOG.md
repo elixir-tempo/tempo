@@ -104,6 +104,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.Builder` builds an expression a step at a time, each step an expression: `every(:week) |> on(:monday) |> at(hour: 9) |> starting(~o"2026-06-01") |> times(10)`. See the building expressions guide.
 
+* `Tempo.Builder.uncertain/2`, `approximate/2`, `grouped/3` and `some/2` mark a value, name a group within it and leave a unit unspecified.
+
 * `Tempo.in_zone/2` takes a fixed offset as IXDTF writes one (`"+02:00"`).
 
 * `Tempo.new/1` takes a group (`group: {2, [month: 3]}`, `2026Y2G3MU`) and `:qualifications` (`%{month: :approximate}`, `2026Y6~M`).

@@ -169,6 +169,43 @@ iex> every(:month) |> on(:monday, nth: 2) |> at(hour: 9)
 {:ok, ~o"R/../P1M/FLL1K2INT9HN"}
 ```
 
+## What a value says of itself
+
+`uncertain/2` and `approximate/2` mark a value as ISO 8601-2's `?` and `~` do: the whole of it, or the units named. Both together are `%`.
+
+```elixir
+iex> uncertain(~o"2026-06-15")
+{:ok, ~o"2026Y6M15D?"}
+
+iex> ~o"2026-06-15" |> uncertain(:month) |> approximate(:day)
+{:ok, ~o"2026Y6?M15~D"}
+```
+
+> *"The 15th of June 2026, perhaps." "The 15th of June 2026: the month uncertain, the day approximate."*
+
+An interval's marks are on its ends, so each end is marked before the two are joined:
+
+```elixir
+iex> {:ok, from} = uncertain(~o"1984")
+iex> {:ok, to} = approximate(~o"2004")
+iex> until(from, to)
+{:ok, ~o"1984Y?/2004Y~"}
+```
+
+`grouped/3` names the nth group of a length within a value, and `some/2` a unit the value leaves unspecified:
+
+```elixir
+iex> grouped(~o"2026", 2, month: 3)
+{:ok, ~o"2026Y2G3MU"}
+
+iex> some(~o"2026-06", :day)
+{:ok, ~o"2026Y6MX*D"}
+```
+
+> *"The second three months of 2026." "Some day of June 2026."*
+
+A mask (`202X`), a margin (`2026±2Y`) and significant digits (`1950S2Y`) are rarer, and `Tempo.new/1` builds them from what each unit holds.
+
 ## Where it begins and ends
 
 `starting/2` gives a recurrence its first repeat, and `until/2` its last; `times/2` counts its occurrences instead, and `ending/2` counts them back from where they end.

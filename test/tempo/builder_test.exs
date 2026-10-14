@@ -103,6 +103,21 @@ defmodule Tempo.BuilderTest do
      )},
     {"R/../P1M/FLL1K2INT9HN", quote(do: every(:month) |> on(:monday, nth: 2) |> at(hour: 9))},
     {"R/../P1Y/FL1M1K2IN", quote(do: every(:year) |> on(:monday, nth: 2) |> on(month: 1))},
+    {"2026-06-15?", quote(do: uncertain(~o"2026-06-15"))},
+    {"2026-06-15~", quote(do: approximate(~o"2026-06-15"))},
+    {"2026-06-15%", quote(do: ~o"2026-06-15" |> uncertain() |> approximate())},
+    {"2026-?06-15", quote(do: uncertain(~o"2026-06-15", :month))},
+    {"2026Y6?M15~D", quote(do: ~o"2026-06-15" |> uncertain(:month) |> approximate(:day))},
+    {"1984?/2004~",
+     quote(do: until(elem(uncertain(~o"1984"), 1), elem(approximate(~o"2004"), 1)))},
+    {"{2026Y6M?,2026Y8M?}", quote(do: uncertain(~o"{2026-06,2026-08}"))},
+    {"2026Y2G3MU", quote(do: grouped(~o"2026", 2, month: 3))},
+    {"2026Y{1,2}G3MU", quote(do: grouped(~o"2026", [1, 2], month: 3))},
+    {"2026Y{1..2}G3MU", quote(do: grouped(~o"2026", 1..2, month: 3))},
+    {"2026Y6M2G10DU", quote(do: grouped(~o"2026-06", 2, day: 10))},
+    {"2026Y6MX*D", quote(do: some(~o"2026-06", :day))},
+    {"2026YX*M", quote(do: some(~o"2026", :month))},
+    {"2026YX*MX*D", quote(do: ~o"2026" |> some(:month) |> some(:day))},
     {"{R/2026-06-01/P1W,^2026-06-08}",
      quote(do: every(:week) |> starting(~o"2026-06-01") |> except(~o"2026-06-08"))},
     {"{R/2026-06-01/P1W,^2026-06-08,^2026-06-15}",
@@ -338,6 +353,41 @@ defmodule Tempo.BuilderTest do
                %{title: "Standup"},
                %{title: "Standup"}
              ]
+    end
+  end
+
+  describe "the steps of what a value says of itself" do
+    test "a mark changes no span" do
+      {:ok, marked} = ~o"2026-06-15" |> uncertain() |> approximate(:day)
+
+      assert Interval.instants(Tempo.to_interval!(marked)) ==
+               Interval.instants(Tempo.to_interval!(~o"2026-06-15"))
+    end
+
+    test "the second three months of a year are April to June" do
+      {:ok, second_quarter} = grouped(~o"2026", 2, month: 3)
+
+      assert Interval.instants(Tempo.to_interval!(second_quarter)) ==
+               {:ok,
+                {NaiveDateTime.new!(~D[2026-04-01], ~T[00:00:00]),
+                 NaiveDateTime.new!(~D[2026-07-01], ~T[00:00:00])}}
+    end
+
+    test "some day of a month is each of its days" do
+      {:ok, some_day} = some(~o"2026-02", :day)
+
+      assert some_day |> Tempo.to_interval!() |> IntervalSet.count() ==
+               Date.days_in_month(~D[2026-02-01])
+    end
+
+    test "what cannot be said is refused" do
+      assert {:error, %ArgumentError{}} = uncertain(~o"2026-06", :day)
+      assert {:error, %ArgumentError{}} = uncertain(~o"2026-06-01/2026-06-30")
+      assert {:error, %ArgumentError{}} = uncertain(~o"2026", "year")
+      assert {:error, %ArgumentError{}} = grouped(~o"2026", 0, month: 3)
+      assert {:error, %ArgumentError{}} = grouped(~o"2026", 2, month: 3, day: 1)
+      assert {:error, %ArgumentError{}} = some(~o"2026-06", :month)
+      assert {:error, %ArgumentError{}} = some(every(:week), :day)
     end
   end
 

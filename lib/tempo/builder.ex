@@ -32,6 +32,10 @@ defmodule Tempo.Builder do
   * What is selected in each repeat, or in a value: `on/3` for days,
     `at/2` for times of day, and `lasting/2` for days that run on.
 
+  * What a value says of itself: `uncertain/2` and `approximate/2`, a
+    group within it (`grouped/3`), and a unit it leaves unspecified
+    (`some/2`).
+
   * Where a recurrence begins and ends: `starting/2`, `until/2`,
     `times/2` and `ending/2`.
 
@@ -301,6 +305,163 @@ defmodule Tempo.Builder do
        ArgumentError.exception(
          "a time of day is its hours, minutes and seconds, or a value of them with no zone, not #{inspect(other)}"
        )}
+
+  @doc """
+  Marks a value uncertain, as ISO 8601-2's `?` does: the whole value, or
+  the units named. A unit marked uncertain and approximate is both (`%`).
+
+  ### Arguments
+
+  * `step` is a value or a set of them, or the result of the step before.
+    An interval's marks are on its ends: mark each value before joining
+    them with `until/2`.
+
+  * `units` is `:all`, the default, or a unit or list of units the value
+    has.
+
+  ### Returns
+
+  * `{:ok, expression}`, the value marked.
+
+  * `{:error, exception}` for an error passed on, a unit the value does not
+    have, or an expression that is no value.
+
+  ### Examples
+
+      iex> import Tempo.Builder
+      iex> uncertain(~o"2026-06-15")
+      {:ok, ~o"2026-06-15?"}
+
+      iex> import Tempo.Builder
+      iex> uncertain(~o"2026-06-15", :month)
+      {:ok, ~o"2026Y6?M15D"}
+
+      iex> import Tempo.Builder
+      iex> until(uncertain(~o"1984") |> elem(1), approximate(~o"2004") |> elem(1))
+      {:ok, ~o"1984?/2004~"}
+
+  """
+  @spec uncertain(step(), :all | Tempo.unit() | [Tempo.unit()]) :: result()
+  def uncertain(step, units \\ :all), do: marked(step, :uncertain, units)
+
+  @doc """
+  Marks a value approximate, as ISO 8601-2's `~` does: the whole value, or
+  the units named. A unit marked approximate and uncertain is both (`%`).
+
+  ### Arguments
+
+  * `step` is a value or a set of them, or the result of the step before.
+
+  * `units` is `:all`, the default, or a unit or list of units the value
+    has.
+
+  ### Returns
+
+  * `{:ok, expression}`, the value marked.
+
+  * `{:error, exception}` as for `uncertain/2`.
+
+  ### Examples
+
+      iex> import Tempo.Builder
+      iex> approximate(~o"2026-06")
+      {:ok, ~o"2026-06~"}
+
+      iex> import Tempo.Builder
+      iex> ~o"2026-06-15" |> uncertain() |> approximate()
+      {:ok, ~o"2026-06-15%"}
+
+  """
+  @spec approximate(step(), :all | Tempo.unit() | [Tempo.unit()]) :: result()
+  def approximate(step, units \\ :all), do: marked(step, :approximate, units)
+
+  defp marked(step, mark, units) do
+    with {:ok, expression} <- Build.expression(step),
+         {:ok, units} <- units_named(units),
+         do: Build.qualifying(expression, mark, units)
+  end
+
+  defp units_named(:all), do: {:ok, :all}
+  defp units_named(unit) when is_atom(unit), do: {:ok, [unit]}
+
+  defp units_named([_ | _] = units) do
+    if Enum.all?(units, &is_atom/1),
+      do: {:ok, units},
+      else: {:error, ArgumentError.exception("units are named by atoms, not #{inspect(units)}")}
+  end
+
+  defp units_named(other),
+    do:
+      {:error,
+       ArgumentError.exception("units are :all, a unit or a list of them, not #{inspect(other)}")}
+
+  @doc """
+  The nth group of a length within a value, as ISO 8601-2 writes one
+  (`2026Y2G3MU`): the second three months of 2026.
+
+  ### Arguments
+
+  * `step` is a value or a set of them, or the result of the step before.
+
+  * `nth` is which group: a number from 1, a list of them, or a range.
+
+  * `length` is the group's length, one unit and its count: `[month: 3]`.
+
+  ### Returns
+
+  * `{:ok, expression}`, the value with the group in it.
+
+  * `{:error, exception}` for an error passed on, a count that is none, a
+    length of no one unit, or a group the value cannot hold.
+
+  ### Examples
+
+      iex> import Tempo.Builder
+      iex> grouped(~o"2026", 2, month: 3)
+      {:ok, ~o"2026Y2G3MU"}
+
+      iex> import Tempo.Builder
+      iex> {:ok, second_ten_days} = grouped(~o"2026-06", 2, day: 10)
+      iex> second_ten_days |> Tempo.to_interval!() |> Tempo.Interval.instants()
+      {:ok, {~N[2026-06-11 00:00:00], ~N[2026-06-21 00:00:00]}}
+
+  """
+  @spec grouped(step(), pos_integer() | [pos_integer() | Range.t()] | Range.t(), keyword()) ::
+          result()
+  def grouped(step, nth, length) do
+    with {:ok, expression} <- Build.expression(step),
+         do: Build.grouping(expression, nth, length)
+  end
+
+  @doc """
+  A value with one of its units left unspecified, as ISO 8601-2's `X*`
+  writes one: some day of June 2026 is `2026Y6MX*D`.
+
+  ### Arguments
+
+  * `step` is a value or a set of them, or the result of the step before.
+
+  * `unit` is the unit left unspecified, one the value does not have.
+
+  ### Returns
+
+  * `{:ok, expression}`, the value with the unit unspecified.
+
+  * `{:error, exception}` for an error passed on, a unit the value already
+    has, or one it cannot have beside its others.
+
+  ### Examples
+
+      iex> import Tempo.Builder
+      iex> some(~o"2026-06", :day)
+      {:ok, ~o"2026Y6MX*D"}
+
+  """
+  @spec some(step(), Tempo.unit()) :: result()
+  def some(step, unit) do
+    with {:ok, expression} <- Build.expression(step),
+         do: Build.unspecifying(expression, unit)
+  end
 
   @doc """
   Where a recurrence begins: its first repeat is the one that holds this

@@ -10,7 +10,7 @@ defmodule Tempo.Build do
   # and `Tempo.IntervalSet.new/2` build are the parts these take.
 
   alias Tempo.{ConversionError, Duration, FrameError, InvalidCalendarError, Options, Spans}
-  alias Tempo.{Validate, Workdays}
+  alias Tempo.{Unit, Validate, Workdays}
 
   # The units a selection names, coarsest first, as a rule's parts are held.
   @units [
@@ -471,6 +471,114 @@ defmodule Tempo.Build do
 
   defp rule_options(nil), do: []
   defp rule_options(rule), do: [select: rule]
+
+  # ── A value's shapes ──────────────────────────────────────────────────
+
+  @doc """
+  A value marked as ISO 8601-2's `?` and `~` mark one: every unit it has
+  where `units` is `:all`, as a mark after the value does, or the units
+  named, as a mark on each does. A unit marked both ways is `:both` (`%`).
+  A set's members are each marked; an interval's ends are marked before
+  they are joined.
+  """
+  @spec qualifying(Tempo.t(), :uncertain | :approximate, :all | [Tempo.unit()]) ::
+          {:ok, Tempo.t()} | {:error, Exception.t()}
+  def qualifying(%Tempo{form: {:value, units}} = value, mark, :all),
+    do: qualifying(value, mark, for({unit, _} <- units, unit != :selection, do: unit))
+
+  def qualifying(%Tempo{form: {:value, units}} = value, mark, named) when is_list(named) do
+    case Enum.reject(named, &Keyword.has_key?(units, &1)) do
+      [] ->
+        marks =
+          Enum.reduce(
+            named,
+            value.qualifications || %{},
+            &Map.update(&2, &1, mark, fn held -> both(held, mark) end)
+          )
+
+        Validate.run(%{value | qualifications: marks})
+
+      missing ->
+        {:error, argument("#{inspect(value)} has no #{inspect(missing)} to mark")}
+    end
+  end
+
+  def qualifying(%Tempo{form: {kind, members}} = set, mark, units)
+      when kind in [:all, :one] and is_list(members) do
+    with {:ok, members} <- each_member(members, &qualifying(&1, mark, units)),
+         do: Validate.run(%{set | form: {kind, members}})
+  end
+
+  def qualifying(%Tempo{form: {:span, _from, _to}} = interval, _mark, _units),
+    do:
+      {:error,
+       argument(
+         "an interval's marks are on its ends: mark each value before joining them, not #{inspect(interval)}"
+       )}
+
+  def qualifying(%Tempo{} = other, _mark, _units),
+    do: {:error, argument("a value or a set of them is marked, not #{inspect(other)}")}
+
+  defp both(mark, mark), do: mark
+  defp both(_held, _mark), do: :both
+
+  @doc """
+  A value with a group in it, as `nGkUU` writes one: the nth group of a
+  length of a unit, counted in the units before it (`2026Y2G3MU`, the
+  second three months of 2026).
+  """
+  @spec grouping(Tempo.t(), term(), [{Tempo.unit(), pos_integer()}]) ::
+          {:ok, Tempo.t()} | {:error, Exception.t()}
+  def grouping(%Tempo{form: {:value, units}} = value, nth, [{unit, size}])
+      when is_integer(size) and size > 0 do
+    with {:ok, nth} <- nth_held(nth),
+         {:ok, units} <- Unit.ordered(units ++ [group: {nth, [{unit, size}]}]),
+         do: Validate.run(%{value | form: {:value, units}})
+  end
+
+  def grouping(%Tempo{form: {kind, members}} = set, nth, length)
+      when kind in [:all, :one] and is_list(members) do
+    with {:ok, members} <- each_member(members, &grouping(&1, nth, length)),
+         do: Validate.run(%{set | form: {kind, members}})
+  end
+
+  def grouping(%Tempo{form: {:value, _}}, _nth, length),
+    do: {:error, argument("a group's length is one unit and its count, not #{inspect(length)}")}
+
+  def grouping(%Tempo{} = other, _nth, _length),
+    do: {:error, argument("a value or a set of them has groups, not #{inspect(other)}")}
+
+  defp nth_held(nth) when is_integer(nth) and nth > 0, do: {:ok, nth}
+  defp nth_held(%Range{} = nth), do: {:ok, [nth]}
+
+  defp nth_held([_ | _] = nth) do
+    if Enum.all?(nth, &((is_integer(&1) and &1 > 0) or is_struct(&1, Range))),
+      do: {:ok, nth},
+      else: {:error, argument("a group is counted from 1, not #{inspect(nth)}")}
+  end
+
+  defp nth_held(other), do: {:error, argument("a group is counted from 1, not #{inspect(other)}")}
+
+  @doc """
+  A value with a unit it leaves unspecified, as `X*` writes one: some day
+  of June 2026 is `2026Y6MX*D`.
+  """
+  @spec unspecifying(Tempo.t(), Tempo.unit()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def unspecifying(%Tempo{form: {:value, units}} = value, unit) when is_atom(unit) do
+    with {:ok, units} <- Unit.ordered(units ++ [{unit, :any}]),
+         do: Validate.run(%{value | form: {:value, units}})
+  end
+
+  def unspecifying(%Tempo{form: {kind, members}} = set, unit)
+      when kind in [:all, :one] and is_list(members) do
+    with {:ok, members} <- each_member(members, &unspecifying(&1, unit)),
+         do: Validate.run(%{set | form: {kind, members}})
+  end
+
+  def unspecifying(%Tempo{} = other, unit),
+    do:
+      {:error,
+       argument("a value or a set of them has some #{inspect(unit)}, not #{inspect(other)}")}
 
   # ── A domain's calendar ───────────────────────────────────────────────
 

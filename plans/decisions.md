@@ -538,3 +538,33 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 1.
 
 * **State.** Built. The matrix's generated values are built from parts: `Tempo.Matrix.Shapes` holds each shape as what a unit holds and builds with `Tempo.new/1`, `Tempo.Interval.new/1` and `Tempo.every/2`; `Tempo.Matrix.Selections.value/1` builds each selection with `Tempo.selection/1` and `Tempo.on/2` (all 294 equal to what their old text read to); the census gives its forms, values with no year and shapes as parts its test builds; `test/tempo/matrix_written_test.exs` holds the reader to the writer's text of every value built. The RRULE measure takes its generated rules as the map `Tempo.RRule.from_rule/2` takes, reading text only for the standard's examples, an `UNTIL` at UTC read on the start's clock; the JSCalendar tests make each document as data and encode it, and the iCalendar tests write theirs whole. Building the matrix from parts needed two builders, added: `Tempo.new/1` takes a group (`group: {2, [month: 3]}`) and `:qualifications`; and found one defect, fixed: a recurrence whose start's year is a set (`R3/{2026,2028}Y6M15D/P1D`) was written but not read.
+
+## 49. The builder's steps for qualifications
+
+* **Question.** `Tempo.new/1` takes `:qualifications`, and `Tempo.Builder` had no step for them. How does a pipeline mark a value uncertain or approximate?
+
+* **Context.** Asked with decisions 50 and 51, finishing the builder. The reader marks every unit of a value for a mark after it (`2026-06-15?`) and one unit for a mark on it (`2026Y6?M`); an interval's marks are on its ends; `?` and `~` together are `%`. The options were (1) `uncertain/2` and `approximate/2`, marking the whole value or the units named, the two together `%`, a set's members each, and an interval refused with the instruction to mark its ends before joining them; (2) one step, `qualified(step, mark, units)`; (3) as 1, with an interval's ends marked in place by an option.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: `Tempo.Builder.uncertain/2` and `approximate/2` (`Tempo.Build.qualifying/3`), held to the reader's forms in `test/tempo/builder_test.exs`.
+
+## 50. The builder's step for a group
+
+* **Question.** How does a pipeline say "the second three months of 2026" (`2026Y2G3MU`)?
+
+* **Context.** With decision 49. The options were (1) `grouped(step, nth, length)`, `nth` a number, a list or a range; (2) the same as `group/3`; (3) no step, groups kept to `Tempo.new/1`.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: `Tempo.Builder.grouped/3` (`Tempo.Build.grouping/3`), its span held to `Date`.
+
+## 51. The builder's steps for unspecified units, masks, margins and significant digits
+
+* **Question.** Which of the rarer unit shapes have steps?
+
+* **Context.** With decision 49. The options were (1) `some(step, unit)` for an unspecified unit (`2026Y6MX*D`), with masks, margins and significant digits left to `Tempo.new/1`'s held forms; (2) as 1, named `unspecified/2`; (3) steps for all four.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: `Tempo.Builder.some/2` (`Tempo.Build.unspecifying/2`).
