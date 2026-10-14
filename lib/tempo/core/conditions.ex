@@ -11,7 +11,7 @@ defmodule Tempo.Conditions do
   # plain members' spans first, and the conditional members are judged
   # against those.
 
-  alias Tempo.{Duration, Limit, Select, Spans}
+  alias Tempo.{Duration, Limit, Scale, Select, Spans}
 
   @doc "Whether a set member is conditional on the others."
   @spec conditional?(term()) :: boolean()
@@ -136,8 +136,7 @@ defmodule Tempo.Conditions do
 
   defp moved_falls_on?({:error, _}, _length, _falls_on), do: false
 
-  defp overlaps?({start, stop}, extents),
-    do: Enum.any?(extents, fn {s, e} -> s < stop and start < e end)
+  defp overlaps?(extent, extents), do: Enum.any?(extents, &Scale.overlap?(extent, &1))
 
   defp moved(%Tempo{form: {:span, from, _}} = span, stop, selector) do
     after_it = Spans.at_position(stop, from, :start, span.calendar, span.zone)

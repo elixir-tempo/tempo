@@ -530,7 +530,7 @@ defmodule Tempo.Algebra do
   @spec members_outside([positioned()], [positioned()]) :: [positioned()]
   def members_outside(a, b), do: Enum.reject(a, fn m -> Enum.any?(b, &overlapping?(m, &1)) end)
 
-  defp overlapping?(x, y), do: x.start < y.stop and y.start < x.stop
+  defp overlapping?(x, y), do: Scale.overlap?({x.start, x.stop}, {y.start, y.stop})
 
   # The one sweep: the operands' edges position by position, every close and
   # open at a position applied before the point after it is judged, with the

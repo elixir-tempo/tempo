@@ -101,6 +101,19 @@ defmodule Tempo.Scale do
   def compare(a, b) when a > b, do: :gt
   def compare(_a, _b), do: :eq
 
+  @doc """
+  Whether two half-open extents of one frame share an instant: each starts
+  before the other ends. An end that is `nil` is open.
+  """
+  @spec overlap?({position() | nil, position() | nil}, {position() | nil, position() | nil}) ::
+          boolean()
+  def overlap?({start_a, stop_a}, {start_b, stop_b}),
+    do: before?(start_a, stop_b) and before?(start_b, stop_a)
+
+  defp before?(nil, _stop), do: true
+  defp before?(_start, nil), do: true
+  defp before?(start, stop), do: start < stop
+
   @doc "The ticks in a day."
   @spec ticks_per_day() :: 86_400_000_000
   def ticks_per_day, do: @day

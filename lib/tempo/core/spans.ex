@@ -459,7 +459,7 @@ defmodule Tempo.Spans do
   defp overlapping({:ok, spans}, set, options) do
     case window_extent(window_in(options[:within], set)) do
       {:ok, {start, stop}} ->
-        {:ok, Stream.filter(spans, &overlaps_window?(extent(&1), start, stop))}
+        {:ok, Stream.filter(spans, &overlaps_window?(extent(&1), {start, stop}))}
 
       _none ->
         {:ok, spans}
@@ -468,10 +468,10 @@ defmodule Tempo.Spans do
 
   defp overlapping(error, _set, _options), do: error
 
-  defp overlaps_window?({:ok, {s, e}}, start, stop) when is_integer(s) and is_integer(e),
-    do: (stop == nil or s < stop) and (start == nil or e > start)
+  defp overlaps_window?({:ok, {s, e} = extent}, window) when is_integer(s) and is_integer(e),
+    do: Scale.overlap?(extent, window)
 
-  defp overlaps_window?(_extent, _start, _stop), do: true
+  defp overlaps_window?(_extent, _window), do: true
 
   defp member_spans(members, options) do
     case Enum.split_with(members, &Conditions.conditional?/1) do

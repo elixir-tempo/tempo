@@ -180,8 +180,8 @@ if Code.ensure_loaded?(JSCalendar) do
     defp replaced(id, spans, event, options) do
       with {:ok, at} <- at_zone(id, event.time_zone),
            {:ok, replacement} <- replacement(event, id, options) do
-        start = start_of(at)
-        {:ok, Enum.reject(spans, &(start_of(&1) == start)) ++ replacement}
+        start = Spans.start_position(at)
+        {:ok, Enum.reject(spans, &(Spans.start_position(&1) == start)) ++ replacement}
       end
     end
 
@@ -203,13 +203,6 @@ if Code.ensure_loaded?(JSCalendar) do
 
         {:error, reason} ->
           {:error, ConversionError.exception(value: id, reason: reason)}
-      end
-    end
-
-    defp start_of(%Tempo{} = expression) do
-      case Spans.extent(expression) do
-        {:ok, {start, _}} -> start
-        _ -> nil
       end
     end
 

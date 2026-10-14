@@ -191,7 +191,7 @@ defmodule Tempo.Select do
   end
 
   defp in_time_order({:ok, picked}),
-    do: {:ok, picked |> Enum.uniq() |> Enum.sort_by(&start_of/1) |> first_showings()}
+    do: {:ok, picked |> Enum.uniq() |> Enum.sort_by(&Spans.start_position/1) |> first_showings()}
 
   defp in_time_order(error), do: error
 
@@ -265,7 +265,7 @@ defmodule Tempo.Select do
     |> Enum.uniq()
     |> Enum.filter(&in_years?(&1, moves.years))
     |> rolled(moves.roll, options)
-    |> Enum.sort_by(&start_of/1)
+    |> Enum.sort_by(&Spans.start_position/1)
     |> first_showings()
     |> positioned(moves.instance)
   end
@@ -438,13 +438,6 @@ defmodule Tempo.Select do
     case Workdays.new(locale) do
       {:ok, workdays} -> workdays
       {:error, exception} -> raise exception
-    end
-  end
-
-  defp start_of(%Tempo{} = value) do
-    case Spans.extent(value) do
-      {:ok, {start, _}} when is_integer(start) -> start
-      _ -> 0
     end
   end
 
@@ -846,7 +839,7 @@ defmodule Tempo.Select do
         |> Stream.iterate(&next_of_unit(&1, unit))
         |> Stream.take_while(&(&1 != nil and before_end?(&1, ends)))
         |> Stream.flat_map(&picked_in(selector, %{&1 | metadata: base.metadata}, options))
-        |> Stream.filter(&(start_of(&1) >= start))
+        |> Stream.filter(&(Spans.start_position(&1) >= start))
 
       {:ok, picked}
     end
@@ -884,7 +877,7 @@ defmodule Tempo.Select do
   defp ends_at(_selector), do: nil
 
   defp before_end?(_period, nil), do: true
-  defp before_end?(period, ends), do: start_of(period) < ends
+  defp before_end?(period, ends), do: Spans.start_position(period) < ends
 
   # The period an endless base is taken in, one at a time: the unit the selector counts in.
   defp selector_unit(%Tempo{form: {:value, units}}) do
@@ -967,7 +960,7 @@ defmodule Tempo.Select do
         else: each_picked(selector, &apply_selector(&1, period, options))
 
     with {:ok, picked} <- picked do
-      {:ok, picked |> Enum.uniq_by(&Spans.extent/1) |> Enum.sort_by(&start_of/1)}
+      {:ok, picked |> Enum.uniq_by(&Spans.extent/1) |> Enum.sort_by(&Spans.start_position/1)}
     end
   end
 
