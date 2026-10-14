@@ -327,7 +327,16 @@ Tempo has no abstraction over `System.monotonic_time/0`. Elapsed time in benchma
 
 ### The current time
 
-Tempo reads the clock in four functions only — `Tempo.utc_now/0`, `Tempo.now/1`, `Tempo.utc_today/0` and `Tempo.today/1` — and through the `Tempo.Clock` behaviour, so a test gives its own process a clock that answers a fixed moment. Everything else in the library is a function of its arguments.
+Tempo reads the clock in four functions only — `Tempo.utc_now/0`, `Tempo.now/1`, `Tempo.utc_today/0` and `Tempo.today/1` — and through the `Tempo.Clock` behaviour, so a test pins the moment its own process reads. Everything else in the library is a function of its arguments.
+
+```elixir
+iex> Tempo.Clock.Test.put(~U[2026-06-15 23:30:00Z])
+iex> Tempo.Clock.Test.advance(3600)
+iex> Tempo.utc_today()
+~o"2026Y6M16D"
+```
+
+> *"Pin the clock at half past eleven on the fifteenth of June; an hour on, **today** is the sixteenth."*
 
 ---
 

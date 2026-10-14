@@ -15,6 +15,7 @@ defmodule TempoTest do
   doctest Tempo.RecurrenceSet
   doctest Tempo.Explain
   doctest Tempo.Clock
+  doctest Tempo.Clock.Test
   doctest Tempo.Workdays
   doctest Tempo.Territory
   doctest Tempo.Sigils

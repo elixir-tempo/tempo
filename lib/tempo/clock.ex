@@ -4,10 +4,9 @@ defmodule Tempo.Clock do
 
   `Tempo.utc_now/0`, `Tempo.now/1`, `Tempo.utc_today/0` and `Tempo.today/1`
   ask the clock configured under `:ex_tempo, :clock`, which by default is
-  `Tempo.Clock.System` and answers with `DateTime.utc_now/0`. A test swaps
-  in its own for the calling process with
-  `Process.put({Tempo.Clock, :clock}, MyClock)`, which leaves concurrent
-  tests their own.
+  `Tempo.Clock.System` and answers with `DateTime.utc_now/0`. A test pins
+  the time of its own process with `Tempo.Clock.Test.put/1`, which leaves
+  concurrent tests their own.
 
   """
 

@@ -192,7 +192,7 @@ The compiler finds every one of these.
 | the relations, predicates and lengths on `Tempo.Interval` | the same names on `Tempo` |
 | the `W` and other modifiers of `~o` | a `[u-ca=…]` suffix in the text |
 
-Each operation is documented on `Tempo` and nowhere else. The modules 1.6 listed as its engine (the tokenizer, the comparison of values, the RRULE expander, `Tempo.TimeZoneDatabase`, `Tempo.Clock.Test`) are no part of the API.
+Each operation is documented on `Tempo` and nowhere else. The modules 1.6 listed as its engine (the tokenizer, the comparison of values, the RRULE expander, `Tempo.TimeZoneDatabase`) are no part of the API. `Tempo.Clock.Test` is kept, and its `put/1` now makes it the test process's clock with no configuration.
 
 A search finds most of the renames before the compiler does:
 

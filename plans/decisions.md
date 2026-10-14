@@ -598,3 +598,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Option 1.
 
 * **State.** Built: `trunc/2`, `round/2` and `at_resolution/2` return `Tempo.ConversionError` with reason `{:not_written_in, unit}`, and extending a value to either unit is the same error, since a year begins in neither. Found with it and fixed: `at_resolution/2` appended a unit on another axis to the value (`2026Y6M1W`, `2026Y34M1D`, and `2026Y1K`, every Monday of 2026), and now names the period of that unit the value starts in, as `trunc/2` does; a weekday or a day of the year extended to the clock skipped the hour and the minute; a year extended to a quarter or a century to a decade raised `KeyError`.
+
+## 55. A clock for tests
+
+* **Question.** 1.6 documented `Tempo.Clock.Test` for pinning the current time in a test. 2.0 had dropped it, leaving a test to write a clock module and `Process.put({Tempo.Clock, :clock}, MyClock)`. Should 2.0 have one?
+
+* **Context.** Found in the 2.0 release review: the removal had no changelog entry, and the migration guide counted the module as engine. The options were (1) restore `Tempo.Clock.Test` with its 1.6 API, so a 1.6 suite migrates unchanged; (2) add `Tempo.Clock.put/1`; (3) leave it and document the `Process.put` route.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: `put/1`, `advance/1`, `reset/0` and `utc_now/0` as in 1.6. `put/1` also makes it the calling process's clock, so the 1.6 `config :ex_tempo, clock: Tempo.Clock.Test` is optional; a time asked or moved before one is pinned is a `Tempo.ClockError` with reason `:not_pinned`, where 1.6 raised a `RuntimeError`.
