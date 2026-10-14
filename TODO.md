@@ -28,7 +28,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **Companions on 2.0.** `tempo_sql` and `tempo_holidays` move to `~> 2.0` once it is on hex. `tempo_holidays` builds its rules with `Tempo.every/2` and `Tempo.selection/1`, where it wrote text to be read.
 
-* [ ] **Performance is not measured.** The reader, the walk, the set operations and the rule engine have no benchmarks against 1.6.4 (`attic/bench` holds the old ones). The reader no longer has a fast path for plain forms; whether it needs one is a measurement.
+* [ ] **Rule expansion is far slower than 1.6.4.** `bench/against_1_6_bench.exs` runs one set of cases against 1.6.4 and 2.0 (medians, 2026-10-14, after the first fixes below). Reading text is 30 times faster, and walking and writing a little faster. Relating and comparing two values take about 3 µs, where 1.6.4 took 0.2 to 1.2 µs. The set operations on two sets of 100 are about 3 times slower, and the expansion of a recurrence rule is 18 to 2,000 times slower: 50 yearly fourth Thursdays of November take 0.61 s, 240 last weekdays of a month 1.9 s, 720 hours 0.15 s. Each period of a rule is selected in afresh, and in a zone each asks the zone database tens of times, which `tz` answers by a linear search. Fixed so far: a reading of the clock named by number is found by arithmetic where the clock keeps one offset (`Expand.candidates/4`), and the children of a span whose offset is steady are found without the database (`Zone.steady_offset/4`), 8 to 20 times faster on rules. To consider: a rule's next period found from the last rather than searched for, the zone's offset cached across a period, and the selection of each period made once for the rule.
 
 ### Decisions for the user
 

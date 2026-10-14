@@ -126,6 +126,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* A time of day selected on a day a zone's clock goes back is each moment the clock shows it: the second showing of a repeated hour was dropped, and its minutes were not found.
+
 * An offset with seconds, as a local mean time has (`-07:52:58`), keeps them in the shift Tempo makes of it (`Z-7H52M58S`), where they were dropped.
 
 * A time shift a critical zone does not have then (`2022-07-08T00:14:07+00:00[!Europe/London]`) is a `Tempo.ZoneError` with reason `:inconsistent`, as RFC 9557 §3.4 requires; without the flag, or with `Z`, the moment stands.

@@ -247,9 +247,59 @@ defmodule Tempo.Expand do
 
   def candidates(_prefix, :group, held, _frame), do: {:error, {:group_size, held}}
 
-  def candidates(prefix, unit, held, frame) do
+  # A reading of the clock named by number (`T59M`), where the clock keeps
+  # one offset through the span, is found by arithmetic: the minute 59 of an
+  # hour without its other fifty-nine.
+  def candidates(prefix, unit, n, frame)
+      when unit in [:hour, :minute, :second] and is_integer(n) and n >= 0 do
+    case named_readings(prefix, unit, n, frame) do
+      {:ok, children} -> {:ok, children}
+      :walk -> walked(prefix, unit, n, frame)
+    end
+  end
+
+  def candidates(prefix, unit, held, frame), do: walked(prefix, unit, held, frame)
+
+  defp walked(prefix, unit, held, frame) do
     with {:ok, children} <- children(prefix, unit, frame), do: {:ok, select(held, children)}
   end
+
+  defp named_readings(prefix, unit, n, frame) do
+    if Unit.anchored?(prefix),
+      do: named_in(extent(prefix, frame), unit, n, frame),
+      else: :walk
+  end
+
+  defp named_in({:ok, {start, stop}}, unit, n, frame) when is_integer(start) and is_integer(stop),
+    do: named_at(steady(frame, start, stop), unit, n, start, stop)
+
+  defp named_in(_no_extent, _unit, _n, _frame), do: :walk
+
+  defp named_at({:ok, offset}, unit, n, start, stop),
+    do: {:ok, readings_at(n, unit, start, stop, offset)}
+
+  defp named_at(:changes, _unit, _n, _start, _stop), do: :walk
+
+  # The units of the span whose reading is n: every `cycle`th from the first.
+  defp readings_at(n, unit, start, stop, offset) do
+    step = Unit.ticks(unit)
+    cycle = if unit == :hour, do: 24, else: 60
+    first = Integer.floor_div(start + offset, step)
+    last = Integer.floor_div(stop - 1 + offset, step)
+
+    for k <- (first + Integer.mod(n - first, cycle))..last//cycle, k <= last do
+      {n, {max(k * step - offset, start), min((k + 1) * step - offset, stop)}}
+    end
+  end
+
+  # The offset a frame's clock keeps through a span: a floating clock's is
+  # none, and a named zone's is its own where it does not change there.
+  defp steady(%{zone: nil, shift: nil}, _start, _stop), do: {:ok, 0}
+
+  defp steady(%{zone: %Zone{} = zone, shift: shift}, start, stop),
+    do: Zone.steady_offset(zone, shift, start, stop)
+
+  defp steady(_frame, _start, _stop), do: :changes
 
   defp chunk_span([{_, {first, _}} | _] = chunk) do
     case List.last(chunk) do
@@ -614,7 +664,25 @@ defmodule Tempo.Expand do
   # where a zone's clock changes within it (`Tempo.Zone.unit_end/4`).
   defp tick_children(start, stop, unit, _prefix, %{zone: zone, shift: shift}) do
     step = Unit.ticks(unit)
+    children(Zone.steady_offset(zone, shift, start, stop), start, stop, unit, step, zone, shift)
+  end
 
+  # Where the clock keeps one offset through the span each unit runs to the
+  # next whole one on the clock, and its reading is the clock's at its start.
+  defp children({:ok, offset}, start, stop, unit, step, _zone, _shift) do
+    start
+    |> Stream.unfold(fn
+      tick when tick >= stop ->
+        nil
+
+      tick ->
+        ends = min(Integer.floor_div(tick + offset, step) * step + step - offset, stop)
+        {{reading(tick + offset, unit), {tick, ends}}, ends}
+    end)
+    |> Enum.to_list()
+  end
+
+  defp children(:changes, start, stop, unit, step, zone, shift) do
     start
     |> Stream.unfold(fn
       tick when tick >= stop ->
@@ -763,12 +831,26 @@ defmodule Tempo.Expand do
 
     with :ok <- expandable(units),
          {:ok, firsts} <- first_values(first, held, frame) do
-      {:ok, Enum.reduce(rest, Stream.map(firsts, &[{first, &1}]), &under_each(&1, &2, frame))}
+      descended = length(rest)
+
+      expanded =
+        rest
+        |> Enum.with_index(1)
+        |> Enum.reduce(Stream.map(firsts, &{[{first, &1}], frame}), fn {part, index}, found ->
+          under_each(part, found, index < descended)
+        end)
+        |> Stream.map(&elem(&1, 0))
+
+      {:ok, expanded}
     end
   end
 
-  defp under_each({unit, held}, prefixes, frame),
-    do: Stream.flat_map(prefixes, fn prefix -> under(prefix, unit, held, frame) end)
+  # Each prefix carries the frame its children are found in: a reading a
+  # zone's clock shows twice is the showing it was found in, so that the
+  # minutes of the second showing of an hour are found in that showing.
+  defp under_each({unit, held}, found, descends?),
+    do:
+      Stream.flat_map(found, fn {prefix, frame} -> under(prefix, unit, held, frame, descends?) end)
 
   defp expandable(units) do
     Enum.find_value(units, :ok, fn
@@ -845,10 +927,12 @@ defmodule Tempo.Expand do
     end)
   end
 
-  defp under(prefix, unit, held, frame) do
+  defp under(prefix, unit, held, frame, descends?) do
     case candidates(prefix, unit, held, frame) do
       {:ok, candidates} ->
-        for {value, span} <- candidates, do: expanded(prefix, unit, value, span, frame)
+        for {value, span} <- candidates,
+            do:
+              {expanded(prefix, unit, value, span, frame), showing(descends?, unit, span, frame)}
 
       {:error, _} ->
         []
@@ -868,6 +952,21 @@ defmodule Tempo.Expand do
   end
 
   defp expanded(prefix, unit, value, _span, _frame), do: prefix ++ [{unit, value}]
+
+  # The frame a unit of the clock that a zone shows twice is descended in:
+  # at the second showing, the shift the clock has then.
+  defp showing(true, unit, {start, _}, %{zone: %Zone{name: name} = zone, shift: nil} = frame)
+       when unit in [:hour, :minute, :second] and is_binary(name) and is_integer(start) do
+    {wall, offset} = Zone.wall_of_utc(zone, nil, start)
+    shown_again(Zone.offsets_at_wall(zone, wall), offset, frame)
+  end
+
+  defp showing(_descends?, _unit, _span, frame), do: frame
+
+  defp shown_again([first, offset], offset, frame) when first != offset,
+    do: %{frame | shift: Zone.shift_of(offset)}
+
+  defp shown_again(_offsets, _offset, frame), do: frame
 
   defp label_in_place?(prefix, unit) do
     case List.last(prefix) do

@@ -441,12 +441,42 @@ defmodule Tempo.Select do
   defp expanded(period, %Tempo{form: {:value, container}}, parts) do
     case Expand.expand(container ++ parts, Spans.frame_of(period)) do
       {:ok, values} ->
-        values |> Enum.take(Limit.values()) |> Enum.map(&as_value(period, &1))
+        values |> Enum.take(Limit.values()) |> Enum.map(&as_value(period, &1)) |> showings()
 
       {:error, _} ->
         []
     end
   end
+
+  # A reading a zone's clock shows twice is expanded twice, in the order the
+  # clock shows it; the second is the second showing, and carries the shift
+  # the clock has then, where the two would otherwise be one value.
+  defp showings(values) do
+    {shown, _seen} =
+      Enum.map_reduce(values, MapSet.new(), fn value, seen ->
+        if MapSet.member?(seen, value),
+          do: {second_showing(value), seen},
+          else: {value, MapSet.put(seen, value)}
+      end)
+
+    shown
+  end
+
+  defp second_showing(%Tempo{zone: %Zone{name: name} = zone, shift: nil} = value)
+       when is_binary(name) do
+    case Spans.extent(%{value | zone: nil}) do
+      {:ok, {wall, _}} when is_integer(wall) ->
+        shown_again(Zone.offsets_at_wall(zone, wall), value)
+
+      _no_reading ->
+        value
+    end
+  end
+
+  defp second_showing(value), do: value
+
+  defp shown_again([_first, second], value), do: %{value | shift: Zone.shift_of(second)}
+  defp shown_again(_one_or_a_gap, value), do: value
 
   # A value in the period's frame: a span's ends carry the shift, a value
   # itself; in a named zone the shift is the zone's at the value.

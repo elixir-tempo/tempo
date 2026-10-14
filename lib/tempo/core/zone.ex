@@ -33,6 +33,15 @@ defmodule Tempo.Zone do
   @second 1_000_000
   @day 86_400 * @second
 
+  # The longest span `steady_offset/4` answers for: no zone's offset has
+  # changed twice within it since 1900.
+  @steady_span 2 * @day
+
+  # Gregorian seconds at 0001-01-01T00:00:00, the floor below which no IANA rule exists.
+  @year_one_seconds :calendar.datetime_to_gregorian_seconds({{1, 1, 1}, {0, 0, 0}})
+  @before_year_one %{utc_offset: 0, std_offset: 0, zone_abbr: "LMT"}
+  @probe_seconds :calendar.datetime_to_gregorian_seconds({{2020, 1, 1}, {0, 0, 0}})
+
   @typedoc "A zone: an IANA name, or a fixed offset in minutes from UTC (`[+05:30]`), never both."
   @type t :: Tempo.zone()
 
@@ -263,6 +272,29 @@ defmodule Tempo.Zone do
   def unit_end(_zone, _shift, utc, step) when is_integer(utc) and is_integer(step),
     do: utc + step
 
+  @doc """
+  The offset a named zone's clock keeps through a span, where it keeps one:
+  `{:ok, offset}`, or `:changes`.
+
+  It is asked only of a span no longer than two days, and answered by the
+  offset at the span's first and last ticks: since 1900 no zone's offset
+  has changed twice within a week (the shortest gap in the database is 166
+  hours), so an offset the same at both ends of two days is the same
+  throughout. A shift that is not the zone's own says a moment the clock
+  did not show so, and is answered as a change, as `unit_end/4` takes it.
+  """
+  @spec steady_offset(t(), shift() | nil, tick(), tick()) :: {:ok, tick()} | :changes
+  def steady_offset(%__MODULE__{name: name} = zone, shift, start, stop)
+      when is_binary(name) and stop - start <= @steady_span do
+    offset = offset_at_utc(zone, start)
+
+    if offset_at_utc(zone, stop - 1) == offset and (shift == nil or shift_ticks(shift) == offset),
+      do: {:ok, offset},
+      else: :changes
+  end
+
+  def steady_offset(_zone, _shift, _start, _stop), do: :changes
+
   # A shift written beside a zone says which of two showings a reading is,
   # and is then the zone's offset there; one that is not the zone's gives a
   # moment the zone's clock did not show so, which is one unit long.
@@ -309,11 +341,6 @@ defmodule Tempo.Zone do
   # the offset is zero. With Elixir's UTC-only default, any zone name is
   # accepted at construction, and the operations that need the zone's rules
   # surface their own errors.
-
-  # Gregorian seconds at 0001-01-01T00:00:00, the floor below which no IANA rule exists.
-  @year_one_seconds :calendar.datetime_to_gregorian_seconds({{1, 1, 1}, {0, 0, 0}})
-  @before_year_one %{utc_offset: 0, std_offset: 0, zone_abbr: "LMT"}
-  @probe_seconds :calendar.datetime_to_gregorian_seconds({{2020, 1, 1}, {0, 0, 0}})
 
   @doc "The `Calendar.TimeZoneDatabase` Tempo asks."
   @spec database() :: Calendar.time_zone_database()
