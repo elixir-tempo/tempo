@@ -248,6 +248,56 @@ defmodule Tempo.WordsTest do
     end
   end
 
+  describe "to_relative_string/2 with no unit asked for" do
+    defp relative(text, from),
+      do: Tempo.to_relative_string(Tempo.from_iso8601!(text), from: Tempo.from_iso8601!(from))
+
+    # Decision 31. The written forms here are the examples of the decision.
+    test "counts in the largest unit of which a whole one lies between" do
+      assert relative("2026-01-01T00:01", "2025-12-31T23:59") == {:ok, "in 2 minutes"}
+      assert relative("2026-07-01T01:00", "2026-06-30T23:00") == {:ok, "in 2 hours"}
+      assert relative("2026-06-15T12:00:30", "2026-06-15T11:59:45") == {:ok, "in 45 seconds"}
+      assert relative("2026-06-14T12:00:00", "2026-06-15T12:00:00") == {:ok, "yesterday"}
+      assert relative("2026-06-16T00:30", "2026-06-15T23:30") == {:ok, "in 1 hour"}
+      assert relative("2026-02-01", "2026-01-31") == {:ok, "tomorrow"}
+      assert relative("2026-06-18", "2026-06-15") == {:ok, "in 3 days"}
+      assert relative("2026-06-30", "2026-06-01") == {:ok, "in 4 weeks"}
+      assert relative("2026-08-20", "2026-07-01") == {:ok, "next month"}
+      assert relative("2028-01-01", "2026-07-01") == {:ok, "in 2 years"}
+      assert relative("2024-03", "2026-07-15") == {:ok, "2 years ago"}
+      assert relative("2026-W40", "2026-06-17") == {:ok, "in 3 months"}
+      assert relative("2026-06-15T12:00:00", "2026-06-15T12:00:00") == {:ok, "now"}
+    end
+
+    test "never counts in a unit finer than the expression is written to" do
+      assert relative("2026", "2026-06-15") == {:ok, "this year"}
+      assert relative("2027", "2026-12-31") == {:ok, "next year"}
+      assert relative("2026-06", "2026-06-15") == {:ok, "this month"}
+      assert relative("2026-08", "2026-07-15") == {:ok, "next month"}
+      assert relative("2026-W26", "2026-06-17") == {:ok, "next week"}
+      assert relative("2026-06-15", "2026-06-15T12:00") == {:ok, "today"}
+      assert relative("2026-06-16", "2026-06-15T23:00") == {:ok, "tomorrow"}
+      assert relative("2026-06-15T12", "2026-06-15T12:30") == {:ok, "this hour"}
+      assert relative("2026-06-15T12:01", "2026-06-15T12:00:30") == {:ok, "in 1 minute"}
+      assert relative("2026-06-22/2026-06-26", "2026-06-21T23:00") == {:ok, "tomorrow"}
+    end
+
+    test "counts the hours that pass across a change of the clock" do
+      assert relative("2026-03-29T04[Europe/Paris]", "2026-03-29T01[Europe/Paris]") ==
+               {:ok, "in 2 hours"}
+
+      assert relative("2026-06-16T00:30[Europe/Paris]", "2026-06-15T23:00Z") ==
+               {:ok, "30 minutes ago"}
+    end
+
+    test "is the unit asked for where one is" do
+      {:ok, next_year} = Tempo.new(year: 2027)
+
+      assert Tempo.to_relative_string(next_year, from: value(~D[2026-07-01]), unit: :month) ==
+               {:ok, "in 6 months"}
+    end
+  end
+
   describe "to_relative_string/2 and where an expression starts" do
     test "a year, a month, a week and an interval are where they begin" do
       from = value(~D[2026-06-17])

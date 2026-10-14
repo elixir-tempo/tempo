@@ -355,3 +355,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 1. A shift the zone never has within the unit is still the moment itself.
 
 * **State.** Built: `Tempo.Zone.shown_from/4`. The day is in the table `test/tempo/change_of_the_clock_test.exs` holds to `DateTime`, twenty-two days now. The value is fifteen minutes long, `Tempo.to_datetime/1` of it is 02:45 at +12:45, and its interval is written `T2HZ12H45M/T3HZ12H45M`: its start as the value itself, which begins where the clock shows it, and not as `T2H45M`, as was said when the question was put.
+
+## 31. The unit relative words are counted in where none is asked for
+
+* **Question.** In which unit does `Tempo.to_relative_string/2` count the difference between an expression and what it is relative to, when the caller names no `:unit`?
+
+* **Context.** The rewrite counted in the first unit the two starts differ in. Porting the old tests of the words showed what that gives: `2026-01-01T00:01` from `2025-12-31T23:59` was "next year", `2026-07-01T01` from `2026-06-30T23` "next month", `2026-06-15T12:00:30` from `2026-06-15T11:59:45` "this hour", `2026` from `2026-06-15` "5 months ago", `2026-06` from `2026-06-15` "14 days ago", `2026-06-15` from `2026-06-15T12:00` "12 hours ago", and `2026-02-01` from `2026-01-31` "next month". The old suite's rule was the largest unit of which a whole one lies between the two, and never a unit finer than the expression's own, which gives "in 2 minutes", "in 2 hours", "in 45 seconds", "this year", "this month", "today" and "tomorrow" for the same. The options were (1) the old rule, (2) the first differing unit with its clock cases made consistent, and (3) to refuse where no unit is given.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built in `Tempo.Format`. The unit is the largest of year, month, week, day, hour, minute and second of which a whole one lies between the two starts (a year and a month by the calendar's own, from a day and a time to the same again), unless that is finer than the unit the expression is written to, which is then the unit. A year, a quarter, a month, a week and a day are counted by the calendar's periods on the expression's clock; an hour, a minute and a second by those that pass, so `2026-03-29T04[Europe/Paris]` is "in 2 hours" from `T01` of that day. A unit asked for is counted in as it is. `test/tempo/words_test.exs` holds the examples above and the old suite's.

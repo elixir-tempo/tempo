@@ -48,7 +48,7 @@ defmodule Tempo do
   @set_options [:within, :metadata]
   @words_options [:locale, :format, :within, :number_system, :prefer, :except]
   @relative_options [:from, :unit, :format, :locale, :numeric]
-  # No unit asked is the unit the two differ in.
+  # No unit asked is the largest of which a whole one lies between the two.
   @relative_units [nil, :year, :quarter, :month, :week, :day, :hour, :minute, :second]
 
   @enforce_keys [:form]
@@ -3648,8 +3648,13 @@ defmodule Tempo do
   A locale's words for where an expression starts relative to another:
   yesterday, in 3 hours, next year.
 
-  The difference is counted in the first unit the two starts differ in, on
-  the expression's own clock: 1 February is next month from 31 January.
+  Where no unit is asked for, the difference is counted in the largest unit
+  of which a whole one lies between the two starts, and never in one finer
+  than the expression is written to: two minutes across midnight are two
+  minutes, 1 February is tomorrow from 31 January, and the year a day is in
+  is this year. A year, a quarter, a month, a week and a day are counted by
+  the calendar's own on the expression's clock, and an hour, a minute and a
+  second by those that pass.
 
   ### Arguments
 
@@ -3695,8 +3700,17 @@ defmodule Tempo do
       iex> Tempo.to_relative_string(~o"2026-06-15T15:00:00Z", from: now)
       {:ok, "in 3 hours"}
 
+      iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31")
+      {:ok, "tomorrow"}
+
       iex> Tempo.to_relative_string(~o"2026-02-01", from: ~o"2026-01-31", unit: :month)
       {:ok, "next month"}
+
+      iex> Tempo.to_relative_string(~o"2026", from: ~o"2026-06-15")
+      {:ok, "this year"}
+
+      iex> Tempo.to_relative_string(~o"2026-01-01T00:01", from: ~o"2025-12-31T23:59")
+      {:ok, "in 2 minutes"}
 
       iex> {:error, %Tempo.ConversionError{reason: :needs_a_year}} = Tempo.to_relative_string(~o"T10:30", from: ~o"2026-06-15")
 

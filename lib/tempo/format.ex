@@ -17,7 +17,10 @@ defmodule Tempo.Format do
   alias Tempo.{Calendar, ConversionError, Duration, Limit, Shift, Spans, Unit, Walk}
 
   @to_minus " – "
-  @units [:year, :month, :day, :hour, :minute, :second]
+  # The units a difference is counted in, coarsest first.
+  @by_size [:year, :quarter, :month, :week, :day, :hour, :minute, :second]
+  # Those a whole one of which may lie between two starts.
+  @lying_between [:year, :month, :week, :day, :hour, :minute, :second]
   @day 86_400_000_000
 
   @doc "A locale's words for an expression or a duration."
@@ -276,8 +279,8 @@ defmodule Tempo.Format do
 
     with {:ok, there} <- reading(value, Spans.frame_of(value)),
          {:ok, here} <- reading(from, here_frame(from, value)) do
-      unit = unit || first_differing(there, here)
-      Relative.to_string(difference(there, here, unit), [unit: unit] ++ options)
+      {unit, count} = counted(unit, value, there, here)
+      Relative.to_string(count, [unit: unit] ++ options)
     end
   end
 
@@ -314,8 +317,71 @@ defmodule Tempo.Format do
       else: :ok
   end
 
-  defp first_differing(there, here),
-    do: Enum.find(@units, :second, &(there.units[&1] != here.units[&1]))
+  # A unit asked for is the unit counted in. Where none is, it is the
+  # largest of which a whole one lies between the two starts, and never one
+  # finer than the expression is written to: two minutes across midnight are
+  # two minutes, and the year a day is in is this year.
+  defp counted(nil, value, there, here) do
+    own = own_unit(value)
+    between = Enum.find(@lying_between, own, &whole?(there, here, &1))
+
+    if coarser?(between, own),
+      do: {between, difference(there, here, between)},
+      else: {own, periods(there, here, own)}
+  end
+
+  defp counted(unit, _value, there, here), do: {unit, difference(there, here, unit)}
+
+  defp coarser?(unit, other), do: size(unit) < size(other)
+
+  defp size(unit), do: Enum.find_index(@by_size, &(&1 == unit))
+
+  # The unit an expression is written to, among those counted in.
+  defp own_unit(%Tempo{form: {:value, _}} = value), do: counted_as(resolution(value))
+  defp own_unit(%Tempo{form: {:span, %Tempo{} = from, _}}), do: own_unit(from)
+  defp own_unit(_other), do: :second
+
+  defp counted_as(unit) when unit in [:century, :decade], do: :year
+  defp counted_as(unit), do: if(unit in @by_size, do: unit, else: :second)
+
+  # Whether a whole one of a unit lies between two starts: a year and a
+  # month by the calendar's own, from a day and a time to the same again.
+  defp whole?(there, here, :year) do
+    {earlier, later} = in_order(there, here)
+    reached = if within_year(later) < within_year(earlier), do: 1, else: 0
+    later.units[:year] - earlier.units[:year] - reached >= 1
+  end
+
+  defp whole?(there, here, :month) do
+    {earlier, later} = in_order(there, here)
+    reached = if within_month(later) < within_month(earlier), do: 1, else: 0
+    difference(later, earlier, :month) - reached >= 1
+  end
+
+  defp whole?(there, here, :week), do: abs(passed(there, here)) >= 7 * @day
+  defp whole?(there, here, :day), do: abs(passed(there, here)) >= @day
+  defp whole?(there, here, unit), do: abs(passed(there, here)) >= Unit.ticks(unit)
+
+  defp in_order(there, here),
+    do: if(passed(there, here) < 0, do: {there, here}, else: {here, there})
+
+  defp within_year(%{units: units} = reading),
+    do: {units[:month], units[:day], Integer.mod(reading.wall, @day)}
+
+  defp within_month(%{units: units} = reading), do: {units[:day], Integer.mod(reading.wall, @day)}
+
+  # The time that passes between two starts, and the periods of a unit of
+  # the clock it carries one into from the other: half past twelve is in
+  # the hour of twelve.
+  defp passed(%{line: :utc} = there, %{line: :utc} = here), do: there.at - here.at
+  defp passed(there, here), do: there.wall - here.wall
+
+  defp periods(there, here, unit) when unit in [:hour, :minute, :second] do
+    ticks = Unit.ticks(unit)
+    Integer.floor_div(Integer.mod(here.wall, ticks) + passed(there, here), ticks)
+  end
+
+  defp periods(there, here, unit), do: difference(there, here, unit)
 
   defp difference(there, here, :year), do: there.units[:year] - here.units[:year]
 
@@ -337,10 +403,7 @@ defmodule Tempo.Format do
 
   # Hours, minutes and seconds are those that pass: across a change of a
   # zone's clock that is not the difference of the two readings.
-  defp difference(%{line: :utc} = there, %{line: :utc} = here, unit),
-    do: div(there.at - here.at, Unit.ticks(unit))
-
-  defp difference(there, here, unit), do: div(there.wall - here.wall, Unit.ticks(unit))
+  defp difference(there, here, unit), do: div(passed(there, here), Unit.ticks(unit))
 
   defp day_of(%{wall: wall}), do: Integer.floor_div(wall, @day)
 
