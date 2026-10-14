@@ -651,14 +651,14 @@ defmodule Tempo.Spans do
 
   # Where the rule's parts next name a value from a position on, whatever
   # the cadence: looked for a year, a month or a day at a time, as far as the
-  # horizon. A nested selection is made in the period as a whole (the fifth
+  # horizon. A nested selection, or a set of them, is made in the period as a whole (the fifth
   # Sunday of a month, at nine), so its parts are looked for in the next period.
   defp next_named(tick, period, walk) do
     parts = picking(walk.parts)
 
     # A skip gives a period that names nothing a day of its own, so no
     # period is passed over to the next that names one.
-    every_period? = Keyword.has_key?(parts, :selection) or Keyword.has_key?(parts, :skip)
+    every_period? = Enum.any?([:selection, :all, :skip], &Keyword.has_key?(parts, &1))
 
     case {every_period?, Select.probe(parts)} do
       {true, _probe} -> tick
@@ -930,6 +930,7 @@ defmodule Tempo.Spans do
   defp with_nested(rule) do
     Enum.flat_map(rule, fn
       {:selection, nested} -> with_nested(nested)
+      {:all, each} -> Enum.flat_map(each, &with_nested/1)
       part -> [part]
     end)
   end

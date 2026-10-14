@@ -385,3 +385,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 1.
 
 * **State.** Built. `Tempo.Validate` refuses a value of a day or finer whose shift asserts a local time the critical zone has neither as the value begins nor as it ends (so either shift of a reading shown twice stands): a `Tempo.ZoneError` with reason `:inconsistent`. It holds at an end of an interval, a member of a set and the start of a recurrence, and for a critical offset written as the zone (`+08:45[!+08:00]`). `+00:00`, `+00` and `Z0H` are held as `[hour: 0, minute: 0]`, apart from `Z` (`[hour: 0]`), and written back as `Z0H0M`; `-00:00` is `Z`, as RFC 9557 section 2 has it. `test/tempo/zone_validation_test.exs` holds the section's figures.
+
+## 34. Numbered weekdays of several days in one rule
+
+* **Question.** How does Tempo read RFC 5545's `BYDAY=2MO,2WE`, the second Monday and the second Wednesday of each month, which it refused, as it refused `1MO,-1FR` and `MO,1TU`?
+
+* **Context.** ISO 8601-2 §12 allows "only one selection rule of the same kind within a selection rule set", and applies a position last, over everything selected, so `L{1,3}K2IN` is the second of the Mondays and Wednesdays taken together (3 June 2026), not the second of each (8 and 10 June). No single ISO 8601-2 selection says the rule. Several numbers on one weekday (`2TU,4TU`, `L2K{2,4}IN`) were read. The options were (1) a set of selections as a Tempo extension, `L{1K2I,3K2I}N`, whose values are taken together, with `COUNT`, `UNTIL`, `BYSETPOS` and times of day applying to them all, (2) a set of recurrences, one for each numbered weekday, which cannot express `COUNT` and is not one RRULE to write back, and (3) to keep refusing.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built. A selection holds `{:all, [parts, ...]}`, read from `{…,…}` inside `L…N` and written back so; `Tempo.selection/1` takes `all: [[...], ...]`. Each selection of the set is made in the period, or in each value the parts before it select (`L6M{1K1I,2K}N`, in June), and their values are taken in time order, a value two pick once; the parts after it select within each value, and a position after it counts among all it selects. `Tempo.RRule.parse/2` lowers numbered weekdays of several days, or numbered weekdays beside a `BYSETPOS`, to a set with one selection for each weekday (a weekday written plain beside a numbered one is every one of it), and `Tempo.RRule.to_string/1` writes it back as `BYDAY`. `test/tempo/selection_set_test.exs` holds it to `Date`, and `test/tempo/rrule_measure_test.exs` to the independent expander. The grammar guide and the conformance guides list it among Tempo's own extensions.

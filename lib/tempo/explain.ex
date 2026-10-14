@@ -130,6 +130,10 @@ defmodule Tempo.Explain do
     do: "each rolled to a weekday (#{String.replace(Atom.to_string(convention), "_", " ")})"
 
   defp part_words({:selection, parts}), do: "(#{parts_words(parts)})"
+
+  defp part_words({:all, each}),
+    do: "all of " <> Enum.map_join(each, " and ", &"(#{parts_words(&1)})")
+
   defp part_words({:window, %Duration{} = length}), do: "a window of #{Tempo.to_iso8601!(length)}"
   defp part_words({:day_of_year, held}), do: "day #{held_words(held, &counted/1)} of the year"
   defp part_words({unit, n}) when is_integer(n) and n < 0, do: "#{counted(n)} #{unit_name(unit)}"

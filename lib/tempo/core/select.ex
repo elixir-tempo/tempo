@@ -55,15 +55,31 @@ defmodule Tempo.Select do
   @spec in_period(Tempo.t(), parts(), keyword()) :: {:ok, [Tempo.t()]} | {:error, Exception.t()}
   def in_period(%Tempo{} = period, parts, options \\ []) do
     {before, nested, window, later} = around_nested(parts)
+    {position, later} = counted_among_all(nested, later)
 
     with :ok <- anchored(period),
          {:ok, {start, stop} = outer} <- bounded_extent(period),
          {:ok, periods} <-
            windows(scopes(period, before, outer, options), nested, window, options) do
-      {:ok,
-       Enum.flat_map(periods, &selected(&1, later, outer_of(&1, nested, {start, stop}), options))}
+      periods
+      |> Enum.flat_map(&selected(&1, later, outer_of(&1, nested, {start, stop}), options))
+      |> positioned(position)
+      |> then(&{:ok, &1})
     end
   end
+
+  # A position after a set of selections counts among all they select in
+  # the period, as a position counts last among what the rules before it
+  # select (ISO 8601-2 §12.9): the first of the second Mondays and second
+  # Wednesdays of a month is whichever comes first.
+  defp counted_among_all({:all, _each}, later) do
+    case Enum.split_with(later, &match?({:instance, _}, &1)) do
+      {[instance: position], later} -> {position, later}
+      {_none, _later} -> {nil, later}
+    end
+  end
+
+  defp counted_among_all(_nested, later), do: {nil, later}
 
   # A window a nested selection opens may run out of the period that made
   # it: the Friday before a New Year's Day is in the year before. What is
@@ -111,9 +127,12 @@ defmodule Tempo.Select do
   # each window it opens. With no nested selection every part selects in the
   # period.
   defp around_nested(parts) do
-    case Enum.split_while(parts, fn {key, _held} -> key != :selection end) do
+    case Enum.split_while(parts, fn {key, _held} -> key not in [:selection, :all] end) do
       {parts, []} ->
         {[], nil, nil, parts}
+
+      {before, [{:all, each} | later]} ->
+        {before, {:all, each}, nil, later}
 
       {before, [{:selection, nested} | rest]} ->
         {window, later} = Keyword.pop(rest, :window)
@@ -130,6 +149,17 @@ defmodule Tempo.Select do
   # from each value a nested selection picks in it.
   defp windows(scopes, nil, _window, _options), do: {:ok, scopes}
 
+  # A set of selections picks what each of its selections picks, in time
+  # order, a value two of them pick once.
+  defp windows(scopes, {:all, each}, nil, options) do
+    Enum.reduce_while(scopes, {:ok, []}, fn scope, {:ok, windows} ->
+      case all_picked(scope, each, options) do
+        {:ok, picked} -> {:cont, {:ok, windows ++ picked}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
   defp windows(scopes, nested, window, options) do
     Enum.reduce_while(scopes, {:ok, []}, fn scope, {:ok, windows} ->
       case in_period(scope, nested, options) do
@@ -138,6 +168,20 @@ defmodule Tempo.Select do
       end
     end)
   end
+
+  defp all_picked(scope, each, options) do
+    each
+    |> Enum.reduce_while({:ok, []}, fn parts, {:ok, picked} ->
+      case in_period(scope, parts, options) do
+        {:ok, more} -> {:cont, {:ok, picked ++ more}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> in_time_order()
+  end
+
+  defp in_time_order({:ok, picked}), do: {:ok, picked |> Enum.uniq() |> Enum.sort_by(&start_of/1)}
+  defp in_time_order(error), do: error
 
   defp windowed(value, nil, _period), do: value
 

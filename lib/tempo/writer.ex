@@ -249,6 +249,7 @@ defmodule Tempo.Writer do
     parts
     |> Enum.map(fn
       {:selection, inner} -> ["L", selection(inner), "N"]
+      {:all, each} -> ["{", Enum.map_intersperse(each, ",", &selection/1), "}"]
       {:window, duration} -> ["/", duration(duration)]
       {:instance, held} -> [value(held, :instance), "I"]
       {:skip, direction} -> ["(", Atom.to_string(direction), ")s"]

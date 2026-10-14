@@ -376,6 +376,7 @@ domain-filter   = set-all ("e" / "o" / "l" / "c")           ; Tempo, after a rec
 domain          = (set-all / set-one / exclusion / domain-filter)   ; Tempo: in a recurrence's interval slot, R/{2020Y..2024Y}/P1Y/…
 year-rule       = (negint / int-set / masked-valueE) "Y"     ; Tempo, in a selection: the years an occurrence may fall in, FL{2026,2028}Y1M1DN
 time-under-period = (year-only / year-month / week-basic / week-extended / monthE) time   ; Tempo: 2026T17, 2026-06T17, 6MT10H, that time on each day of the period
+selection-set   = "{" 1*selection-rule *("," 1*selection-rule) "}"   ; Tempo, in a selection: several selections whose values are taken together, L{1K2I,3K2I}N; a position after it counts among them all
 ```
 
 Tempo marks its selection extensions with a lowercase designator (`q`, `e`, `m`) so that they are visible at a glance as non-standard; `I` is uppercase because it is ISO 8601-2 §12.9.

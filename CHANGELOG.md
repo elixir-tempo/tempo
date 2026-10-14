@@ -82,6 +82,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Added
 
+* A set of selections, `L{1K2I,3K2I}N` and `Tempo.selection(all: [...])`: what each selects, taken together, so `BYDAY=2MO,2WE` is read and written back.
+
 * `Tempo.Allen`: the thirteen relations as predicates, `relation/2`, `inverse/1` and `compose/2`.
 
 * `Tempo.every/2`, `Tempo.selection/1` and `Tempo.one_of/1` build a recurrence, a selection and a one-of set from parts, so a program never writes text to have it read back.

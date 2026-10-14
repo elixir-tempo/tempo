@@ -172,6 +172,7 @@ defmodule Tempo.Validate do
   defp unknown_event(parts) do
     Enum.find_value(parts, fn
       {:selection, inner} -> unknown_event(inner)
+      {:all, each} -> Enum.find_value(each, &unknown_event/1)
       {:event, {name, _zone}} -> if name in Event.known(), do: nil, else: name
       _other -> nil
     end)

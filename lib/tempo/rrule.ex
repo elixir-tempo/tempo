@@ -614,17 +614,7 @@ defmodule Tempo.RRule do
       |> numbered_before_times(numbered, in_months? and not monthly_count?)
       |> windowed(duration)
 
-    cond do
-      Keyword.has_key?(parts, :unsupported) ->
-        {cadence,
-         {:error, argument("BYDAY with numbered weekdays of several days is not supported")}}
-
-      parts == [] ->
-        {cadence, {:ok, nil}}
-
-      true ->
-        {cadence, {:ok, parts}}
-    end
+    if parts == [], do: {cadence, {:ok, nil}}, else: {cadence, {:ok, parts}}
   end
 
   # A numbered weekday (`2MO`) is the nth of its weekday in the period, and
@@ -672,7 +662,7 @@ defmodule Tempo.RRule do
 
   defp push_byday(acc, %{byday: entries}, nil) do
     if Enum.any?(entries, fn {n, _} -> is_integer(n) end) do
-      [{:unsupported, :byday} | acc]
+      [{:all, weekday_selections(entries)} | acc]
     else
       case Enum.map(entries, &elem(&1, 1)) do
         [one] -> [{:day_of_week, one} | acc]
@@ -682,7 +672,23 @@ defmodule Tempo.RRule do
   end
 
   defp push_byday(acc, _rule, {day, _n}), do: [{:day_of_week, day} | acc]
+
   defp push_byday(acc, _rule, nil), do: acc
+
+  # Numbered weekdays of several days (`2MO,2WE`), or beside a BYSETPOS
+  # that counts among them all: a set of selections, one for each weekday,
+  # whose days are taken together. A weekday written plain beside a
+  # numbered one (`MO,1MO`) is every one of them.
+  defp weekday_selections(entries) do
+    entries
+    |> Enum.group_by(&elem(&1, 1), &elem(&1, 0))
+    |> Enum.sort_by(fn {day, _} -> Enum.find_index(entries, &(elem(&1, 1) == day)) end)
+    |> Enum.map(fn {day, numbers} ->
+      if nil in numbers,
+        do: [day_of_week: day],
+        else: [day_of_week: day, instance: one_or_list(numbers)]
+    end)
+  end
 
   defp push_instance(acc, %{bysetpos: positions}, _numbered),
     do: [{:instance, one_or_list(positions)} | acc]
@@ -695,9 +701,7 @@ defmodule Tempo.RRule do
   defp windowed(parts, nil), do: parts
 
   defp windowed(parts, %Duration{} = duration) do
-    if Keyword.has_key?(parts, :unsupported),
-      do: parts,
-      else: [selection: parts, window: duration]
+    [selection: parts, window: duration]
   end
 
   defp one_or_list([one]), do: one
@@ -898,15 +902,23 @@ defmodule Tempo.RRule do
 
   # A numbered weekday selected before the times of day is BYDAY's `2MO`.
   defp weekday_and_position(parts) do
-    case Keyword.pop(parts, :selection) do
-      {[day_of_week: day, instance: n], rest} when is_integer(day) ->
-        {day, n, rest}
+    case {Keyword.pop(parts, :all), Keyword.pop(parts, :selection)} do
+      {{[_ | _] = each, rest}, _selection} ->
+        {instance, rest} = Keyword.pop(rest, :instance)
+        {{:all, each}, instance, rest}
 
-      _no_numbered_weekday ->
-        {weekday, parts} = Keyword.pop(parts, :day_of_week)
-        {instance, parts} = Keyword.pop(parts, :instance)
-        {weekday, instance, parts}
+      {_no_set, selection} ->
+        weekday_and_position(selection, parts)
     end
+  end
+
+  defp weekday_and_position({[day_of_week: day, instance: n], rest}, _parts) when is_integer(day),
+    do: {day, n, rest}
+
+  defp weekday_and_position(_no_numbered_weekday, parts) do
+    {weekday, parts} = Keyword.pop(parts, :day_of_week)
+    {instance, parts} = Keyword.pop(parts, :instance)
+    {weekday, instance, parts}
   end
 
   defp frequency_of(%Tempo{
@@ -978,6 +990,10 @@ defmodule Tempo.RRule do
   # One weekday with one position is a numbered weekday; otherwise the
   # weekdays are plain and the positions BYSETPOS.
   defp byday_parts(nil, nil), do: []
+
+  defp byday_parts({:all, each}, instance),
+    do: ["BYDAY=" <> Enum.map_join(each, ",", &weekday_codes/1)] ++ byday_parts(nil, instance)
+
   defp byday_parts(nil, instance), do: ["BYSETPOS=#{listed(instance)}"]
 
   defp byday_parts(day, instance) when is_integer(day) and is_integer(instance),
@@ -998,6 +1014,11 @@ defmodule Tempo.RRule do
 
     ["BYDAY=#{codes}"] ++ byday_parts(nil, instance)
   end
+
+  defp weekday_codes(day_of_week: day), do: @weekday_codes[day]
+
+  defp weekday_codes(day_of_week: day, instance: numbers),
+    do: numbers |> List.wrap() |> Enum.map_join(",", &"#{&1}#{@weekday_codes[day]}")
 
   defp no_rrule(expression, what),
     do: ConversionError.exception(value: expression, reason: {:no_rrule, what})

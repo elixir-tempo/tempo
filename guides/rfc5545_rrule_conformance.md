@@ -45,7 +45,7 @@ iex> Tempo.to_iso8601(rule)
 | `COUNT` | ✓ | Not beside `UNTIL`. Counts from the rule's start. |
 | `UNTIL` | ✓ | A date or a date and time; the last occurrence may begin on it. |
 | `BYSECOND`, `BYMINUTE`, `BYHOUR` | ✓ | |
-| `BYDAY` | ✓ | Weekdays, and one weekday with numbers (`2MO`, `-1FR`, `1MO,3MO`). Numbered weekdays of several days (`2MO,2WE`) are not read. |
+| `BYDAY` | ✓ | Weekdays, numbered weekdays (`2MO`, `-1FR`, `1MO,3MO`), and numbered weekdays of several days (`2MO,2WE`, `1MO,-1FR`), read as a set of selections, `L{1K2I,3K2I}N`, one for each weekday. |
 | `BYMONTHDAY` | ✓ | From 1, or from -1 back from the end of the month. |
 | `BYYEARDAY` | ✓ | From 1, or from -1 back from the end of the year. |
 | `BYWEEKNO` | ✓ | ISO 8601 weeks; from -1 back from the year's last. |
@@ -260,8 +260,6 @@ An occurrence's length is no part of an RRULE and is not written; iCalendar carr
 ## Not read
 
 `Tempo.RRule.parse/2` returns `{:error, %ArgumentError{}}` that names what it does not read, rather than a rule that is nearly it:
-
-* **Numbered weekdays of several days in one `BYDAY`** (`BYDAY=2MO,2WE`).
 
 * **`EXRULE`**, which RFC 5545 deprecated in favour of `EXDATE`.
 

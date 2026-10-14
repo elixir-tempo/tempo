@@ -292,6 +292,7 @@ Tempo marks the designators it adds with a lowercase letter, so that they are se
 | A week start, `[u-fw=sun]` | `2026-W25[u-fw=sun]` | the day the expression's weeks begin on, a suffix of the whole expression (BCP 47's `fw`) |
 | A roll to a weekday, `(…)r` | `FL31D(modified-nearest)rN` | each day selected moved to a weekday of the locale's working week, by a convention |
 | A skip, `(…)s` | `FL2M29D(forward)sN` | what is taken for a day or a month the year lacks: the next there is, or the last before it (RFC 7529's `SKIP`) |
+| A set of selections, `{…}` | `L{1K2I,3K2I}N` | what each selection picks, taken together: the second Monday and the second Wednesday, RFC 5545's `BYDAY=2MO,2WE`. ISO 8601-2 has one rule of a kind in a selection, and its position counts among everything selected |
 
 ### Computed events
 

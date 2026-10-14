@@ -200,14 +200,16 @@ iex> unread = fn rule ->
 ...>   {:error, error} = Tempo.RRule.parse(rule, from: ~o"2026-01-01")
 ...>   Exception.message(error)
 ...> end
-iex> unread.("FREQ=MONTHLY;BYDAY=2MO,2WE")
-"BYDAY with numbered weekdays of several days is not supported"
-
 iex> unread.("FREQ=DAILY;COUNT=2;UNTIL=20260101")
 "COUNT and UNTIL exclude each other"
 ```
 
-* **Numbered weekdays of several days** (`BYDAY=2MO,2WE`). One weekday with several numbers is read: `BYDAY=1MO,3MO` is `1K{1,3}I`.
+One rule RFC 5545 allows has no single ISO 8601-2 selection: numbered weekdays of several days, the second Monday and the second Wednesday. ISO 8601-2 has one rule of a kind in a selection and counts a position among everything selected, so `L{1,3}K2IN` is the second of the Mondays and Wednesdays taken together. Tempo reads the rule as a set of selections, its own extension, whose values are taken together:
+
+```elixir
+iex> Tempo.RRule.parse("FREQ=MONTHLY;BYDAY=2MO,2WE")
+{:ok, ~o"R/../P1M/FL{1K2I,3K2I}N"}
+```
 
 The [RRULE conformance guide](rfc5545_rrule_conformance.md) goes through RFC 5545 part by part.
 

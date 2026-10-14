@@ -50,7 +50,13 @@ defmodule Tempo.RRuleMeasureTest do
           "BYMONTHDAY=-1",
           "BYMONTHDAY=31",
           "BYDAY=SA;BYMONTHDAY=7,8,9,10,11,12,13",
-          "BYDAY=TU,WE,TH;BYSETPOS=3"
+          "BYDAY=TU,WE,TH;BYSETPOS=3",
+          "BYDAY=2MO,2WE",
+          "BYDAY=1MO,-1FR",
+          "BYDAY=MO,1TU",
+          "BYDAY=1MO,3MO;BYSETPOS=-1",
+          "BYDAY=2MO,2WE;BYHOUR=9,17;BYSETPOS=1,-1",
+          "BYDAY=1TU,-1TH;BYMONTH=2,8"
         ],
     "YEARLY" =>
       @any ++
@@ -65,7 +71,11 @@ defmodule Tempo.RRuleMeasureTest do
           "BYDAY=MO",
           "BYMONTH=1,7;BYDAY=1MO",
           "BYDAY=1SU,-1SU;BYMONTH=4,10",
-          "BYMONTH=6,7;BYMONTHDAY=1,-1;BYHOUR=8,20"
+          "BYMONTH=6,7;BYMONTHDAY=1,-1;BYHOUR=8,20",
+          "BYDAY=1SU,-1MO",
+          "BYDAY=1MO,1TU;BYMONTH=6,7",
+          "BYDAY=10MO,-10FR",
+          "BYDAY=2MO,-1SA;BYMONTH=3;BYHOUR=9,17"
         ]
   }
 

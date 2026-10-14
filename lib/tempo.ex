@@ -563,6 +563,13 @@ defmodule Tempo do
     `:selection` selects: `~o"P1D"` for the day after, `~o"-P7D"` for the
     week before.
 
+  * `:all` is a list of selections, each as parts, whose values are taken
+    together: `[[day_of_week: 1, instance: 2], [day_of_week: 3, instance:
+    2]]` is the second Monday and the second Wednesday. The parts written
+    after it select within each value, and a position counts among them
+    all. It is Tempo's own, written `L{1K2I,3K2I}N`: ISO 8601-2 has one rule
+    of a kind in a selection.
+
   ### Returns
 
   * `{:ok, selection}`, a `t:t/0` with no year.
@@ -582,6 +589,11 @@ defmodule Tempo do
       iex> {:ok, last_weekday} = Tempo.selection(day_of_week: 1..5, instance: -1)
       iex> Tempo.select(~o"2026-06", last_weekday)
       {:ok, ~o"{2026-06-30}"}
+
+      iex> {:ok, first_monday_and_last_friday} =
+      ...>   Tempo.selection(all: [[day_of_week: 1, instance: 1], [day_of_week: 5, instance: -1]])
+      iex> Tempo.select(~o"2026-06", first_monday_and_last_friday)
+      {:ok, ~o"{2026-06-01,2026-06-26}"}
 
       iex> {:error, %ArgumentError{}} = Tempo.selection(fortnight: 1)
 

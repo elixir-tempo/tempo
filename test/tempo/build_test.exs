@@ -64,6 +64,23 @@ defmodule Tempo.BuildTest do
      quote(do: Tempo.every(~o"P1W", from: ~o"2026-06-15T10:00[Europe/Paris]"))},
     {"L1K2IN", quote(do: Tempo.selection(day_of_week: 1, instance: 2))},
     {"L12M25DN", quote(do: Tempo.selection(month: 12, day: 25))},
+    {"L{1K2I,3K2I}T9HN",
+     quote(
+       do:
+         Tempo.selection(
+           hour: 9,
+           all: [[instance: 2, day_of_week: 1], [day_of_week: 3, instance: 2]]
+         )
+     )},
+    {"L6M{1K1I,2K}-1IN",
+     quote(
+       do:
+         Tempo.selection(
+           month: 6,
+           all: [[day_of_week: 1, instance: 1], [day_of_week: 2]],
+           instance: -1
+         )
+     )},
     {"[2026-06-15,2026-06-17]", quote(do: Tempo.one_of([~o"2026-06-15", ~o"2026-06-17"]))}
   ]
 

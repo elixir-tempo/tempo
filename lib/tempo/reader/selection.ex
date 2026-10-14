@@ -6,9 +6,12 @@ defmodule Tempo.Reader.Selection do
   # `T` an hour, minute or second), a position `nI`, an
   # event `(name[@zone])e`, a roll to a weekday `(convention)r` (Tempo's own,
   # as the event is), a skip to the next or the last day there is
-  # `(forward)s`, or a nested selection, which `/duration` may
-  # follow to open a window from each date it selects (§12.10). The result
-  # is the parts in the order written.
+  # `(forward)s`, a nested selection, which `/duration` may
+  # follow to open a window from each date it selects (§12.10), or a set of
+  # selections whose values are taken together, `{1K2I,3K2I}` (Tempo's own:
+  # ISO 8601-2 has one rule of a kind in a selection, so the second Monday
+  # and the second Wednesday are two). The result is the parts in the order
+  # written.
 
   alias Tempo.Reader.Duration
   alias Tempo.Reader.Number
@@ -37,6 +40,11 @@ defmodule Tempo.Reader.Selection do
   def read(_text), do: :error
 
   defp parts(<<"N", _::binary>> = rest, _context, acc), do: {:ok, Enum.reverse(acc), rest}
+
+  # The end of one of a set of selections.
+  defp parts(<<stop, _::binary>> = rest, _context, acc) when stop in [?,, ?}],
+    do: {:ok, Enum.reverse(acc), rest}
+
   defp parts(<<"T", rest::binary>>, :date, acc), do: parts(rest, :clock, acc)
 
   defp parts(<<"L", _::binary>> = text, context, acc) do
@@ -56,10 +64,35 @@ defmodule Tempo.Reader.Selection do
     end
   end
 
-  defp parts(text, context, acc) do
+  # `{1,3}K` is a part of a set of weekdays; `{1K2I,3K2I}` a set of selections.
+  defp parts(<<"{", _::binary>> = text, context, acc) do
+    case numbered(text, context) do
+      {:ok, part, rest} -> parts(rest, context, [part | acc])
+      :error -> all_of(text, context, acc)
+    end
+  end
+
+  defp parts(text, context, acc), do: part_read(numbered(text, context), context, acc)
+
+  defp numbered(text, context) do
     case Number.value(text) do
-      {:ok, held, rest} -> part_read(part(held, rest, context), context, acc)
+      {:ok, held, rest} -> part(held, rest, context)
       :error -> :error
+    end
+  end
+
+  defp all_of(<<"{", rest::binary>>, context, acc) do
+    case selections(rest, context, []) do
+      {:ok, each, rest} -> parts(rest, context, [{:all, each} | acc])
+      _ -> :error
+    end
+  end
+
+  defp selections(text, context, acc) do
+    case parts(text, context, []) do
+      {:ok, [_ | _] = one, <<",", rest::binary>>} -> selections(rest, context, [one | acc])
+      {:ok, [_ | _] = one, <<"}", rest::binary>>} -> {:ok, Enum.reverse([one | acc]), rest}
+      _ -> :error
     end
   end
 

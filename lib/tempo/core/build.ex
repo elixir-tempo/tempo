@@ -25,7 +25,7 @@ defmodule Tempo.Build do
     :second
   ]
   @clock [:hour, :minute, :second]
-  @parts @units ++ [:instance, :event, :roll, :skip, :selection, :window]
+  @parts @units ++ [:instance, :event, :roll, :skip, :selection, :window, :all]
 
   @every_options [:from, :count, :until, :select, :metadata]
 
@@ -107,6 +107,16 @@ defmodule Tempo.Build do
     with {:ok, parts} <- parts(nested), do: {:ok, {:selection, parts}}
   end
 
+  # Several selections whose values are taken together: the second Monday
+  # and the second Wednesday, `[all: [[day_of_week: 1, instance: 2],
+  # [day_of_week: 3, instance: 2]]]`.
+  defp part({:all, [_ | _] = each}) do
+    with {:ok, each} <- each_selection(each), do: {:ok, {:all, each}}
+  end
+
+  defp part({:all, other}),
+    do: {:error, argument(":all of a selection is a list of selections, not #{inspect(other)}")}
+
   defp part({unit, %Range{} = range}) when unit in @units or unit == :instance,
     do: {:ok, {unit, [range]}}
 
@@ -124,10 +134,21 @@ defmodule Tempo.Build do
   defp part({key, held}),
     do: {:error, argument("#{inspect(key)} of a selection does not take #{inspect(held)}")}
 
-  # A nested selection and its window stand first, where they are made; the
-  # units follow coarsest first, and a position counts among them all.
+  defp each_selection(each) do
+    Enum.reduce_while(each, {:ok, []}, fn selection, {:ok, held} ->
+      case parts(selection) do
+        {:ok, parts} -> {:cont, {:ok, held ++ [parts]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  # A nested selection and its window stand first, where they are made, and
+  # a set of selections after the months it is made in; the units follow
+  # coarsest first, and a position counts among them all.
   defp ordered(parts) do
     {nested, rest} = Keyword.split(parts, [:selection, :window])
+    {all, rest} = Keyword.split(rest, [:all])
     {last, units} = Keyword.split(rest, [:instance])
     {events, units} = Keyword.split(units, [:event])
     {rolls, units} = Keyword.split(units, [:skip, :roll])
@@ -138,7 +159,8 @@ defmodule Tempo.Build do
     {times, days} = Enum.split_with(later, fn {unit, _} -> unit in @clock end)
 
     # A skip and a roll stand after the days they move and before a time of day on them.
-    by_order(before) ++ nested ++ events ++ by_order(days) ++ rolls ++ by_order(times) ++ last
+    by_order(before) ++
+      nested ++ all ++ events ++ by_order(days) ++ rolls ++ by_order(times) ++ last
   end
 
   defp by_order(units),
