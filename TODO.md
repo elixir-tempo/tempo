@@ -67,7 +67,7 @@ Why 2.0 is slower than 1.6.4 where it is, and where it could be faster. None of 
 * [ ] **Revisit the calendar adapter.** Every calendar question goes through `Tempo.Calendar`, and `test/tempo/calendar_surface_test.exs` holds the library to it; what the adapter itself still knows (the `Calendar.ISO` table, the Gregorian for a solar term, Easter and the registry lookup by name) is left as it is for now (2026-10-14).
 * [ ] **A `Tempo.Intervallic` protocol**, so that a struct of the caller's (`%Booking{check_in, check_out}`) takes part in relations and set operations without being copied into a `%Tempo{}`.
 
-* [ ] **A guide to selection**: the selector vocabulary, with `Tempo.selection/1` beside each written form.
+* [x] **A guide to selection**: the selector vocabulary, with `Tempo.selection/1` beside each written form. `guides/selection.md`, 2026-10-14.
 
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 

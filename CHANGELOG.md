@@ -84,6 +84,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Added
 
+* A guide to selection: every part of a selection, written and built with `Tempo.selection/1`, with positions, nesting, sets, events, rolls, skips and zones.
+
 * A guide to the design decisions of 2.0: for each, the question, the alternatives, the choice and why.
 
 * A set of selections, `L{1K2I,3K2I}N` and `Tempo.selection(all: [...])`: what each selects, taken together, so `BYDAY=2MO,2WE` is read and written back.

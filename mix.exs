@@ -150,6 +150,7 @@ defmodule Tempo.MixProject do
         "guides/ai-assistance.md",
         "guides/interop.md",
         "guides/set-operations.md",
+        "guides/selection.md",
         "guides/uncertain-dates.md",
         "guides/enumeration-semantics.md",
         "guides/pattern-matching-with-sigils.md",
