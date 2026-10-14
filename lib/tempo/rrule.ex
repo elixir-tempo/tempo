@@ -586,17 +586,11 @@ defmodule Tempo.RRule do
   end
 
   # The selection's parts, and the cadence: a yearly rule with a numbered
-  # weekday in named months counts it in each month, so its cadence is the month.
+  # weekday in named months keeps its years, and selects the weekday in each
+  # month it names, one period a year as RFC 5545 counts it.
   defp lowered(rule, cadence, duration) do
     numbered = numbered_weekday(rule)
     in_months? = rule.freq == :year and numbered != nil and Map.has_key?(rule, :bymonth)
-
-    # Every year, the months are the repeats and the weekday is counted in
-    # each. Every second year or more they are not, a month being no whole
-    # number of them: the rule keeps its years, and the weekday is selected
-    # in each month it names.
-    monthly_count? = in_months? and Map.get(rule, :interval, 1) == 1
-    cadence = if monthly_count?, do: %Duration{units: [month: 1]}, else: cadence
 
     parts =
       []
@@ -611,7 +605,7 @@ defmodule Tempo.RRule do
       |> push(rule, :bysecond)
       |> push_instance(rule, numbered)
       |> Enum.reverse()
-      |> numbered_before_times(numbered, in_months? and not monthly_count?)
+      |> numbered_before_times(numbered, in_months?)
       |> windowed(duration)
 
     if parts == [], do: {cadence, {:ok, nil}}, else: {cadence, {:ok, parts}}

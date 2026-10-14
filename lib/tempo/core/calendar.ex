@@ -185,10 +185,17 @@ defmodule Tempo.Calendar do
 
   @doc "The day number of a date."
   @spec iso_days(module(), Calendar.year(), Calendar.month(), Calendar.day()) :: integer()
+  # The default calendar's day numbers are its own, as Elixir reckons them:
+  # what its module in Localize answers, more directly.
+  def iso_days(Calendar.ISO, year, month, day),
+    do: Calendar.ISO.date_to_iso_days(year, month, day)
+
   def iso_days(calendar, year, month, day), do: impl(calendar).date_to_iso_days(year, month, day)
 
   @doc "The date of a day number."
   @spec date(module(), integer()) :: date()
+  def date(Calendar.ISO, days), do: Calendar.ISO.date_from_iso_days(days)
+
   def date(calendar, days) do
     case impl(calendar).date_from_iso_days(days) do
       {year, month, day} -> {year, month, day}
@@ -198,6 +205,7 @@ defmodule Tempo.Calendar do
 
   @doc "Whether a date exists."
   @spec valid_date?(module(), Calendar.year(), Calendar.month(), Calendar.day()) :: boolean()
+  def valid_date?(Calendar.ISO, year, month, day), do: Calendar.ISO.valid_date?(year, month, day)
   def valid_date?(calendar, year, month, day), do: impl(calendar).valid_date?(year, month, day)
 
   # ── Periods as spans of days ──────────────────────────────────────────

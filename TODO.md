@@ -28,7 +28,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **Companions on 2.0.** `tempo_sql` and `tempo_holidays` move to `~> 2.0` once it is on hex. `tempo_holidays` builds its rules with `Tempo.every/2` and `Tempo.selection/1`, where it wrote text to be read.
 
-* [ ] **Rule expansion is slower than 1.6.4** (decision 35: aim at about ten times). `bench/against_1_6_bench.exs` runs one set of cases against 1.6.4 and 2.0. On 2026-10-14, after the work below, 2.0 over 1.6.4 is: reading text 0.03, writing 0.8, walking 0.9, relating 2.6, set operations 3, and of rule expansion last weekdays 5.0, weekdays 5.5, Monday-Wednesday-Friday 9.2, daily 15, hourly 16, yearly fourth Thursdays 26 (from 145 to 19,000 before). Built: a reading of the clock or a month or day named by number found by arithmetic or the calendar (`Expand.candidates/4`); a zone's offset asked of the database at points six days apart, each answer kept by the process and a change between two bounded as it is asked about (`Zone.known_days/2`), and a wall reading answered from the offsets a day either side of it; a clock part looked for in the unit above it, at the showing a period begins at (`Select.containers/3`); a period of one day tested for its month, day and weekday and its named times built directly (`Select.on_its_day/4`); and two empty periods of a day or finer tried before looking ahead. Left: the fixed cost of a daily or hourly period (about 8 µs floating), and the yearly rule's zone lookups past 2037, where `tz` computes each period afresh.
+* [x] **Rule expansion against 1.6.4** (decisions 35 and 37). `bench/against_1_6_bench.exs` runs one set of cases against 1.6.4 and 2.0. On 2026-10-14, 2.0 over 1.6.4: reading text 0.03, writing 0.8, walking 0.8, relating 2.4, comparing 14 (3 µs), set operations 3, and of rule expansion weekdays 3.1, last weekdays 5.4, yearly fourth Thursdays 6.7, daily 8.7, Monday-Wednesday-Friday 8.9, hourly 11 (from 145 to 19,000 before the work). The work and what it found are in decisions 35 to 37; where 2.0 could be faster is under "Performance" below.
 
 ### Decisions for the user
 
@@ -46,7 +46,23 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 * [ ] **Two Localize defects** found before the rewrite and not rechecked since: a month that begins after its first day (`Calendrical.Reform.England`, March 1751) is not written from its year and month, and a day of the month a year turns in (`Calendrical.Julian.March25`) is read back a year early.
 
-### Ideas, not committed to
+### Performance
+
+Why 2.0 is slower than 1.6.4 where it is, and where it could be faster. None of it is needed for 2.0 (decision 37); each is a measurement first, against `bench/against_1_6_bench.exs`.
+
+* **A value does not carry where it is.** A `%Tempo{}` holds its units as written, and every question of where it lies (`Tempo.Spans.extent/1`) reads them again through the calendar: about 0.4 µs a value, ten times in a period of a rule (the period, the selection's test that a value lies in it, the span made of the value, its end written as a value and read back, the duplicate check, the bound). 1.6.4 expanded rules over Elixir dates and naive datetimes it held as positions. The rule walk now carries a period's extent and each occurrence's (decision 37); the general opportunity is an internal value that carries its position from where the engine builds it, written as units only when it is handed back.
+
+* **One selection engine for every rule.** RRULE, cron, JSCalendar and ISO 8601-2 selections all lower to one selection, made in each period by containers, expansion, filters and positions. That is what gives them one meaning (zones, other calendars, sets of selections, rolls, skips); 1.6.4 had a weekday fast path, integer indices and a merge path beside its resolver. 2.0 has shortcuts only where they are exact (a named reading by arithmetic, a period of one day tested for its date). A rule could instead be compiled once into a test of a day number (a set of months, weekdays, days of the month) walked by integer arithmetic, the general engine kept for what that cannot say.
+
+* **Every calendar question goes through the adapter.** `Tempo.Calendar` dispatches each to the calendar's module (decisions 6 and 8); the default calendar's day numbers are now answered by `Calendar.ISO` directly. Day-number arithmetic for the Gregorian calendar held inline in the walk would remove most of what is left in a date's extent.
+
+* **A zone is asked by point.** `Calendar.TimeZoneDatabase` answers an offset at an instant and gives no period's bounds, so Tempo keeps what it learns at points six days apart and bounds a change as it is asked about (`Tempo.Zone`). A database that gave its periods (as `tz`'s own list does) would answer a span at once. `tz` also computes each period past its precompiled years afresh, which is most of what a zoned rule in the 2040s costs.
+
+* **Lazy streams of structs.** Occurrences are made one at a time by `Stream.unfold/2`, each a new struct with keyword lists, and memory is 2 to 8 times 1.6.4's on the rule cases. Most callers take a bounded list, which could be made by a loop.
+
+* **Comparing two values** is 3 µs (14 times 1.6.4, small in itself): each is placed on the line first. A comparison of two values of one calendar and frame written to the same units could compare the units.
+
+## Ideas, not committed to
 
 * [ ] **Revisit the calendar adapter.** Every calendar question goes through `Tempo.Calendar`, and `test/tempo/calendar_surface_test.exs` holds the library to it; what the adapter itself still knows (the `Calendar.ISO` table, the Gregorian for a solar term, Easter and the registry lookup by name) is left as it is for now (2026-10-14).
 * [ ] **A `Tempo.Intervallic` protocol**, so that a struct of the caller's (`%Booking{check_in, check_out}`) takes part in relations and set operations without being copied into a `%Tempo{}`.

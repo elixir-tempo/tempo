@@ -56,17 +56,27 @@ defmodule Tempo.Select do
   def in_period(%Tempo{} = period, parts, options \\ []) do
     {before, nested, window, later} = around_nested(parts)
     {position, later} = counted_among_all(nested, later)
+    {given, options} = Keyword.pop(options, :extent)
 
     with :ok <- anchored(period),
-         {:ok, {start, stop} = outer} <- bounded_extent(period),
+         {:ok, {start, stop} = outer} <- known_extent(given, period),
          {:ok, periods} <-
            windows(scopes(period, before, outer, options), nested, window, options) do
+      # Where the period is selected in whole, its extent is the one known.
+      known = if before == [] and nested == nil, do: {:ok, outer}, else: nil
+
       periods
-      |> Enum.flat_map(&selected(&1, later, outer_of(&1, nested, {start, stop}), options))
+      |> Enum.flat_map(&selected(&1, later, outer_of(&1, nested, {start, stop}), options, known))
       |> positioned(position)
       |> then(&{:ok, &1})
     end
   end
+
+  # A caller that has the period's extent gives it (`:extent`), and it is not reckoned again.
+  defp known_extent({start, stop} = extent, _period) when is_integer(start) and is_integer(stop),
+    do: {:ok, extent}
+
+  defp known_extent(_none, period), do: bounded_extent(period)
 
   # A position after a set of selections counts among all they select in
   # the period, as a position counts last among what the rules before it
@@ -214,45 +224,50 @@ defmodule Tempo.Select do
   # The candidates of a period: with no parts left the period itself (a
   # window), else the expansion of each container with the parts, within the
   # period, filtered by the rule's years, then positioned.
-  defp selected(period, [], _outer, _options), do: [period]
+  defp selected(period, parts, outer, options, known \\ nil)
 
-  defp selected(period, parts, outer, options) do
+  defp selected(period, [], _outer, _options, _known), do: [period]
+
+  defp selected(period, parts, outer, options, known) do
     {instance, parts} = Keyword.pop(parts, :instance)
     {years, parts} = Keyword.pop(parts, :year)
     {event, parts} = Keyword.pop(parts, :event)
     {roll, parts} = Keyword.pop(parts, :roll)
     {skip, parts} = Keyword.pop(parts, :skip)
+    moves = %{event: event, roll: roll, skip: skip, years: years, instance: instance}
 
-    case bounded_extent(period) do
+    case known || bounded_extent(period) do
       {:ok, extent} ->
         extent = clipped(extent, outer)
         moved? = event != nil or roll != nil or skip != nil
-
-        case on_its_day(moved?, period, parts, extent) do
-          :none ->
-            []
-
-          {:day, []} ->
-            positioned([period], instance)
-
-          {:times, values} ->
-            values |> Enum.flat_map(&met(&1, period, extent)) |> positioned(instance)
-
-          {_kept_or_day, parts} ->
-            period
-            |> candidates(parts, event, extent, options)
-            |> Kernel.++(skipped(period, parts, skip, extent))
-            |> Enum.uniq()
-            |> Enum.filter(&in_years?(&1, years))
-            |> rolled(roll, options)
-            |> Enum.sort_by(&start_of/1)
-            |> first_showings()
-            |> positioned(instance)
-        end
+        picked(on_its_day(moved?, period, parts, extent), period, extent, moves, options)
 
       {:error, _} ->
         []
     end
+  end
+
+  # What a period picks: nothing, where its one day is not one its parts
+  # name; the day itself, or the times named on it; else what its parts
+  # select, moved, filtered and positioned as they say.
+  defp picked(:none, _period, _extent, _moves, _options), do: []
+
+  defp picked({:day, []}, period, _extent, moves, _options),
+    do: positioned([period], moves.instance)
+
+  defp picked({:times, values}, period, extent, moves, _options),
+    do: values |> Enum.flat_map(&met(&1, period, extent)) |> positioned(moves.instance)
+
+  defp picked({_kept_or_day, parts}, period, extent, moves, options) do
+    period
+    |> candidates(parts, moves.event, extent, options)
+    |> Kernel.++(skipped(period, parts, moves.skip, extent))
+    |> Enum.uniq()
+    |> Enum.filter(&in_years?(&1, moves.years))
+    |> rolled(moves.roll, options)
+    |> Enum.sort_by(&start_of/1)
+    |> first_showings()
+    |> positioned(moves.instance)
   end
 
   # A period within one day is a day the parts naming a month, a day of the

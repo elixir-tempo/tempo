@@ -406,7 +406,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-14).** Option 1.
 
-* **State.** In progress; `TODO.md` holds the numbers. On 2026-10-14 rule expansion stands at 5 to 26 times 1.6.4 on the benchmark's cases, from 145 to 19,000. The work found and fixed three defects: an hourly rule across a repeated hour searched for ever, a time of day selected on a fall-back day missed moments, and decision 36 was put.
+* **State.** Built, with decision 37. On 2026-10-14 rule expansion stands at 3 to 11 times 1.6.4 on the benchmark's cases, from 145 to 19,000. The work found and fixed three defects: an hourly rule across a repeated hour searched for ever, a time of day selected on a fall-back day missed moments, and decision 36 was put.
 
 ## 36. A time of day the clock shows twice, or skips, within a period
 
@@ -417,3 +417,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 1. A reading the clock skips stays no value, following section 3.3.10's "MUST be ignored".
 
 * **State.** Built in `Tempo.Select`: a period's values are taken once by their reading, the first showing in time. The second showing is kept where the period holds it and not the first, so an hourly rule across a repeated hour still gives each hour that passes. `test/tempo/clock_selection_test.exs` holds both to `DateTime`.
+
+## 37. Whether to carry rule expansion on to ten times 1.6.4
+
+* **Question.** With rule expansion at 5 to 28 times 1.6.4 on the benchmark's cases (from 145 to 19,000), is it carried on to about ten times before 2.0, or accepted?
+
+* **Context.** Daily and hourly rules stood at 16 times: a period costs about 9 µs with no zone, where 1.6.4 took about 1 µs an occurrence, in some twenty computations of an extent a period, spread over building the period, selecting in it, making the occurrence's span and testing its end. The yearly fourth Thursday of November stood at 28 times in Chicago and about 17 floating, the difference being `tz` computing each period past its precompiled years afresh. The options were (1) to accept this for 2.0 and move to the release work, (2) to carry on to ten times by restructuring the rule walk so that a period's span is built once and passed on, and (3) to accept it and add a fast path for rules that keep only the start's time of day, exact with no zone.
+
+* **Decision (2026-10-14).** Option 2.
+
+* **State.** Built. The rule walk carries each period's extent and each occurrence's (`Tempo.Spans`), a period's extent is given to the selection, the start of the next period is kept from the one before, a period of one day is tested for its date and its named times built directly, and a yearly rule with a numbered weekday in named months keeps one period a year (where it had twelve, and was written back as a monthly rule). Rule expansion stands at 3 to 11 times 1.6.4 on the benchmark's cases; `TODO.md` holds the numbers and, under "Performance", where 2.0 could be faster still.

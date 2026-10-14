@@ -119,7 +119,8 @@ defmodule Tempo.Unit do
 
   @doc "Whether a unit is of the clock: an hour, a minute, a second or a part of one."
   @spec clock?(t()) :: boolean()
-  def clock?(unit), do: unit in @clock_units
+  def clock?(unit) when unit in @clock_units, do: true
+  def clock?(_unit), do: false
 
   @doc "Whether a unit is a label read from a date, rather than a unit of its own."
   @spec label?(t()) :: boolean()

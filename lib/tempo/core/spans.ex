@@ -41,6 +41,9 @@ defmodule Tempo.Spans do
 
   @day Scale.ticks_per_day()
 
+  # Where the start of a rule's next period is kept (`start_at/3`).
+  @next_start {__MODULE__, :next_start}
+
   # The periods of a day or finer a rule tries one by one, selecting
   # nothing, before it looks ahead for where its parts next name a value.
   @quiet_periods 2
@@ -560,8 +563,11 @@ defmodule Tempo.Spans do
         |> to_range_end(from)
         |> in_range_years(from, first.calendar)
         |> Stream.dedup_by(&landing/1)
-        |> Stream.map(&%{&1 | metadata: Map.merge(recurrence.metadata, &1.metadata)})
+        |> Stream.map(fn {occurrence, extent} ->
+          {%{occurrence | metadata: Map.merge(recurrence.metadata, occurrence.metadata)}, extent}
+        end)
         |> bounded(bound, until, options)
+        |> Stream.map(&elem(&1, 0))
 
       {:ok, stream}
     end
@@ -571,7 +577,7 @@ defmodule Tempo.Spans do
   defp selected_in({:each, periods}, walk, _first_step) do
     periods
     |> Stream.map(&eligible(&1, walk.first))
-    |> Stream.flat_map(&picked_in(&1, walk))
+    |> Stream.flat_map(&picked_in(&1, period_extent(&1), walk))
   end
 
   # A cadence's periods are stepped through by number, so that a run of
@@ -583,16 +589,32 @@ defmodule Tempo.Spans do
 
     {first_step, nil}
     |> Stream.unfold(fn {k, quiet_since} ->
-      period = eligible(period_at.(k), walk.first)
-      step(picked_in(period, walk), period, k, quiet_since, walk)
+      {period, extent} = eligible_at(period_at.({:with_extent, k}), walk.first)
+      step(picked_in(period, extent, walk), {period, extent}, k, quiet_since, walk)
     end)
     |> Stream.flat_map(& &1)
   end
 
-  defp picked_in(period, %{parts: parts, begins: begins, options: options}) do
+  # What a period selects, from where the rule begins: a period that begins
+  # there or later selects only from there, and the first is filtered. Each
+  # occurrence goes on with its extent, reckoned once as its span is made.
+  defp picked_in(period, {start, _stop} = extent, %{parts: parts, begins: begins} = walk)
+       when start >= begins,
+       do: in_rule_period(period, parts, [extent: extent] ++ walk.options)
+
+  defp picked_in(period, extent, %{parts: parts, begins: begins, options: options}) do
+    options = if extent, do: [extent: extent] ++ options, else: options
+
     period
     |> in_rule_period(parts, options)
-    |> Enum.filter(&(start_position(&1) >= begins))
+    |> Enum.filter(fn {_occurrence, {start, _stop}} -> start >= begins end)
+  end
+
+  defp period_extent(period) do
+    case extent(period) do
+      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) -> {start, stop}
+      _ -> nil
+    end
   end
 
   defp step([_ | _] = picked, _period, k, _quiet_since, _walk), do: {picked, {k + 1, nil}}
@@ -601,8 +623,8 @@ defmodule Tempo.Spans do
   # for a few: a weekend in a daily rule of weekdays is passed over a day at
   # a time, each day's weekday asked of it. A longer quiet, and a quiet of
   # coarser periods, is passed over to where the parts next name a value.
-  defp step([], period, k, quiet_since, walk) do
-    {start, stop} = ends_of(period)
+  defp step([], {period, extent}, k, quiet_since, walk) do
+    {start, stop} = extent || {0, 0}
     {since, quiet_from} = quiet_since || {start, k}
 
     cond do
@@ -748,6 +770,15 @@ defmodule Tempo.Spans do
 
   defp eligible(period, _first), do: period
 
+  # A period whose extent its building gave keeps it, unless the rule
+  # selects in the first unit of a longer repeat.
+  defp eligible_at({period, extent}, first) do
+    case eligible(period, first) do
+      ^period when extent != nil -> {period, extent}
+      narrowed -> {narrowed, period_extent(narrowed)}
+    end
+  end
+
   defp start_of_rule(%Tempo{form: {:value, _}} = from) do
     case extent(from) do
       {:ok, {start, _}} when is_integer(start) -> start
@@ -821,7 +852,7 @@ defmodule Tempo.Spans do
 
   defp in_range_years(stream, %Tempo{form: {:when, %Tempo{} = inner, [years: filter]}}, calendar) do
     if range_start(inner),
-      do: Stream.filter(stream, &in_years?(&1, filter, calendar)),
+      do: Stream.filter(stream, &in_years?(elem(&1, 0), filter, calendar)),
       else: stream
   end
 
@@ -832,8 +863,11 @@ defmodule Tempo.Spans do
          %Tempo{form: {:all, [%Tempo{form: {:span, %Tempo{}, %Tempo{} = to}}]}}
        ) do
     case end_position(to) do
-      {:ok, stop} when is_integer(stop) -> Stream.take_while(stream, &(start_position(&1) < stop))
-      _ -> stream
+      {:ok, stop} when is_integer(stop) ->
+        Stream.take_while(stream, fn {_occurrence, {start, _}} -> start < stop end)
+
+      _ ->
+        stream
     end
   end
 
@@ -893,7 +927,9 @@ defmodule Tempo.Spans do
   defp only_exclusions?(_domain), do: false
 
   defp left_out(stream, []), do: stream
-  defp left_out(stream, excluded), do: Stream.reject(stream, &excluded?(extent(&1), excluded))
+
+  defp left_out(stream, excluded),
+    do: Stream.reject(stream, fn {_occurrence, extent} -> excluded?({:ok, extent}, excluded) end)
 
   # The extents a domain of exclusions alone leaves out. One that cannot be
   # given its spans is the error, and no occurrence is answered as if
@@ -916,7 +952,20 @@ defmodule Tempo.Spans do
   defp steps(%Tempo{form: {:span, from, to}} = first, recurrence) do
     with {:ok, [base]} <- spans(first, []),
          {:ok, cadence} <- cadence(from, to, base, recurrence) do
-      {:ok, {:steps, fn k -> occurrence(base, {from, to}, cadences(cadence, k), recurrence) end}}
+      # `{:with_extent, k}` gives the period with the extent it was built
+      # from, where that is known, so that a walk need not reckon it again;
+      # the start of the period after it, which that needs, is kept for it.
+      walk = make_ref()
+
+      {:ok,
+       {:steps,
+        fn
+          {:with_extent, k} ->
+            occurrence_at(base, {from, to}, cadences(cadence, k), {recurrence, walk, k})
+
+          k ->
+            occurrence(base, {from, to}, cadences(cadence, k), recurrence)
+        end}}
     end
   end
 
@@ -975,12 +1024,33 @@ defmodule Tempo.Spans do
 
   defp in_rule_period(period, parts, options) do
     case Select.in_period(period, parts, options) do
-      {:ok, picked} -> Enum.map(picked, &as_span_or_self/1)
+      {:ok, picked} -> Enum.flat_map(picked, &with_extent/1)
       {:error, _} -> []
     end
   end
 
-  defp as_span_or_self(%Tempo{form: {:value, _}} = value), do: as_span!(value)
+  # An occurrence and its extent: a value picked is the span it covers.
+  defp with_extent(%Tempo{form: {:value, _}} = value) do
+    case extent(value) do
+      {:ok, {start, stop} = extent} when is_integer(start) and is_integer(stop) ->
+        [{span_of(value, stop), extent}]
+
+      {:error, exception} ->
+        raise exception
+    end
+  end
+
+  defp with_extent(picked) do
+    occurrence = as_span_or_self(picked)
+
+    case extent(occurrence) do
+      {:ok, {start, stop} = extent} when is_integer(start) and is_integer(stop) ->
+        [{occurrence, extent}]
+
+      _open ->
+        []
+    end
+  end
 
   # A window from a selected value, with its end written as a value.
   defp as_span_or_self(%Tempo{form: {:span, %Tempo{}, %Duration{}}} = span) do
@@ -1197,17 +1267,18 @@ defmodule Tempo.Spans do
   """
   @spec as_span(Tempo.t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def as_span(%Tempo{form: {:value, _units}} = value) do
-    with {:ok, {_start, stop}} <- extent(value) do
-      to = if clock_resolution?(value), do: clock_end(value, stop), else: value
+    with {:ok, {_start, stop}} <- extent(value), do: {:ok, span_of(value, stop)}
+  end
 
-      {:ok,
-       %Tempo{
-         form: {:span, value, to},
-         calendar: value.calendar,
-         zone: value.zone,
-         metadata: value.metadata
-       }}
-    end
+  defp span_of(value, stop) do
+    to = if clock_resolution?(value), do: clock_end(value, stop), else: value
+
+    %Tempo{
+      form: {:span, value, to},
+      calendar: value.calendar,
+      zone: value.zone,
+      metadata: value.metadata
+    }
   end
 
   defp as_span!(value) do
@@ -1483,6 +1554,8 @@ defmodule Tempo.Spans do
   # Where an occurrence starts on a line. Two steps that land on one start
   # (the second having stepped over a day the clock left out) are one
   # occurrence; on a cycle each is its own.
+  defp landing({%Tempo{}, {start, _stop}}), do: start
+
   defp landing(occurrence) do
     case extent(occurrence) do
       {:ok, {start, _}} when is_integer(start) -> start
@@ -1565,6 +1638,48 @@ defmodule Tempo.Spans do
     }
   end
 
+  # A span written with a length knows its extent as it is built: where it
+  # starts, and where the next starts.
+  defp occurrence_at(
+         %Tempo{form: {:span, from, to}} = base,
+         {_, %Duration{} = duration},
+         {%Duration{units: [_ | _]} = step, next, _previous},
+         {recurrence, walk, k}
+       ) do
+    {moved, start} =
+      start_at(walk, k, fn -> moved_value(from, step, :start, base, recurrence) end)
+
+    stop = next_start_at(walk, k + 1, fn -> moved_value(from, next, :start, base, recurrence) end)
+
+    stop = later(stop, start, duration, base, recurrence)
+    {%{base | form: {:span, moved, value_at(stop, to, :end, base)}}, {start, stop}}
+  end
+
+  defp occurrence_at(base, ends, cadences, {recurrence, _walk, _k}),
+    do: {occurrence(base, ends, cadences, recurrence), nil}
+
+  # The start of the kth period and where it starts: the one the period
+  # before it reckoned, where it is the next of the same walk, or reckoned
+  # now. One is kept in the process, whichever walk last reckoned one.
+  defp start_at(walk, k, moved) do
+    case Process.get(@next_start) do
+      {^walk, ^k, value, start} -> {value, start}
+      _other -> reckoned(moved)
+    end
+  end
+
+  defp next_start_at(walk, k, moved) do
+    {value, start} = reckoned(moved)
+    Process.put(@next_start, {walk, k, value, start})
+    start
+  end
+
+  defp reckoned(moved) do
+    value = moved.()
+    {:ok, {start, _}} = extent(value)
+    {value, start}
+  end
+
   # Where the next occurrence starts, when that is later; where it is not (the
   # next step lands on the same start past a day a clock left out, or a cycle
   # comes round), the occurrence's own length from its start.
@@ -1610,12 +1725,16 @@ defmodule Tempo.Spans do
   defp taken_before(stream, nil), do: stream
   defp taken_before(stream, stop), do: Stream.take_while(stream, &starts_before?(&1, stop))
 
+  defp ends_by?({%Tempo{}, {_, stop}}, start), do: stop <= start
+
   defp ends_by?(occurrence, start) do
     case extent(occurrence) do
       {:ok, {_, stop}} when is_integer(stop) -> stop <= start
       _ -> false
     end
   end
+
+  defp starts_before?({%Tempo{}, {start, _}}, stop), do: Scale.compare(start, stop) == :lt
 
   defp starts_before?(occurrence, stop) do
     case extent(occurrence) do

@@ -161,6 +161,15 @@ defmodule Tempo.RRuleMeasureTest do
     end
   end
 
+  describe "a yearly rule that counts a weekday in named months" do
+    test "is one period a year, and is written back as it was read" do
+      {:ok, thanksgiving} = RRule.parse("FREQ=YEARLY;BYMONTH=11;BYDAY=4TH")
+
+      assert Tempo.to_iso8601!(thanksgiving) == "R/../P1Y/FL11ML4K4INN"
+      assert RRule.to_string(thanksgiving) == {:ok, "FREQ=YEARLY;BYMONTH=11;BYDAY=4TH"}
+    end
+  end
+
   describe "a yearly rule of every second year or more" do
     # It keeps its years where it counts a weekday in the months it names:
     # the last Sunday of October of every second year.

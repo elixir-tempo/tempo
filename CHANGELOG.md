@@ -126,6 +126,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* A yearly RRULE that counts a weekday in named months (`FREQ=YEARLY;BYMONTH=11;BYDAY=4TH`) is written back as it was read, where it became a monthly rule.
+
 * An hourly rule across an hour a zone's clock shows twice gives each hour that passes, where it searched for ever; the end of a span at the second showing of a reading is written with its shift.
 
 * A time of day selected on a day a zone's clock goes back is its first showing, as RFC 5545 has it, and the minutes of an hour the clock shows again are found (Chatham's 03:59 on 5 April 2026 was missing).
