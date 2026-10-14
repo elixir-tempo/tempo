@@ -71,7 +71,7 @@ true
 
 > *"The fifteenth of June is a day long and holds twenty-four hours, half past ten among them. Ten o'clock in Paris is **within** seven to nine in UTC. The thirtieth of Sivan 5786 **overlaps** the fifteenth of June 2026."*
 
-### Three ways to construct a Tempo
+### Four ways to construct a Tempo
 
 The `~o` sigil is ideal for literal values in source code. For runtime data — form inputs, database rows, API payloads — reach for `Tempo.new/1`, which takes its units in any order and validates them against the calendar:
 
@@ -88,6 +88,16 @@ iex> Tempo.new!(day: 15, year: 2026, month: 6, hour: 14, minute: 30, zone: "Aust
 iex> Tempo.from_elixir(~U[2026-06-15 14:30:00Z])
 {:ok, ~o"2026Y6M15DT14H30M0SZ"}
 ```
+
+A rule, or anything said a piece at a time, is built a step at a time with `Tempo.Builder`, each step a complete expression:
+
+```elixir
+iex> import Tempo.Builder
+iex> every(:week) |> on(:monday) |> at(hour: 9) |> starting(~o"2026-06-01") |> times(10)
+{:ok, ~o"R10/2026Y6M1D/P1W/FL1KT9HN"}
+```
+
+> *"Every week, on Monday, at nine, starting the 1st of June, ten times."*
 
 `Tempo.new/1` validates its units against the calendar (a Gregorian February has 28 days in a common year, a Hebrew leap year a thirteenth month), returns `{:ok, value}` or `{:error, exception}`, and has a `new!/1` that raises. `Tempo.Interval.new/1` and `Tempo.Duration.new/1` follow the same contract, as does every function that can fail.
 
@@ -257,6 +267,8 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 * [Cookbook](https://hexdocs.pm/ex_tempo/cookbook.html) — recipe-format answers to common temporal questions.
 
 * [When to use Tempo](https://hexdocs.pm/ex_tempo/when-to-use-tempo.html) — where the interval model earns its keep (and where it doesn't).
+
+* [Building expressions](https://hexdocs.pm/ex_tempo/building-expressions.html) — rules and values built a step at a time, each step an expression.
 
 * [Set operations](https://hexdocs.pm/ex_tempo/set-operations.html) — union, intersection, complement, difference, predicates.
 

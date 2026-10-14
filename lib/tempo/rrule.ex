@@ -24,6 +24,7 @@ defmodule Tempo.RRule do
 
   import Kernel, except: [to_string: 1]
 
+  alias Tempo.Build
   alias Tempo.Calendar, as: Calendars
   alias Tempo.{ConversionError, Duration, Options, Validate}
 
@@ -424,7 +425,8 @@ defmodule Tempo.RRule do
     bound = bound(rule)
 
     with {:ok, parts} <- parts,
-         {:ok, first} <- first_span(from, cadence) do
+         {:ok, first} <- first_span(from, cadence),
+         {:ok, bound} <- Build.bound_in_frame(bound, first) do
       recurrence = %Tempo{
         form: {:every, first, bound, in_calendar(parts, first.calendar, rule)},
         calendar: first.calendar,

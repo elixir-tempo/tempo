@@ -102,6 +102,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.to_calendar/2` converts a recurrence with no end as a rule, read in the other calendar, so one set holds rules of several calendars.
 
+* `Tempo.Builder` builds an expression a step at a time, each step an expression: `every(:week) |> on(:monday) |> at(hour: 9) |> starting(~o"2026-06-01") |> times(10)`. See the building expressions guide.
+
+* `Tempo.in_zone/2` takes a fixed offset as IXDTF writes one (`"+02:00"`).
+
 * `Tempo.Interval.instants/1` gives the instants an interval runs between, its end the instant after its last date, for a store of timestamps.
 
 * `Tempo.members/2` and `Tempo.walk/3`: the spans of any expression, and any span walked at a unit.
@@ -197,6 +201,12 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * `Tempo.Interval.new/1` refuses an interval or a set as an end, where it built an interval with an interval in it.
 
 * A named zone given where no time zone database is configured is a `Tempo.ZoneError` with reason `:no_database`, where it was accepted and reading a time in it raised a `MatchError`.
+
+* The occurrences of a recurrence with no rule carry its metadata, as those of one with a rule did.
+
+* A set whose member is a recurrence with an open start (`{R/../P1Y/FL12M25DN}`) is read; the reader took the start's `..` for a range, so such a set written by `Tempo.to_iso8601/1` did not read back.
+
+* `Tempo.every/2` and `Tempo.RRule.parse/2` give an `:until` the calendar and zone of the recurrence's start, as the reader gives a suffix's to every value before it.
 
 * `Tempo.RRule.to_string/1` writes the `UNTIL` of a rule in a zone or at UTC as a UTC time with `Z`, as RFC 5545 requires; it wrote the local reading with no `Z`, which read back floating.
 

@@ -50,6 +50,29 @@ defmodule Tempo.IntervalSetTest do
       assert_raise Tempo.ConversionError, fn -> IntervalSet.first(~o"R/P1W/2026-06-01") end
     end
 
+    test "of a recurrence carry its metadata, with a rule or without" do
+      {:ok, daily} =
+        Tempo.every(~o"P1D", from: ~o"2026-06-01", count: 2, metadata: %{title: "Standup"})
+
+      {:ok, mondays} =
+        Tempo.every(~o"P1W",
+          from: ~o"2026-06-01",
+          count: 2,
+          select: [day_of_week: 1],
+          metadata: %{title: "Review"}
+        )
+
+      assert Enum.map(IntervalSet.members(daily), &Tempo.metadata/1) == [
+               %{title: "Standup"},
+               %{title: "Standup"}
+             ]
+
+      assert Enum.map(IntervalSet.members(mondays), &Tempo.metadata/1) == [
+               %{title: "Review"},
+               %{title: "Review"}
+             ]
+    end
+
     test "of a recurrence set are its rules, a rule on its own the one" do
       rule = Tempo.every!(~o"P1Y", select: [month: 12, day: 25])
 

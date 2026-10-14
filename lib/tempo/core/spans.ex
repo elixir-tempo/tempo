@@ -1777,6 +1777,7 @@ defmodule Tempo.Spans do
         indexes
         |> Stream.map(fn n -> occurrence(base, {from, to}, cadences(cadence, n), recurrence) end)
         |> Stream.dedup_by(&landing/1)
+        |> Stream.map(&%{&1 | metadata: Map.merge(recurrence.metadata, &1.metadata)})
         |> bounded(bound, until, options)
 
       {:ok, stream}

@@ -69,6 +69,24 @@ defmodule Tempo.Zone do
     end
   end
 
+  @doc """
+  A zone as IXDTF writes one in a suffix: a name the database knows
+  (`"Europe/Paris"`), or a fixed offset (`"+02:00"`).
+  """
+  @spec written(String.t()) :: {:ok, t()} | {:error, Exception.t()}
+  def written(<<sign, hours::binary-size(2), ":", minutes::binary-size(2)>> = text)
+      when sign in [?+, ?-] do
+    case {Integer.parse(hours), Integer.parse(minutes)} do
+      {{h, ""}, {m, ""}} when m < 60 ->
+        {:ok, fixed(if(sign == ?-, do: -1, else: 1) * (h * 60 + m))}
+
+      _not_an_offset ->
+        named(text)
+    end
+  end
+
+  def written(name) when is_binary(name), do: named(name)
+
   @doc "A zone of a fixed offset, in minutes from UTC."
   @spec fixed(integer()) :: %__MODULE__{name: nil, offset: integer(), critical: false}
   def fixed(minutes) when is_integer(minutes), do: %__MODULE__{offset: minutes}

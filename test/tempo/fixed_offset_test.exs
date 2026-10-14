@@ -153,6 +153,31 @@ defmodule Tempo.FixedOffsetTest do
     end
   end
 
+  describe "in_zone/2 with a fixed offset" do
+    test "is the expression its text reads to with the offset as its zone" do
+      assert Tempo.in_zone(~o"2026-06-01T09", "-05:30") ==
+               Tempo.from_iso8601("2026-06-01T09[-05:30]")
+
+      assert Tempo.in_zone(~o"R/2026-06-01T09:00/P1W", "+02:00") ==
+               Tempo.from_iso8601("R/2026-06-01T09:00/P1W[+02:00]")
+    end
+
+    test "is the instant DateTime says at that offset" do
+      {:ok, at_offset} = Tempo.in_zone(~o"2026-06-01T09:00:00", "+05:30")
+      {:ok, expected, _offset} = DateTime.from_iso8601("2026-06-01T09:00:00+05:30")
+      {:ok, datetime} = Tempo.to_datetime(at_offset)
+
+      assert DateTime.to_unix(datetime) == DateTime.to_unix(expected)
+    end
+
+    test "of more than a day, or that is no offset, is refused" do
+      assert {:error, %Tempo.InvalidDateError{unit: :zone}} =
+               Tempo.in_zone(~o"2026-06-01T09", "+25:00")
+
+      assert {:error, %Tempo.ZoneError{}} = Tempo.in_zone(~o"2026-06-01T09", "+02:61")
+    end
+  end
+
   describe "a text the locale reads at a fixed offset" do
     test "is the value from_iso8601/1 reads from the offset" do
       for {text, iso8601} <- [

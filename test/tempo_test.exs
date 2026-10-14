@@ -19,6 +19,7 @@ defmodule TempoTest do
   doctest Tempo.Territory
   doctest Tempo.Sigils
   doctest Tempo.Allen
+  doctest Tempo.Builder
   doctest Tempo.LeapSeconds
   doctest Tempo.Unit
   doctest Tempo.Calendar

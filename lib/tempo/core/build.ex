@@ -9,7 +9,8 @@ defmodule Tempo.Build do
   # back. What `Tempo.new/1`, `Tempo.Interval.new/1`, `Tempo.Duration.new/1`
   # and `Tempo.IntervalSet.new/2` build are the parts these take.
 
-  alias Tempo.{Duration, InvalidCalendarError, Options, Validate, Workdays}
+  alias Tempo.{ConversionError, Duration, FrameError, InvalidCalendarError, Options, Spans}
+  alias Tempo.{Validate, Workdays}
 
   # The units a selection names, coarsest first, as a rule's parts are held.
   @units [
@@ -180,6 +181,7 @@ defmodule Tempo.Build do
          {:ok, first} <- in_calendar(first, Keyword.get(options, :calendar)),
          {:ok, first} <- in_years(first, Keyword.get(options, :years)),
          {:ok, bound} <- bound(Keyword.get(options, :count), Keyword.get(options, :until)),
+         {:ok, bound} <- bound_in_frame(bound, first),
          {:ok, rule} <- rule(Keyword.get(options, :select)) do
       Validate.run(%Tempo{
         form: {:every, first, bound, rule},
@@ -273,8 +275,276 @@ defmodule Tempo.Build do
 
   defp bound(nil, until), do: {:error, argument(":until is a value, not #{inspect(until)}")}
 
+  @doc """
+  The bound of a recurrence in the frame of its first repeat, as the reader
+  gives a suffix's calendar and zone to every value before it: an until of
+  a calendar of the same days (the Gregorian, its weeks begun on another
+  day) is in the first repeat's, and one with no zone is in its zone, a
+  value written at a shift the same instant read there. An until of another
+  calendar is refused, as an interval's two ends of two calendars are.
+  """
+  @spec bound_in_frame(term(), Tempo.t()) :: {:ok, term()} | {:error, Exception.t()}
+  def bound_in_frame(%Tempo{} = until, %Tempo{calendar: calendar, zone: zone}) do
+    with {:ok, until} <- until_in(until, calendar), do: until_zoned(until, zone)
+  end
+
+  def bound_in_frame(bound, _first), do: {:ok, bound}
+
+  defp until_in(%Tempo{calendar: calendar} = until, calendar), do: {:ok, until}
+
+  defp until_in(%Tempo{} = until, calendar) do
+    if Tempo.Calendar.gregorian?(until.calendar) and Tempo.Calendar.gregorian?(calendar),
+      do: {:ok, %{until | calendar: calendar}},
+      else:
+        {:error,
+         argument(
+           ":until is in #{inspect(until.calendar)} and the recurrence in #{inspect(calendar)}; " <>
+             "convert it with Tempo.to_calendar/2"
+         )}
+  end
+
+  defp until_zoned(%Tempo{zone: nil} = until, %Tempo.Zone{} = zone),
+    do: Validate.run(%{until | zone: zone})
+
+  defp until_zoned(until, _zone), do: Validate.run(until)
+
   defp rule(nil), do: {:ok, nil}
   defp rule(select), do: parts(select)
+
+  # ── A step of a pipeline ──────────────────────────────────────────────
+
+  @doc "The expression a step is given: an expression, or the result of the step before, whose error passes through."
+  @spec expression(term()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def expression(%Tempo{} = expression), do: {:ok, expression}
+  def expression({:ok, %Tempo{} = expression}), do: {:ok, expression}
+  def expression({:error, %_{__exception__: true}} = error), do: error
+
+  def expression(other),
+    do: {:error, ConversionError.exception(value: other, reason: :not_an_expression)}
+
+  @doc """
+  An expression with more selected in it: a recurrence's rule, or a value's
+  selection, with the parts added. A unit the expression already selects is
+  refused, as two values for one unit say neither.
+  """
+  @spec selecting(Tempo.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def selecting(%Tempo{form: {:every, first, bound, rule}} = recurrence, parts) do
+    with {:ok, rule} <- merged(rule || [], parts),
+         do: Validate.run(%{recurrence | form: {:every, first, bound, rule}})
+  end
+
+  def selecting(%Tempo{form: {:value, units}} = value, parts) do
+    {held, coarser} = Keyword.pop(units, :selection, [])
+
+    with {:ok, selection} <- merged(held, parts),
+         do: Validate.run(%{value | form: {:value, coarser ++ [selection: selection]}})
+  end
+
+  def selecting(%Tempo{form: {kind, members}} = set, parts)
+      when kind in [:all, :one] and is_list(members) do
+    with {:ok, members} <- each_member(members, &selecting(&1, parts)),
+         do: Validate.run(%{set | form: {kind, members}})
+  end
+
+  def selecting(%Tempo{} = other, _parts),
+    do:
+      {:error,
+       argument(
+         "a selection refines a value, a recurrence or a set of them, not #{inspect(other)}; " <>
+           "select in an interval with Tempo.select/3"
+       )}
+
+  @doc """
+  An expression whose selection becomes the start of a window: what it
+  selects is nested (`L…N`), the window is its length, and what is selected
+  after it is selected in the window (`LL12M25D7KN/P8D1K-1IN`, the last
+  Monday in the eight days from a Sunday the 25th of December).
+  """
+  @spec nesting(Tempo.t(), Duration.t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def nesting(%Tempo{form: {:every, _first, _bound, nil}} = recurrence, _window),
+    do: {:error, nothing_selected(recurrence)}
+
+  def nesting(%Tempo{form: {:every, first, bound, rule}} = recurrence, %Duration{} = window),
+    do:
+      Validate.run(%{
+        recurrence
+        | form: {:every, first, bound, [selection: rule, window: window]}
+      })
+
+  def nesting(%Tempo{form: {:value, units}} = value, %Duration{} = window) do
+    case Keyword.pop(units, :selection) do
+      {nil, _units} ->
+        {:error, nothing_selected(value)}
+
+      {held, coarser} ->
+        Validate.run(%{
+          value
+          | form: {:value, coarser ++ [selection: [selection: held, window: window]]}
+        })
+    end
+  end
+
+  def nesting(%Tempo{form: {kind, members}} = set, %Duration{} = window)
+      when kind in [:all, :one] and is_list(members) do
+    with {:ok, members} <- each_member(members, &nesting(&1, window)),
+         do: Validate.run(%{set | form: {kind, members}})
+  end
+
+  def nesting(%Tempo{} = other, %Duration{}), do: {:error, nothing_selected(other)}
+
+  defp nothing_selected(expression),
+    do:
+      argument(
+        "a window is counted from what an expression selects, and #{inspect(expression)} selects nothing yet"
+      )
+
+  # A time of day given to a selection with a position is a time on each day
+  # it selects: the selection is closed (`LL{1..5}K-1INT9HN`, nine o'clock of
+  # the last weekday), where merged the position would count among the times.
+  defp merged(held, parts) do
+    if Keyword.has_key?(held, :instance) and Enum.all?(Keyword.keys(parts), &(&1 in @clock)),
+      do: merged_parts([selection: held], parts),
+      else: merged_parts(held, parts)
+  end
+
+  defp merged_parts(held, parts) do
+    case Enum.find(Keyword.keys(parts), &Keyword.has_key?(held, &1)) do
+      nil ->
+        parts(held ++ parts)
+
+      unit ->
+        {:error,
+         argument("#{inspect(unit)} is already selected (#{inspect(Keyword.get(held, unit))})")}
+    end
+  end
+
+  # A set's exclusions are kept as they are; its members are refined.
+  defp each_member(members, fun) do
+    Enum.reduce_while(members, {:ok, []}, fn
+      {:except, _} = out, {:ok, acc} ->
+        {:cont, {:ok, acc ++ [out]}}
+
+      member, {:ok, acc} ->
+        case fun.(member) do
+          {:ok, refined} -> {:cont, {:ok, acc ++ [refined]}}
+          {:error, _} = error -> {:halt, error}
+        end
+    end)
+  end
+
+  @doc """
+  A recurrence as the cadence and the options `every/2` builds it from, so a
+  step that changes its start, its end or its count builds it again.
+  """
+  @spec every_options(Tempo.t()) :: {Duration.t(), keyword()}
+  def every_options(%Tempo{form: {:every, first, bound, rule}} = recurrence) do
+    {cadence, start} = start_options(first, recurrence)
+
+    {cadence,
+     start ++ bound_options(bound) ++ rule_options(rule) ++ [metadata: recurrence.metadata]}
+  end
+
+  defp start_options(%Tempo{form: {:span, %Duration{} = cadence, to}}, _r),
+    do: {cadence, [to: to]}
+
+  defp start_options(%Tempo{form: {:span, :open, cadence}}, r),
+    do: {cadence, [calendar: r.calendar]}
+
+  defp start_options(
+         %Tempo{form: {:span, %Tempo{form: {:when, every_year, years: filter}}, cadence}},
+         r
+       )
+       when every_year.form == {:span, :open, :open},
+       do: {cadence, [calendar: r.calendar, years: filter]}
+
+  defp start_options(
+         %Tempo{form: {:span, %Tempo{form: {:when, domain, years: filter}}, cadence}},
+         _r
+       ),
+       do: {cadence, [from: domain, years: filter]}
+
+  defp start_options(%Tempo{form: {:span, from, cadence}}, _r), do: {cadence, [from: from]}
+
+  defp bound_options(:infinity), do: []
+  defp bound_options(count) when is_integer(count), do: [count: count]
+  defp bound_options(%Tempo{} = until), do: [until: until]
+
+  defp rule_options(nil), do: []
+  defp rule_options(rule), do: [select: rule]
+
+  # ── A domain's calendar ───────────────────────────────────────────────
+
+  @doc """
+  A domain of years read in another calendar: the same year numbers, each a
+  year of `calendar`, as the years of a rule are those of the calendar
+  written after it.
+  """
+  @spec years_in(Tempo.t(), Calendar.calendar()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def years_in(%Tempo{form: {:all, members}} = domain, calendar) when is_list(members) do
+    with {:ok, members} <- each_member(members, &years_in(&1, calendar)) do
+      members =
+        Enum.map(members, fn
+          {:except, value} -> {:except, %{value | calendar: calendar}}
+          member -> member
+        end)
+
+      Validate.run(%{domain | form: {:all, members}, calendar: calendar})
+    end
+  end
+
+  def years_in(%Tempo{form: {:value, _}} = year, calendar),
+    do: Validate.run(%{year | calendar: calendar})
+
+  def years_in(%Tempo{form: {:span, from, to}} = span, calendar) do
+    with {:ok, from} <- an_end_in(from, calendar),
+         {:ok, to} <- an_end_in(to, calendar),
+         do: Validate.run(%{span | form: {:span, from, to}, calendar: calendar})
+  end
+
+  def years_in(%Tempo{} = other, _calendar),
+    do: {:error, argument("a domain is of years, not #{inspect(other)}")}
+
+  defp an_end_in(%Tempo{} = value, calendar), do: years_in(value, calendar)
+  defp an_end_in(open, _calendar), do: {:ok, open}
+
+  # ── A zone ────────────────────────────────────────────────────────────
+
+  @doc """
+  A floating expression placed in a zone, its readings unchanged: every value
+  in it carries the zone, as the reader gives a suffix's zone to each.
+  """
+  @spec in_zone(Tempo.t(), Tempo.Zone.t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def in_zone(%Tempo{} = expression, %Tempo.Zone{} = zone) do
+    with :ok <- Spans.whole(expression),
+         :ok <- floating(expression),
+         do: Validate.run(rezoned(expression, zone))
+  end
+
+  defp floating(%Tempo{} = expression) do
+    if Spans.frame(expression) == :utc,
+      do: {:error, FrameError.exception(a: expression, b: nil, reason: :zoned)},
+      else: :ok
+  end
+
+  defp rezoned(%Tempo{form: form} = expression, zone) do
+    %{expression | zone: zone, form: rezoned_form(form, zone)}
+  end
+
+  defp rezoned_form({:value, _} = form, _zone), do: form
+
+  defp rezoned_form({:span, from, to}, zone),
+    do: {:span, rezoned_end(from, zone), rezoned_end(to, zone)}
+
+  defp rezoned_form({:every, first, bound, rule}, zone),
+    do: {:every, rezoned(first, zone), rezoned_end(bound, zone), rule}
+
+  defp rezoned_form({kind, members}, zone) when kind in [:all, :one] and is_list(members),
+    do: {kind, Enum.map(members, &rezoned_end(&1, zone))}
+
+  defp rezoned_form(form, _zone), do: form
+
+  defp rezoned_end(%Tempo{} = value, zone), do: rezoned(value, zone)
+  defp rezoned_end(other, _zone), do: other
 
   # ── A one-of set ──────────────────────────────────────────────────────
 

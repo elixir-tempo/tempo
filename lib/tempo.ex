@@ -1904,7 +1904,8 @@ defmodule Tempo do
 
   * `expression` is a `t:t/0` with no zone and no shift.
 
-  * `zone` is a time zone name the database knows.
+  * `zone` is a time zone name the database knows, or a fixed offset as
+    IXDTF writes one (`"+02:00"`).
 
   ### Returns
 
@@ -1919,6 +1920,9 @@ defmodule Tempo do
       iex> Tempo.in_zone(~o"2026-06-15T10", "Europe/Paris")
       {:ok, ~o"2026-06-15T10[Europe/Paris]"}
 
+      iex> Tempo.in_zone(~o"2026-06-15T10", "+02:00")
+      {:ok, ~o"2026-06-15T10[+02:00]"}
+
       iex> {:error, %Tempo.FrameError{}} = Tempo.in_zone(~o"2026-06-15T10Z", "Europe/Paris")
 
   """
@@ -1927,11 +1931,7 @@ defmodule Tempo do
   def in_zone(_expression, zone) when not is_binary(zone), do: not_a_zone(zone)
 
   def in_zone(%__MODULE__{} = expression, zone) do
-    with :ok <- Spans.whole(expression),
-         :ok <- floating(expression),
-         {:ok, zone} <- Zone.named(zone) do
-      Validate.run(rezoned(expression, zone))
-    end
+    with {:ok, zone} <- Zone.written(zone), do: Build.in_zone(expression, zone)
   end
 
   @doc """
@@ -2027,32 +2027,6 @@ defmodule Tempo do
       {territory, _locale} -> Tempo.Territory.resolve(territory)
     end
   end
-
-  defp floating(%__MODULE__{} = expression) do
-    if Spans.frame(expression) == :utc,
-      do: {:error, FrameError.exception(a: expression, b: nil, reason: :zoned)},
-      else: :ok
-  end
-
-  defp rezoned(%__MODULE__{form: form} = expression, zone) do
-    %{expression | zone: zone, form: rezoned_form(form, zone)}
-  end
-
-  defp rezoned_form({:value, _} = form, _zone), do: form
-
-  defp rezoned_form({:span, from, to}, zone),
-    do: {:span, rezoned_end(from, zone), rezoned_end(to, zone)}
-
-  defp rezoned_form({:every, first, bound, rule}, zone),
-    do: {:every, rezoned(first, zone), rezoned_end(bound, zone), rule}
-
-  defp rezoned_form({kind, members}, zone) when kind in [:all, :one] and is_list(members),
-    do: {kind, Enum.map(members, &rezoned_end(&1, zone))}
-
-  defp rezoned_form(form, _zone), do: form
-
-  defp rezoned_end(%__MODULE__{} = value, zone), do: rezoned(value, zone)
-  defp rezoned_end(other, _zone), do: other
 
   @doc """
   A zoned expression moved to another time zone: the same instants, read on

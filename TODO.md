@@ -95,7 +95,7 @@ Why 2.0 is slower than 1.6.4 where it is, and where it could be faster. None of 
 * [x] The golden comparison retired; the corpus kept for the totality check.
 * [x] Version 2.0.0, OTP 27, the engine hidden, `### Options` on every function that takes them.
 * [x] `tempo_network` ported: 225 tests, its README, its guide.
-* [x] A composable builder: `Tempo.every/2`, `Tempo.selection/1`, `Tempo.one_of/1`.
+* [x] A composable builder: `Tempo.every/2`, `Tempo.selection/1`, `Tempo.one_of/1`, and the steps of `Tempo.Builder` (decisions 45 to 47), each step an expression.
 * [x] Cron's `L`, `LW`, `nW`, `nL` and `n#k`.
 * [x] A set with no end: refused by what needs every member, bounded by a window, read lazily by what can.
 * [x] A bound on work is a refusal, never a part of the answer (`Tempo.Limit.take/2`).

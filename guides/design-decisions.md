@@ -460,6 +460,34 @@ iex> Tempo.to_elixir(~o"2026-06-15/2026-06-20")
 
 **Why.** An interval written to two dates holds both of them, as a `Date.Range` does, so the two are the same six days and convert both ways. A month converted to a range of its days would read back as a span of days, a different expression from the month, so it stays an error.
 
+## Building expressions
+
+### How a built expression composes (decisions 45, 46 and 47)
+
+**The question.** Each builder made a whole expression in one call from keyword parts: `Tempo.every/2` took the cadence, the start, the end and the selection at once. How does an expression said a piece at a time, every week, on Mondays, at nine, from June, ten times, get built?
+
+**The alternatives.**
+
+* Steps that refine the one struct: each takes an expression, or the result of the step before, and returns a result; an error passes through to the end, and every step's result is an expression built as its text reads.
+
+* The same steps returning the bare expression and raising where a part cannot be built.
+
+* Steps that gather a plan, made into an expression by a final `build/1`, the steps not themselves expressions.
+
+And where the steps live: in a module the caller imports, `Tempo.Builder`, so that they are short English words beside `Tempo.at/2` and `Tempo.on/2` without colliding with them, or in `Tempo` under other names. And what they refine: any expression where they have a meaning, or recurrences and selections only.
+
+**The choice.** Steps that refine the one struct and pass an error on, in `Tempo.Builder`, refining any expression where they have a meaning.
+
+```elixir
+iex> import Tempo.Builder
+iex> every(:week) |> on(:monday) |> at(hour: 9) |> starting(~o"2026-06-01") |> times(10)
+{:ok, ~o"R10/2026Y6M1D/P1W/FL1KT9HN"}
+iex> ~o"2026-06" |> on(:monday) |> at(hour: 9)
+{:ok, ~o"2026Y6ML1KT9HN"}
+```
+
+**Why.** One struct means every step can return a real expression: the pipeline can stop at any step and what it holds is usable, inspectable and writable, which a plan is not. A result passed on keeps Tempo's contract of returning its errors while still reading as one pipeline, and a value holds a selection as a recurrence does, so `on` and `at` mean one thing in both. The steps are English words because the test of an example is that it reads as a sentence a product manager would say.
+
 ## Errors
 
 ### An argument that is no expression (decision 39)

@@ -506,10 +506,20 @@ defmodule Tempo.Reader do
     with {:ok, [member]} <- member(rest, text), do: {:ok, [{:except, member}]}
   end
 
+  # A member that is a recurrence is read whole: a `..` in it is its open
+  # start (`R/../P1Y/FL12M25DN`) or its domain's, and no range of the set's.
+  defp member(<<"R", _::binary>> = body, text) do
+    if String.match?(body, ~r/\AR[0-9]*\//),
+      do: with({:ok, expression} <- expression(body, text), do: {:ok, [expression]}),
+      else: ranged_member(body, text)
+  end
+
+  defp member(body, text), do: ranged_member(body, text)
+
   # A member that is an interval with an open end, `2026-06-03/..` and
   # `../2026-06-03`, is that interval: its `..` is the end's, and no range's.
   # It is what "and later" (`2026-06-03..`) is written back as.
-  defp member(body, text) do
+  defp ranged_member(body, text) do
     case split_top(body, "..") do
       [_single] ->
         with {:ok, expression} <- expression(body, text), do: {:ok, [expression]}

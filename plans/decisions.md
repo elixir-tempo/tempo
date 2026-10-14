@@ -498,3 +498,33 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **State.** Built in `tempo_sql`. Meta version 3 holds the expression's text, its metadata and each member's for a set. A version 1 or 2 row is read with its end written to a calendar unit moved back a unit, a recurrence rebuilt with `Tempo.every/2` (`:to` for one counted back), and a set of version 2 intervals read member by member; a document with neither an expression nor both ends is refused.
 
+
+## 45. How a built expression composes
+
+* **Question.** Each builder (`Tempo.new/1`, `Tempo.every/2`, `Tempo.selection/1`, `Tempo.one_of/1`, the `new` functions of `Tempo.Interval`, `Tempo.Duration` and `Tempo.IntervalSet`) makes a whole expression in one call from keyword parts. Nothing refines an expression a step at a time: every week, then on Mondays, at nine, from June, ten times, in Paris. How does a pipeline of steps compose?
+
+* **Context.** Asked for by the user as the one key feature Tempo lacks (2026-10-14), before a sweep that removes every expression built by string manipulation. The options were (1) refinement verbs on the one struct, each taking an expression or a result (`{:ok, _}`, `{:error, _}`) and returning a result, an error passing through to the end, every step's result an expression built as its text reads; (2) the same verbs returning the bare expression and raising on a part that cannot be built; (3) verbs that gather a plan, made into an expression by a final `build/1`, the steps not themselves expressions.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built. `Tempo.Builder` (`lib/tempo/builder.ex`) holds the steps: `every/1`, `on/3` (with `:nth` and `:within`), `at/2`, `lasting/2`, `starting/2`, `until/2`, `times/2`, `ending/2`, `in_zone/2`, `in_calendar/2`, `weeks_beginning/2`, `in_years/3`, `except/2`, `with_metadata/2` and `all_of/1`. A recurrence is rebuilt through `Tempo.every/2` from its own options with the one changed (`Tempo.Build.every_options/1`), a start, an end, a count and years each given once; a selection is merged into a recurrence's rule or a value's, and a time given to a positioned selection closes it first. `test/tempo/builder_test.exs` holds each pipeline to the text it reads as, seventeen of RFC 5545's examples among them, and `test/tempo/holiday_builder_test.exs` builds a rule of each of the 290 shapes `tempo_holidays` makes for its 208 territories. Building it found five defects, fixed: the occurrences of a recurrence with no rule did not carry its metadata; `Tempo.in_zone/2` took no fixed offset; a set whose member is a recurrence with an open start did not read (every holiday set of its territories, 375 of 3,695 rules, which now all read back as they were written); and `Tempo.every/2` and the RRULE reader left an until out of its start's zone and calendar.
+
+## 46. Where the builder's verbs live
+
+* **Question.** The verbs read as English words (`every`, `on`, `at`, `starting`, `until`, `times`), and `Tempo.at/2` and `Tempo.on/2` already place one value on another. Where are they?
+
+* **Context.** With decision 45. The options were (1) a module the caller imports, `Tempo.Builder`, so the verbs are short English words beside `Tempo`'s functions without colliding with them; (2) in `Tempo`, under names that do not collide.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built: `Tempo.Builder`, meant to be imported.
+
+## 47. What the builder's verbs refine
+
+* **Question.** Do the verbs refine recurrences and selections only, or any expression?
+
+* **Context.** With decision 45. A value holds a selection as a recurrence does (`2026Y6ML1KT9HN`, the Mondays of June 2026 at nine), so one verb can refine both. The options were (1) the verbs refine any expression where they have a meaning: `~o"2026-06" |> on(:monday) |> at(hour: 9)` as `every(:week) |> on(:monday) |> at(hour: 9)`, values, spans, sets and recurrences alike; (2) recurrences and selections only, values and spans kept to `Tempo.new/1` and `Tempo.Interval.new/1`.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built: `on/3` and `at/2` refine a value, a recurrence and the members of a set; an interval is refused, with `Tempo.select/3` named.

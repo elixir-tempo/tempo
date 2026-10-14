@@ -114,7 +114,7 @@ defmodule Tempo.MixProject do
 
   def groups_for_modules do
     [
-      Core: ~r/^Tempo(?:\.(Interval|IntervalSet|RecurrenceSet|Duration|Sigils))?$/,
+      Core: ~r/^Tempo(?:\.(Interval|IntervalSet|RecurrenceSet|Duration|Sigils|Builder))?$/,
       "Relations and selection": ~r/^Tempo\.(Allen|Workdays|Territory|Event|Event\.Resolver)$/,
       "Recurrence rules and calendar formats": ~r/^Tempo\.(RRule|Cron|ICal|JSCalendar)$/,
       "Clock, leap seconds and explanation":
@@ -149,6 +149,7 @@ defmodule Tempo.MixProject do
         "guides/when-to-use-tempo.md",
         "guides/ai-assistance.md",
         "guides/interop.md",
+        "guides/building-expressions.md",
         "guides/set-operations.md",
         "guides/selection.md",
         "guides/uncertain-dates.md",
