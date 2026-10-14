@@ -25,7 +25,11 @@ defmodule Tempo.Event.Resolver do
   @doc "The event names this resolver computes."
   @callback known() :: [String.t()]
 
-  @doc "The date of a named event in a Gregorian year, `{:ok, date}` in `Calendar.ISO` or `{:error, reason}`."
+  @doc """
+  The date of a named event in a Gregorian year, `{:ok, date}` in
+  `Calendar.ISO` or `{:error, reason}`. `Tempo.Event.date/3` returns the
+  reason as that of a `Tempo.InvalidDateError`, and an exception as it is.
+  """
   @callback date(name :: String.t(), year :: integer(), calendar :: module()) ::
               {:ok, Date.t()} | {:error, term()}
 end

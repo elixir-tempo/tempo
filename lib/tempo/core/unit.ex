@@ -89,6 +89,7 @@ defmodule Tempo.Unit do
 
   # The least a unit holds: the first month, day or week; the clock's zero.
   @minimum %{
+    quarter: 1,
     month: 1,
     week: 1,
     day: 1,

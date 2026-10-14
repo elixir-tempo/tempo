@@ -529,6 +529,44 @@ iex> Tempo.trunc(~D[2026-06-15], :month)
 
 **Why.** Every function answers every shape of expression or returns an error that names what is wrong, and an argument of the wrong type is one more shape. A `FunctionClauseError` names the clauses that did not match, which says nothing to a caller who passed a `Date` where Tempo wanted its own value. A predicate raises rather than returns the error because `Enum.filter(values, &Tempo.overlaps?(&1, june))` would read an `{:error, _}` tuple as true.
 
+### The errors of a computed event (decision 52)
+
+**The question.** What does `Tempo.Event.date/3` return when it cannot give a date: an event no one knows, a zone that is none, a year the astronomy does not reach, or a reason of an application's own resolver?
+
+**The alternatives.** Name the error in `date/3`; change the resolver behaviour so a resolver returns an exception; leave the bare reasons.
+
+**The choice.** Name it in `date/3`: a `Tempo.InvalidDateError` with `unit: :event` and the reason, or a `Tempo.ZoneError` for a zone.
+
+```elixir
+iex> {:error, %Tempo.InvalidDateError{reason: {:unknown_event, "brigadoon"}}} =
+...>   Tempo.Event.date("brigadoon", 2026)
+```
+
+**Why.** The reader already names an unknown event so, and an application's resolver keeps the simple `{:error, reason}` it was written to.
+
+### A predicate that cannot answer (decision 53)
+
+**The question.** What does `Tempo.workday?/2` answer for a month, which is many days?
+
+**The alternatives.** Raise, as the other predicates do; return the error.
+
+**The choice.** Raise. `Enum.filter(days, &Tempo.workday?(&1, :US))` would read an `{:error, _}` tuple as true.
+
+### Truncating to a season or a traditional month (decision 54)
+
+**The question.** Which season is 15 June in, and which traditional month is a Hebrew date given with ordinal months?
+
+**The alternatives.** A named error unless the value is written in the unit; compute the answer.
+
+**The choice.** A named error, `{:not_written_in, unit}`, from `trunc/2`, `round/2` and `at_resolution/2`.
+
+```elixir
+iex> {:error, %Tempo.ConversionError{reason: {:not_written_in, :season}}} =
+...>   Tempo.trunc(~o"2026-06-15", :season)
+```
+
+**Why.** A date is in summer in London and in winter in Sydney, and the answer was the month, a value of another unit. Where a value is extended to a unit on another axis than its own, as a month to its weeks, Tempo answers with the period of that unit it starts in, as `trunc/2` does: June 2026 at the week is the week of 1 June.
+
 ## Decisions about the project
 
 Some decisions concern the project rather than the meaning of a date, and are recorded here briefly:

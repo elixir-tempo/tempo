@@ -89,6 +89,9 @@ defmodule Tempo.Scale do
 
       {:microsecond, precision} ->
         [hour: hour, minute: minute, second: second, microsecond: {microsecond, precision}]
+
+      :microsecond ->
+        [hour: hour, minute: minute, second: second, microsecond: {microsecond, 6}]
     end
   end
 

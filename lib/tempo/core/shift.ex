@@ -191,6 +191,12 @@ defmodule Tempo.Shift do
     end
   end
 
+  # A year's first weekday is that of its first week.
+  defp filled_down_to([year: _year] = units, :day_of_week), do: units ++ [week: 1, day_of_week: 1]
+
+  # A century's first decade is that of its first year.
+  defp filled_down_to([year: year], :decade), do: [decade: Integer.floor_div(year, 10)]
+
   # A century or a decade written as its first year is already at the year.
   defp filled_down_to(units, unit) do
     if written_to?(units, unit), do: units, else: with_first(Expand.filled_to(units, unit), unit)
@@ -706,6 +712,10 @@ defmodule Tempo.Shift do
       Unit.compare(unit, Unit.grain(Unit.resolution(units))) != :lt ->
         {:ok, value}
 
+      # A season or a traditional month is named only by a value written in one.
+      unit in [:season, :traditional_month] ->
+        {:error, conversion(value, {:not_written_in, unit})}
+
       not Unit.concrete?(units) ->
         {:error, conversion(value, :several)}
 
@@ -896,9 +906,17 @@ defmodule Tempo.Shift do
   @doc "A value written at a unit: truncated to a coarser one, extended with first values to a finer one."
   @spec at_resolution(expression(), Unit.t()) :: {:ok, expression()} | {:error, Exception.t()}
   def at_resolution(%Tempo{form: {:value, units}} = value, unit) do
-    if Unit.compare(unit, Unit.grain(Unit.resolution(units))) == :gt,
-      do: {:ok, %{value | form: {:value, extended_to(units, unit, value.calendar)}}},
-      else: trunc(value, unit)
+    cond do
+      Unit.compare(unit, Unit.grain(Unit.resolution(units))) != :gt ->
+        trunc(value, unit)
+
+      # A year begins in no season, and in no traditional month all calendars share.
+      unit in [:season, :traditional_month] ->
+        {:error, conversion(value, {:not_written_in, unit})}
+
+      true ->
+        extended_on_axis(value, units, unit)
+    end
   end
 
   def at_resolution(%Tempo{} = expression, unit),
@@ -906,6 +924,51 @@ defmodule Tempo.Shift do
 
   def at_resolution(%Duration{} = duration, _unit),
     do: {:error, conversion(duration, :bare_duration)}
+
+  # Units extended on their own axis with first values; a unit on another
+  # axis (a week of a month, a day of a quarter) is the period of it the
+  # value starts in, as `trunc/2` names one.
+  defp extended_on_axis(value, units, unit) do
+    extended = extended_to(units, unit, value.calendar)
+
+    if on_axis?(units, extended),
+      do: {:ok, %{value | form: {:value, extended}}},
+      else: starting_period(value, units, unit)
+  end
+
+  defp on_axis?(units, extended) do
+    from = max(length(units) - 1, 0)
+
+    extended
+    |> Enum.drop(from)
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.all?(fn [previous, next] -> next_on_axis?(previous, next) end)
+  end
+
+  defp next_on_axis?(previous, next) when previous in [:century, :decade, :year],
+    do: next in [:decade, :year, :month, :week, :day_of_year, :quarter]
+
+  defp next_on_axis?(:week, next), do: next == :day_of_week
+  defp next_on_axis?(previous, :hour), do: previous in [:day, :day_of_week, :day_of_year]
+  defp next_on_axis?(previous, next), do: Unit.child(previous) == next
+
+  defp starting_period(value, units, unit) do
+    cond do
+      not Unit.concrete?(units) ->
+        {:error, conversion(value, :several)}
+
+      not Unit.anchored?(units) ->
+        {:error, conversion(value, :needs_a_year)}
+
+      true ->
+        frame = Spans.frame_of(value)
+
+        with {:ok, {start, _}} <- extent(plain(units), frame, value) do
+          {:ok, %{value | form: {:value, period_units(start, unit, frame)}} |> requalified()}
+        end
+    end
+  end
 
   @doc "A value split into its date and its time of day, either nil when the value has none."
   @spec split(expression()) :: {Tempo.t() | nil, Tempo.t() | nil} | {:error, Exception.t()}

@@ -255,6 +255,48 @@ defmodule Tempo.ShiftTest do
       assert Tempo.split(~o"2026-06~-15") == {~o"2026-06~-15", nil}
       assert {:error, %ConversionError{}} = Tempo.split(~o"2026-06-15/2026-06-16")
     end
+
+    test "extend on the value's own axis, and to another axis as the period it starts in" do
+      assert Tempo.at_resolution(~o"2027", :day_of_week) == {:ok, ~o"2027-W01-1"}
+      assert Tempo.at_resolution(~o"20C", :decade) == {:ok, ~o"200J"}
+      assert Tempo.at_resolution(~o"2026", :quarter) == {:ok, ~o"2026Y33M"}
+      assert Tempo.at_resolution(~o"2026-W23", :second) == {:ok, ~o"2026-W23-1T00:00:00"}
+      assert Tempo.at_resolution(~o"2026-166", :minute) == {:ok, ~o"2026-166T00:00"}
+      assert Tempo.at_resolution(~o"2026-06", :week) == {:ok, ~o"2026-W23"}
+      assert Tempo.at_resolution(~o"2026-06", :day_of_year) == {:ok, ~o"2026-152"}
+      assert Tempo.at_resolution(~o"2026Y34M", :day) == {:ok, ~o"2026-04-01"}
+
+      assert {:error, %ConversionError{reason: :needs_a_year}} =
+               Tempo.at_resolution(~o"6M", :week)
+
+      assert {:error, %ConversionError{reason: :several}} =
+               Tempo.at_resolution(~o"2026Y{6,7}M", :week)
+    end
+
+    test "a season or a traditional month is named only by a value written in one" do
+      {:ok, hebrew} = Tempo.to_calendar(~o"2026-06-15", Calendrical.Hebrew)
+
+      for {value, unit} <- [{~o"2026-06-15", :season}, {hebrew, :traditional_month}] do
+        assert {:error, %ConversionError{reason: {:not_written_in, ^unit}}} =
+                 Tempo.trunc(value, unit)
+
+        assert {:error, %ConversionError{reason: {:not_written_in, ^unit}}} =
+                 Tempo.round(value, unit)
+
+        assert {:error, %ConversionError{reason: {:not_written_in, ^unit}}} =
+                 Tempo.at_resolution(value, unit)
+      end
+
+      # A year begins in neither, and is coarser than both.
+      for unit <- [:season, :traditional_month] do
+        assert {:error, %ConversionError{reason: {:not_written_in, ^unit}}} =
+                 Tempo.at_resolution(~o"2026", unit)
+
+        assert Tempo.trunc(~o"2026", unit) == {:ok, ~o"2026"}
+      end
+
+      assert Tempo.trunc(~o"2026Y22M", :season) == {:ok, ~o"2026Y22M"}
+    end
   end
 
   describe "a change of the clock" do

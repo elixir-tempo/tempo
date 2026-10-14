@@ -136,8 +136,10 @@ defmodule Tempo.Expand do
     end
   end
 
-  # The unit a gap under a unit is filled with: a week's is its weekday.
+  # The unit a gap under a unit is filled with: a week's is its weekday, and
+  # a weekday's or a day of the year's is its hour, as a day's is.
   defp filler(:week), do: :day_of_week
+  defp filler(unit) when unit in [:day_of_week, :day_of_year], do: :hour
   defp filler(unit), do: Unit.child(unit)
 
   @doc """
@@ -148,7 +150,7 @@ defmodule Tempo.Expand do
   def filled_to(prefix, unit) do
     {last, _} = List.last(prefix) || {nil, nil}
 
-    if last == nil or contains?(last, Keyword.get(prefix, last), unit) do
+    if last == nil or Unit.grain(last) == unit or contains?(last, Keyword.get(prefix, last), unit) do
       prefix
     else
       case filler(last) do

@@ -5,7 +5,7 @@ defmodule Tempo.EventTest do
 
   import Tempo.Sigils
 
-  alias Tempo.{Event, Interval, IntervalSet}
+  alias Tempo.{Event, Interval, IntervalSet, InvalidDateError, ZoneError}
 
   defmodule FiscalEvents do
     @behaviour Tempo.Event.Resolver
@@ -54,14 +54,21 @@ defmodule Tempo.EventTest do
     end
 
     test "what has no instant, a zone that is none and a year out of reach are errors" do
-      assert Event.date("easter@+09:00", 2026) == {:error, {:no_instant, "easter"}}
-      assert Event.date("brigadoon@+09:00", 2026) == {:error, {:unknown_event, "brigadoon"}}
+      assert {:error, %InvalidDateError{unit: :event, reason: {:no_instant, "easter"}}} =
+               Event.date("easter@+09:00", 2026)
 
-      assert Event.date("march-equinox@Mars/Olympus", 2026) ==
-               {:error, {:invalid_zone, "Mars/Olympus"}}
+      assert {:error, %InvalidDateError{reason: {:unknown_event, "brigadoon"}}} =
+               Event.date("brigadoon@+09:00", 2026)
 
-      assert Event.date("march-equinox@+99:00", 2026) == {:error, {:invalid_zone, "+99:00"}}
-      assert Event.date("march-equinox", 99_999) == {:error, :year_out_of_range}
+      assert {:error, %ZoneError{zone: "Mars/Olympus", reason: :unknown}} =
+               Event.date("march-equinox@Mars/Olympus", 2026)
+
+      assert {:error, %ZoneError{zone: "+99:00"}} = Event.date("march-equinox@+99:00", 2026)
+
+      assert {:error, %InvalidDateError{reason: :year_out_of_range} = error} =
+               Event.date("march-equinox", 99_999)
+
+      assert Exception.message(error) =~ "astronomy does not reach"
     end
   end
 
@@ -80,7 +87,8 @@ defmodule Tempo.EventTest do
     end
 
     test "a module that is no calendar reckons none" do
-      assert Event.date("qingming", 2026, String) == {:error, {:no_solar_terms, String}}
+      assert {:error, %InvalidDateError{reason: {:no_solar_terms, String}}} =
+               Event.date("qingming", 2026, String)
     end
   end
 
@@ -115,12 +123,16 @@ defmodule Tempo.EventTest do
     end
 
     test "its own error is returned, and an answer that is no date is one" do
-      assert Event.date("refused", 2026) == {:error, :closed}
-      assert Event.date("not-a-date", 2026) == {:error, {:not_a_date, :tomorrow}}
+      assert {:error, %InvalidDateError{value: "refused", reason: :closed}} =
+               Event.date("refused", 2026)
+
+      assert {:error, %InvalidDateError{reason: {:not_a_date, :tomorrow}}} =
+               Event.date("not-a-date", 2026)
     end
 
     test "a name it does not know is still unknown" do
-      assert Event.date("brigadoon", 2026) == {:error, {:unknown_event, "brigadoon"}}
+      assert {:error, %InvalidDateError{reason: {:unknown_event, "brigadoon"}}} =
+               Event.date("brigadoon", 2026)
     end
   end
 end

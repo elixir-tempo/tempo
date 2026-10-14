@@ -47,6 +47,20 @@ defmodule Tempo.InvalidDateError do
   defp describe({:unknown_event, name}),
     do: "#{inspect(name)}, a name no event Tempo knows has (see Tempo.Event.known/0)"
 
+  defp describe({:no_instant, name}),
+    do: "#{inspect(name)}, an event that is a day and no instant, so has no date in a zone"
+
+  defp describe({:no_solar_terms, calendar}),
+    do: "a solar term, which #{inspect(calendar)} does not reckon"
+
+  defp describe(:year_out_of_range), do: "in a year the astronomy does not reach"
+
+  defp describe({:uncomputable_event, event}),
+    do: "#{inspect(event)}, whose date the calendar cannot give that year"
+
+  defp describe({:not_a_date, given}),
+    do: "#{inspect(given)}, which its resolver answered where a date belongs"
+
   defp describe(:skipped_by_the_clock), do: "a reading the zone's clock skips"
   defp describe(:needs_a_year), do: "a value that cannot be told without a year"
   defp describe(reason) when is_binary(reason), do: reason

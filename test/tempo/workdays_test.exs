@@ -87,6 +87,13 @@ defmodule Tempo.WorkdaysTest do
       refute Tempo.weekend?(~o"2027-04-26", school_days())
     end
 
+    test "workday? and weekend? raise what they cannot answer, as predicates do" do
+      assert_raise Tempo.ConversionError, fn -> Tempo.workday?(~o"2026-06", :US) end
+      assert_raise Tempo.ConversionError, fn -> Tempo.weekend?(~o"2026-06", :US) end
+      assert_raise Tempo.ConversionError, fn -> Tempo.workday?(nil, :US) end
+      assert_raise ArgumentError, fn -> Tempo.weekend?(~o"2026-06-15", "nowhere") end
+    end
+
     test "counting a span's workdays leaves the days off out" do
       # Term 2 of 2027, Tuesday 27 April to Friday 2 July: nine weeks and four
       # days, with no day off this set holds (King's Birthday is not in it).

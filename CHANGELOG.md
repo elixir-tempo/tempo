@@ -178,6 +178,16 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * A value extended to the microsecond, or built with an integer `:microsecond`, holds `{microseconds, 6}` and is written, where the writer raised.
 
+* `Tempo.Event.date/3` returns a `Tempo.InvalidDateError` or a `Tempo.ZoneError`, where it returned bare reasons.
+
+* `Tempo.workday?/2` and `weekend?/2` raise what they cannot answer, as predicates do, where they returned an error.
+
+* `trunc/2`, `round/2` and `at_resolution/2` to a season or traditional month the value is not written in are `{:not_written_in, unit}`, where they answered the month.
+
+* `Tempo.at_resolution/2` to a unit on another axis is the period of it the value starts in (June at the week is the week of 1 June), where it wrote both units.
+
+* `Tempo.at_resolution/2` extends a weekday or a day of the year through the hour, a year to a quarter, and a century to a decade, where they skipped units or raised.
+
 * An offset behind UTC by less than an hour (`-00:30`) is read as behind; it was read as ahead.
 
 * `Tempo.from_elixir/2` reads a `DateTime` whose time zone is an offset (`"-05:00"`), is UTC beside an offset, or is no zone of the database by its own offset, and `Tempo.to_datetime/1` answers for a value in a fixed-offset zone (`[-05:00]`). `Tempo.parse/2` reads "EST" and "GMT+5" as the shifts they are.

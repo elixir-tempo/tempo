@@ -1834,6 +1834,10 @@ defmodule Tempo do
   defp verdict({:error, exception}), do: raise(exception)
   defp verdict(verdict), do: verdict
 
+  # A predicate's answer, or the error it raises.
+  defp answered(answer) when is_boolean(answer), do: answer
+  defp answered({:error, exception}), do: raise(exception)
+
   # ── Frames ────────────────────────────────────────────────────────────
 
   @doc """
@@ -2603,7 +2607,11 @@ defmodule Tempo do
 
   * `{:error, %Tempo.ConversionError{}}` when a unit the value is not
     written in is asked of a value that names several periods, or has no
-    year.
+    year, and with reason `{:not_written_in, unit}` for a season or a
+    traditional month the value is not written in, which a date names
+    none of.
+
+  * `{:error, %ArgumentError{}}` for a unit that is not one.
 
   ### Examples
 
@@ -2723,7 +2731,9 @@ defmodule Tempo do
   @doc """
   A value written at a unit: truncated to a coarser one as `trunc/2`
   truncates, and extended to a finer one with the first value of each unit
-  between.
+  between. A finer unit on another axis than the value's, a week of a month
+  or a day of a quarter, is the period of it the value starts in, as
+  `trunc/2` names one.
 
   ### Arguments
 
@@ -2733,12 +2743,17 @@ defmodule Tempo do
 
   ### Returns
 
-  * `{:ok, expression}`, or `{:error, exception}` as for `trunc/2`.
+  * `{:ok, expression}`, or `{:error, exception}` as for `trunc/2`. A
+    year begins in no season and in no traditional month, so extending to
+    either is `{:not_written_in, unit}`.
 
   ### Examples
 
       iex> Tempo.at_resolution(~o"2020Y", :day)
       {:ok, ~o"2020Y1M1D"}
+
+      iex> Tempo.at_resolution(~o"2026-06", :week)
+      {:ok, ~o"2026-W23"}
 
       iex> Tempo.at_resolution(~o"2020Y6M15DT10H", :day)
       {:ok, ~o"2020Y6M15D"}
@@ -3658,8 +3673,12 @@ defmodule Tempo do
 
     ### Returns
 
-    * `true` or `false`, or `{:error, exception}` for a value that names
-      several days or a territory Localize does not know.
+    * `true` or `false`.
+
+    * Raises a `Tempo.ConversionError` for a value that names several days
+      and the error `workdays/2` returns for a territory Localize does not
+      know, as a predicate raises rather than answers an error that
+      `Enum.filter/2` would read as true.
 
     ### Examples
 
@@ -3670,15 +3689,17 @@ defmodule Tempo do
         #{name == :workday?}
 
     """
-    @spec unquote(name)(t(), term()) :: boolean() | {:error, error()}
+    @spec unquote(name)(t(), term()) :: boolean()
     def unquote(name)(value, territory \\ nil)
 
     def unquote(name)(value, territory) when is_expression(value) do
-      with {:ok, workdays} <- Workdays.new(territory),
-           do: Workdays.unquote(name)(value, workdays)
+      case Workdays.new(territory) do
+        {:ok, workdays} -> answered(Workdays.unquote(name)(value, workdays))
+        {:error, exception} -> raise exception
+      end
     end
 
-    def unquote(name)(other, _territory), do: not_an_expression(other)
+    def unquote(name)(other, _territory), do: not_an_expression!(other)
   end
 
   @doc """

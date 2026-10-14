@@ -568,3 +568,33 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Option 1.
 
 * **State.** Built: `Tempo.Builder.some/2` (`Tempo.Build.unspecifying/2`).
+
+## 52. The errors of `Tempo.Event.date/3`
+
+* **Question.** `Tempo.Event.date/3` returned bare reasons (`{:error, {:unknown_event, name}}`, `{:invalid_zone, zone}`, a resolver's own reason) where every other public function returns an exception. Which should it return?
+
+* **Context.** Found in the 2.0 release review. The reasons come from the computation and from `Tempo.Event.Resolver` implementations, which return `{:error, reason}`. The options were (1) to name the error in `date/3` and leave the behaviour as it is; (2) to change the behaviour so a resolver returns an exception; (3) to leave it.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built. `date/3` returns a `Tempo.InvalidDateError` with `unit: :event` and the reason, as the reader already reported an unknown event, a `Tempo.ZoneError` with reason `:unknown` for a zone after an `@` that is none, and an exception a resolver returns as it is.
+
+## 53. A workday predicate that cannot answer
+
+* **Question.** `Tempo.workday?/2` and `weekend?/2` returned `{:error, exception}` for a value that names several days or a territory that is none. Decision 39 has predicates raise. Which do they do?
+
+* **Context.** Found in the 2.0 release review. The options were (1) raise, as the other predicates do; (2) keep the error, as an exception to the rule.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: both raise the error, and a non-expression raises `:not_an_expression`. `Tempo.Workdays`'s own functions, which are no API, keep returning it for the workday functions that use them.
+
+## 54. Truncating to a season or a traditional month
+
+* **Question.** `Tempo.trunc(~o"2026-06-15", :season)` answered the month, and a Hebrew date truncated to `:traditional_month` its ordinal month. What should they answer?
+
+* **Context.** Found in the 2.0 release review. The options were (1) a named error unless the value is written in the unit; (2) compute the season or the traditional month. A season of 21 to 24 has months in the territory in force (decisions 19, 20 and 22), so option 2 is open for a season without new work in Calendrical.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: `trunc/2`, `round/2` and `at_resolution/2` return `Tempo.ConversionError` with reason `{:not_written_in, unit}`, and extending a value to either unit is the same error, since a year begins in neither. Found with it and fixed: `at_resolution/2` appended a unit on another axis to the value (`2026Y6M1W`, `2026Y34M1D`, and `2026Y1K`, every Monday of 2026), and now names the period of that unit the value starts in, as `trunc/2` does; a weekday or a day of the year extended to the clock skipped the hour and the minute; a year extended to a quarter or a century to a decade raised `KeyError`.

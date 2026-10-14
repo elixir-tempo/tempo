@@ -31,6 +31,7 @@ defmodule Tempo.ConversionError do
           | :not_an_elixir_value
           | :not_a_duration
           | :not_an_interval
+          | {:not_written_in, :season | :traditional_month}
           | term()
 
   @type t :: %__MODULE__{value: term(), reason: reason()}
@@ -109,6 +110,13 @@ defmodule Tempo.ConversionError do
   defp describe({:no_rrule, :month_end}),
     do:
       "steps to the last day of a month that lacks its start's day, where RFC 5545 would pass the month over"
+
+  defp describe({:not_written_in, :season}),
+    do:
+      "is not written in seasons, so names none: a date lies in a season only on one side of the equator, and a year begins in none; write the value in seasons, or give the season of a hemisphere (25 to 32)"
+
+  defp describe({:not_written_in, unit}),
+    do: "is not written in a #{unit}, so names none; write the value in one"
 
   defp describe(:not_an_expression), do: "is not a Tempo expression"
 

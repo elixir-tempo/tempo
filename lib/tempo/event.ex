@@ -17,6 +17,8 @@ defmodule Tempo.Event do
   """
 
   alias Tempo.Calendar, as: Calendars
+  alias Tempo.InvalidDateError
+  alias Tempo.ZoneError
 
   # The solar terms by name, each with the number Calendrical counts it by,
   # from `lichun`; Tempo holds the names to select by.
@@ -105,9 +107,17 @@ defmodule Tempo.Event do
 
   * `{:ok, date}`, a `t:Date.t/0` in `Calendar.ISO`.
 
-  * `{:error, reason}`: `{:unknown_event, name}`, `{:no_solar_terms,
-    calendar}`, `{:invalid_zone, zone}`, `:year_out_of_range` for a year
-    `Astro` does not reach, or a resolver's own reason.
+  * `{:error, %Tempo.InvalidDateError{unit: :event}}` whose reason is
+    `{:unknown_event, name}`, `{:no_instant, name}` for an `@` zone after an
+    event that is no instant, `{:no_solar_terms, calendar}`,
+    `:year_out_of_range` for a year `Astro` does not reach, or a resolver's
+    own reason.
+
+  * `{:error, %Tempo.ZoneError{reason: :unknown}}` for a zone after an `@`
+    that is none.
+
+  * `{:error, %ArgumentError{}}` for a name that is no string or a year
+    that is no integer.
 
   ### Examples
 
@@ -126,18 +136,18 @@ defmodule Tempo.Event do
       iex> Tempo.Event.date("qingming", 2026, Calendrical.Gregorian)
       {:ok, ~D[2026-04-05]}
 
-      iex> Tempo.Event.date("brigadoon", 2026)
-      {:error, {:unknown_event, "brigadoon"}}
+      iex> {:error, %Tempo.InvalidDateError{reason: {:unknown_event, "brigadoon"}}} =
+      ...>   Tempo.Event.date("brigadoon", 2026)
 
   """
-  @spec date(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, term()}
+  @spec date(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, Exception.t()}
   def date(name, year, calendar \\ Calendars.default())
 
   def date(name, year, calendar) when is_binary(name) and is_integer(year) do
-    case String.split(name, "@", parts: 2) do
-      [event, zone] -> zoned_date(event, zone, year)
-      [event] -> event_date(event, year, calendar)
-    end
+    name
+    |> String.split("@", parts: 2)
+    |> dated_event(year, calendar)
+    |> named(name)
   end
 
   def date(name, year, _calendar) when is_binary(name),
@@ -146,6 +156,20 @@ defmodule Tempo.Event do
 
   def date(name, _year, _calendar),
     do: {:error, ArgumentError.exception("an event's name is a string, not #{inspect(name)}")}
+
+  defp dated_event([event, zone], year, _calendar), do: zoned_date(event, zone, year)
+  defp dated_event([event], year, calendar), do: event_date(event, year, calendar)
+
+  # Every error is named where it leaves the module, the reasons the
+  # computation carries in it becoming the exception's.
+  defp named({:ok, %Date{}} = date, _name), do: date
+  defp named({:error, %{__exception__: true}} = error, _name), do: error
+
+  defp named({:error, {:invalid_zone, zone}}, _name),
+    do: {:error, ZoneError.exception(zone: zone, reason: :unknown)}
+
+  defp named({:error, reason}, name),
+    do: {:error, InvalidDateError.exception(value: name, unit: :event, reason: reason)}
 
   defp event_date(name, year, calendar) do
     case Map.fetch(@events, name) do
