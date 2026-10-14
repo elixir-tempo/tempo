@@ -618,3 +618,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Option 1.
 
 * **State.** Built, each change commented where it is made. `Tempo.Expand.placed/2` gives each value with the extent finding it gave (a reading of a clock that keeps one offset), and an hour's minutes are found under the hour's extent rather than the hour placed again; `Tempo.Select` takes that extent to judge a candidate, keeps the extent a next container was found with, and looks for no container past the period's end; the walk places its first start once, and a span picked whole keeps the extent the walk gave it. Weekly MWF went from 22.2 to 16.8 ms, last weekday from 37.8 to 30.3, hourly from 9.0 to 7.3, yearly from 1.94 to 1.68: 4 to 8 times 1.6.4. What is left is `Tempo.Select.in_period/3` answering values without their extents, so the walk places what it picks again; carrying them out would thread `{value, extent}` through every picking, rolling and positioning step of `Select`.
+
+## 57. Extents threaded through all of `Tempo.Select`
+
+* **Question.** Decision 56 left `Tempo.Select.in_period/3` answering values without their extents, so the walk placed what it picked again. Threading `{value, extent}` through every picking, rolling and positioning step of `Select` was built and measured. Is it kept?
+
+* **Context.** It made hourly and yearly rules 10 to 13% faster, last weekday and weekdays 2 to 4%, daily and weekly not measurably. The readability assessment found the algorithm as easy to follow as before, but `Select` harder to change safely: its picking pipeline carried pairs and a few steps plain values, two helpers took either, and the rule that a carried extent is what `Tempo.Spans.extent/1` gives was kept by hand in six places, where a forgotten one gives a wrong position near a change of the clock. The options were (1) revert it and keep decision 56's first round; (2) keep it with one constructor for a pair and a test holding every carried extent to `Spans.extent/1`; (3) keep it as it is.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Reverted before it was committed. `Select` answers values; decision 56's carrying stays inside `Expand.placed/2`, `Select`'s judging of a candidate and its containers, and the walk. Further work on rule expansion starts from the zone: about 100 questions of it in each weekly occurrence, for skipped days, readings shown twice and steady offsets.
