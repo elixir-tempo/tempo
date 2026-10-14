@@ -188,7 +188,7 @@ iex> Tempo.on(~o"T10:30", ~o"2026-01-04")
 
 ### Union — member-preserving
 
-All members of both operands, kept as distinct intervals with their original metadata.
+All members of both operands, kept as distinct intervals with their original metadata. A member both operands hold, the same in its span, its written form and its metadata, is one member of the union, so `union(a, a)` is `a`; members that cover the same time but differ in form or metadata (June, and 1 to 30 June; two bookings of one hour) stay two.
 
 ```elixir
 iex> {:ok, r} = Tempo.union(~o"2022Y", ~o"2023Y")

@@ -79,7 +79,9 @@ defmodule Tempo.SetOperationsTest do
     assert stretches(coalesced) == Sets.cover(a ++ b),
            "coalesced union of #{inspect(a)} and #{inspect(b)}"
 
-    assert marked(union) == Enum.sort(a ++ b), "union of #{inspect(a)} and #{inspect(b)}"
+    # A member both hold is one member of the union (decision 38).
+    assert marked(union) == Enum.uniq(Enum.sort(a ++ b)),
+           "union of #{inspect(a)} and #{inspect(b)}"
 
     assert marked(overlapping) == Enum.sort(Sets.members_overlapping(a, b)),
            "members overlapping of #{inspect(a)} and #{inspect(b)}"
@@ -135,5 +137,58 @@ defmodule Tempo.SetOperationsTest do
     {:ok, not_a_or_b} = Tempo.complement(a_or_b, within: window)
     {:ok, not_a_and_not_b} = Tempo.intersection(not_a, not_b)
     assert Tempo.equal?(not_a_or_b, not_a_and_not_b)
+  end
+
+  describe "a member both operands of a union hold" do
+    # Decision 38: the same member, in span, form and metadata, is one
+    # member of the union; members that differ in any of those are two.
+    test "is one member" do
+      june = Tempo.new!(year: 2026, month: 6)
+      {:ok, july} = Tempo.new(year: 2026, month: 7)
+      {:ok, june_and_july} = IntervalSet.new([june, july])
+
+      assert {:ok, union} = Tempo.union(june, june)
+      assert IntervalSet.count(union) == 1
+
+      assert {:ok, union} = Tempo.union(june_and_july, june)
+      assert IntervalSet.count(union) == 2
+    end
+
+    test "is two where their forms or their metadata differ" do
+      june = Tempo.new!(year: 2026, month: 6)
+
+      {:ok, days_of_june} =
+        Interval.new(
+          from: Tempo.new!(year: 2026, month: 6, day: 1),
+          to: Tempo.new!(year: 2026, month: 6, day: 30)
+        )
+
+      {:ok, nine} = Tempo.new(year: 2026, month: 6, day: 15, hour: 9)
+
+      assert {:ok, union} = Tempo.union(june, days_of_june)
+      assert IntervalSet.count(union) == 2
+
+      assert {:ok, union} =
+               Tempo.union(%{nine | metadata: %{who: "Ann"}}, %{nine | metadata: %{who: "Bob"}})
+
+      assert IntervalSet.count(union) == 2
+    end
+
+    test "is one member of a union with no end" do
+      {:ok, mondays} =
+        Tempo.every([week: 1],
+          from: Tempo.new!(year: 2026, month: 6, day: 1),
+          select: [day_of_week: 1]
+        )
+
+      {:ok, union} = Tempo.union(mondays, Tempo.new!(year: 2026, month: 6, day: 8))
+
+      assert union |> Enum.take(3) |> Enum.map(&Interval.from/1) ==
+               [
+                 Tempo.new!(year: 2026, month: 6, day: 1),
+                 Tempo.new!(year: 2026, month: 6, day: 8),
+                 Tempo.new!(year: 2026, month: 6, day: 15)
+               ]
+    end
   end
 end

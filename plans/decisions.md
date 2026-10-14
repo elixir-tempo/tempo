@@ -427,3 +427,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 2.
 
 * **State.** Built. The rule walk carries each period's extent and each occurrence's (`Tempo.Spans`), a period's extent is given to the selection, the start of the next period is kept from the one before, a period of one day is tested for its date and its named times built directly, and a yearly rule with a numbered weekday in named months keeps one period a year (where it had twelve, and was written back as a monthly rule). Rule expansion stands at 3 to 11 times 1.6.4 on the benchmark's cases; `TODO.md` holds the numbers and, under "Performance", where 2.0 could be faster still.
+
+## 38. A member both operands of a union hold
+
+* **Question.** Is a member that both operands of `Tempo.union/3` hold one member of the union, or two?
+
+* **Context.** `Tempo.union(~o"2026-06", ~o"2026-06")` was `{2026Y6M/2026Y6M,2026Y6M/2026Y6M}`, and the union of June and July with June held June twice. The redesign plan had listed "`union(a, a)` doubles every member" among 1.6's flaws; 2.0's set-algebra models defined union as both operands' members, repeats included, and `Tempo.equal?/2` (which compares the time covered) already held `union(a, a)` equal to `a`. The options were (1) the same member, in span, written form and metadata, being one member, members that differ in any of those staying two, (2) keeping both operands' members with repeats, and (3) merging members that cover the same time, whatever their form or metadata, which drops one member's metadata.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built: `Tempo.union/3` takes a member once where both operands hold it (or one holds it twice), with an endless operand too (`Tempo.Algebra.merged/2`). The models of `test/tempo/set_operations_test.exs` and `set_operations_measure_test.exs` say so, and its tests hold June beside 1 to 30 June, and two bookings of one hour with different metadata, as two members.

@@ -8,7 +8,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ### Before the release
 
-* [ ] **Test coverage has little headroom.** CI's coverage run (`mix test --cover --include guides --include total`: the suite, the guides and the totality check, 1,340 tests on 2026-10-14) is at 90.12% against the 90% it requires. The Gregorian calendars of other week starts are left out of the measure, being Calendrical's code. The suite it replaced was 217 files. Each was run against the new library on 2026-10-13 (`git show a43b944:test`): 52 still compile, and 775 of their 1,478 tests pass, so the old tests are not carried over as they stand, and what is worth carrying is their cases, each rewritten for the new API and checked against the standard it cites rather than the old answer. Every file ported so far found a defect.
+* [ ] **Test coverage has little headroom.** CI's coverage run (`mix test --cover --include guides --include total`: the suite, the guides and the totality check, 1,964 tests on 2026-10-14) is at 90.72% against the 90% it requires. The Gregorian calendars of other week starts are left out of the measure, being Calendrical's code. The suite it replaced was 217 files. Each was run against the new library on 2026-10-13 (`git show a43b944:test`): 52 still compile, and 775 of their 1,478 tests pass, so the old tests are not carried over as they stand, and what is worth carrying is their cases, each rewritten for the new API and checked against the standard it cites rather than the old answer. Every file ported so far found a defect.
     * [x] Cron, held to a matcher written apart from the library (`test/tempo/cron_test.exs`).
     * [x] RFC 5545's own examples, read from the text of the standard (`test/tempo/rfc5545_examples_test.exs`).
     * [x] iCalendar and JSCalendar import, with the fixtures (`ical_test.exs`, `ical_availability_test.exs`, `jscalendar_test.exs`).
@@ -40,11 +40,11 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 * [x] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused. Built (decision 34): a set of selections, `L{1K2I,3K2I}N`, held to `Date` in `selection_set_test.exs` and to the RRULE measure.
 
-* [ ] **A solar term of a year before 0 is a day late**: `Tempo.Event.date("qingming", -3000, Calendrical.Chinese)` is 7 April and the moment is on the 6th. Calendrical's `solar_term/3` takes `trunc/1` of the moment where it wants `floor/1`. Upstream.
+* [ ] **A solar term of a year before 0 is a day late**: `Tempo.Event.date("qingming", -3000, Calendrical.Chinese)` is 7 April and the moment is on the 6th. `Calendrical.Lunisolar.solar_term/3` takes `trunc(moment)`, which rounds a negative day number up, where it wants `floor/1`. Upstream; rechecked against Calendrical `448f435` on 2026-10-14.
 
-* [ ] **Text that is no calendar is read as a calendar of no events**: `Tempo.ICal.parse("hello, world")` is `{:ok, ~o"{}"}`. The `ical` library returns no error for text it cannot read. Upstream.
+* [ ] **Text that is no calendar is read as a calendar of no events**: `Tempo.ICal.parse("hello, world")` is `{:ok, ~o"{}"}`. The `ical` library returns no error for text it cannot read. Upstream; rechecked against `ical` 3.2.0 on 2026-10-14.
 
-* [ ] **Two Localize defects** found before the rewrite and not rechecked since: a month that begins after its first day (`Calendrical.Reform.England`, March 1751) is not written from its year and month, and a day of the month a year turns in (`Calendrical.Julian.March25`) is read back a year early.
+* [ ] **Two Localize defects**, rechecked against Localize `9ac3e95` on 2026-10-14. A day of the month a year turns in is read back a year early: `Localize.Date.parse("March 20, 1700", calendar: Calendrical.Julian.March25, format: :long)` is `1699-13-20`, where `Localize.Date.to_string/2` wrote it from `1700-13-20`; Tempo reaches it, `Tempo.parse("March 20, 1700", calendar: Calendrical.Julian.March25)` being `1699Y13M20D`. A month that begins after its first day is not written from its year and month: `Localize.Date.to_string(%{year: 1751, month: 3, calendar: Calendrical.Reform.England}, format: :yMMM)` is an `InvalidValueError`; Tempo no longer reaches it, writing a month by its days (`Mar 25 – 31, 1751`). Upstream.
 
 ### Performance
 

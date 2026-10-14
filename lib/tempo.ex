@@ -924,8 +924,9 @@ defmodule Tempo do
 
   @doc """
   The union of two expressions: every member of either, kept whole with its
-  own metadata, in order of start. Two members that cover one time stay two;
-  `Tempo.IntervalSet.coalesce/1` merges them.
+  own metadata, in order of start. A member both hold, the same in its span,
+  its form and its metadata, is one member; two members that cover one time
+  otherwise stay two, and `Tempo.IntervalSet.coalesce/1` merges them.
 
   ### Arguments
 
@@ -992,10 +993,12 @@ defmodule Tempo do
 
   defp united(:bounded, a, b, options) do
     with {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
+      # A member both operands hold is one member of their union (decision 38).
       members =
         Algebra.whole(pa ++ pb)
         |> Enum.sort_by(&{&1.start, &1.stop})
         |> Enum.map(& &1.span)
+        |> Enum.uniq()
 
       Algebra.gathered(members, calendar: frame.calendar, zone: frame.zone, metadata: a.metadata)
     end

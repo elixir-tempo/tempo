@@ -6,6 +6,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Breaking changes
 
+* `Tempo.union/3` holds a member both operands hold once (`union(a, a)` is `a`), where it held it twice; members that differ in form or metadata stay two.
+
 * An interval written to a date runs through that date: `~o"2026-06-15/2026-06-20"` is six days and holds the 20th. An end written to a time of day is still a boundary.
 
 * Every expression is a `%Tempo{}` with a `:form`. `%Tempo.Interval{}`, `%Tempo.IntervalSet{}`, `%Tempo.Set{}` and `%Tempo.Range{}` are no longer structs; their modules keep their functions.

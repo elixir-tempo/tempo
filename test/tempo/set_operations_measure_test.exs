@@ -216,13 +216,14 @@ defmodule Tempo.SetOperationsMeasureTest do
     end
 
     # A union keeps its operands' members, each whole, in the order of
-    # their starts.
+    # their starts, a member both hold once (decision 38).
     test "of a union are the members of both, in the order of their starts" do
       for a <- @sets, b <- @sets do
         {:ok, answer} = Tempo.union(set(:hours, a), set(:hours, b))
         spans = answer |> IntervalSet.members() |> Enum.map(&member_cells(&1, :hours))
 
-        assert {a, b, Enum.map(spans, &{hd(&1), List.last(&1) + 1})} == {a, b, Enum.sort(a ++ b)}
+        assert {a, b, Enum.map(spans, &{hd(&1), List.last(&1) + 1})} ==
+                 {a, b, Enum.uniq(Enum.sort(a ++ b))}
       end
     end
   end

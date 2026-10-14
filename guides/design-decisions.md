@@ -75,6 +75,31 @@ true
 
 **Why.** Taking the endless operand within the other was sometimes right and sometimes wrong: it said every Monday for ever was within June. Each predicate has an answer that needs no search, so none needs a window.
 
+### A member both operands of a union hold (decision 38)
+
+**The question.** `Tempo.union/3` keeps members whole rather than merging the time they cover. Is a member both operands hold one member of the union, or two?
+
+**The alternatives.**
+
+* One member, where it is the same in span, written form and metadata; members that differ in any of those stay two.
+
+* Two: the union is both operands' members, repeats included.
+
+* One for any two members covering the same time, whatever their form or metadata.
+
+**Tempo's choice.** The first.
+
+```elixir
+iex> {:ok, union} = Tempo.union(~o"2026-06", ~o"2026-06")
+iex> Tempo.IntervalSet.count(union)
+1
+iex> {:ok, union} = Tempo.union(~o"2026-06", ~o"2026-06-01/2026-06-30")
+iex> Tempo.IntervalSet.count(union)
+2
+```
+
+**Why.** In set algebra the union of a set with itself is the set. Keeping members whole is what lets a union carry each member's metadata (two bookings of one hour are two bookings), so members that differ in form or metadata stay apart, and merging the time they cover is left to `Tempo.IntervalSet.coalesce/1`.
+
 ### The order of a selection by a list (decision 10)
 
 **The question.** In what order does `Tempo.select/3` answer when its selector is a list, such as the 20th and the 5th of each month?

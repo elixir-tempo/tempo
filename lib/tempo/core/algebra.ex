@@ -487,15 +487,27 @@ defmodule Tempo.Algebra do
   defp kept(:difference), do: fn in_a, in_b -> in_a > 0 and in_b == 0 end
   defp kept(:symmetric_difference), do: fn in_a, in_b -> in_a > 0 != in_b > 0 end
 
-  @doc "The members of two operands given in the order of time, as one stream in that order."
+  @doc """
+  The members of two operands given in the order of time, as one stream in
+  that order; a member both hold, or one holds twice, is given once.
+  """
   @spec merged(Enumerable.t(), Enumerable.t()) :: Enumerable.t()
   def merged(in_a, in_b) do
-    Stream.resource(
-      fn -> %{a: cursor(in_a), b: cursor(in_b)} end,
-      &next_member/1,
-      &closed/1
-    )
+    fn -> %{a: cursor(in_a), b: cursor(in_b)} end
+    |> Stream.resource(&next_member/1, &closed/1)
+    |> Stream.transform({nil, []}, &once_at_its_place/2)
   end
+
+  # Members that begin and end together are next to one another; of those,
+  # one that is the same as one given before is not given again.
+  defp once_at_its_place(%{start: start, stop: stop, span: span} = member, {{start, stop}, given}) do
+    if span in given,
+      do: {[], {{start, stop}, given}},
+      else: {[member], {{start, stop}, [span | given]}}
+  end
+
+  defp once_at_its_place(%{start: start, stop: stop, span: span} = member, _elsewhere),
+    do: {[member], {{start, stop}, [span]}}
 
   defp next_member(%{a: nil, b: nil} = state), do: {:halt, state}
   defp next_member(%{a: {member, _}, b: nil} = state), do: {[member], advanced(state, :a)}
