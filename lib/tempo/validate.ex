@@ -1,4 +1,5 @@
 defmodule Tempo.Validate do
+  @minutes_in_a_day 24 * 60
   @moduledoc false
 
   # What the reader builds, checked once against the calendar (law 7: what
@@ -26,11 +27,24 @@ defmodule Tempo.Validate do
   def run(%Duration{} = duration), do: {:ok, duration}
 
   def run(%Tempo{form: form} = expression) do
-    case form(form, expression) do
-      :ok -> {:ok, expression}
-      {:error, _} = error -> error
+    with :ok <- offset(expression.zone, expression),
+         :ok <- form(form, expression) do
+      {:ok, expression}
     end
   end
+
+  # A zone that is a fixed offset (`[+14:00]`) is within a day of UTC, as a
+  # written shift is.
+  defp offset(%Zone{name: nil, offset: minutes}, expression)
+       when is_integer(minutes) and abs(minutes) >= @minutes_in_a_day do
+    invalid(
+      expression,
+      :zone,
+      "an offset of #{div(minutes, 60)} hours, where an offset is within a day of UTC"
+    )
+  end
+
+  defp offset(_zone, _expression), do: :ok
 
   defp form({:value, units}, expression) do
     with :ok <- value(units, expression),

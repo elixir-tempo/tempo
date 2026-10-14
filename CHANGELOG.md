@@ -122,6 +122,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* A zone that is a fixed offset is within a day of UTC, as a written shift is: `[+25:00]` is refused, where it was read.
+
 * An offset behind UTC by less than an hour (`-00:30`) is read as behind; it was read as ahead.
 
 * `Tempo.from_elixir/2` reads a `DateTime` whose time zone is an offset (`"-05:00"`), is UTC beside an offset, or is no zone of the database by its own offset, and `Tempo.to_datetime/1` answers for a value in a fixed-offset zone (`[-05:00]`). `Tempo.parse/2` reads "EST" and "GMT+5" as the shifts they are.

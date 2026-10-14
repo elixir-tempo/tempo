@@ -18,7 +18,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
     * [ ] The set operations held to a measure written apart (`set_operations_measure_test.exs`).
     * [x] Zones: a change of the clock (`change_of_the_clock_test.exs`), twenty-one days of twelve zones held to what `DateTime` says the clock showed.
     * [x] Zones: a fixed offset (`fixed_offset_test.exs`), held to the `DateTime` and its instant.
-    * [ ] Zones: a day a zone left out, and what a zone refuses (`day_left_out_test.exs`, `zone_validation_test.exs`).
+    * [x] Zones: a day a zone left out, over the six zones that left one (`day_left_out_test.exs`), and what a zone's clock makes of a reading (`zone_validation_test.exs`), each held to `Date` and `DateTime`.
     * [ ] Words: `to_string/2` and `to_relative_string/2` (`format_test.exs`, `to_relative_string_test.exs`).
     * [ ] Calendars other than `Calendar.ISO`: weeks, composites, a year that starts in March (`week_calendar_test.exs`, `composite_calendar_test.exs`, `year_start_test.exs`).
 
