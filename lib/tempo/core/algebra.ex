@@ -103,10 +103,11 @@ defmodule Tempo.Algebra do
   end
 
   defp placed_spans(spans, side) do
-    Enum.reduce_while(spans, {:ok, []}, fn span, {:ok, acc} ->
+    spans
+    |> Enum.reduce_while({:ok, []}, fn span, {:ok, acc} ->
       case Spans.extent(span) do
         {:ok, {start, stop}} when is_integer(start) and is_integer(stop) ->
-          {:cont, {:ok, acc ++ [%{start: start, stop: stop, span: span, side: side}]}}
+          {:cont, {:ok, [%{start: start, stop: stop, span: span, side: side} | acc]}}
 
         {:ok, _open} ->
           {:halt, {:error, ConversionError.exception(value: span, reason: :open)}}
@@ -115,7 +116,11 @@ defmodule Tempo.Algebra do
           {:halt, error}
       end
     end)
+    |> in_order()
   end
+
+  defp in_order({:ok, reversed}), do: {:ok, Enum.reverse(reversed)}
+  defp in_order(error), do: error
 
   # An operand with no end, a recurrence or a set read from a stream, is
   # bounded by the window or by the other operand's whole stretch.
@@ -499,6 +504,22 @@ defmodule Tempo.Algebra do
   @doc "Positioned spans with the second half of a cut cycle span left out: one entry per member."
   @spec whole([positioned()]) :: [positioned()]
   def whole(positioned), do: Enum.reject(positioned, &(Map.get(&1, :half) == :second))
+
+  @doc """
+  The spans of positioned members sorted by position, each once. Equal
+  members lie at the same position, so only the members at one position are
+  compared: `Enum.uniq/1` over them all hashes every member whole, which was
+  a quarter of a union's time.
+  """
+  @spec distinct([positioned()]) :: [Tempo.t()]
+  def distinct(sorted) do
+    sorted
+    |> Enum.chunk_by(&{&1.start, &1.stop})
+    |> Enum.flat_map(&distinct_at_one_position/1)
+  end
+
+  defp distinct_at_one_position([only]), do: [only.span]
+  defp distinct_at_one_position(several), do: several |> Enum.map(& &1.span) |> Enum.uniq()
 
   @doc "The members of the first operand some point of which is in the second."
   @spec members_overlapping([positioned()], [positioned()]) :: [positioned()]

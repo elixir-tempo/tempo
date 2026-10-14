@@ -160,7 +160,7 @@ defmodule Tempo.Format do
   defp resolution(_other), do: :day
 
   defp finer(a, b),
-    do: Enum.max_by([a, b], fn unit -> Enum.find_index(Unit.order(), &(&1 == unit)) || 0 end)
+    do: Enum.max_by([a, b], fn unit -> Unit.rank(unit) || 0 end)
 
   # The unit a value is shown at: itself when it is a day or finer, else the unit below.
   defp shown_unit(%Tempo{form: {:value, units}}) do

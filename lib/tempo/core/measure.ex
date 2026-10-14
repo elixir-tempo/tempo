@@ -176,7 +176,7 @@ defmodule Tempo.Measure do
 
   defp finest(units), do: Enum.max_by(units, &index/1)
   defp index({:microsecond, precision}), do: 100 + precision
-  defp index(unit), do: Enum.find_index(Unit.order(), &(&1 == Unit.grain(unit))) || 0
+  defp index(unit), do: Unit.rank(Unit.grain(unit)) || 0
 
   @doc "The duration from the start of one value to the start of another, in their finer unit."
   @spec between(Tempo.t(), Tempo.t()) :: {:ok, Duration.t()} | {:error, Exception.t()}

@@ -1184,8 +1184,7 @@ defmodule Tempo do
       members =
         Algebra.whole(pa ++ pb)
         |> Enum.sort_by(&{&1.start, &1.stop})
-        |> Enum.map(& &1.span)
-        |> Enum.uniq()
+        |> Algebra.distinct()
 
       Algebra.gathered(members, calendar: frame.calendar, zone: frame.zone, metadata: a.metadata)
     end

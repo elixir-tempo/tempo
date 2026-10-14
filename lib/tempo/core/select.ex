@@ -531,7 +531,7 @@ defmodule Tempo.Select do
   defp met_at(_candidate_extent, _extent, _candidate, _period), do: []
 
   defp coarsest(parts), do: parts |> Enum.map(&elem(&1, 0)) |> Enum.min_by(&unit_index/1)
-  defp unit_index(unit), do: Enum.find_index(Unit.order(), &(&1 == Unit.grain(unit))) || 99
+  defp unit_index(unit), do: Unit.rank(Unit.grain(unit)) || 99
 
   # The unit a part counts its candidates in: days of the month in their
   # month, days of the week in their month, months and weeks in their year,

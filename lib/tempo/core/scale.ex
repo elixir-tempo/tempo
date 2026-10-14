@@ -118,16 +118,35 @@ defmodule Tempo.Scale do
 
   defp line_extent_of({first, after_last}, clock_units, zone, shift, frame) do
     start_wall = first * @day + clock_ticks(clock_units)
-    start = clock_start(start_wall, clock_units, zone, shift, frame)
 
-    stop =
-      case clock_units do
-        [] -> placed(after_last * @day, zone, shift, frame)
-        _ -> clock_end(start, resolution_ticks(clock_units), zone, shift, frame)
-      end
+    case steady_reading(start_wall, clock_units, zone, shift, frame) do
+      {:ok, offset} ->
+        start = start_wall - offset
+        {start, start + resolution_ticks(clock_units)}
 
-    {start, stop}
+      :changes ->
+        start = clock_start(start_wall, clock_units, zone, shift, frame)
+
+        stop =
+          case clock_units do
+            [] -> placed(after_last * @day, zone, shift, frame)
+            _ -> clock_end(start, resolution_ticks(clock_units), zone, shift, frame)
+          end
+
+        {start, stop}
+    end
   end
+
+  # A reading of the clock in a named zone that keeps one offset through
+  # the day either side of it is placed by that offset, as on a fixed
+  # offset: no zone's offset has changed twice within a week, so its clock
+  # neither skips nor repeats any of a reading an hour long or less. Two
+  # questions of the zone answer it, where finding a change asks several
+  # (`clock_start/5`, `clock_end/5`), and most readings are nowhere near one.
+  defp steady_reading(wall, [_ | _], %Zone{name: name} = zone, nil, :utc) when is_binary(name),
+    do: Zone.steady_offset(zone, nil, wall - @day, wall + @day)
+
+  defp steady_reading(_wall, _clock_units, _zone, _shift, _frame), do: :changes
 
   # A reading of the clock begins where the clock first shows it, which for
   # an hour whose start a zone's clock skips is where the clock comes out of

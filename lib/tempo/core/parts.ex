@@ -158,7 +158,7 @@ defmodule Tempo.Parts do
 
   # An interval open at both ends is written to no unit.
   defp finest(units), do: Enum.max_by(units, &index/1, fn -> nil end)
-  defp index(unit), do: Enum.find_index(Unit.order(), &(&1 == Unit.grain(unit))) || 0
+  defp index(unit), do: Unit.rank(Unit.grain(unit)) || 0
 
   @doc "Whether an expression has a year, so a place on the time line."
   @spec anchored?(Tempo.t()) :: boolean()

@@ -1312,13 +1312,18 @@ defmodule Tempo.Spans do
   end
 
   defp each_spans(members, options) do
-    Enum.reduce_while(members, {:ok, []}, fn member, {:ok, acc} ->
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
       case spans(member, options) do
-        {:ok, stream} -> {:cont, {:ok, acc ++ [beneath(stream, member)]}}
+        {:ok, stream} -> {:cont, {:ok, [beneath(stream, member) | acc]}}
         error -> {:halt, error}
       end
     end)
+    |> in_member_order()
   end
+
+  defp in_member_order({:ok, reversed}), do: {:ok, Enum.reverse(reversed)}
+  defp in_member_order(error), do: error
 
   # A set held as a member carries its metadata to each of its occurrences,
   # beneath the occurrence's own: a holiday's name, on the day it falls and
@@ -1331,33 +1336,45 @@ defmodule Tempo.Spans do
 
   # A set's members' spans, each in the order of time, are its spans in that
   # order: merged as they are asked for, since a member may have no end.
+  #
+  # The merge holds each member's next span, its head, in an ordered set
+  # keyed by where the span starts and then by the member's place in the
+  # set, so that spans starting together keep the members' order. Taking
+  # the earliest head and putting back that member's next is a logarithmic
+  # step, where a list scanned for the earliest made merging a set of n
+  # members n² steps.
   defp in_time_order([stream]), do: stream
 
   defp in_time_order(streams) do
     Stream.resource(
-      fn -> Enum.flat_map(streams, &head_of/1) end,
+      fn -> streams |> Enum.with_index() |> Enum.reduce(:gb_sets.new(), &put_head/2) end,
       &earliest/1,
       fn _heads -> :ok end
     )
   end
 
-  defp head_of(enumerable),
-    do: heads(&Enumerable.reduce(enumerable, &1, fn member, _ -> {:suspend, member} end))
+  defp put_head({enumerable, place}, heads),
+    do:
+      put_next(
+        &Enumerable.reduce(enumerable, &1, fn span, _ -> {:suspend, span} end),
+        place,
+        heads
+      )
 
-  defp heads(continuation) do
+  defp put_next(continuation, place, heads) do
     case continuation.({:cont, nil}) do
-      {:suspended, span, continuation} -> [{start_position(span), span, continuation}]
-      {_done_or_halted, _} -> []
+      {:suspended, span, next} -> :gb_sets.add({start_position(span), place, span, next}, heads)
+      {_done_or_halted, _} -> heads
     end
   end
 
-  defp earliest([]), do: {:halt, []}
-
   defp earliest(heads) do
-    {start, _span, _continuation} = Enum.min_by(heads, &elem(&1, 0))
-    index = Enum.find_index(heads, &(elem(&1, 0) == start))
-    {{_start, span, continuation}, rest} = List.pop_at(heads, index)
-    {[span], List.insert_at(rest, index, heads(continuation)) |> List.flatten()}
+    if :gb_sets.is_empty(heads) do
+      {:halt, heads}
+    else
+      {{_start, place, span, next}, rest} = :gb_sets.take_smallest(heads)
+      {[span], put_next(next, place, rest)}
+    end
   end
 
   defp plural_end(%Tempo{} = value), do: not singular?(value)
@@ -1570,6 +1587,9 @@ defmodule Tempo.Spans do
   # ── Written spans ─────────────────────────────────────────────────────
 
   # A written span with its duration end made a value and an open end placed by the window, if one is given.
+  # A span of two values has neither, and is placed only when it is asked where it lies.
+  defp resolved(%Tempo{form: {:span, %Tempo{}, %Tempo{}}} = span, _options), do: {:ok, span}
+
   defp resolved(%Tempo{form: {:span, from, to}} = span, options) do
     with {:ok, {start, stop}} <- extent(span),
          {:ok, from} <- resolved_end(from, start, stop, :from, span, options),
@@ -2038,7 +2058,7 @@ defmodule Tempo.Spans do
   def child_unit(%Tempo{form: {:span, from, to}}) do
     [from, to]
     |> Enum.flat_map(&end_resolution/1)
-    |> Enum.max_by(fn {unit, _} -> Enum.find_index(Unit.order(), &(&1 == unit)) || 0 end, fn ->
+    |> Enum.max_by(fn {unit, _} -> Unit.rank(unit) || 0 end, fn ->
       nil
     end)
     |> then(fn

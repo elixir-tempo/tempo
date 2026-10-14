@@ -1012,7 +1012,7 @@ defmodule Tempo.Shift do
   defp finer_resolution(%Tempo{form: {:value, a}}, %Tempo{form: {:value, b}}) do
     [a, b]
     |> Enum.map(&Unit.grain(Unit.resolution(&1)))
-    |> Enum.max_by(fn unit -> Enum.find_index(Unit.order(), &(&1 == unit)) end)
+    |> Enum.max_by(fn unit -> Unit.rank(unit) end)
   end
 
   # A value in a named zone written with a time shift takes the zone's shift where it lands.

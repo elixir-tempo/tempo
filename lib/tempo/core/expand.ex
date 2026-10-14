@@ -44,13 +44,15 @@ defmodule Tempo.Expand do
   def one_span?(units) do
     units = Unit.cyclic(units)
 
-    Unit.concrete?(units) and annotation_last?(units) and
-      units
-      |> Enum.chunk_every(2, 1, :discard)
-      |> Enum.all?(fn [{parent, held}, {child, _}] -> single?(parent, held, child) end) and
+    Unit.concrete?(units) and annotation_last?(units) and each_within_its_parent?(units) and
       (units == [] or match?([{unit, _} | _] when unit in [:century, :decade, :year], units) or
          not Unit.anchored?(units))
   end
+
+  defp each_within_its_parent?([{parent, held}, {child, _} = next | rest]),
+    do: single?(parent, held, child) and each_within_its_parent?([next | rest])
+
+  defp each_within_its_parent?(_one_or_none), do: true
 
   # A year with significant digits or a margin is one span alone; with units under it, one per year.
   defp annotation_last?(units) do

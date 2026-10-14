@@ -56,6 +56,10 @@ defmodule Tempo.Unit do
     :microsecond
   ]
 
+  # Each unit's place in that order, so that two units are compared, and a
+  # list of them sorted, without a walk along it.
+  @rank @order |> Enum.with_index() |> Map.new()
+
   # The unit a value's children are in, one below the unit it is written to.
   @child %{
     century: :year,
@@ -217,7 +221,7 @@ defmodule Tempo.Unit do
         {:error, argument("#{inspect(keys)} name a date two ways; a value is written one way")}
 
       true ->
-        {:ok, Enum.sort_by(units, &index(ordered_as(&1)))}
+        {:ok, Enum.sort_by(units, &rank(ordered_as(&1)))}
     end
   end
 
@@ -267,10 +271,12 @@ defmodule Tempo.Unit do
   def compare(unit, unit), do: :eq
 
   def compare(a, b) do
-    if index(a) < index(b), do: :lt, else: :gt
+    if rank(a) < rank(b), do: :lt, else: :gt
   end
 
-  defp index(unit), do: Enum.find_index(@order, &(&1 == unit))
+  @doc "A unit's place among the units, coarsest first, as `order/0` lists them; `nil` for what is no unit."
+  @spec rank(term()) :: non_neg_integer() | nil
+  def rank(unit), do: Map.get(@rank, unit)
 
   @doc """
   The finest unit a value is written to: its resolution. A value ending in a
