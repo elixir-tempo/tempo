@@ -35,7 +35,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ### Defects and gaps
 
-* [ ] **An hour a fall-back shows in two parts.** The Chatham Islands' clock goes from 03:45 back to 02:45 (5 April 2026), so the hour from 02:00 is shown for an hour, and an hour later for fifteen minutes more. The walk steps through both, and the value of the second (`T2H` with the offset it then has) is given the whole hour from 02:00 at that offset, forty-five minutes of which the clock showed as 03:00. It is the one day left out of `change_of_the_clock_test.exs`. To decide: what such a value is.
+* [ ] **A length shorter than its own unit is written as none.** `Tempo.duration/1` counts whole units of an expression's resolution, so the half hour the clock shows of an hour it half skips (Lord Howe Island, 4 October 2026, `T2H`) is `PT0H`, and so is the quarter hour of decision 30. It wants the finer unit: `PT30M`.
 
 * [ ] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused.
 
@@ -56,6 +56,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ## Done since the rewrite
 
+* [x] Decision 30 built (2026-10-14): an hour a fall-back shows in two parts is, the second time, the part the clock shows.
 * [x] An hour of a zone's clock is from where the clock comes to it to where the clock leaves it (2026-10-14): thirty minutes where the clock skips half of it, ninety where it shows half of it twice. The hours of a day with such a change were each a whole hour long and ran over one another.
 * [x] An interval with an open end is read as a member of a set (`{2026-06-03/..}`), as "and later" is written back; a member with several ranges is an error where it raised (2026-10-14).
 * [x] Two defects (2026-10-14): a month by its name that its year lacks is refused as it is read, and an exclusion that cannot be given its spans is the error where a rule's occurrences are made (no test reaches the second: every exclusion the reader gives has spans in a window).

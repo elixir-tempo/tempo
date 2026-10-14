@@ -17,7 +17,9 @@ defmodule Tempo.ChangeOfTheClock do
   # by half an hour (Lord Howe Island), at a quarter to the hour (the
   # Chatham Islands), half an hour before midnight (Pyongyang), a quarter
   # of an hour at midnight (Kathmandu), by two hours (Troll), and at
-  # midnight (Cairo, Havana).
+  # midnight (Cairo, Havana). The Chatham Islands' fall-back, from 03:45 to
+  # 02:45, shows the hour from 02:00 in two parts with three quarters of an
+  # hour between them.
 
   alias Tempo.Spans
 
@@ -48,7 +50,8 @@ defmodule Tempo.ChangeOfTheClock do
     {"Asia/Pyongyang", ~D[2015-08-14], "midnight back to 23:30"},
     {"America/Caracas", ~D[2007-12-09], "03:00 back to 02:30"},
     {"Asia/Colombo", ~D[2006-04-15], "00:30 back to midnight"},
-    {"Antarctica/Troll", ~D[2024-10-27], "03:00 back to 01:00"}
+    {"Antarctica/Troll", ~D[2024-10-27], "03:00 back to 01:00"},
+    {"Pacific/Chatham", ~D[2026-04-05], "03:45 back to 02:45"}
   ]
 
   @doc "The days on which a clock goes forward, as `{zone, date, change}`."

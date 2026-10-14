@@ -9,7 +9,7 @@ defmodule Tempo.Interop do
   # struct its units fill: a date, a time, a date and time, in its zone when
   # it has one.
 
-  alias Tempo.{Clock, ConversionError, Duration, Shift, Unit, Validate, Zone}
+  alias Tempo.{Clock, ConversionError, Duration, Shift, Spans, Unit, Validate, Zone}
 
   @doc "A Tempo value from an Elixir struct, at a resolution when one is asked."
   @spec from(term(), keyword()) :: {:ok, Tempo.t() | Duration.t()} | {:error, Exception.t()}
@@ -156,11 +156,17 @@ defmodule Tempo.Interop do
     do: {:error, ConversionError.exception(value: value, reason: :floating)}
 
   # A shift written beside a zone gives the moment (RFC 9557 §3.4), and the
-  # zone the clock that moment is shown on.
+  # zone the clock that moment is shown on. Where the shift says which of
+  # two showings of a reading is meant and the clock comes to that showing
+  # part of the way through it, the moment is where the value begins: the
+  # hour from 02:00 shown again from 02:45.
   def to_datetime(%Tempo{zone: %Zone{name: name}, shift: shift} = value)
       when is_binary(name) and is_list(shift) do
     with {:ok, moment} <- to_datetime(%{value | zone: nil}) do
-      moment |> DateTime.shift_zone(name) |> named(value)
+      moment
+      |> DateTime.add(seconds_to_its_start(value), :second)
+      |> DateTime.shift_zone(name)
+      |> named(value)
     end
   end
 
@@ -184,6 +190,19 @@ defmodule Tempo.Interop do
 
   def to_datetime(other),
     do: {:error, ConversionError.exception(value: other, reason: :not_an_elixir_value)}
+
+  # The seconds from the moment a value's reading and shift name to where
+  # the value begins in its zone: none, but where the zone's clock comes to
+  # that showing within the reading.
+  defp seconds_to_its_start(%Tempo{} = value) do
+    case {Spans.extent(value), Spans.extent(%{value | zone: nil})} do
+      {{:ok, {start, _}}, {:ok, {written, _}}} when is_integer(start) and is_integer(written) ->
+        div(start - written, 1_000_000)
+
+      _no_place ->
+        0
+    end
+  end
 
   # The year, month and day of a value on any axis, through its parts.
   defp date_parts(%Tempo{form: {:value, _}} = value) do

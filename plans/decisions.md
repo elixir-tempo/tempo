@@ -345,3 +345,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision.** Mine, in building (2026-10-14); for the user to overrule.
 
 * **State.** Built.
+
+## 30. An hour a fall-back shows in two parts
+
+* **Question.** What is the value of an hour when a zone's clock goes back into the middle of it, and shows a part of it a second time without coming to its start again?
+
+* **Context.** On 5 April 2026 the Chatham Islands' clock goes from 03:45 back to 02:45, so it shows 02:00 to 03:00, then 03:00 to 03:45, then 02:45 to 03:00 again, then 03:00 to 04:00. The walk of the day gave the four hours in that order, the second showing of each with the offset it has. The value of the second part of the hour from 02:00, `T2H` at +12:45, was sixty minutes long: "02:00 at +12:45" is a moment the clock read 03:00 at +13:45, so the value ran over the forty-five minutes before it, and `Enum.count/1` of its minutes was sixty where the clock showed fifteen. The engine's rule was that a shift written beside a zone "gives the moment, whatever the clock showed", which disagrees here with "an hour is what the clock shows of it". The old design had left this day out of its table for a decision. The options: (1) the value is the part the clock showed, a shift beside a zone saying which showing is meant; (2) leave it, the hours of this day overlapping; (3) the walk yields an interval for a partial showing, a walk of hours then giving values and intervals.
+
+* **Decision (2026-10-14).** Option 1. A shift the zone never has within the unit is still the moment itself.
+
+* **State.** Built: `Tempo.Zone.shown_from/4`. The day is in the table `test/tempo/change_of_the_clock_test.exs` holds to `DateTime`, twenty-two days now. The value is fifteen minutes long, `Tempo.to_datetime/1` of it is 02:45 at +12:45, and its interval is written `T2HZ12H45M/T3HZ12H45M`: its start as the value itself, which begins where the clock shows it, and not as `T2H45M`, as was said when the question was put.

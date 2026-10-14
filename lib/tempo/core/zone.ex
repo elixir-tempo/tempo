@@ -166,6 +166,37 @@ defmodule Tempo.Zone do
   def first_shown(zone, wall), do: utc_of_wall(zone, nil, wall)
 
   @doc """
+  The UTC tick at which a zone's clock first shows a unit of `step` ticks
+  that begins at a wall reading, at the offset a written shift names.
+
+  A shift beside a zone says which of two showings is meant. Where the
+  zone has that offset as the unit begins, the unit begins there. Where it
+  comes to that offset within the unit (the clock going back from 03:45 to
+  02:45 shows the hour from 02:00 again from 02:45) the unit begins where
+  it does. Where it has it nowhere in the unit, the shift says a moment
+  the zone's clock did not show so, and the unit begins at that moment.
+  """
+  @spec shown_from(t(), shift(), tick(), pos_integer()) :: tick()
+  def shown_from(%__MODULE__{name: name} = zone, shift, wall, step) when is_binary(name) do
+    offset = shift_ticks(shift)
+    written = wall - offset
+    before = offset_at_utc(zone, written)
+
+    cond do
+      before == offset ->
+        written
+
+      offset_at_utc(zone, written + step - 1) == offset ->
+        first_change(zone, before, written, written + step)
+
+      true ->
+        written
+    end
+  end
+
+  def shown_from(_zone, shift, wall, _step) when is_integer(wall), do: wall - shift_ticks(shift)
+
+  @doc """
   Where the unit of the clock that is showing at a UTC tick ends: an hour,
   a minute or a second of `step` ticks, as the zone's clock shows it.
 

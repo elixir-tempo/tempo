@@ -130,6 +130,17 @@ defmodule Tempo.Scale do
   # an hour whose start a zone's clock skips is where the clock comes out of
   # the gap. A written shift says the moment itself.
   defp clock_start(wall, [_ | _], %Zone{} = zone, nil, :utc), do: Zone.first_shown(zone, wall)
+
+  # A shift beside a zone says which showing of the reading is meant, and
+  # the reading begins where the zone's clock shows it so.
+  defp clock_start(wall, [_ | _] = clock_units, %Zone{} = zone, shift, :utc)
+       when is_list(shift) do
+    case resolution_ticks(clock_units) do
+      ticks when ticks >= @ticks_in_a_second -> Zone.shown_from(zone, shift, wall, ticks)
+      _a_part_of_a_second -> placed(wall, zone, shift, :utc)
+    end
+  end
+
   defp clock_start(wall, _clock_units, zone, shift, frame), do: placed(wall, zone, shift, frame)
 
   # A reading of the clock ends where the clock leaves it, which in a zone
