@@ -65,6 +65,10 @@ defmodule Tempo.Measure do
       {:ok, :infinity} ->
         :infinity
 
+      # A set with no members covers no time, and has no resolution to count it in.
+      {:ok, {_ticks, _start, _frame, []}} ->
+        %Duration{units: [second: 0]}
+
       {:ok, {_ticks, _start, _frame, covered}} ->
         counted(covered, resolution(expression), Spans.frame_of(expression), expression)
 

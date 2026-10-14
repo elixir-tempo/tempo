@@ -688,3 +688,43 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Option 1.
 
 * **State.** The prototype is kept: plain recurrences are built with the rule walk's builder, 36 to 50% faster. The rule is stated in `plans/carried-position.md` for reviews to hold.
+
+## 64. Comparing where two expressions begin
+
+* **Question.** 1.6's `Tempo.Compare.compare_endpoints/2` ordered two values by where each begins, and a consumer (`agenda`) orders session starts, a cutoff against a day, and a hold's expiry with it. `Tempo.compare/3` breaks a tie of starts by the ends, so a reading at nine and the day it begins are not the same. How does 2.0 compare where two expressions begin?
+
+* **Context.** Found porting `agenda` to 2.0 (2026-10-15). The options were (1) a `:by` option of `compare/3`, `by: :start`; (2) a function of its own, `compare_starts/2`; (3) none, a consumer comparing the instants of `Tempo.Interval.instants/1`.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: `Tempo.compare(a, b, by: :start)`, the default `:start_and_end`; a `:by` it does not take is an `ArgumentError`. `test/tempo/compare_test.exs`. 1.6's `to_utc_seconds/1`, used to group by where values begin, is the same sorter (migration guide).
+
+## 65. Where at least n members of a set overlap
+
+* **Question.** 1.6's `Tempo.IntervalSet.overlapping(set, at_least: n)` gave the time n members cover at once, which `agenda` uses for a resource's concurrency. Is it in 2.0?
+
+* **Context.** Found porting `agenda`. The options were (1) in Tempo, on the sweep; (2) in `agenda`.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** It was already there: `Tempo.IntervalSet.covered(set, at_least: n)`, with members that only meet not overlapping, as 1.6's did; the migration guide lists it. The survey that found the gap matched names, not meanings.
+
+## 66. 1.6's quarter and half shorthand
+
+* **Question.** 1.6 read `2026Y2Q` as the second quarter and `2026Y1H` as the first half, its own shorthand for ISO 8601-2's `34M` and `40M`. 2.0 read neither, and the migration guide did not say so. Are they read?
+
+* **Context.** Found porting `agenda`, whose tests and 1.6's own holidays guide wrote `~o"2026Y3Q"`. The options were (1) not read, the migration guide and `agenda` writing the standard's form; (2) read as 1.6 did, as Tempo's own extension, written back as the standard's.
+
+* **Decision (2026-10-15).** Option 2, in lower case as Tempo's designators are, since neither is a standard's: `q` and `h`.
+
+* **State.** Built: `2026Y1q` to `2026Y4q` read as the quarters (`33M` to `36M`) and `2026Y1h`, `2026Y2h` as the halves (`40M`, `41M`, held as groups of six months), each written back as the standard's; a quarter or a half the year has not is a `Tempo.ParseError`. The conformance guide lists them with Tempo's extensions, the grammar guide has their productions, and the migration guide says that 1.6's `2Q` is now `2q`.
+
+## 67. A set operation with several operands
+
+* **Question.** 1.6's `union/3`, `intersection/3` and `difference/3` took a list as the second operand, combining the first with each in turn, an empty list imposing nothing. 2.0 took two expressions and refused a list, and the migration guide did not say so. Does 2.0 take a list?
+
+* **Context.** Found porting `agenda`, whose planner intersects the free time of everyone a session needs in one call. The options were (1) a list as the second operand, as 1.6; (2) a one-argument form over a list; (3) none, a consumer folding with `Enum.reduce/3`.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: the list is taken one operand after another with the same options, the `:metadata` function applying at each step; an empty list leaves the first operand as it is; an operand that is no expression stops the operation with its error. `test/tempo/set_operation_operands_test.exs`. The migration guide maps 1.6's `metadata: :left` and `{:merge, fun}` to `:first` and the function itself.

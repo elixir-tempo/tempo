@@ -3,12 +3,13 @@ defmodule Tempo.InvalidDateError do
   A value no date or time has: a unit outside the values its calendar gives
   it, a day a month lacks, a reading the clock skips.
 
-  * `:value` is the value, as written or as built.
+  * `:value` is the value, as written or as built, or the units it was
+    built from where one of them is no unit's value (`hour: "09"`).
 
   * `:unit` is the unit at fault, where one is.
 
   * `:reason` says why: `:out_of_range`, `:no_such_date`, `:skipped_by_the_clock`,
-    `:needs_a_year`, or a short description.
+    `:needs_a_year`, `{:not_a_unit_value, held}`, or a short description.
 
   """
 
@@ -60,6 +61,9 @@ defmodule Tempo.InvalidDateError do
 
   defp describe({:not_a_date, given}),
     do: "#{inspect(given)}, which its resolver answered where a date belongs"
+
+  defp describe({:not_a_unit_value, held}),
+    do: "#{inspect(held)}, where a unit holds an integer, a list or a range of them"
 
   defp describe(:skipped_by_the_clock), do: "a reading the zone's clock skips"
   defp describe(:needs_a_year), do: "a value that cannot be told without a year"

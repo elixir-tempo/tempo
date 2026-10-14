@@ -1118,8 +1118,11 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `a` and `b` are each a `t:t/0` that has spans: a value, an interval, a
-    recurrence, a set.
+  * `a` is a `t:t/0` that has spans: a value, an interval, a recurrence, a
+    set.
+
+  * `b` is a `t:t/0` that has spans, or a list of them, each united with
+    `a` in turn: an empty list leaves `a` as it is.
 
   * `options` is a keyword list of options.
 
@@ -1171,9 +1174,18 @@ defmodule Tempo do
       iex> Tempo.IntervalSet.count(both)
       2
 
+      iex> {:ok, quarter} = Tempo.union(~o"2026-01", [~o"2026-02", ~o"2026-03"])
+      iex> Tempo.IntervalSet.count(quarter)
+      3
+
   """
-  @spec union(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
-  def union(a, b, options \\ []) do
+  @spec union(t(), t() | [t()], keyword()) :: {:ok, t()} | {:error, error()}
+  def union(a, b, options \\ [])
+
+  def union(a, operands, options) when is_list(operands),
+    do: each_operand(&union/3, a, operands, options, "Tempo.union/3")
+
+  def union(a, b, options) do
     with :ok <- Options.check(options, @set_options, "Tempo.union/3") do
       united(Algebra.streamed(:union, a, b, options), a, b, options)
     end
@@ -1222,7 +1234,10 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `a` and `b` are each a `t:t/0` that has spans.
+  * `a` is a `t:t/0` that has spans.
+
+  * `b` is a `t:t/0` that has spans, or a list of them, intersected with each in turn: an empty
+    list leaves `a` as it is.
 
   * `options` is a keyword list of options.
 
@@ -1249,9 +1264,20 @@ defmodule Tempo do
       iex> Tempo.intersection(~o"2026-06-15T09/2026-06-15T17", ~o"2026-06-15T12/2026-06-15T13")
       {:ok, ~o"{2026-06-15T12/2026-06-15T13}"}
 
+      iex> workday = ~o"2026-06-15T09/2026-06-15T17"
+      iex> alice_free = ~o"2026-06-15T10/2026-06-15T15"
+      iex> bob_free = ~o"2026-06-15T13/2026-06-15T18"
+      iex> Tempo.intersection(workday, [alice_free, bob_free])
+      {:ok, ~o"{2026-06-15T13/2026-06-15T15}"}
+
   """
-  @spec intersection(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
-  def intersection(a, b, options \\ []),
+  @spec intersection(t(), t() | [t()], keyword()) :: {:ok, t()} | {:error, error()}
+  def intersection(a, b, options \\ [])
+
+  def intersection(a, operands, options) when is_list(operands),
+    do: each_operand(&intersection/3, a, operands, options, "Tempo.intersection/3")
+
+  def intersection(a, b, options),
     do: operate(:intersection, a, b, options, "Tempo.intersection/3")
 
   @doc """
@@ -1261,7 +1287,10 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `a` and `b` are each a `t:t/0` that has spans.
+  * `a` is a `t:t/0` that has spans.
+
+  * `b` is a `t:t/0` that has spans, or a list of them, taken away one after another: an empty
+    list leaves `a` as it is.
 
   * `options` is a keyword list of options.
 
@@ -1293,9 +1322,28 @@ defmodule Tempo do
       {:ok, ~o"{2026-06-15T09/2026-06-15T12,2026-06-15T13/2026-06-15T17}"}
 
   """
-  @spec difference(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
-  def difference(a, b, options \\ []),
+  @spec difference(t(), t() | [t()], keyword()) :: {:ok, t()} | {:error, error()}
+  def difference(a, b, options \\ [])
+
+  def difference(a, operands, options) when is_list(operands),
+    do: each_operand(&difference/3, a, operands, options, "Tempo.difference/3")
+
+  def difference(a, b, options),
     do: operate(:difference, a, b, options, "Tempo.difference/3")
+
+  # A list of operands is taken one by one, as 1.6 took it (decision 67):
+  # united with each, intersected with each, each taken away in turn. An
+  # empty list leaves the first operand as it is.
+  defp each_operand(operation, a, operands, options, name) do
+    with :ok <- Options.check(options, @set_options, name) do
+      Enum.reduce_while(operands, {:ok, a}, fn b, {:ok, acc} ->
+        continued(operation.(acc, b, options))
+      end)
+    end
+  end
+
+  defp continued({:ok, result}), do: {:cont, {:ok, result}}
+  defp continued(error), do: {:halt, error}
 
   @doc """
   The symmetric difference of two expressions: every instant in exactly one
@@ -1650,10 +1698,16 @@ defmodule Tempo do
   * `:within` is a `t:t/0`, the window an expression with no end of its own (a
     recurrence with no count) or no year is placed in.
 
+  * `:by` is what is compared: `:start_and_end`, the default, where each
+    begins and, where they begin together, where each ends; or `:start`,
+    where each begins alone, so that a reading of nine o'clock and the day
+    it begins are `:eq`.
+
   ### Returns
 
   * `:lt`, `:eq` or `:gt`; raises a `Tempo.FrameError` for two expressions
-    that share no frame.
+    that share no frame, and an `ArgumentError` for an option it does not
+    take.
 
   ### Examples
 
@@ -1663,17 +1717,24 @@ defmodule Tempo do
       iex> Tempo.compare(~o"2026-06-15T09:00Z", ~o"2026-06-15T10:00+01:00")
       :eq
 
+      iex> Tempo.compare(~o"2026-06-15T00", ~o"2026-06-15")
+      :lt
+
+      iex> Tempo.compare(~o"2026-06-15T00", ~o"2026-06-15", by: :start)
+      :eq
+
       iex> Enum.sort([~o"2026-06-16", ~o"2026-06-15"], Tempo)
       [~o"2026-06-15", ~o"2026-06-16"]
 
   """
   @spec compare(t(), t(), keyword()) :: :lt | :eq | :gt
   def compare(a, b, options \\ []) do
-    Options.check!(options, [:within], "Tempo.compare/3")
+    Options.check!(options, [:within, :by], "Tempo.compare/3")
+    by = compared_by!(Keyword.get(options, :by, :start_and_end))
 
-    case Algebra.aligned(a, b, options) do
+    case Algebra.aligned(a, b, Keyword.take(options, [:within])) do
       {:ok, _frame, [pa | _], [pb | _]} ->
-        compare_positions({pa.start, pa.stop}, {pb.start, pb.stop})
+        compare_positions(by, {pa.start, pa.stop}, {pb.start, pb.stop})
 
       {:ok, _frame, _, _} ->
         raise FrameError.exception(a: a, b: b, reason: :several)
@@ -1683,10 +1744,15 @@ defmodule Tempo do
     end
   end
 
-  defp compare_positions({start, stop}, {start, other_stop}),
+  defp compared_by!(by) when by in [:start_and_end, :start], do: by
+
+  defp compared_by!(other),
+    do: raise(ArgumentError, ":by is :start_and_end or :start, not #{inspect(other)}")
+
+  defp compare_positions(:start_and_end, {start, stop}, {start, other_stop}),
     do: Scale.compare(stop, other_stop)
 
-  defp compare_positions({start, _}, {other_start, _}),
+  defp compare_positions(_by, {start, _}, {other_start, _}),
     do: Scale.compare(start, other_start)
 
   # ── Certainty ─────────────────────────────────────────────────────────

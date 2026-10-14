@@ -148,4 +148,20 @@ defmodule Tempo.NotAnExpressionTest do
     assert Tempo.to_iso8601(midnight) == {:ok, "2026Y6M15DT0H0M0.000000S"}
     assert Tempo.new(hour: 10, microsecond: 5) == Tempo.new(hour: 10, microsecond: {5, 6})
   end
+
+  test "a unit given text or a name rather than a number is refused where it is built" do
+    assert {:error,
+            %Tempo.InvalidDateError{unit: :hour, reason: {:not_a_unit_value, "09"}} = error} =
+             Tempo.new(year: 2027, month: 3, day: 2, hour: "09")
+
+    assert Exception.message(error) =~ ~s(its hour is "09", where a unit holds an integer)
+
+    assert {:error, %Tempo.InvalidDateError{unit: :month, reason: {:not_a_unit_value, :march}}} =
+             Tempo.new(year: 2027, month: :march)
+
+    assert {:error, %Tempo.InvalidDateError{reason: {:not_a_unit_value, 9.5}}} =
+             Tempo.new(hour: 9.5)
+
+    assert {:ok, _some_year} = Tempo.new(year: :any)
+  end
 end

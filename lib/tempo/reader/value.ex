@@ -163,6 +163,15 @@ defmodule Tempo.Reader.Value do
   defp designated(held, <<"M", rest::binary>>, :date) when is_integer(held) and held in 40..41,
     do: {:ok, :group, {held - 39, [month: 6]}, rest}
 
+  # Tempo's own shorthand for a quarter and a half of the year, lowercase as
+  # its designators are: `2q` is ISO 8601-2's `34M` and `1h` its `40M`, each
+  # held and written back as the standard's.
+  defp designated(held, <<"q", rest::binary>>, :date) when is_integer(held) and held in 1..4,
+    do: {:ok, :quarter, held, rest}
+
+  defp designated(held, <<"h", rest::binary>>, :date) when is_integer(held) and held in 1..2,
+    do: {:ok, :group, {held, [month: 6]}, rest}
+
   defp designated(held, <<designator::binary-size(1), rest::binary>>, :date)
        when is_map_key(@date_designators, designator) do
     {:ok, Map.fetch!(@date_designators, designator), held, rest}

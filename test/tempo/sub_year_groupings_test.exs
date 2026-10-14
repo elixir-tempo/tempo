@@ -57,4 +57,27 @@ defmodule Tempo.SubYearGroupingsTest do
     assert {:ok, quarters} = Tempo.walk(~o"2026", :quarter)
     assert Enum.to_list(quarters) == [~o"2026-33", ~o"2026-34", ~o"2026-35", ~o"2026-36"]
   end
+
+  # Tempo's lowercase shorthand (decision 66): a quarter `q` and a half `h`,
+  # read as the groupings above and written back as the standard writes them.
+  test "a quarter written q and a half written h are the standard's groupings" do
+    for {shorthand, standard} <- [
+          {"2026Y1q", "2026Y33M"},
+          {"2026Y2q", "2026Y34M"},
+          {"2026Y3q", "2026Y35M"},
+          {"2026Y4q", "2026Y36M"},
+          {"2026Y1h", "2026Y40M"},
+          {"2026Y2h", "2026Y41M"}
+        ] do
+      assert Tempo.from_iso8601(shorthand) == Tempo.from_iso8601(standard)
+    end
+
+    assert Tempo.to_iso8601(~o"2026Y2q") == {:ok, "2026Y34M"}
+  end
+
+  test "a quarter or a half the year has not is refused" do
+    assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2026Y5q")
+    assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2026Y3h")
+    assert {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2026Y0q")
+  end
 end

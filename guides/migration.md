@@ -159,6 +159,7 @@ The compiler finds every one of these.
 | 1.6 | 2.0 |
 |---|---|
 | the `:bound` option | `:within` |
+| a set operation's `metadata: :left`, `metadata: {:merge, fun}` | `metadata: :first`, `metadata: fun` |
 | `Tempo.subset?/3` | `Tempo.within?/3` |
 | `Tempo.grounded?/1` | `Tempo.zoned?/1` |
 | `Tempo.anchor/2`, `Tempo.merge/2` | `Tempo.at/2` or `Tempo.on/2`, in either order |
@@ -183,6 +184,9 @@ The compiler finds every one of these.
 | `Tempo.IntervalSet.to_list/1` | `Tempo.IntervalSet.members/1` |
 | `Tempo.IntervalSet.total_duration/1` | `Tempo.duration/1` |
 | `Tempo.IntervalSet.overlapping/2` | `Tempo.IntervalSet.covered/2` |
+| `Tempo.IntervalSet.empty?/1` | `Tempo.empty?/1` |
+| `Tempo.Compare.compare_endpoints/2`, answering `:earlier`, `:same` or `:later` | `Tempo.compare/3` with `by: :start`, answering `:lt`, `:eq` or `:gt` |
+| `Tempo.Compare.to_utc_seconds/1`, to order or group by where values begin | `Tempo.compare/3` with `by: :start` as the sorter, or `Tempo.Interval.instants/1` for the instants themselves |
 | `Tempo.ICal.from_ical/2` given text, `from_ical_file/2` | `Tempo.ICal.parse/2`, `parse_file/2` |
 | `Tempo.ICal.available_from_ical/2` | `Tempo.ICal.available/2` |
 | `Tempo.JSCalendar.to_interval_set/2` | `Tempo.JSCalendar.parse/2` |
@@ -197,7 +201,7 @@ Each operation is documented on `Tempo` and nowhere else. The modules 1.6 listed
 A search finds most of the renames before the compiler does:
 
 ```bash
-grep -rnE 'bound:|subset\?|grounded\?|Tempo\.(anchor|merge|meets\?|during\?|compose)\(|_date_time|to_calendar\(|from_date_range|extend_resolution|to_interval_set|to_rrule|parse_(date|time|datetime|interval)|inverse_relation|equivalent\?|certainly_|possibly_|_certainty|working_day|Tempo\.weekend\(|beginning_of_|end_of_(day|month)|IntervalSet\.(to_list|total_duration|overlapping)|from_ical|Expander|Tempo\.(Operations|Select|Format|Compare)\.|%Tempo\.(Interval|IntervalSet|Set|Range)\{' lib test
+grep -rnE 'bound:|subset\?|grounded\?|Tempo\.(anchor|merge|meets\?|during\?|compose)\(|_date_time|to_calendar\(|from_date_range|extend_resolution|to_interval_set|to_rrule|parse_(date|time|datetime|interval)|inverse_relation|equivalent\?|certainly_|possibly_|_certainty|working_day|Tempo\.weekend\(|beginning_of_|end_of_(day|month)|IntervalSet\.(to_list|total_duration|overlapping|empty\?)|from_ical|Expander|Tempo\.(Operations|Select|Format|Compare)\.|%Tempo\.(Interval|IntervalSet|Set|Range)\{' lib test
 ```
 
 ## An option a function does not take is an error
@@ -566,6 +570,15 @@ iex> Tempo.from_iso8601("2026-21")
 ```
 
 A season of 21 to 24 has no dates of its own: spring is March to May in one hemisphere and September to November in the other, and 1.6 read the northern months everywhere. It has its months in a territory, named with `Tempo.in_territory/2` or the `:territory` and `:locale` options, and otherwise taken from the application's `:default_territory` or the current locale. A season of a hemisphere (25 to 32) runs from an equinox or a solstice to the next, and is kept as it is written where 1.6 read it into its dates.
+
+1.6's quarter and half, `2026Y2Q` and `2026Y1H`, are Tempo's own shorthand, not ISO 8601's, and are written in lower case as Tempo's designators are (decision 66). They are read as the standard's quarter and half, and written back as those:
+
+```elixir
+iex> Tempo.from_iso8601("2026Y2q")
+{:ok, ~o"2026Y34M"}
+iex> Tempo.from_iso8601("2026Y1h")
+{:ok, ~o"2026Y1G6MU"}
+```
 
 Three texts 1.6 read are read otherwise:
 

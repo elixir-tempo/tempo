@@ -205,7 +205,11 @@ defmodule Tempo.Validate do
 
   # ── A value ───────────────────────────────────────────────────────────
 
-  defp value(units, %Tempo{calendar: calendar} = expression) do
+  defp value(units, expression) do
+    with :ok <- shaped(units), do: bounded(units, expression)
+  end
+
+  defp bounded(units, %Tempo{calendar: calendar} = expression) do
     Enum.reduce_while(units, :ok, fn {unit, held}, :ok ->
       case unit(unit, held, units, calendar) do
         :ok -> {:cont, :ok}
@@ -213,6 +217,25 @@ defmodule Tempo.Validate do
       end
     end)
   end
+
+  # A unit holds a number, a list, a tuple or `:any`. Text or another atom
+  # (`hour: "09"`, `month: :march`) is a program's mistake, named here
+  # rather than met by the writer. The expression it would make cannot be
+  # written, so the error carries the units.
+  defp shaped(units) do
+    case Enum.find(units, fn {_unit, held} -> unshaped?(held) end) do
+      nil ->
+        :ok
+
+      {unit, held} ->
+        {:error,
+         InvalidDateError.exception(value: units, unit: unit, reason: {:not_a_unit_value, held})}
+    end
+  end
+
+  defp unshaped?(held) when is_binary(held) or is_float(held), do: true
+  defp unshaped?(held) when is_atom(held), do: held != :any
+  defp unshaped?(_held), do: false
 
   defp invalid(expression, unit, reason),
     do: {:error, InvalidDateError.exception(value: expression, unit: unit, reason: reason)}

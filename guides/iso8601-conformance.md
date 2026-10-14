@@ -285,6 +285,7 @@ Tempo marks the designators it adds with a lowercase letter, so that they are se
 | An end after a cadence | `R/2026-06-01/P1D/2026-06-10` | a recurrence's last date, RFC 5545's `UNTIL` |
 | A computed event, `e` | `L(easter)eN`, `L(march-equinox@+09:00)eN` | a day a rule computes |
 | A traditional month, `m` | `8m15D`, `6+m` | a lunisolar calendar's named month, and its leap month |
+| A quarter, `q`, and a half, `h` | `2026Y2q`, `2026Y1h` | the second quarter, the first half: ISO 8601-2's `2026Y34M` and `2026Y40M`, as which they are held and written back |
 | An exclusion, `^` | `{2020Y..2024Y,^2022Y}` | a member left out |
 | A recurrence's domain | `R/{2020Y..2024Y}/P1Y/F…` | the periods a rule recurs in |
 | A domain filter | `{2020Y..2026Y}e`, `o`, `l`, `c` | even, odd, leap or common years |

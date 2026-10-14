@@ -33,6 +33,12 @@ defmodule Tempo.MeasureTest do
       assert Tempo.duration(~o"2026Y{1..-1}M15DT10HZ") == ~o"PT12H"
     end
 
+    test "a set with no members covers no time" do
+      assert Tempo.duration(~o"{}") == ~o"PT0S"
+      assert {:ok, nothing} = Tempo.intersection(~o"2026-06-15", ~o"2026-06-16")
+      assert Tempo.duration(nothing) == ~o"PT0S"
+    end
+
     test "an open end and a recurrence with none are infinite" do
       assert Tempo.duration(~o"2026-01-15/..") == :infinity
       assert Tempo.duration(~o"R/2026-06-01/P1D") == :infinity

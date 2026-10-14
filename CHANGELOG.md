@@ -2,7 +2,7 @@
 
 ## [v2.0.0] — Unreleased
 
-Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migration guide](https://hexdocs.pm/ex_tempo/migration.html) takes each change below with its 1.6 form and its 3.0 form.
+Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migration guide](https://hexdocs.pm/ex_tempo/migration.html) takes each change below with its 1.6 form and its 2.0 form.
 
 ### Breaking changes
 
@@ -122,6 +122,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.Event.Resolver`: an application's own computed events, registered under `config :ex_tempo, :event_resolvers`.
 
+* `Tempo.compare/3` with `by: :start` compares where two expressions begin alone, as 1.6's `Tempo.Compare.compare_endpoints/2` did.
+
+* A quarter written `2026Y2q` and a half written `2026Y1h`, Tempo's lower-case shorthand for 1.6's `2Q` and `1H`, read as ISO 8601-2's `34M` and `40M`.
+
 * A value that asks for more than `:max_values_at_once` values at once (10,000 by default) is a `Tempo.ConversionError` with reason `:too_many_values`.
 
 * `Tempo.Clock.Test.put/1` makes the test clock the calling process's, so it needs no configuration; it raises a `Tempo.ClockError` before a time is pinned.
@@ -153,6 +157,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * ISO 8601-1's alternative duration format (`P0002-01-10T22:33:55`) is read.
 
 ### Fixed
+
+* `Tempo.new/1` returns a `Tempo.InvalidDateError` for a unit given text, a float or a name (`hour: "09"`), where it built a value the writer could not write.
 
 * A yearly RRULE that counts a weekday in named months (`FREQ=YEARLY;BYMONTH=11;BYDAY=4TH`) is written back as it was read, where it became a monthly rule.
 
