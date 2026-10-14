@@ -82,6 +82,33 @@ defmodule Tempo.MeasureTest do
       refute Tempo.shorter_than?(~o"2026-01-15/..", ~o"P1Y")
     end
 
+    test "measure a set by the time it covers" do
+      {:ok, weekends} = Tempo.select(~o"2026-06", Tempo.weekends!(:AU))
+
+      assert Tempo.exactly?(weekends, ~o"P8D")
+      assert Tempo.at_least?(weekends, ~o"P8D")
+      assert Tempo.at_most?(weekends, ~o"P8D")
+      assert Tempo.longer_than?(weekends, ~o"P7D")
+      assert Tempo.shorter_than?(weekends, ~o"P9D")
+
+      # A month is laid from the set's first day: 6 June to 6 July.
+      assert Tempo.shorter_than?(weekends, ~o"P1M")
+    end
+
+    test "an empty set has no length, and one with no last member is not measured" do
+      {:ok, empty} = IntervalSet.new([])
+
+      assert Tempo.exactly?(empty, ~o"PT0S")
+      assert Tempo.shorter_than?(empty, ~o"P1D")
+      assert Tempo.shorter_than?(empty, ~o"P1M")
+      refute Tempo.at_least?(empty, ~o"P1D")
+
+      {:ok, weekends} = Tempo.select(~o"2026-06-15/..", Tempo.weekends!(:AU))
+
+      assert {:error, %ConversionError{reason: :unbounded}} =
+               Tempo.longer_than?(weekends, ~o"P100Y")
+    end
+
     test "a value with no year is measured by an exact duration" do
       assert Tempo.at_least?(~o"6M", ~o"P1D")
       assert Tempo.at_least?(~o"2026Y6MXD", ~o"P1W")

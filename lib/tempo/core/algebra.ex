@@ -120,8 +120,27 @@ defmodule Tempo.Algebra do
   # An operand with no end, a recurrence or a set read from a stream, is
   # bounded by the window or by the other operand's whole stretch.
   defp window_for(expression, other, options) do
-    if endless?(expression), do: options[:within] || other, else: options[:within]
+    if endless?(expression), do: options[:within] || stretch_of(other), else: options[:within]
   end
+
+  # The stretch an operand covers, from its first span's start to its last
+  # span's end: a set of appointments bounds a set of holidays by the days
+  # from the first appointment to the last.
+  defp stretch_of(%Tempo{form: {:all, members}} = set) when is_list(members) do
+    case Spans.spans(set, []) do
+      {:ok, spans} -> stretch_between(Enum.to_list(spans), set)
+      {:error, _} -> set
+    end
+  end
+
+  defp stretch_of(other), do: other
+
+  defp stretch_between([%Tempo{form: {:span, from, _}} | _] = spans, set) do
+    %Tempo{form: {:span, _, to}} = List.last(spans)
+    %{set | form: {:span, from, to}}
+  end
+
+  defp stretch_between(_none, set), do: set
 
   defp bounded(spans, expression), do: Limit.take(spans, expression)
 
@@ -140,11 +159,36 @@ defmodule Tempo.Algebra do
 
   defp one_frame(a, b, _pa, _pb, options), do: frames_agree(a, b, options)
 
+  # Each operand is placed as its spans are: by the window, or one with no
+  # end by the other operand's stretch.
   defp frames_agree(a, b, options) do
-    window = options[:within]
-    a_placed = placed(a, window)
-    b_placed = placed(b, window)
+    a_placed = placed(a, window_for(a, b, options))
+    b_placed = placed(b, window_for(b, a, options))
+    agree(a, b, a_placed, b_placed)
+  end
 
+  # A rule with no start, or a set of such rules, has the frame of what it
+  # is beside: the years of the other operand are its years.
+  defp agree(a, b, a_placed, b_placed) do
+    cond do
+      placeless?(b_placed) and not placeless?(a_placed) -> frame_of(a_placed, a)
+      placeless?(a_placed) and not placeless?(b_placed) -> frame_of(b_placed, b)
+      true -> frames_of(a, b, a_placed, b_placed)
+    end
+  end
+
+  defp placeless?(%Tempo{form: {:every, %Tempo{form: {:span, :open, _}}, _bound, _rule}}),
+    do: true
+
+  defp placeless?(%Tempo{form: {:all, [_ | _] = members}}),
+    do: Enum.all?(members, &placeless_member?/1)
+
+  defp placeless?(_expression), do: false
+
+  defp placeless_member?(%Tempo{form: {:when, member, _conditions}}), do: placeless?(member)
+  defp placeless_member?(member), do: placeless?(member)
+
+  defp frames_of(a, b, a_placed, b_placed) do
     case {Spans.frame(a_placed), Spans.frame(b_placed)} do
       {{:cycle, u}, {:cycle, u}} -> frame_of(a_placed, a)
       {{:cycle, _}, {:cycle, _}} -> {:error, FrameError.exception(a: a, b: b, reason: :cycles)}
@@ -195,8 +239,18 @@ defmodule Tempo.Algebra do
   @doc "Whether an expression has no last span: a recurrence with no end, or a set read from a stream."
   @spec endless?(term()) :: boolean()
   def endless?(%Tempo{form: {:every, _first, :infinity, _rule}}), do: true
+
+  # A set with a member that has no end has none: a territory's holidays,
+  # rules that recur for ever.
+  def endless?(%Tempo{form: {:all, members}}) when is_list(members),
+    do: Enum.any?(members, &endless_member?/1)
+
   def endless?(%Tempo{} = expression), do: Spans.lazy?(expression)
   def endless?(_other), do: false
+
+  defp endless_member?(%Tempo{form: {:when, member, _conditions}}), do: endless_member?(member)
+  defp endless_member?(%Tempo{} = member), do: endless?(member)
+  defp endless_member?(_exclusion), do: false
 
   @doc """
   How an operation is answered where an operand has no end and no window is

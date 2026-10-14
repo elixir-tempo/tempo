@@ -661,7 +661,7 @@ defmodule Tempo.Shift do
   defp stepped_days(start, days, busy, frame) do
     wall_busy = Enum.map(busy, fn {s, e} -> {Walk.wall(s, frame), Walk.wall(e, frame)} end)
     direction = if days < 0, do: -1, else: 1
-    day = Integer.floor_div(Walk.wall(start, frame), @day)
+    day = start |> Walk.wall(frame) |> Integer.floor_div(@day) |> origin_day(direction, wall_busy)
 
     landed_day =
       Enum.reduce(1..abs(days)//1, day, fn _, d ->
@@ -669,6 +669,18 @@ defmodule Tempo.Shift do
       end)
 
     utc_of_wall(landed_day * @day + Integer.mod(Walk.wall(start, frame), @day), frame)
+  end
+
+  # An origin on a busy day first moves to the edge of its busy stretch, as
+  # a time does: forward, to the first free day after it; back, to the day
+  # after the last free day before it, so a day back is that free day.
+  defp origin_day(day, 1, busy), do: next_free_day(day, 1, busy)
+
+  defp origin_day(day, -1, busy) do
+    case next_free_day(day, -1, busy) do
+      ^day -> day
+      free -> free + 1
+    end
   end
 
   defp next_free_day(day, direction, busy) do

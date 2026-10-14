@@ -93,6 +93,10 @@ defmodule Tempo.Writer do
 
   def body(%Tempo{form: {:all, members}}), do: ["{", members(members), "}"]
   def body(%Tempo{form: {:one, members}}), do: ["[", members(members), "]"]
+
+  def body(%Tempo{form: {:when, %Tempo{form: {:span, :open, :open}}, years: filter}}),
+    do: ["..", filter(filter)]
+
   def body(%Tempo{form: {:when, member, years: filter}}), do: [body(member), filter(filter)]
 
   # ── Units ─────────────────────────────────────────────────────────────

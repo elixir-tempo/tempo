@@ -24,12 +24,37 @@ defmodule Tempo.Conditions do
   @spec resolve([Tempo.t()], [Tempo.t()], keyword()) ::
           {:ok, [Tempo.t()]} | {:error, Exception.t()}
   def resolve(conditionals, others, options) do
+    with {:ok, unmoved} <- unmoved(conditionals, options) do
+      conditionals
+      |> Enum.with_index()
+      |> Enum.reduce_while({:ok, []}, &resolved_beside(&1, &2, others, unmoved, options))
+    end
+  end
+
+  # Each reads the plain members, and the other conditionals where they
+  # stand before they are judged, never where one is moved, nor itself.
+  defp resolved_beside({conditional, index}, {:ok, acc}, others, unmoved, options) do
+    beside = others ++ (unmoved |> List.delete_at(index) |> List.flatten())
+
+    case resolved(conditional, beside, options) do
+      {:ok, spans} -> {:cont, {:ok, acc ++ spans}}
+      {:error, _} = error -> {:halt, error}
+    end
+  end
+
+  defp unmoved(conditionals, options) do
     Enum.reduce_while(conditionals, {:ok, []}, fn conditional, {:ok, acc} ->
-      case resolved(conditional, others, options) do
-        {:ok, spans} -> {:cont, {:ok, acc ++ spans}}
+      case unmoved_spans(conditional, options) do
+        {:ok, spans} -> {:cont, {:ok, acc ++ [spans]}}
         {:error, _} = error -> {:halt, error}
       end
     end)
+  end
+
+  defp unmoved_spans(%Tempo{form: {:when, member, _}, metadata: metadata}, options) do
+    with {:ok, spans} <- Spans.spans(member, options),
+         {:ok, spans} <- Limit.take(spans, member),
+         do: {:ok, Enum.map(spans, &%{&1 | metadata: Map.merge(metadata, &1.metadata)})}
   end
 
   defp resolved(

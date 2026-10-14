@@ -819,10 +819,12 @@ defmodule Tempo.Select do
           qualifications: nil
       }
 
+      ends = ends_at(selector)
+
       picked =
         first
         |> Stream.iterate(&next_of_unit(&1, unit))
-        |> Stream.take_while(&(&1 != nil))
+        |> Stream.take_while(&(&1 != nil and before_end?(&1, ends)))
         |> Stream.flat_map(&picked_in(selector, %{&1 | metadata: base.metadata}, options))
         |> Stream.filter(&(start_of(&1) >= start))
 
@@ -853,6 +855,14 @@ defmodule Tempo.Select do
     end
   end
 
+  # Where a selector picks nothing more, for ever: workdays from days off
+  # with no end. Nil for one that may pick in any period.
+  defp ends_at(%Workdays{} = workdays), do: Workdays.off_from(workdays)
+  defp ends_at(_selector), do: nil
+
+  defp before_end?(_period, nil), do: true
+  defp before_end?(period, ends), do: start_of(period) < ends
+
   # The period an endless base is taken in, one at a time: the unit the selector counts in.
   defp selector_unit(%Tempo{form: {:value, units}}) do
     case Enum.filter(selector_parts(units), fn {unit, _} -> unit in @part_units end) do
@@ -878,7 +888,7 @@ defmodule Tempo.Select do
   defp apply_selector(%Tempo{form: {:value, units}} = selector, period, options) do
     if Unit.anchored?(units),
       do: {:error, not_a_selector(selector)},
-      else: in_period(period, selector_parts(units), options)
+      else: in_period(period, Unit.cyclic(units), options)
   end
 
   defp apply_selector(
@@ -949,8 +959,10 @@ defmodule Tempo.Select do
 
   defp apply_selector(selector, _period, _options), do: {:error, not_a_selector(selector)}
 
-  # A value's units as a selection's parts: a selection written in them is
-  # flattened into the units around it.
+  # A value's units as a selection's parts, a selection written in them
+  # flattened into the units around it: what the selector counts in. It is
+  # selected with the selection kept, so the units before it name each value
+  # it selects in (`4ML1K1IN`, the first Monday of each April).
   defp selector_parts(units) do
     units
     |> Unit.cyclic()

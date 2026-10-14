@@ -313,4 +313,74 @@ defmodule Tempo.SelectTest do
       end
     end
   end
+
+  describe "an ISO 8601-2 selection as the selector" do
+    defp selected(base, selector),
+      do: base |> Tempo.select(selector) |> ok() |> IntervalSet.members()
+
+    test "a computed event selects its day in each year" do
+      assert selected(~o"2027", ~o"L(easter)eN") == [~o"2027-03-28"]
+
+      assert selected(~o"2026/2028", ~o"L(easter)eN") ==
+               [~o"2026-04-05", ~o"2027-03-28", ~o"2028-04-16"]
+    end
+
+    test "a §12.10 window selects within it, or nothing" do
+      # The Friday that falls 7 to 13 April, and the Thursday that falls
+      # 17 to 21 December, of which 2027 has none.
+      assert selected(~o"2027", ~o"LLL4M7DN/P7DN5K1IN") == [~o"2027-04-09"]
+      assert selected(~o"2027", ~o"LLL12M17DN/P5DN4K1IN") == []
+
+      # The five days from the fourth Wednesday.
+      assert selected(~o"2026", ~o"LL3K4IN/P5DN") == [~o"2026-01-28/P5D"]
+    end
+
+    test "a selection counts in the period it is given" do
+      assert selected(~o"2027-04", ~o"L1K1IN") == [~o"2027-04-05"]
+      assert selected(~o"2027-04/2027-06", ~o"L1K1IN") == [~o"2027-04-05"]
+      assert selected(~o"2027-04-09", ~o"LT22HN") == [~o"2027-04-09T22"]
+    end
+
+    test "units before a selection name each value it selects in" do
+      assert selected(~o"2027", ~o"4ML1K1IN") == [~o"2027-04-05"]
+      assert selected(~o"2026/2027", ~o"4ML1K1IN") == [~o"2026-04-06", ~o"2027-04-05"]
+
+      # A position inside the selection counts among all it selects.
+      assert selected(~o"2026/2027", ~o"L4M1K1IN") == [~o"2026-04-06"]
+    end
+
+    test "a selector with a year is not a selector" do
+      assert {:error, %ArgumentError{}} = Tempo.select(~o"2027", ~o"2027YL12M25DN")
+    end
+
+    test "a list mixes selections with values" do
+      assert selected(~o"2027", [~o"L(easter)eN", ~o"L12M25DN"]) ==
+               [~o"2027-03-28", ~o"2027-12-25"]
+    end
+
+    test "a base with no end selects lazily" do
+      {:ok, easters} = Tempo.select(~o"2026/..", ~o"L(easter)eN")
+      assert Enum.take(easters, 2) == [~o"2026-04-05", ~o"2027-03-28"]
+    end
+  end
+
+  describe "a value with no year in a window of several periods" do
+    test "is placed on each of them" do
+      assert texts(Tempo.to_interval(~o"4M", within: ~o"2026/2027")) ==
+               ["2026Y4M/2026Y4M", "2027Y4M/2027Y4M"]
+
+      assert texts(Tempo.to_interval(~o"12M25D", within: ~o"{2026,2028}")) ==
+               ["2026Y12M25D/2026Y12M25D", "2028Y12M25D/2028Y12M25D"]
+
+      assert texts(Tempo.to_interval(~o"4ML1K1IN", within: ~o"2026/2027")) ==
+               ["2026Y4M6D/2026Y4M6D", "2027Y4M5D/2027Y4M5D"]
+
+      assert texts(Tempo.to_interval(~o"T09", within: ~o"2026-06-15/2026-06-16")) ==
+               ["2026Y6M15DT9H/T10H", "2026Y6M16DT9H/T10H"]
+    end
+
+    test "and on a cycle where the window has no year" do
+      assert Tempo.to_interval(~o"15D", within: ~o"6M") == {:ok, ~o"6M15D/6M15D"}
+    end
+  end
 end

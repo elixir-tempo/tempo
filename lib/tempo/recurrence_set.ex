@@ -44,7 +44,7 @@ defmodule Tempo.RecurrenceSet do
       iex> {:ok, holidays} = Tempo.RecurrenceSet.new([~o"R/2026-01-01/P1Y/FL12M25DN", ~o"R/2026-01-01/P1Y/FL1M1DN"])
       iex> {:ok, days} = Tempo.to_interval(holidays, within: ~o"2026")
       iex> Tempo.IntervalSet.map(days, &Tempo.month/1)
-      [12, 1]
+      [1, 12]
 
   """
   @spec new([Tempo.t()], keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}

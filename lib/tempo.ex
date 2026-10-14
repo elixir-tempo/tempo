@@ -2002,7 +2002,9 @@ defmodule Tempo do
   One value placed on another: a date at a time of day, a time of day on a
   date, a month and a day. The value with a year keeps it and the other
   supplies the finer units it lacks; a unit between the two that neither
-  names is its first. An interval is placed end by end.
+  names is its first. An interval is placed end by end. A selection selects
+  within the units before it, so it follows the other's units and finer
+  units follow it, with nothing filled beside it.
 
   ### Arguments
 
@@ -2013,8 +2015,9 @@ defmodule Tempo do
 
   * `{:ok, placed}`, a `t:t/0`.
 
-  * `{:error, exception}` when both have a year, or the result is no date or
-    time the calendar and zone have.
+  * `{:error, exception}` when both have a year, both hold a selection,
+    either is not a `t:t/0`, or the result is no date or time the calendar
+    and zone have.
 
   ### Examples
 
@@ -2032,6 +2035,9 @@ defmodule Tempo do
 
       iex> Tempo.at(~o"2026-06", ~o"T17")
       {:ok, ~o"2026-06-01T17"}
+
+      iex> Tempo.on(~o"L(easter)eN", ~o"2027")
+      {:ok, ~o"2027YL(easter)eN"}
 
   """
   @spec at(t(), t()) :: {:ok, t()} | {:error, error()}
@@ -2083,7 +2089,14 @@ defmodule Tempo do
   def at(%__MODULE__{} = value, %__MODULE__{form: {kind, _}} = set) when kind in [:all, :one],
     do: at(set, value)
 
-  def at(a, b), do: {:error, FrameError.exception(a: a, b: b, reason: :several)}
+  def at(%__MODULE__{} = a, %__MODULE__{} = b),
+    do: {:error, FrameError.exception(a: a, b: b, reason: :several)}
+
+  def at(%__MODULE__{}, other),
+    do: {:error, ConversionError.exception(value: other, reason: :not_an_expression)}
+
+  def at(other, _value),
+    do: {:error, ConversionError.exception(value: other, reason: :not_an_expression)}
 
   defp each_at(members, other) do
     Enum.reduce_while(members, {:ok, []}, fn member, {:ok, acc} ->
@@ -2099,33 +2112,45 @@ defmodule Tempo do
 
   # The coarser value's units above the finer's first unit, the chain between
   # filled with its first values, then the finer's units whole. A finer value
-  # of any year alone (`X*Y`) adds nothing to the other.
+  # of any year alone (`X*Y`) adds nothing to the other. A selection selects
+  # within the units before it, so nothing is filled beside one: a selection
+  # follows the coarser value's units, and finer units follow a selection.
   defp composed(
          %__MODULE__{form: {:value, coarse}} = value,
          %__MODULE__{form: {:value, b}} = other
-       ) do
-    case Unit.cyclic(b) do
-      [] ->
-        {:ok, value}
+       ),
+       do: composed(value, other, coarse, Unit.cyclic(b))
 
-      fine ->
-        first = Unit.coarsest(fine)
+  defp composed(value, _other, _coarse, []), do: {:ok, value}
 
-        if Unit.label?(first) and not Expand.one_span?(coarse ++ fine) do
-          {:error, ConversionError.exception(value: other, reason: :selection)}
-        else
-          composed_units(value, other, coarse, fine, first)
-        end
+  defp composed(value, other, coarse, fine) do
+    first = Unit.coarsest(fine)
+    selects? = Keyword.has_key?(coarse, :selection)
+
+    cond do
+      selects? and Keyword.has_key?(fine, :selection) ->
+        {:error, ConversionError.exception(value: other, reason: :selection)}
+
+      selects? or first == :selection ->
+        placed_units(value, other, coarse ++ fine)
+
+      Unit.label?(first) and not Expand.one_span?(coarse ++ fine) ->
+        {:error, ConversionError.exception(value: other, reason: :selection)}
+
+      true ->
+        composed_units(value, other, coarse, fine, first)
     end
   end
 
   defp composed_units(value, other, coarse, fine, first) do
-    filled =
-      coarse
-      |> Enum.take_while(fn {unit, _} -> Unit.compare(unit, first) == :lt end)
-      |> Expand.filled_to(first)
-      |> Kernel.++(fine)
+    coarse
+    |> Enum.take_while(fn {unit, _} -> Unit.compare(unit, first) == :lt end)
+    |> Expand.filled_to(first)
+    |> Kernel.++(fine)
+    |> then(&placed_units(value, other, &1))
+  end
 
+  defp placed_units(value, other, filled) do
     Validate.run(%{
       value
       | form: {:value, filled},
@@ -3086,8 +3111,10 @@ defmodule Tempo do
 
   ### Returns
 
-  * `{:ok, %Tempo.Workdays{}}`, or `{:error, %ArgumentError{}}` for a
-    territory Localize does not know.
+  * `{:ok, %Tempo.Workdays{}}`.
+
+  * `{:error, %ArgumentError{}}` for a territory Localize does not know, an
+    option this function does not take, or days off that are not a `t:t/0`.
 
   ### Examples
 
@@ -3181,6 +3208,23 @@ defmodule Tempo do
   A value moved by a number of workdays, forward for a positive count and
   back for a negative one, stepping over the weekend and the days off.
 
+  ### Arguments
+
+  * `value` is a `t:t/0` within one day.
+
+  * `count` is the number of workdays to move, an integer.
+
+  * `territory` is a territory code, a `t:Tempo.Workdays.t/0` or `nil`,
+    as for `workdays/2`.
+
+  ### Returns
+
+  * `{:ok, workday}`, a `t:t/0`.
+
+  * `{:error, %Tempo.ConversionError{reason: :open}}` when the days off
+    never end in the direction moved, and `{:error, exception}` for a value
+    that names several days or a territory Localize does not know.
+
   ### Examples
 
       iex> Tempo.add_workdays(~o"2026-06-12", 3, :US)
@@ -3199,6 +3243,21 @@ defmodule Tempo do
   @doc """
   The first workday after a value.
 
+  ### Arguments
+
+  * `value` is a `t:t/0` within one day.
+
+  * `territory` is a territory code, a `t:Tempo.Workdays.t/0` or `nil`,
+    as for `workdays/2`.
+
+  ### Returns
+
+  * `{:ok, workday}`, a `t:t/0`.
+
+  * `{:error, %Tempo.ConversionError{reason: :open}}` when the days off
+    never end after the value, and `{:error, exception}` for a value
+    that names several days or a territory Localize does not know.
+
   ### Examples
 
       iex> Tempo.next_workday(~o"2026-06-12", :US)
@@ -3212,6 +3271,21 @@ defmodule Tempo do
 
   @doc """
   The last workday before a value.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` within one day.
+
+  * `territory` is a territory code, a `t:Tempo.Workdays.t/0` or `nil`,
+    as for `workdays/2`.
+
+  ### Returns
+
+  * `{:ok, workday}`, a `t:t/0`.
+
+  * `{:error, %Tempo.ConversionError{reason: :open}}` when the days off
+    never end before the value, and `{:error, exception}` for a value
+    that names several days or a territory Localize does not know.
 
   ### Examples
 
@@ -3227,6 +3301,21 @@ defmodule Tempo do
   @doc """
   The nearest workday to a value: the value itself when it is one, else the
   closer of the next and the previous, the next on a tie.
+
+  ### Arguments
+
+  * `value` is a `t:t/0` within one day.
+
+  * `territory` is a territory code, a `t:Tempo.Workdays.t/0` or `nil`,
+    as for `workdays/2`.
+
+  ### Returns
+
+  * `{:ok, workday}`, a `t:t/0`.
+
+  * `{:error, %Tempo.ConversionError{reason: :open}}` when the days off
+    never end either way from the value, and `{:error, exception}` for a value
+    that names several days or a territory Localize does not know.
 
   ### Examples
 
@@ -3261,6 +3350,16 @@ defmodule Tempo do
     `:modified_following`, `:modified_preceding` and `:modified_nearest`;
     the modified conventions turn back when the roll would leave the month.
 
+  ### Returns
+
+  * `{:ok, workday}`, a `t:t/0`.
+
+  * `{:error, %ArgumentError{}}` for a convention or an option this
+    function does not take, `{:error, %Tempo.ConversionError{reason:
+    :open}}` when the days off never end the way the value is rolled, and
+    `{:error, exception}` for a value that names several days or a
+    territory Localize does not know.
+
   ### Examples
 
       iex> Tempo.roll_to_workday(~o"2026-05-30", :US)
@@ -3283,6 +3382,21 @@ defmodule Tempo do
 
   @doc """
   How many workdays an expression's days hold.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` with an end: a value, an interval, a set.
+
+  * `territory` is a territory code, a `t:Tempo.Workdays.t/0` or `nil`,
+    as for `workdays/2`.
+
+  ### Returns
+
+  * `{:ok, count}`, a non-negative integer.
+
+  * `{:error, %Tempo.ConversionError{reason: :unbounded}}` for an
+    expression with no end, and `{:error, exception}` for a territory
+    Localize does not know.
 
   ### Examples
 

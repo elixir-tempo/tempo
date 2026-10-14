@@ -4,6 +4,7 @@ defmodule Tempo.ShiftTest do
   import Tempo.Sigils
 
   alias Tempo.ConversionError
+  alias Tempo.IntervalSet
 
   # Shifting: one arithmetic over values, spans, sets and masks, with and
   # without a year, and through free time (`plans/architecture-redesign.md`,
@@ -317,6 +318,49 @@ defmodule Tempo.ShiftTest do
                {:ok, %{~o"2026Y{1,2}G3MU" | form: {:all, [~o"2026Y{1..3}M", ~o"2026Y{4..6}M"]}}}
 
       assert {:error, %ConversionError{reason: :several}} = Tempo.extend(~o"{1,2}G3MU")
+    end
+  end
+
+  describe "a day shifted by days of free time" do
+    # The weekends of 2027, Good Friday and Easter Monday (Easter is 28
+    # March), and the Monday after Anzac Day, which fell on a Sunday.
+    defp days_off do
+      {:ok, weekends} = Tempo.select(~o"2027", Tempo.weekends!(:AU))
+      holidays = IntervalSet.new!([~o"2027-03-26", ~o"2027-03-29", ~o"2027-04-26"])
+      {:ok, days_off} = Tempo.union(weekends, holidays)
+      days_off
+    end
+
+    test "lands on a free day, stepping over the busy ones" do
+      assert shifted(~o"2027-04-23", day: 1, skipping: days_off()) == ~o"2027-04-27"
+      assert Tempo.shift(~o"2027-04-23", ~o"P1D", skipping: days_off()) == {:ok, ~o"2027-04-27"}
+      assert shifted(~o"2027-04-23", day: 5, skipping: days_off()) == ~o"2027-05-03"
+      assert shifted(~o"2027-03-25", day: 1, skipping: days_off()) == ~o"2027-03-30"
+    end
+
+    test "an origin on a busy day first moves to the edge of its busy days" do
+      assert shifted(~o"2027-04-23", day: 0, skipping: days_off()) == ~o"2027-04-23"
+      assert shifted(~o"2027-04-24", day: 0, skipping: days_off()) == ~o"2027-04-27"
+      assert shifted(~o"2027-04-24", day: 1, skipping: days_off()) == ~o"2027-04-28"
+    end
+
+    test "backward, as free time is walked back" do
+      assert shifted(~o"2027-03-25", day: -1, skipping: days_off()) == ~o"2027-03-24"
+      assert shifted(~o"2027-03-22", day: -1, skipping: days_off()) == ~o"2027-03-19"
+      assert shifted(~o"2027-03-30", day: -1, skipping: days_off()) == ~o"2027-03-25"
+
+      # A day back from Easter Sunday is the Thursday before Good Friday.
+      assert shifted(~o"2027-03-28", day: -1, skipping: days_off()) == ~o"2027-03-25"
+    end
+
+    test "a finer origin or duration walks free time by the clock" do
+      assert shifted(~o"2027-04-23T16:30", hour: 1, skipping: days_off()) == ~o"2027-04-23T17:30"
+      assert shifted(~o"2027-04-23", hour: 3, skipping: days_off()) == ~o"2027-04-23T03"
+    end
+
+    test "a busy set with no end is read as far as the shift reaches" do
+      {:ok, weekends} = Tempo.select(~o"2026-06-18/..", Tempo.weekends!(:US))
+      assert shifted(~o"2026-06-18", day: 3, skipping: weekends) == ~o"2026-06-23"
     end
   end
 end

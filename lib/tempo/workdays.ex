@@ -57,7 +57,9 @@ defmodule Tempo.Workdays do
 
   * `{:ok, workdays}`.
 
-  * `{:error, %ArgumentError{}}` for a value that names no territory.
+  * `{:error, %ArgumentError{}}` for a value that names no territory, an
+    option this function does not take, or days off that are not a
+    `t:Tempo.t/0`.
 
   ### Examples
 
@@ -69,8 +71,12 @@ defmodule Tempo.Workdays do
   @spec new(term(), keyword()) :: {:ok, t()} | {:error, Exception.t()}
   def new(territory, options \\ [])
 
-  def new(%__MODULE__{} = workdays, options),
-    do: {:ok, %{workdays | except: Keyword.get(options, :except, workdays.except)}}
+  def new(%__MODULE__{} = workdays, options) do
+    with :ok <- Options.check(options, [:except], "Tempo.workdays/2"),
+         {:ok, except} <- days_off(Keyword.get(options, :except, workdays.except)) do
+      {:ok, %{workdays | except: except}}
+    end
+  end
 
   # What `Tempo.workdays/2` answers may be passed on as it is.
   def new({:ok, %__MODULE__{} = workdays}, options), do: new(workdays, options)
@@ -78,16 +84,26 @@ defmodule Tempo.Workdays do
 
   def new(territory, options) do
     with :ok <- Options.check(options, [:except], "Tempo.workdays/2"),
+         {:ok, except} <- days_off(Keyword.get(options, :except)),
          {:ok, territory} <- Territory.resolve(territory) do
       {:ok,
        %__MODULE__{
          territory: territory,
          weekdays: Localize.Calendar.weekdays(territory),
          weekend: Localize.Calendar.weekend(territory),
-         except: Keyword.get(options, :except)
+         except: except
        }}
     end
   end
+
+  # The days off are an expression with spans, or none.
+  defp days_off(nil), do: {:ok, nil}
+  defp days_off(%Tempo{} = except), do: {:ok, except}
+
+  defp days_off(other),
+    do:
+      {:error,
+       ArgumentError.exception("the days off (:except) are a Tempo value, not #{inspect(other)}")}
 
   @doc "Whether a value, a day or finer, falls on a workday: a weekday that is not a day off."
   @spec workday?(Tempo.t(), t()) :: boolean() | {:error, Exception.t()}
@@ -131,22 +147,85 @@ defmodule Tempo.Workdays do
     end)
   end
 
-  # The next workday on from a value, a day at a time in one direction.
-  @doc false
-  @spec step(Tempo.t(), 1 | -1, t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   # Whether a value is a workday, or the error for a set with no end.
   defp whole_workday?(value, workdays) do
     with :ok <- Spans.whole(value), do: workday?(value, workdays)
   end
 
+  # The next workday on from a value, a day at a time in one direction.
+  @doc false
+  @spec step(Tempo.t(), 1 | -1, t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def step(value, direction, workdays) do
     with :ok <- Spans.whole(value),
          {:ok, moved} <- Shift.shift(value, Duration.new!(day: direction)) do
       case workday?(moved, workdays) do
         true -> {:ok, moved}
-        false -> step(moved, direction, workdays)
+        false -> step_past(moved, direction, workdays)
         {:error, _} = error -> error
       end
+    end
+  end
+
+  # A day off within days off that never end in this direction has no
+  # workday beyond it, which is an error rather than a walk with no end.
+  defp step_past(day, direction, workdays) do
+    case off_for_good?(day, direction, workdays) do
+      true -> {:error, ConversionError.exception(value: workdays.except, reason: :open)}
+      false -> step(day, direction, workdays)
+    end
+  end
+
+  defp off_for_good?(_day, _direction, %__MODULE__{except: nil}), do: false
+
+  defp off_for_good?(day, direction, %__MODULE__{except: except}) do
+    with {:ok, extent} <- Spans.extent(day) do
+      except
+      |> endless(direction)
+      |> Enum.any?(&within_endless?(extent, &1))
+    end
+  end
+
+  # A day lies in days off open at their end when it begins at or after
+  # they do, and in days off open at their start when it ends at or before.
+  defp within_endless?({start, _stop}, {from, nil}), do: start >= from
+  defp within_endless?({_start, stop}, {nil, to}), do: stop <= to
+
+  @doc false
+  # Where the days off leave no workday after them, or nil: the earliest
+  # start of days off with no end.
+  @spec off_from(t()) :: integer() | nil
+  def off_from(%__MODULE__{except: nil}), do: nil
+
+  def off_from(%__MODULE__{except: except}) do
+    except |> endless(1) |> Enum.map(&elem(&1, 0)) |> Enum.min(fn -> nil end)
+  end
+
+  # The extents of the days off that never end in a direction: a span
+  # written with an open end; a recurrence with no rule and no end, whose
+  # repetitions follow one another (ISO 8601-1 §3.1.1.11) and so leave no
+  # day from its start; or a member of a set that takes nothing out.
+  defp endless(%Tempo{form: {:span, _from, :open}} = span, 1), do: extents_of(span)
+  defp endless(%Tempo{form: {:span, :open, _to}} = span, -1), do: extents_of(span)
+
+  defp endless(%Tempo{form: {:every, %Tempo{} = first, :infinity, nil}}, 1) do
+    case Spans.extent(first) do
+      {:ok, {start, _stop}} when is_integer(start) -> [{start, nil}]
+      _none -> []
+    end
+  end
+
+  defp endless(%Tempo{form: {:all, members}} = set, direction) when is_list(members) do
+    if Enum.any?(members, &match?({:except, _}, &1)),
+      do: [],
+      else: Enum.flat_map(members, &endless(%{set | form: &1.form}, direction))
+  end
+
+  defp endless(_expression, _direction), do: []
+
+  defp extents_of(span) do
+    case Spans.extent(span) do
+      {:ok, extent} -> [extent]
+      {:error, _} -> []
     end
   end
 
@@ -155,8 +234,16 @@ defmodule Tempo.Workdays do
   def nearest(%Tempo{} = value, %__MODULE__{} = workdays) do
     case whole_workday?(value, workdays) do
       true -> {:ok, value}
-      false -> nearest_from(value, workdays, 1)
+      false -> nearest_off(value, workdays)
       {:error, _} = error -> error
+    end
+  end
+
+  # A day off within days off that never end either way has no workday near it.
+  defp nearest_off(value, workdays) do
+    case off_for_good?(value, 1, workdays) and off_for_good?(value, -1, workdays) do
+      true -> {:error, ConversionError.exception(value: workdays.except, reason: :open)}
+      false -> nearest_from(value, workdays, 1)
     end
   end
 
@@ -225,7 +312,7 @@ defmodule Tempo.Workdays do
   defp rolled(value, workdays, :following), do: step(value, 1, workdays)
   defp rolled(value, workdays, :preceding), do: step(value, -1, workdays)
 
-  defp rolled(value, workdays, :nearest), do: nearest_from(value, workdays, 1)
+  defp rolled(value, workdays, :nearest), do: nearest_off(value, workdays)
   defp rolled(value, workdays, :modified_nearest), do: nearest_in_month(value, workdays, 1)
 
   defp rolled(value, workdays, :modified_following) do

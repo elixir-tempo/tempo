@@ -372,7 +372,7 @@ defmodule Tempo.Spans do
         with {:ok, values} <- selected_values(value, options), do: each_spans_of(values, [])
 
       not Unit.anchored?(units) and options[:within] != nil ->
-        spans(placed_in(value, options[:within]), Keyword.delete(options, :within))
+        placed_spans(value, options[:within], Keyword.delete(options, :within))
 
       Expand.one_span?(units) ->
         with {:ok, span} <- as_span(value), do: {:ok, [span]}
@@ -462,15 +462,38 @@ defmodule Tempo.Spans do
   defp member_spans(members, options) do
     case Enum.split_with(members, &Conditions.conditional?/1) do
       {[], members} ->
-        with {:ok, streams} <- each_spans(members, options), do: {:ok, Stream.concat(streams)}
+        with {:ok, streams} <- each_spans(members, options), do: {:ok, in_time_order(streams)}
 
+      # The conditions are read over the window and a year either side, so
+      # that a day kept between two holidays at the window's edge, or moved
+      # into it from before, is judged as it is anywhere; the set keeps
+      # what lies in the window.
       {conditionals, members} ->
-        with {:ok, streams} <- each_spans(members, options),
-             {:ok, others} <- Limit.take(Stream.concat(streams), hd(conditionals)),
-             {:ok, conditional} <- Conditions.resolve(conditionals, others, options) do
+        wide = widened(options)
+
+        with {:ok, streams} <- each_spans(members, wide),
+             {:ok, others} <- Limit.take(in_time_order(streams), hd(conditionals)),
+             {:ok, conditional} <- Conditions.resolve(conditionals, others, wide) do
           {:ok, Enum.sort_by(others ++ conditional, &start_position/1)}
         end
     end
+  end
+
+  defp widened(options) do
+    case window_extent(options[:within]) do
+      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) ->
+        Keyword.put(options, :within, widened_window(options[:within], start, stop))
+
+      _none ->
+        options
+    end
+  end
+
+  defp widened_window(%Tempo{calendar: calendar, zone: zone} = window, start, stop) do
+    day = %Tempo{form: {:value, [year: 2000, month: 1, day: 1]}, calendar: calendar, zone: zone}
+    from = at_position(start - 366 * @day, day, :start, calendar, zone)
+    to = at_position(stop + 366 * @day, day, :end, calendar, zone)
+    %{window | form: {:span, from, to}, metadata: %{}}
   end
 
   defp start_position(span) do
@@ -507,11 +530,40 @@ defmodule Tempo.Spans do
   end
 
   defp selection_periods(value, prefix, options) do
-    period = placed_in(%{value | form: {:value, prefix}}, options[:within])
+    window = options[:within]
+    period = placed_in(%{value | form: {:value, prefix}}, window)
 
-    if Unit.anchored?(elem(period.form, 1)),
-      do: {:ok, [period]},
-      else: {:error, conversion(value, :needs_a_year)}
+    cond do
+      Unit.anchored?(elem(period.form, 1)) -> {:ok, [period]}
+      on_the_line?(window) -> in_each_period(%{value | form: {:value, prefix}}, window, [])
+      true -> {:error, conversion(value, :needs_a_year)}
+    end
+  end
+
+  # A value with no year placed by a window: in it, where the window is one
+  # value it fits under, and else on each of the window's periods, as
+  # `Tempo.select/3` selects it there (`4M` in `2026/2027`, each April).
+  defp placed_spans(value, window, options) do
+    placed = placed_in(value, window)
+
+    if on_the_line?(window) and not Unit.anchored?(elem(placed.form, 1)),
+      do:
+        with(
+          {:ok, values} <- in_each_period(value, window, options),
+          do: each_spans_of(values, [])
+        ),
+      else: spans(placed, options)
+  end
+
+  defp on_the_line?(%Tempo{} = window), do: not match?({:cycle, _}, frame(window))
+  defp on_the_line?(_none), do: false
+
+  defp in_each_period(%Tempo{form: {:value, units}} = value, window, options) do
+    with {:ok, periods} <- spans(window, []),
+         {:ok, periods} <- Limit.take(periods, window),
+         {:ok, picked} <- each_selected(periods, Unit.cyclic(units), options) do
+      {:ok, Enum.map(picked, &%{&1 | metadata: value.metadata})}
+    end
   end
 
   defp each_selected(periods, parts, options) do
@@ -558,7 +610,7 @@ defmodule Tempo.Spans do
 
       stream =
         periods
-        |> selected_in(walk, first_step(periods, bound, options))
+        |> selected_in(walk, first_step(periods, bound, options) - carried_back(bound, parts))
         |> left_out(excluded)
         |> to_range_end(from)
         |> in_range_years(from, first.calendar)
@@ -659,6 +711,16 @@ defmodule Tempo.Spans do
   end
 
   defp first_step(_periods, _bound, _options), do: 0
+
+  # A selection that opens a window (a day observed on the Monday after)
+  # may carry an occurrence into the next period: a window's occurrences
+  # are looked for from the period before it, and those before it dropped.
+  # A count counts from the rule's start, which no period before reaches.
+  defp carried_back(count, _parts) when is_integer(count), do: 0
+
+  defp carried_back(_bound, parts) do
+    if Keyword.has_key?(with_nested(picking(parts)), :window), do: 1, else: 0
+  end
 
   # The number of the last period that begins by a position, no less than a
   # least number: reckoned from the length of a period and then stepped to.
@@ -805,7 +867,7 @@ defmodule Tempo.Spans do
   defp rule_periods(first, %Tempo{form: form} = domain, recurrence, options)
        when elem(form, 0) in [:all, :when] do
     cond do
-      only_exclusions?(domain) ->
+      only_exclusions?(domain) or every_year?(domain) ->
         rule_periods(%{first | form: put_elem(first.form, 1, :open)}, :open, recurrence, options)
 
       match?(%Tempo{}, range_start(domain)) ->
@@ -851,7 +913,7 @@ defmodule Tempo.Spans do
   defp range_start(_domain), do: nil
 
   defp in_range_years(stream, %Tempo{form: {:when, %Tempo{} = inner, [years: filter]}}, calendar) do
-    if range_start(inner),
+    if range_start(inner) != nil or every_year?(inner),
       do: Stream.filter(stream, &in_years?(elem(&1, 0), filter, calendar)),
       else: stream
   end
@@ -876,7 +938,11 @@ defmodule Tempo.Spans do
 
   defp to_range_end(stream, _from), do: stream
 
+  # A count counts from the domain's first member, so a counted recurrence
+  # takes all of a domain that has an end, and the window the occurrences.
   defp each_member(domain, first, recurrence, options) do
+    options = if counted?(recurrence), do: Keyword.delete(options, :within), else: options
+
     with {:ok, members} <- spans(domain, options) do
       {:ok, {:each, on_steps(members, domain_start(domain), first, recurrence)}}
     end
@@ -898,6 +964,8 @@ defmodule Tempo.Spans do
   end
 
   defp on_steps(members, _start, _first, _recurrence), do: members
+
+  defp counted?(%Tempo{form: {:every, _first, count, _rule}}), do: is_integer(count)
 
   defp on_step?(member, period_at) do
     start = start_position(member)
@@ -925,6 +993,11 @@ defmodule Tempo.Spans do
     do: Enum.all?(members, &match?({:except, _}, &1))
 
   defp only_exclusions?(_domain), do: false
+
+  # Every year (`R/..e/…`), the years a filter keeps of those a window gives.
+  defp every_year?(%Tempo{form: {:when, inner, [years: _filter]}}), do: every_year?(inner)
+  defp every_year?(%Tempo{form: {:span, :open, :open}}), do: true
+  defp every_year?(_domain), do: false
 
   defp left_out(stream, []), do: stream
 
@@ -1064,14 +1137,61 @@ defmodule Tempo.Spans do
 
   # ── Exclusions and domain filters ─────────────────────────────────────
 
-  # The members' spans but those that lie within an excluded member's.
+  # The members' spans with what an excluded member covers taken out: a
+  # member within one is left out, and one an excluded member falls inside
+  # is cut around it, each piece written to the member's own resolution
+  # (`{2017Y..,^2020Y}` is 2017 to 2019, and 2021 on).
   defp excluded_spans(set, members, excluded, options) do
     with {:ok, kept} <- spans(%{set | form: {:all, members}}, options),
          {:ok, out} <- spans(%{set | form: {:all, excluded}}, options),
          {:ok, out} <- Limit.take(out, set) do
-      out = Enum.map(out, &extent/1)
-      {:ok, Stream.reject(kept, &excluded?(extent(&1), out))}
+      out = out |> Enum.flat_map(&bounded_extent/1) |> Enum.sort()
+      {:ok, Stream.flat_map(kept, &cut_around(&1, out))}
     end
+  end
+
+  defp bounded_extent(span) do
+    case extent(span) do
+      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) -> [{start, stop}]
+      _open -> []
+    end
+  end
+
+  defp cut_around(span, out) do
+    case extent(span) do
+      {:ok, {start, stop}} when is_integer(start) -> pieces(span, {start, stop}, out)
+      _ -> [span]
+    end
+  end
+
+  defp pieces(span, whole, out) do
+    case left_after(whole, out) do
+      [^whole] -> [span]
+      left -> Enum.map(left, &piece(span, &1))
+    end
+  end
+
+  # What of a stretch no excluded stretch covers; a stop of nil has no end.
+  defp left_after({start, stop}, out) do
+    {left, from} =
+      Enum.reduce(out, {[], start}, fn {s, e}, {left, from} ->
+        cond do
+          e <= from or (stop != nil and s >= stop) -> {left, from}
+          s > from -> {[{from, s} | left], e}
+          true -> {left, max(from, e)}
+        end
+      end)
+
+    if stop == nil or from < stop,
+      do: Enum.reverse([{from, stop} | left]),
+      else: Enum.reverse(left)
+  end
+
+  defp piece(%Tempo{form: {:span, from, to}} = span, {start, stop}) do
+    model = if match?(%Tempo{form: {:value, _}}, from), do: from, else: to
+    first = at_position(start, model, :start, span.calendar, span.zone)
+    last = if stop == nil, do: to, else: at_position(stop, model, :end, span.calendar, span.zone)
+    %{span | form: {:span, first, last}}
   end
 
   defp excluded?({:ok, {start, stop}}, out) when is_integer(start) and is_integer(stop) do
@@ -1125,10 +1245,50 @@ defmodule Tempo.Spans do
   defp each_spans(members, options) do
     Enum.reduce_while(members, {:ok, []}, fn member, {:ok, acc} ->
       case spans(member, options) do
-        {:ok, stream} -> {:cont, {:ok, acc ++ [stream]}}
+        {:ok, stream} -> {:cont, {:ok, acc ++ [beneath(stream, member)]}}
         error -> {:halt, error}
       end
     end)
+  end
+
+  # A set held as a member carries its metadata to each of its occurrences,
+  # beneath the occurrence's own: a holiday's name, on the day it falls and
+  # on the day it is observed.
+  defp beneath(stream, %Tempo{form: {:all, _members}, metadata: metadata})
+       when map_size(metadata) > 0,
+       do: Stream.map(stream, &%{&1 | metadata: Map.merge(metadata, &1.metadata)})
+
+  defp beneath(stream, _member), do: stream
+
+  # A set's members' spans, each in the order of time, are its spans in that
+  # order: merged as they are asked for, since a member may have no end.
+  defp in_time_order([stream]), do: stream
+
+  defp in_time_order(streams) do
+    Stream.resource(
+      fn -> Enum.flat_map(streams, &head_of/1) end,
+      &earliest/1,
+      fn _heads -> :ok end
+    )
+  end
+
+  defp head_of(enumerable),
+    do: heads(&Enumerable.reduce(enumerable, &1, fn member, _ -> {:suspend, member} end))
+
+  defp heads(continuation) do
+    case continuation.({:cont, nil}) do
+      {:suspended, span, continuation} -> [{start_position(span), span, continuation}]
+      {_done_or_halted, _} -> []
+    end
+  end
+
+  defp earliest([]), do: {:halt, []}
+
+  defp earliest(heads) do
+    {start, _span, _continuation} = Enum.min_by(heads, &elem(&1, 0))
+    index = Enum.find_index(heads, &(elem(&1, 0) == start))
+    {{_start, span, continuation}, rest} = List.pop_at(heads, index)
+    {[span], List.insert_at(rest, index, heads(continuation)) |> List.flatten()}
   end
 
   defp plural_end(%Tempo{} = value), do: not singular?(value)

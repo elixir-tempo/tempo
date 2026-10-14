@@ -155,7 +155,7 @@ defmodule Tempo.CalendarsTest do
   end
 
   describe "Tempo.RecurrenceSet" do
-    test "its occurrences within a window are its members', each with its metadata" do
+    test "its occurrences within a window are its members', in time order, each with its metadata" do
       {:ok, holidays} =
         RecurrenceSet.new([
           Tempo.put_metadata(~o"R/2020-01-01/P1Y/FL12M25DN", %{name: "Christmas"}),
@@ -165,7 +165,7 @@ defmodule Tempo.CalendarsTest do
       {:ok, days} = Tempo.to_interval(holidays, within: ~o"2026")
 
       assert IntervalSet.map(days, &{Tempo.month(&1), Tempo.day(&1), Tempo.metadata(&1).name}) ==
-               [{12, 25, "Christmas"}, {4, 5, "Easter"}]
+               [{4, 5, "Easter"}, {12, 25, "Christmas"}]
     end
 
     test "is the days off of a territory's workdays" do
