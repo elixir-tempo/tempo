@@ -186,4 +186,42 @@ defmodule Tempo.MeasureTest do
       assert Duration.new(second: 1, microsecond: {500_000, 1}) == {:ok, ~o"PT1.5S"}
     end
   end
+
+  describe "a duration's own functions" do
+    test "units/0 are the units a duration is written in, coarsest first" do
+      assert Duration.units() == [
+               :year,
+               :month,
+               :week,
+               :day,
+               :hour,
+               :minute,
+               :second,
+               :microsecond
+             ]
+    end
+
+    test "new/1 refuses what is no keyword list of its units" do
+      assert {:error, %ArgumentError{}} = Duration.new("P1D")
+      assert_raise ArgumentError, fn -> Duration.new!(fortnight: 1) end
+    end
+
+    test "a fraction of a second is counted in microseconds" do
+      assert Duration.to_microseconds(Duration.new!(second: 1, microsecond: {500_000, 6})) ==
+               {:ok, 1_500_000}
+    end
+
+    test "to_unit/3 counts in a unit of fixed length, and a month only from a date" do
+      assert {:error, %ArgumentError{}} = Duration.to_unit(~o"P1D", :month)
+      assert {:error, %ArgumentError{}} = Duration.to_unit(~o"P1M", :day)
+
+      # February 2026 has 28 days, March 31.
+      assert Duration.to_unit(~o"P1M", :day, relative_to: ~o"2026-03-01") == {:ok, 31.0}
+    end
+
+    test "compare/3 of a month needs a date to lay it from" do
+      assert_raise ArgumentError, fn -> Duration.compare(~o"P1M", ~o"P30D") end
+      assert Duration.compare(~o"P1M", ~o"P30D", relative_to: ~o"2026-03-01") == :gt
+    end
+  end
 end

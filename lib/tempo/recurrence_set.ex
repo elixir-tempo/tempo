@@ -72,7 +72,10 @@ defmodule Tempo.RecurrenceSet do
 
   """
   @spec members(Tempo.t()) :: [Tempo.t()]
-  def members(set), do: IntervalSet.members(set)
+  def members(%Tempo{form: {:all, _members}} = set), do: IntervalSet.members(set)
+
+  # A rule on its own is a set of one rule.
+  def members(%Tempo{} = rule), do: [rule]
 
   @doc """
   The set with the members a function is truthy for.

@@ -10,6 +10,7 @@ defmodule Tempo.IntervalSet do
 
   alias Tempo.Algebra
   alias Tempo.Allen
+  alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Limit
   alias Tempo.Options
@@ -131,8 +132,9 @@ defmodule Tempo.IntervalSet do
     order.
 
   * `{:error, %ArgumentError{}}` when a duration has a month or a year, which
-    has no fixed length, and `{:error, exception}` when the expression has no
-    spans.
+    has no fixed length, `{:error, %Tempo.ConversionError{reason: :unbounded}}`
+    for an expression with no end, whose slots cannot all be listed, and
+    `{:error, exception}` when the expression has no spans.
 
   ### Examples
 
@@ -154,6 +156,7 @@ defmodule Tempo.IntervalSet do
          {:ok, length} <- Duration.to_microseconds(duration),
          {:ok, step} <- Duration.to_microseconds(Keyword.get(options, :every, duration)),
          :ok <- positive(step, duration),
+         :ok <- ended(expression),
          {:ok, spans} <- Spans.spans(expression),
          {:ok, slots} <-
            spans
@@ -161,6 +164,13 @@ defmodule Tempo.IntervalSet do
            |> Limit.take(expression) do
       {:ok, %Tempo{form: {:all, slots}, calendar: expression.calendar, zone: expression.zone}}
     end
+  end
+
+  # Every slot of what has no end cannot be listed.
+  defp ended(expression) do
+    if Tempo.bounded?(expression),
+      do: :ok,
+      else: {:error, ConversionError.exception(value: expression, reason: :unbounded)}
   end
 
   defp positive(step, _duration) when step > 0, do: :ok
@@ -451,7 +461,9 @@ defmodule Tempo.IntervalSet do
 
   @doc """
   The members of a set, or of any expression: a singular expression is its
-  own one member.
+  own one member, and a plural one has the members `Enum` gives of it (a
+  recurrence its occurrences). One with no end, or with more members than
+  the application's `:max_values_at_once`, raises a `Tempo.ConversionError`.
 
   ### Examples
 
@@ -460,6 +472,9 @@ defmodule Tempo.IntervalSet do
 
       iex> Tempo.IntervalSet.members(~o"2026-06")
       [~o"2026-06"]
+
+      iex> Tempo.IntervalSet.members(~o"R2/2026-06-01/P1W")
+      [~o"2026-06-01/2026-06-07", ~o"2026-06-08/2026-06-14"]
 
   """
   @spec members(Tempo.t()) :: [Tempo.t()]
@@ -472,7 +487,21 @@ defmodule Tempo.IntervalSet do
     end
   end
 
-  def members(%Tempo{} = expression), do: [expression]
+  def members(%Tempo{} = expression) do
+    if Spans.singular?(expression), do: [expression], else: plural_members(expression)
+  end
+
+  defp plural_members(expression) do
+    case taken_members(expression) do
+      {:ok, taken} -> taken
+      {:error, exception} -> raise exception
+    end
+  end
+
+  defp taken_members(expression) do
+    with {:ok, members} <- Spans.members(expression, []),
+         do: Limit.take(members, expression)
+  end
 
   @doc """
   How many members a set has.
