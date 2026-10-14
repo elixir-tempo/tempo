@@ -488,8 +488,8 @@ defmodule Tempo.Select do
 
   defp in_container(container, period, parts, _unit, extent) do
     period
-    |> expanded(container, parts)
-    |> Enum.flat_map(&met(&1, period, extent))
+    |> placed_values(container, parts)
+    |> Enum.flat_map(fn {value, placed} -> met(value, placed, period, extent) end)
   end
 
   # A day of the week counted from the end of the week: `-1K` is the week's last day.
@@ -512,7 +512,10 @@ defmodule Tempo.Select do
   # A candidate within the period is picked whole; one the period lies within
   # picks the period itself (an hour of the 15th, asked for the 15th); one
   # that overlaps otherwise is not picked.
-  defp met(%Tempo{} = candidate, period, extent) do
+  defp met(%Tempo{} = candidate, period, extent), do: met(candidate, nil, period, extent)
+
+  # A candidate whose extent its expansion gave is not placed again.
+  defp met(%Tempo{} = candidate, nil, period, extent) do
     case Spans.extent(candidate) do
       {:ok, {s, e}} when is_integer(s) and is_integer(e) ->
         met_at({s, e}, extent, candidate, period)
@@ -521,6 +524,8 @@ defmodule Tempo.Select do
         []
     end
   end
+
+  defp met(candidate, placed, period, extent), do: met_at(placed, extent, candidate, period)
 
   defp met_at({s, e}, {start, stop}, candidate, _period) when s >= start and e <= stop,
     do: [candidate]
@@ -556,20 +561,22 @@ defmodule Tempo.Select do
   defp counted_in(unit, _period, _extent), do: container_of(unit)
 
   # The containers a period runs through: the one its start is in, and each
-  # next until the period's end.
+  # next until the period's end. Containers tile the line, so the one that
+  # ends at or after the period's end is the last, and no next is looked
+  # for; a next whose extent was found in finding it is not placed again.
   defp containers(%Tempo{} = period, unit, {start, stop}) do
     frame = frame(period)
 
-    period
-    |> container_at(start, unit, frame)
+    {container_at(period, start, unit, frame), nil}
     |> Stream.unfold(fn
       nil ->
         nil
 
-      container ->
-        case Spans.extent(container) do
-          {:ok, {container_start, container_stop}} when container_start < stop ->
-            {container, next(container, {container_start, container_stop}, unit, period, frame)}
+      {container, placed} ->
+        case placed || Spans.extent(container) do
+          {:ok, {container_start, container_stop} = extent} when container_start < stop ->
+            {container,
+             if(container_stop < stop, do: next(container, extent, unit, period, frame))}
 
           _ ->
             nil
@@ -585,18 +592,24 @@ defmodule Tempo.Select do
 
   # A unit of the clock is followed by the one the clock shows as it ends,
   # which across a change of the clock is not an hour on by the clock; any
-  # other by the next of its unit.
+  # other by the next of its unit. Each is given with its extent where
+  # finding it placed it, else nil.
   defp next(_container, {container_start, container_stop}, unit, period, frame)
        when unit in [:hour, :minute] do
     following = container_at(period, container_stop, unit, frame)
 
     case Spans.extent(following) do
-      {:ok, {next_start, _}} when next_start > container_start -> following
+      {:ok, {next_start, _}} = placed when next_start > container_start -> {following, placed}
       _ -> nil
     end
   end
 
-  defp next(container, _extent, unit, _period, _frame), do: next_of_unit(container, unit)
+  defp next(container, _extent, unit, _period, _frame) do
+    case next_of_unit(container, unit) do
+      nil -> nil
+      following -> {following, nil}
+    end
+  end
 
   defp next_of_unit(container, unit) do
     case Shift.shift(container, Shift.one(unit)) do
@@ -621,18 +634,32 @@ defmodule Tempo.Select do
   defp at_showing(container, _start, _unit, _frame), do: container
 
   # A container's units with the parts beneath: every concrete value they allow.
-  defp expanded(period, %Tempo{form: {:value, container}} = scope, parts) do
-    case Expand.expand(container ++ parts, scope_frame(period, scope)) do
-      {:ok, values} ->
-        values
+  defp expanded(period, scope, parts),
+    do: period |> placed_values(scope, parts) |> Enum.map(&elem(&1, 0))
+
+  # Each with the extent its expansion gave it, where it gave one and the
+  # value is still on the frame it was found on: a value given another
+  # shift (a second showing, a reading on a zone of fixed offset) is
+  # placed again where it is asked.
+  defp placed_values(period, %Tempo{form: {:value, container}} = scope, parts) do
+    frame = scope_frame(period, scope)
+
+    case Expand.placed(container ++ parts, frame) do
+      {:ok, placed} ->
+        placed
         |> Enum.take(Limit.values())
-        |> Enum.map(&in_scope(as_value(period, &1), scope))
+        |> Enum.map(fn {units, extent} ->
+          on_frame(in_scope(as_value(period, units), scope), extent, frame)
+        end)
         |> showings()
 
       {:error, _} ->
         []
     end
   end
+
+  defp on_frame(%Tempo{shift: shift} = value, extent, %{shift: shift}), do: {value, extent}
+  defp on_frame(value, _extent, _frame), do: {value, nil}
 
   # A reading a zone's clock shows twice is selected in a period once, at its
   # first showing there, as a value written to that reading is read (decision
@@ -643,12 +670,12 @@ defmodule Tempo.Select do
   # A reading a zone's clock shows twice is expanded twice, in the order the
   # clock shows it; the second is the second showing, and carries the shift
   # the clock has then, where the two would otherwise be one value.
-  defp showings(values) do
+  defp showings(placed) do
     {shown, _seen} =
-      Enum.map_reduce(values, MapSet.new(), fn value, seen ->
+      Enum.map_reduce(placed, MapSet.new(), fn {value, extent}, seen ->
         if MapSet.member?(seen, value),
-          do: {second_showing(value), seen},
-          else: {value, MapSet.put(seen, value)}
+          do: {{second_showing(value), nil}, seen},
+          else: {{value, extent}, MapSet.put(seen, value)}
       end)
 
     shown

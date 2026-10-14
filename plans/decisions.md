@@ -608,3 +608,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Option 1.
 
 * **State.** Built: `put/1`, `advance/1`, `reset/0` and `utc_now/0` as in 1.6. `put/1` also makes it the calling process's clock, so the 1.6 `config :ex_tempo, clock: Tempo.Clock.Test` is optional; a time asked or moved before one is pinned is a `Tempo.ClockError` with reason `:not_pinned`, where 1.6 raised a `RuntimeError`.
+
+## 56. Rule expansion
+
+* **Question.** Rule expansion is 2.7 to 9.7 times 1.6.4's time after the 2026-10-15 work on the set operations. How is it made faster without making the engine harder to read?
+
+* **Context.** `Tempo.Expand` and `Tempo.Select` pass `%Tempo{}` values from step to step, and each step places the value on the line again: an occurrence of a weekly rule places about 25 values, which ask the zone about 100 times. The options were (1) carry the span each candidate was found at along with it, inside `Expand` and `Select`, the algorithms as they are; (2) a second path for rules that are pure Gregorian day arithmetic, compiled to tests of a day number, beside the general engine; (3) stop for 2.0.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built, each change commented where it is made. `Tempo.Expand.placed/2` gives each value with the extent finding it gave (a reading of a clock that keeps one offset), and an hour's minutes are found under the hour's extent rather than the hour placed again; `Tempo.Select` takes that extent to judge a candidate, keeps the extent a next container was found with, and looks for no container past the period's end; the walk places its first start once, and a span picked whole keeps the extent the walk gave it. Weekly MWF went from 22.2 to 16.8 ms, last weekday from 37.8 to 30.3, hourly from 9.0 to 7.3, yearly from 1.94 to 1.68: 4 to 8 times 1.6.4. What is left is `Tempo.Select.in_period/3` answering values without their extents, so the walk places what it picks again; carrying them out would thread `{value, extent}` through every picking, rolling and positioning step of `Select`.

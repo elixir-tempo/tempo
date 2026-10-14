@@ -256,7 +256,7 @@ defmodule Tempo.Expand do
   # hour without its other fifty-nine.
   def candidates(prefix, unit, n, frame)
       when unit in [:hour, :minute, :second] and is_integer(n) and n >= 0 do
-    case named_readings(prefix, unit, n, frame) do
+    case named_readings(prefix, nil, unit, n, frame) do
       {:ok, children} -> {:ok, children}
       :walk -> walked(prefix, unit, n, frame)
     end
@@ -296,11 +296,15 @@ defmodule Tempo.Expand do
     with {:ok, children} <- children(prefix, unit, frame), do: {:ok, select(held, children)}
   end
 
-  defp named_readings(prefix, unit, n, frame) do
+  # The readings named n under a prefix, placed here unless its extent is known.
+  defp named_readings(prefix, nil, unit, n, frame) do
     if Unit.anchored?(prefix),
       do: named_in(extent(prefix, frame), unit, n, frame),
       else: :walk
   end
+
+  defp named_readings(_prefix, extent, unit, n, frame),
+    do: named_in({:ok, extent}, unit, n, frame)
 
   defp named_in({:ok, {start, stop}}, unit, n, frame) when is_integer(start) and is_integer(stop),
     do: named_at(steady(frame, start, stop), unit, n, start, stop)
@@ -857,6 +861,18 @@ defmodule Tempo.Expand do
   @spec expand(Unit.units(), frame()) ::
           {:ok, Enumerable.t()} | {:error, ConversionError.reason()}
   def expand(units, frame) do
+    with {:ok, placed} <- placed(units, frame), do: {:ok, Stream.map(placed, &elem(&1, 0))}
+  end
+
+  @doc """
+  The values `expand/2` gives, each with its extent on the frame where
+  finding it gave one (a reading of a clock that keeps one offset there),
+  else `nil`: the caller that places each value then need not place it
+  again.
+  """
+  @spec placed(Unit.units(), frame()) ::
+          {:ok, Enumerable.t()} | {:error, ConversionError.reason()}
+  def placed(units, frame) do
     units = units |> Unit.cyclic() |> filled()
 
     [{first, held} | rest] = units
@@ -868,10 +884,11 @@ defmodule Tempo.Expand do
       expanded =
         rest
         |> Enum.with_index(1)
-        |> Enum.reduce(Stream.map(firsts, &{[{first, &1}], frame}), fn {part, index}, found ->
+        |> Enum.reduce(Stream.map(firsts, &{[{first, &1}], frame, nil}), fn {part, index},
+                                                                            found ->
           under_each(part, found, index < descended)
         end)
-        |> Stream.map(&elem(&1, 0))
+        |> Stream.map(fn {value, _frame, extent} -> {value, extent} end)
 
       {:ok, expanded}
     end
@@ -880,9 +897,14 @@ defmodule Tempo.Expand do
   # Each prefix carries the frame its children are found in: a reading a
   # zone's clock shows twice is the showing it was found in, so that the
   # minutes of the second showing of an hour are found in that showing.
-  defp under_each({unit, held}, found, descends?),
-    do:
-      Stream.flat_map(found, fn {prefix, frame} -> under(prefix, unit, held, frame, descends?) end)
+  # It carries its extent too where finding it gave one, so that its own
+  # children are found without placing it again: an hour's minutes under
+  # the hour just found, rather than the hour placed anew for each.
+  defp under_each({unit, held}, found, descends?) do
+    Stream.flat_map(found, fn {prefix, frame, extent} ->
+      under(prefix, extent, unit, held, frame, descends?)
+    end)
+  end
 
   defp expandable(units) do
     Enum.find_value(units, :ok, fn
@@ -959,16 +981,37 @@ defmodule Tempo.Expand do
     end)
   end
 
-  defp under(prefix, unit, held, frame, descends?) do
-    case candidates(prefix, unit, held, frame) do
-      {:ok, candidates} ->
-        for {value, span} <- candidates,
-            do:
-              {expanded(prefix, unit, value, span, frame), showing(descends?, unit, span, frame)}
+  defp under(prefix, extent, unit, held, frame, descends?) do
+    case placed_candidates(prefix, extent, unit, held, frame) do
+      {:ok, candidates, placed?} ->
+        for {value, span} <- candidates do
+          {expanded(prefix, unit, value, span, frame), showing(descends?, unit, span, frame),
+           carried(span, placed?)}
+        end
 
       {:error, _} ->
         []
     end
+  end
+
+  defp carried(span, true = _placed?), do: span
+  defp carried(_span, false = _placed?), do: nil
+
+  # The candidates under a prefix, and whether each one's span is its
+  # extent: so for a reading of the clock found by arithmetic, which is
+  # where the clock keeps one offset (`named_readings/5`); not for a day,
+  # whose span is days, nor for a reading found by walking a change of
+  # the clock, whose span is the part of it shown.
+  defp placed_candidates(prefix, extent, unit, n, frame)
+       when unit in [:hour, :minute, :second] and is_integer(n) and n >= 0 do
+    case named_readings(prefix, extent, unit, n, frame) do
+      {:ok, children} -> {:ok, children, true}
+      :walk -> with {:ok, children} <- walked(prefix, unit, n, frame), do: {:ok, children, false}
+    end
+  end
+
+  defp placed_candidates(prefix, _extent, unit, held, frame) do
+    with {:ok, children} <- candidates(prefix, unit, held, frame), do: {:ok, children, false}
   end
 
   # A label picked out of a period is the date it names (`2026Y6M3K` is each

@@ -1099,11 +1099,20 @@ defmodule Tempo.Spans do
       # the start of the period after it, which that needs, is kept for it.
       walk = make_ref()
 
+      # Every period is the first moved by whole cadences, so where the
+      # first starts is placed once for the walk and not at every step.
+      first_start = start_extent(base)
+
       {:ok,
        {:steps,
         fn
           {:with_extent, k} ->
-            occurrence_at(base, {from, to}, cadences(cadence, k), {recurrence, walk, k})
+            occurrence_at(
+              base,
+              {from, to},
+              cadences(cadence, k),
+              {recurrence, walk, k, first_start}
+            )
 
           k ->
             occurrence(base, {from, to}, cadences(cadence, k), recurrence)
@@ -1166,10 +1175,16 @@ defmodule Tempo.Spans do
 
   defp in_rule_period(period, parts, options) do
     case Select.in_period(period, parts, options) do
-      {:ok, picked} -> Enum.flat_map(picked, &with_extent/1)
+      {:ok, picked} -> Enum.flat_map(picked, &with_extent(&1, period, options[:extent]))
       {:error, _} -> []
     end
   end
+
+  # A span of two values picked whole is where the walk placed it.
+  defp with_extent(%Tempo{form: {:span, %Tempo{}, %Tempo{}}} = period, period, {_, _} = extent),
+    do: [{period, extent}]
+
+  defp with_extent(picked, _period, _extent), do: with_extent(picked)
 
   # An occurrence and its extent: a value picked is the span it covers.
   defp with_extent(%Tempo{form: {:value, _}} = value) do
@@ -1897,19 +1912,25 @@ defmodule Tempo.Spans do
          %Tempo{form: {:span, from, to}} = base,
          {_, %Duration{} = duration},
          {%Duration{units: [_ | _]} = step, next, _previous},
-         {recurrence, walk, k}
+         {recurrence, walk, k, first_start}
        ) do
     {moved, start} =
-      start_at(walk, k, fn -> moved_value(from, step, :start, base, recurrence) end)
+      start_at(walk, k, fn -> moved_from(first_start, from, step, :start, base, recurrence) end)
 
-    stop = next_start_at(walk, k + 1, fn -> moved_value(from, next, :start, base, recurrence) end)
+    stop =
+      next_start_at(walk, k + 1, fn ->
+        moved_from(first_start, from, next, :start, base, recurrence)
+      end)
 
     stop = later(stop, start, duration, base, recurrence)
     {%{base | form: {:span, moved, value_at(stop, to, :end, base)}}, {start, stop}}
   end
 
-  defp occurrence_at(base, ends, cadences, {recurrence, _walk, _k}),
+  defp occurrence_at(base, ends, cadences, {recurrence, _walk, _k, _first_start}),
     do: {occurrence(base, ends, cadences, recurrence), nil}
+
+  defp start_extent(%Tempo{form: {:span, %Tempo{} = from, _to}}), do: extent(from)
+  defp start_extent(_base), do: nil
 
   # The start of the kth period and where it starts: the one the period
   # before it reckoned, where it is the next of the same walk, or reckoned
@@ -2018,8 +2039,11 @@ defmodule Tempo.Spans do
     end
   end
 
-  defp moved_value(%Tempo{} = value, duration, kind, span, recurrence) do
-    {:ok, {start, stop}} = extent(value)
+  defp moved_value(%Tempo{} = value, duration, kind, span, recurrence),
+    do: moved_from(extent(value), value, duration, kind, span, recurrence)
+
+  # A value moved by a duration from where it is, its extent given.
+  defp moved_from({:ok, {start, stop}}, value, duration, kind, span, recurrence) do
     position = if kind == :end and not clock_resolution?(value), do: stop, else: start
     {:ok, moved} = shifted(position, duration, frame_of(span), recurrence)
     value_at(moved, value, kind, span)
