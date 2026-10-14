@@ -96,7 +96,8 @@ The time I am busy, with meetings that overlap merged, and the time I am free in
 
 ```elixir
 iex> working_hours = ~o"2026-04-21T09/2026-04-21T17[Europe/London]"
-iex> {:ok, busy} = Tempo.intersection(schedule, working_hours)
+iex> {:ok, in_hours} = Tempo.intersection(schedule, working_hours)
+iex> {:ok, busy} = Tempo.IntervalSet.coalesce(in_hours)
 iex> busy
 ~o"{2026Y4M21DT9H30M0S/T45M0S,2026Y4M21DT10H30M0S/T12H0M0S}[Europe/London]"
 
@@ -104,7 +105,7 @@ iex> Tempo.difference(working_hours, schedule)
 {:ok, ~o"{2026Y4M21DT9H/T30M0S,2026Y4M21DT9H45M0S/T10H30M0S,2026Y4M21DT12H0M0S/T17H}[Europe/London]"}
 ```
 
-> *"**Busy** is the schedule **within** working hours: the stand-up, then half past ten to noon. **Free** is working hours **minus** the schedule."*
+> *"**Busy** is the schedule **within** working hours, its meetings **joined** where they overlap: the stand-up, then half past ten to noon. **Free** is working hours **minus** the schedule."*
 
 `Tempo.ICal.parse_file/2` reads a file the same way, and `Tempo.ICal.from_ical/2` takes a calendar the `ical` library has already parsed.
 
@@ -187,7 +188,7 @@ iex> Tempo.IntervalSet.map(morning, &Tempo.metadata(&1).summary)
 ["Standup", "Design review"]
 ```
 
-**The operations on time** — `Tempo.intersection/2`, `Tempo.difference/2`, `Tempo.symmetric_difference/2`, `Tempo.complement/2`, `Tempo.IntervalSet.coalesce/1` — answer the time covered, with events that overlap or touch merged into one span. These are the ones for *free-busy* questions. A span of the answer that came from one event carries that event's metadata; one merged from several is no one event.
+**The operations on time** — `Tempo.intersection/2`, `Tempo.difference/2`, `Tempo.symmetric_difference/2`, `Tempo.complement/2` — answer the time covered, in pieces each of one event: a piece ends where its event ends, so each carries that event's metadata, and two events that meet are two pieces. `Tempo.IntervalSet.coalesce/1` joins pieces that overlap or touch into the time covered, which is what a *free-busy* question asks; a span joined from several is no one event.
 
 ```elixir
 iex> {:ok, covered} = Tempo.IntervalSet.coalesce(schedule)

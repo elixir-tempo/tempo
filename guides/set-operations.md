@@ -229,6 +229,22 @@ iex> Tempo.year(iv)
 
 The surviving A member inherits A's calendar and metadata; the B operand is used only to decide *whether* to keep the member.
 
+A result ends where the member it comes from ends, so it carries that one member's metadata. Two holidays that meet are two results, each with its own name; `Tempo.IntervalSet.coalesce/1` joins them where the time covered is the question:
+
+```elixir
+iex> christmas = Tempo.put_metadata(~o"2027-12-27", %{name: "Christmas Day"})
+iex> boxing_day = Tempo.put_metadata(~o"2027-12-28", %{name: "Boxing Day"})
+iex> {:ok, holidays} = Tempo.IntervalSet.new([christmas, boxing_day])
+iex> {:ok, shared} = Tempo.intersection(holidays, ~o"2027-12")
+iex> Tempo.IntervalSet.map(shared, &Tempo.metadata(&1).name)
+["Christmas Day", "Boxing Day"]
+iex> {:ok, covered} = Tempo.IntervalSet.coalesce(shared)
+iex> Tempo.IntervalSet.count(covered)
+1
+```
+
+> *"Christmas and Boxing Day **shared** with December are two holidays, each with its name; the time they **cover** is one stretch of two days."*
+
 ### Complement — instant-level
 
 Every instant in the universe that is NOT covered by any member of `set`. The `:within` option is **required**. Internally coalesces before computing gaps.

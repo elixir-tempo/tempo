@@ -467,7 +467,8 @@ A base with no end gives a lazy set, walked only as far as it is taken. The same
 ```elixir
 iex> {:ok, june_workdays} = Tempo.select(~o"2026-06", Tempo.workdays(:US))
 iex> vacation = ~o"2026-06-15/2026-06-20"
-iex> Tempo.difference(june_workdays, vacation)
+iex> {:ok, at_work} = Tempo.difference(june_workdays, vacation)
+iex> Tempo.IntervalSet.coalesce(at_work)
 {:ok, ~o"{2026Y6M1D/5D,2026Y6M8D/12D,2026Y6M22D/26D,2026Y6M29D/30D}"}
 
 iex> {:ok, days_at_work} = Tempo.members_outside(june_workdays, vacation)
@@ -475,7 +476,7 @@ iex> Tempo.IntervalSet.count(days_at_work)
 17
 ```
 
-> *"The **US workdays** of June **minus** my **vacation** are the time I am at work: four runs of days. The workdays **outside** my vacation are seventeen."*
+> *"The **US workdays** of June **minus** my **vacation** are the days I am at work, **joined** into four runs of days. The workdays **outside** my vacation are seventeen."*
 
 `difference/2` answers the time left, with days that touch joined into one span. `members_outside/2` keeps each workday a member of its own, which is the one to use when the days are to be counted or listed.
 

@@ -27,8 +27,13 @@ defmodule Tempo.EndlessOperandsTest do
 
   describe "an answer that lies within the bounded operand" do
     test "is bounded: an intersection, in either order" do
-      assert Tempo.intersection(@weeks, @busy) == {:ok, ~o"{2026-06-10/2026-06-20}"}
-      assert Tempo.intersection(@busy, @weeks) == {:ok, ~o"{2026-06-10/2026-06-20}"}
+      # Each week is a member, and a result ends where its member does.
+      assert Tempo.intersection(@weeks, @busy) ==
+               {:ok, ~o"{2026-06-10/2026-06-14,2026-06-15/2026-06-20}"}
+
+      assert Tempo.intersection(@busy, @weeks) ==
+               {:ok, ~o"{2026-06-10/2026-06-14,2026-06-15/2026-06-20}"}
+
       assert Tempo.intersection(fifteenths(), @busy) == {:ok, ~o"{2026-06-15/2026-06-15}"}
     end
 

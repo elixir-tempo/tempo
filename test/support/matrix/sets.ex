@@ -98,6 +98,48 @@ defmodule Tempo.Matrix.Sets do
   end
 
   @doc """
+  Stretches an operation keeps, each cut where the member it is credited to
+  ends and the stretch goes on: a result carries one member of each side,
+  and ends with it (decision 42). A piece is credited, on each side, to the
+  member covering its start that began latest, the one ending latest of
+  those that began together.
+
+  ### Arguments
+
+  * `kept` is a list of `t:stretch/0`, what the operation keeps.
+
+  * `a` and `b` are lists of `t:span/0`, the operands.
+
+  ### Returns
+
+  * A list of `t:stretch/0` in order.
+
+  """
+  @spec by_member([stretch()], [span()], [span()]) :: [stretch()]
+  def by_member(kept, a, b) do
+    Enum.flat_map(kept, fn {from, to} -> pieces(from, to, a, b) end)
+  end
+
+  defp pieces(from, to, a, b) do
+    ends =
+      [credited(from, a), credited(from, b)]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(fn {_from, stop, _id} -> stop end)
+      |> Enum.filter(&(&1 > from and &1 < to))
+
+    case ends do
+      [] -> [{from, to}]
+      ends -> [{from, Enum.min(ends)} | pieces(Enum.min(ends), to, a, b)]
+    end
+  end
+
+  defp credited(at, spans) do
+    spans
+    |> Enum.filter(fn {from, to, _id} -> from <= at and at < to end)
+    |> Enum.max_by(fn {from, to, _id} -> {from, to} end, fn -> nil end)
+  end
+
+  @doc """
   Each member of the first list cut to each member of the second it overlaps.
 
   ### Arguments

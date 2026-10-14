@@ -474,23 +474,27 @@ defmodule Tempo.Algebra do
 
   @doc "Every point in either operand."
   @spec union([positioned()], [positioned()], frame()) :: [result()]
-  def union(a, b, frame), do: sweep(a, b, frame, fn da, db -> da > 0 or db > 0 end)
+  def union(a, b, frame), do: sweep(a, b, frame, fn da, db -> da > 0 or db > 0 end, :by_member)
 
   @doc "Every point in both operands."
   @spec intersection([positioned()], [positioned()], frame()) :: [result()]
-  def intersection(a, b, frame), do: sweep(a, b, frame, fn da, db -> da > 0 and db > 0 end)
+  def intersection(a, b, frame),
+    do: sweep(a, b, frame, fn da, db -> da > 0 and db > 0 end, :by_member)
 
   @doc "Every point in the first operand and not the second."
   @spec difference([positioned()], [positioned()], frame()) :: [result()]
-  def difference(a, b, frame), do: sweep(a, b, frame, fn da, db -> da > 0 and db == 0 end)
+  def difference(a, b, frame),
+    do: sweep(a, b, frame, fn da, db -> da > 0 and db == 0 end, :by_member)
 
   @doc "Every point in exactly one operand."
   @spec symmetric_difference([positioned()], [positioned()], frame()) :: [result()]
-  def symmetric_difference(a, b, frame), do: sweep(a, b, frame, fn da, db -> da > 0 != db > 0 end)
+  def symmetric_difference(a, b, frame),
+    do: sweep(a, b, frame, fn da, db -> da > 0 != db > 0 end, :by_member)
 
   @doc "Every point covered by at least so many members of one operand."
   @spec covered([positioned()], pos_integer(), frame()) :: [result()]
-  def covered(a, at_least, frame), do: sweep(a, [], frame, fn da, _db -> da >= at_least end)
+  def covered(a, at_least, frame),
+    do: sweep(a, [], frame, fn da, _db -> da >= at_least end, :joined)
 
   @doc "Positioned spans with the second half of a cut cycle span left out: one entry per member."
   @spec whole([positioned()]) :: [positioned()]
@@ -509,8 +513,11 @@ defmodule Tempo.Algebra do
 
   # The one sweep: the operands' edges position by position, every close and
   # open at a position applied before the point after it is judged, with the
-  # members of each side covering it.
-  defp sweep(a, b, frame, keep?) do
+  # members of each side covering it. A result is credited, on each side, to
+  # the member covering its start that opened last. By member, it ends where
+  # that member ends and the result goes on, so each keeps its own metadata
+  # (decision 42); joined, it runs on, as the time covered does.
+  defp sweep(a, b, frame, keep?, runs) do
     (edges(a, :a) ++ edges(b, :b))
     |> Enum.group_by(fn {position, _, _, _} -> position end)
     |> Enum.sort_by(fn {position, _} -> position end)
@@ -535,6 +542,10 @@ defmodule Tempo.Algebra do
           {[Map.merge(open, %{stop: position, closed: edge_model(edges, :close)}) | out],
            covering, nil}
 
+        {%{} = open, true} when runs == :by_member ->
+          {out, open} = recredited(out, open, covering, position, edges)
+          {out, covering, open}
+
         _ ->
           {out, covering, open}
       end
@@ -542,6 +553,29 @@ defmodule Tempo.Algebra do
     |> elem(0)
     |> Enum.reverse()
     |> joined(frame)
+  end
+
+  # A result whose member has ended while the result goes on is closed there,
+  # and the rest credited to the members covering it now.
+  defp recredited(out, open, covering, position, edges) do
+    if member_ended?(open, covering) do
+      closed = Map.merge(open, %{stop: position, closed: edge_model(edges, :close)})
+
+      reopened = %{
+        start: position,
+        opened: edge_model(edges, :open),
+        a: List.first(covering.a),
+        b: List.first(covering.b)
+      }
+
+      {[closed | out], reopened}
+    else
+      {out, open}
+    end
+  end
+
+  defp member_ended?(open, covering) do
+    (open.a != nil and open.a not in covering.a) or (open.b != nil and open.b not in covering.b)
   end
 
   # ── The sweep, one result at a time ───────────────────────────────────

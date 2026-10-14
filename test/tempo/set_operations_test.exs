@@ -67,13 +67,14 @@ defmodule Tempo.SetOperationsTest do
     {:ok, overlapping} = Tempo.members_overlapping(sa, sb)
     {:ok, outside} = Tempo.members_outside(sa, sb)
 
-    assert stretches(intersection) == Sets.shared(a, b),
+    assert stretches(intersection) == Sets.by_member(Sets.shared(a, b), a, b),
            "intersection of #{inspect(a)} and #{inspect(b)}"
 
-    assert stretches(difference) == unmarked(Sets.difference(a, b)),
+    assert stretches(difference) == Sets.by_member(unmarked(Sets.difference(a, b)), a, b),
            "difference of #{inspect(a)} and #{inspect(b)}"
 
-    assert stretches(symmetric) == Sets.cover(Sets.symmetric_difference(a, b)),
+    assert stretches(symmetric) ==
+             Sets.by_member(Sets.cover(Sets.symmetric_difference(a, b)), a, b),
            "symmetric difference of #{inspect(a)} and #{inspect(b)}"
 
     assert stretches(coalesced) == Sets.cover(a ++ b),

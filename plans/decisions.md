@@ -458,3 +458,23 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **State.** Built. `Tempo.to_calendar/2` of an expression with no end is `{:when, rule, read_in: calendar}`: `Tempo.Spans` selects the rule in its own calendar and reads each span in the other, with the wrapper's metadata beneath the span's; `Tempo.Writer` refuses it (`:read_in_another_calendar`); `Tempo.Select` takes it as a selector, as it takes a recurrence. A rule whose domain has a last year (`R/{2015Y}/P1Y/F…`) is not one with no end, and is converted through its spans as a bounded recurrence is. `test/tempo/read_in_calendar_test.exs` holds Eid al-Fitr beside Saudi National Day to the Umm al-Qura dates, and every public function to answering such a rule or refusing it by name.
 
+## 41. Civil holidays beside holidays projected onto their evenings
+
+* **Question.** `Tempo.Holidays.day_start/2` (in `tempo_holidays`) projects the occurrences of a holiday whose day begins at sunset onto the evening before, a zoned interval, and leaves every other occurrence the civil day it is. A set is of one frame in 2.0, so the two are refused together. Where do the civil days go?
+
+* **Context.** Found running `tempo_holidays` on 2.0: Saudi Arabia's holidays projected onto their evenings in Riyadh beside Founding Day. The reference place of a bare `:evening` or `:sunset` is the holiday calendar's (Mecca and Riyadh for an Islamic date, Jerusalem for a Hebrew one), and a civil day has none of its own. The options were (1) to place the civil days in the zone the day start is read in: the zone named, a location's zone through `tz_world`, or for a bare boundary the reference zone of the set's sunset holidays, UTC where none is found, a lazy set with a bare boundary needing a location; (2) to return the occurrences as a list, not a set; (3) to project to wall-clock times with no zone, so every member is floating, losing the instant.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built in `tempo_holidays`: `Tempo.Holidays.DayStart.civil_zone/2` and `Tempo.Holidays.day_start/2`, a lazy set given a bare boundary returning `{:error, {:location_required, day_start}}`; Saudi Arabia's Founding Day is a day in Riyadh beside Eid al-Fitr's evening.
+
+## 42. Results of set operations across members that meet
+
+* **Question.** Where two members of an operand meet, or overlap, is a result of an intersection, a difference or a symmetric difference one run across them, or a piece of each?
+
+* **Context.** Found running `tempo_holidays` on 2.0: England's and Australia's holidays in 2027 share Christmas, observed Monday 27 December, and Boxing Day, observed Tuesday 28 December; their intersection was one two-day span named Christmas Day. The sweep gave maximal runs, each carrying the metadata of the member it began with, and the set-operation model compared answers as the time covered. Decision 38 kept members that differ in form or metadata two in a union. The options were (1) a result ends where the member it comes from ends and another goes on, so each keeps its own metadata, the time covered unchanged and `Tempo.IntervalSet.coalesce/1` joining; (2) to keep maximal runs; (3) to split only when `:metadata` is given.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built. `Tempo.Algebra`'s sweep credits a result, on each side, to the member covering its start that opened last, and ends it where that member ends while the result goes on; the time-covered sweep (`covered/3`, for free time) still joins. `Tempo.Matrix.Sets.by_member/3` works the same out on whole numbers apart from the code, and `test/tempo/set_operations_test.exs` holds intersection, difference and symmetric difference to it over every pair of sets of up to two members between four points and generated sets of four between nine. The iCal and cookbook guides join with `coalesce/1` where they ask for the time covered.
+

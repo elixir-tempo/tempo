@@ -75,6 +75,22 @@ true
 
 **Why.** Taking the endless operand within the other was sometimes right and sometimes wrong: it said every Monday for ever was within June. Each predicate has an answer that needs no search, so none needs a window.
 
+### Results across members that meet (decision 42)
+
+**The question.** Where two members of an operand meet, is a result of an intersection or a difference one run across both, or a piece of each?
+
+**The alternatives.**
+
+* A result ends where the member it comes from ends, so each carries its own member's metadata; joining is asked for with `Tempo.IntervalSet.coalesce/1`.
+
+* Maximal runs, each carrying the metadata of the member it began with.
+
+* Maximal runs, split only where the caller asks for metadata.
+
+**The choice.** A result ends where its member ends.
+
+**Why.** A result that runs across two members carries one member's metadata over time the other covers: England and Australia share Christmas and Boxing Day in 2027, on the 27th and 28th, and as one run they were one two-day Christmas Day. The time covered is the same either way, and the question that wants it, a free-busy one, joins the pieces in one more step. It is the rule decision 38 gives a union: members that differ stay two.
+
 ### A member both operands of a union hold (decision 38)
 
 **The question.** `Tempo.union/3` keeps members whole rather than merging the time they cover. Is a member both operands hold one member of the union, or two?

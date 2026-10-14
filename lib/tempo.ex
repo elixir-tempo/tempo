@@ -1101,7 +1101,9 @@ defmodule Tempo do
 
   @doc """
   The intersection of two expressions: every instant in both, as spans
-  trimmed to the overlap, each carrying the first operand's metadata.
+  trimmed to the overlap, each carrying the first operand's metadata. A
+  span ends where the member it comes from ends, so two members that meet
+  are two spans; `Tempo.IntervalSet.coalesce/1` joins them.
 
   ### Arguments
 
@@ -1140,7 +1142,7 @@ defmodule Tempo do
   @doc """
   The difference of two expressions: every instant in the first and not the
   second, as spans trimmed to what is left, each carrying the first
-  operand's metadata.
+  operand's metadata. A span ends where the member it comes from ends.
 
   ### Arguments
 
@@ -1182,7 +1184,7 @@ defmodule Tempo do
 
   @doc """
   The symmetric difference of two expressions: every instant in exactly one
-  of them, as spans.
+  of them, as spans, each ending where the member it comes from ends.
 
   ### Arguments
 
