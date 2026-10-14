@@ -1250,6 +1250,11 @@ defmodule Tempo do
   def complement(a, _options) when not is_expression(a), do: not_an_expression(a)
 
   def complement(a, options) do
+    with :ok <- Options.check(options, @set_options, "Tempo.complement/2"),
+         do: complemented(a, options)
+  end
+
+  defp complemented(a, options) do
     case Keyword.get(options, :within) do
       %__MODULE__{} = window ->
         operate(:difference, window, a, options, "Tempo.complement/2")
@@ -1698,6 +1703,12 @@ defmodule Tempo do
   a year becomes the span of dates it covers, a month of one calendar being
   no month of another; a set converts member by member.
 
+  A recurrence with no end is converted as a rule: it is still selected in
+  its own calendar, and each of its spans is read in `calendar`. So a set
+  holds rules of several calendars, each read in the set's: Eid al-Fitr
+  beside National Day, both in the Gregorian. Such a rule has no ISO 8601
+  text, its own calendar having no place inside another's.
+
   ### Arguments
 
   * `expression` is a `t:t/0` that has spans.
@@ -1722,6 +1733,11 @@ defmodule Tempo do
       iex> Tempo.to_calendar(~o"5786-09[u-ca=hebrew]", Calendar.ISO)
       {:ok, ~o"2026-05-17/2026-06-15"}
 
+      iex> eid = Tempo.every!(~o"P1Y", select: [month: 10, day: 1], calendar: Calendrical.Islamic.UmmAlQura)
+      iex> {:ok, in_gregorian} = Tempo.to_calendar(eid, Calendar.ISO)
+      iex> Tempo.to_interval(in_gregorian, within: ~o"2026")
+      {:ok, ~o"{2026-03-20/2026-03-20}"}
+
   """
   @spec to_calendar(t(), module()) :: {:ok, t()} | {:error, error()}
   def to_calendar(other, _calendar) when not is_struct(other, __MODULE__),
@@ -1730,8 +1746,31 @@ defmodule Tempo do
   def to_calendar(%__MODULE__{calendar: calendar} = expression, calendar), do: {:ok, expression}
 
   def to_calendar(%__MODULE__{} = expression, calendar) do
-    with {:ok, calendar} <- calendar_of(calendar),
-         {:ok, _frame, positioned} <- Algebra.positioned(expression, []) do
+    with {:ok, calendar} <- calendar_of(calendar) do
+      if Algebra.endless?(expression),
+        do: {:ok, read_in(expression, calendar)},
+        else: converted(expression, calendar)
+    end
+  end
+
+  # A rule with no end is converted as a rule: it is selected in its own
+  # calendar, and each of its spans read in the other (decision 40).
+  defp read_in(%__MODULE__{form: {:when, rule, read_in: _}}, calendar),
+    do: read_in(rule, calendar)
+
+  defp read_in(%__MODULE__{calendar: calendar} = rule, calendar), do: rule
+
+  defp read_in(%__MODULE__{} = rule, calendar) do
+    %__MODULE__{
+      form: {:when, rule, read_in: calendar},
+      calendar: calendar,
+      zone: rule.zone,
+      metadata: rule.metadata
+    }
+  end
+
+  defp converted(expression, calendar) do
+    with {:ok, _frame, positioned} <- Algebra.positioned(expression, []) do
       frame = %{calendar: calendar, zone: expression.zone}
       converted = Enum.map(positioned, &converted_span(&1, frame))
 

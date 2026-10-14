@@ -855,10 +855,13 @@ defmodule Tempo.Select do
     end
   end
 
+  # A period of a base with no end is selected in as it is come to: what
+  # the selector cannot answer there is raised, as the stream has no other
+  # way to say so, and is never passed over to look in the next for ever.
   defp picked_in(selector, period, options) do
     case apply_selector(selector, period, options) do
       {:ok, picked} -> picked
-      {:error, _} -> []
+      {:error, exception} -> raise exception
     end
   end
 
@@ -923,13 +926,14 @@ defmodule Tempo.Select do
   defp apply_selector(%Tempo{form: {:span, _, _}} = selector, _period, _options),
     do: {:error, not_a_selector(selector)}
 
-  defp apply_selector(%Tempo{form: {:every, _, _, _}} = recurrence, period, options) do
-    with {:ok, spans} <- Spans.spans(recurrence, Keyword.put(options, :within, period)),
-         {:ok, spans} <- Limit.take(spans, recurrence),
-         {:ok, extent} <- bounded_extent(period) do
-      {:ok, Enum.filter(spans, &within?(&1, extent))}
-    end
-  end
+  defp apply_selector(%Tempo{form: {kind, _, _, _}} = recurrence, period, options)
+       when kind == :every,
+       do: occurrences_in(recurrence, period, options)
+
+  # A rule read in another calendar, or a member with conditions, gives its
+  # occurrences in each period as a recurrence does.
+  defp apply_selector(%Tempo{form: {:when, _, _}} = member, period, options),
+    do: occurrences_in(member, period, options)
 
   defp apply_selector(%Tempo{form: {kind, members}}, period, options) when kind in [:all, :one],
     do: apply_selector(members, period, options)
@@ -965,6 +969,14 @@ defmodule Tempo.Select do
   end
 
   defp apply_selector(selector, _period, _options), do: {:error, not_a_selector(selector)}
+
+  defp occurrences_in(recurrence, period, options) do
+    with {:ok, spans} <- Spans.spans(recurrence, Keyword.put(options, :within, period)),
+         {:ok, spans} <- Limit.take(spans, recurrence),
+         {:ok, extent} <- bounded_extent(period) do
+      {:ok, Enum.filter(spans, &within?(&1, extent))}
+    end
+  end
 
   # A value's units as a selection's parts, a selection written in them
   # flattened into the units around it: what the selector counts in. It is

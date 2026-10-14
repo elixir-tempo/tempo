@@ -54,10 +54,22 @@ defmodule Tempo.Writer do
 
   # A condition that reads the other members of a set (`keep_when`,
   # `move_when`) has no text; a filter of years has.
+  # A rule read in another calendar than its own has none either: its
+  # calendar would be written inside the expression (decision 40).
   defp written_conditions(expression) do
-    if Enum.any?([expression | parts(expression)], &unwritten_condition?/1),
-      do: {:error, Iso8601EncodeError.exception(value: expression, reason: :conditions)},
-      else: :ok
+    parts = [expression | parts(expression)]
+
+    cond do
+      Enum.any?(parts, &match?(%Tempo{form: {:when, _, read_in: _}}, &1)) ->
+        {:error,
+         Iso8601EncodeError.exception(value: expression, reason: :read_in_another_calendar)}
+
+      Enum.any?(parts, &unwritten_condition?/1) ->
+        {:error, Iso8601EncodeError.exception(value: expression, reason: :conditions)}
+
+      true ->
+        :ok
+    end
   end
 
   defp unwritten_condition?(%Tempo{form: {:when, _member, [years: _filter]}}), do: false

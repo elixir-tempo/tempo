@@ -425,10 +425,31 @@ defmodule Tempo.Spans do
          do: {:ok, Stream.filter(spans, &in_years?(&1, filter, expression.calendar))}
   end
 
+  # A rule converted to another calendar (`Tempo.to_calendar/2` of a rule
+  # with no end): selected in its own calendar, each span read in this one.
+  def spans(%Tempo{form: {:when, member, read_in: calendar}} = converted, options) do
+    with {:ok, spans} <- spans(member, options) do
+      {:ok, Stream.map(spans, &read_in(&1, calendar, converted.metadata))}
+    end
+  end
+
   def spans(%Tempo{form: {:when, _, _}} = member, options) do
     if Conditions.conditional?(member),
       do: Conditions.resolve([member], [], options),
       else: {:error, conversion(member, :conditions)}
+  end
+
+  defp read_in(%Tempo{form: {:span, from, to}} = span, calendar, metadata) do
+    {:ok, {start, stop}} = extent(span)
+
+    %Tempo{
+      form:
+        {:span, at_position(start, from, :start, calendar, span.zone),
+         at_position(stop, to, :end, calendar, span.zone)},
+      calendar: calendar,
+      zone: span.zone,
+      metadata: Map.merge(metadata, span.metadata)
+    }
   end
 
   defp member_stream(member, options) do
@@ -2242,6 +2263,9 @@ defmodule Tempo.Spans do
     do: spans(recurrence, options)
 
   def members(%Tempo{form: {:span, _, _}} = span, options), do: spans(span, options)
+
+  def members(%Tempo{form: {:when, _, read_in: _}} = converted, options),
+    do: spans(converted, options)
 
   def members(%Tempo{form: {:when, _, _}} = member, _options),
     do: {:error, conversion(member, :conditions)}

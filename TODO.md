@@ -27,7 +27,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **`tempo_network` 0.1.0.** The companion package (`~/Development/tempo/tempo_network`) is built and its gates pass against a path dependency on this repository; it needs its own repository, and `{:ex_tempo, "~> 2.0"}` once 2.0 is on hex. It calls the hidden `Tempo.Calendar` in one file (`Tempo.Network.Calendar`), an agreed private seam for now (`plans/decisions.md`, 15), so a change to the adapter checks the companions.
 
-* [ ] **Companions on 2.0.** `tempo_sql` and `tempo_holidays` move to `~> 2.0` once it is on hex. `tempo_holidays` builds its rules with `Tempo.every/2` and `Tempo.selection/1`, where it wrote text to be read.
+* [ ] **Companions on 2.0.** `tempo_sql` and `tempo_holidays` move to `~> 2.0` once it is on hex. `tempo_holidays` is ported (2026-10-14) against a path dependency: its rules are built from parts, its conformance unchanged (168,186 matched, 0 mismatched), 220 of its 222 tests passing, the two left waiting on decision 41. `tempo_sql` is not yet run against 2.0.
 
 * [x] **Rule expansion against 1.6.4** (decisions 35 and 37). `bench/against_1_6_bench.exs` runs one set of cases against 1.6.4 and 2.0. On 2026-10-14, 2.0 over 1.6.4: reading text 0.03, writing 0.8, walking 0.8, relating 2.4, comparing 14 (3 µs), set operations 3, and of rule expansion weekdays 3.1, last weekdays 5.4, yearly fourth Thursdays 6.7, daily 8.7, Monday-Wednesday-Friday 8.9, hourly 11 (from 145 to 19,000 before the work). The work and what it found are in decisions 35 to 37; where 2.0 could be faster is under "Performance" below.
 

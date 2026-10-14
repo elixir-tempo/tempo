@@ -250,6 +250,8 @@ defmodule Tempo.Measure do
   def holds?(_comparison, %Duration{} = duration, _by),
     do: {:error, conversion(duration, :bare_duration)}
 
+  def holds?(_comparison, %Tempo{}, by), do: {:error, conversion(by, :not_a_duration)}
+
   # An exact duration is its ticks anywhere; a month or a year is laid from the start.
   defp laid(duration, start, frame, expression) do
     if Duration.exact?(duration) do

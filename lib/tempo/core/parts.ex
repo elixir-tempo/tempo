@@ -145,11 +145,14 @@ defmodule Tempo.Parts do
     do: [from, to] |> Enum.filter(&match?(%Tempo{}, &1)) |> Enum.map(&resolution/1) |> finest()
 
   def resolution(%Tempo{form: {:every, first, _, _}}), do: resolution(first)
+  def resolution(%Tempo{form: {:when, member, _conditions}}), do: resolution(member)
 
   def resolution(%Tempo{form: {_kind, members}}) when not is_list(members), do: nil
 
+  # A set is written to its members' finest unit; what it leaves out is not
+  # among them.
   def resolution(%Tempo{form: {_kind, members}}),
-    do: members |> Enum.map(&resolution/1) |> finest()
+    do: members |> Enum.reject(&match?({:except, _}, &1)) |> Enum.map(&resolution/1) |> finest()
 
   def resolution(%Tempo.Duration{units: units}), do: units |> List.last() |> elem(0)
 

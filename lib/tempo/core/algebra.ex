@@ -249,15 +249,32 @@ defmodule Tempo.Algebra do
 
   @doc "Whether an expression has no last span: a recurrence with no end, or a set read from a stream."
   @spec endless?(term()) :: boolean()
-  def endless?(%Tempo{form: {:every, _first, :infinity, _rule}}), do: true
+  def endless?(%Tempo{form: {:every, first, :infinity, _rule}}), do: not closed_domain?(first)
 
   # A set with a member that has no end has none: a territory's holidays,
   # rules that recur for ever.
   def endless?(%Tempo{form: {:all, members}}) when is_list(members),
     do: Enum.any?(members, &endless_member?/1)
 
+  # A member with conditions, or a rule read in another calendar, ends where
+  # its member does.
+  def endless?(%Tempo{form: {:when, member, _conditions}}), do: endless?(member)
   def endless?(%Tempo{} = expression), do: Spans.lazy?(expression)
   def endless?(_other), do: false
+
+  # A rule whose domain is years with a last (`R/{2015Y}/P1Y/F…`,
+  # `{2020Y..2024Y}`) ends with them.
+  defp closed_domain?(%Tempo{form: {:span, %Tempo{} = domain, _cadence}}), do: closed?(domain)
+  defp closed_domain?(_first), do: false
+
+  defp closed?(%Tempo{form: {:all, [_ | _] = members}}), do: Enum.all?(members, &closed_member?/1)
+  defp closed?(%Tempo{form: {:when, inner, years: _filter}}), do: closed?(inner)
+  defp closed?(_domain), do: false
+
+  defp closed_member?({:except, _member}), do: true
+  defp closed_member?(%Tempo{form: {:value, _units}}), do: true
+  defp closed_member?(%Tempo{form: {:span, %Tempo{}, %Tempo{}}}), do: true
+  defp closed_member?(_open), do: false
 
   defp endless_member?(%Tempo{form: {:when, member, _conditions}}), do: endless_member?(member)
   defp endless_member?(%Tempo{} = member), do: endless?(member)

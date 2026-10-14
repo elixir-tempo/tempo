@@ -136,7 +136,12 @@ defmodule Tempo.Workdays do
   @spec add(Tempo.t(), integer(), t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def add(%Tempo{} = value, 0, %__MODULE__{}), do: {:ok, value}
 
-  def add(%Tempo{} = value, count, %__MODULE__{} = workdays) when is_integer(count) do
+  def add(%Tempo{}, count, %__MODULE__{}) when not is_integer(count),
+    do:
+      {:error,
+       ArgumentError.exception("a count of workdays is an integer, not #{inspect(count)}")}
+
+  def add(%Tempo{} = value, count, %__MODULE__{} = workdays) do
     direction = if count > 0, do: 1, else: -1
 
     Enum.reduce_while(1..abs(count)//1, {:ok, value}, fn _, {:ok, current} ->

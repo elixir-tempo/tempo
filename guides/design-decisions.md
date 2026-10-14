@@ -302,6 +302,30 @@ iex> Tempo.to_relative_string(~o"2026-06-16", from: ~o"2026-06-15T23:30[Europe/P
 
 **Why.** A floating date has no zone of its own, so the day after the day the reference's clock shows is what a person means by "tomorrow". Refusing would make the default reference an error for the commonest values.
 
+### A set of rules in two calendars (decision 40)
+
+**The question.** One expression is in one calendar. How then does a set hold Saudi Arabia's holidays, Islamic rules beside Gregorian ones?
+
+**The alternatives.**
+
+* Convert a rule as a rule: a recurrence with no end converted to another calendar is still selected in its own, and each of its occurrences is read in the other. A set brings such a member to its calendar so.
+
+* Let a set of recurrences hold several calendars, its occurrences read in its first member's: the same mechanics, as an exception to the rule.
+
+* Refuse, and keep a set for each calendar, combined by the caller within a window.
+
+**The choice.** Convert a rule as a rule.
+
+```elixir
+iex> eid = Tempo.every!(~o"P1Y", select: [month: 10, day: 1], calendar: Calendrical.Islamic.UmmAlQura)
+iex> national_day = Tempo.every!(~o"P1Y", select: [month: 9, day: 23])
+iex> {:ok, holidays} = Tempo.RecurrenceSet.new([national_day, eid])
+iex> Tempo.to_interval(holidays, within: ~o"2026")
+{:ok, ~o"{2026Y3M20D/2026Y3M20D,2026Y9M23D/2026Y9M23D}"}
+```
+
+**Why.** The rule stays whole: every span the set gives is in the set's calendar, so one calendar to an expression holds where it matters, in the spans a caller sees. Converting an endless rule had been refused, since its occurrences cannot all be listed; read this way it needs none listed, and every rule converts. What such a set cannot have is ISO 8601 text, since a member's own calendar would be written inside the expression, and the writer says so.
+
 ## Seasons
 
 ISO 8601-2 numbers seasons: 21 to 24 are spring, summer, autumn and winter, and 25 to 32 the same seasons of the northern and southern hemispheres. Spring is March to May in the north and September to November in the south.

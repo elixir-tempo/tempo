@@ -98,6 +98,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.every/2` takes `:calendar` for a recurrence with no start and `:years` for a domain's even, odd, leap or common years; `Tempo.IntervalSet.new/2` takes `:except`.
 
+* `Tempo.to_calendar/2` converts a recurrence with no end as a rule, read in the other calendar, so one set holds rules of several calendars.
+
 * `Tempo.members/2` and `Tempo.walk/3`: the spans of any expression, and any span walked at a unit.
 
 * `Tempo.metadata/1` and `put_metadata/2` on every expression.
