@@ -262,7 +262,7 @@ defmodule Tempo.Select do
   end
 
   defp each_value(period, units) do
-    case Expand.expand(units, Spans.frame_of(period)) do
+    case Expand.expand(units, frame(period)) do
       {:ok, values} -> values |> Enum.take(Limit.values()) |> Enum.map(&as_value(period, &1))
       {:error, _} -> []
     end
@@ -410,7 +410,7 @@ defmodule Tempo.Select do
   # The containers a period runs through: the one its start is in, and each
   # next until the period's end.
   defp containers(%Tempo{} = period, unit, {start, stop}) do
-    frame = Spans.frame_of(period)
+    frame = frame(period)
     first = %{period | form: {:value, Shift.period_units(start, unit, frame)}}
 
     first
@@ -439,7 +439,7 @@ defmodule Tempo.Select do
 
   # A container's units with the parts beneath: every concrete value they allow.
   defp expanded(period, %Tempo{form: {:value, container}}, parts) do
-    case Expand.expand(container ++ parts, Spans.frame_of(period)) do
+    case Expand.expand(container ++ parts, frame(period)) do
       {:ok, values} ->
         values |> Enum.take(Limit.values()) |> Enum.map(&as_value(period, &1)) |> showings()
 
@@ -481,9 +481,20 @@ defmodule Tempo.Select do
   # A value in the period's frame: a span's ends carry the shift, a value
   # itself; in a named zone the shift is the zone's at the value.
   defp as_value(%Tempo{} = period, units) do
-    %{shift: shift, zone: zone} = Spans.frame_of(period)
+    %{shift: shift, zone: zone} = frame(period)
     value = %{period | form: {:value, units}, qualifications: nil, shift: shift}
     if zone != nil and shift != nil, do: rezoned(value, zone), else: value
+  end
+
+  # The frame a period is selected in. In a named zone that is the zone's
+  # clock: a shift written on the period's start says only which showing it
+  # begins at, and each value is read on the clock, a second showing given
+  # its own shift (`showings/1`).
+  defp frame(period) do
+    case Spans.frame_of(period) do
+      %{zone: %Zone{name: name}} = frame when is_binary(name) -> %{frame | shift: nil}
+      frame -> frame
+    end
   end
 
   defp rezoned(value, zone) do
@@ -544,7 +555,7 @@ defmodule Tempo.Select do
   # ── Events ────────────────────────────────────────────────────────────
 
   defp years_through(%Tempo{calendar: calendar} = period, {start, stop}) do
-    frame = Spans.frame_of(period)
+    frame = frame(period)
     first = Keyword.fetch!(Shift.period_units(start, :year, frame), :year)
     last = Keyword.fetch!(Shift.period_units(stop - 1, :year, frame), :year)
     _ = calendar
@@ -575,7 +586,7 @@ defmodule Tempo.Select do
     do: [%{value | form: {:value, units}}]
 
   defp with_parts(%Tempo{form: {:value, units}} = value, parts, period) do
-    case Expand.expand(units ++ parts, Spans.frame_of(period)) do
+    case Expand.expand(units ++ parts, frame(period)) do
       {:ok, values} -> Enum.map(values, &%{value | form: {:value, &1}})
       {:error, _} -> []
     end

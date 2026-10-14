@@ -33,6 +33,14 @@ defmodule Tempo.Zone do
   @second 1_000_000
   @day 86_400 * @second
 
+  # The days of a zone whose offset is asked of the database together
+  # (`steady_days/2`), and how many such answers a process keeps before it
+  # forgets them and begins again. With the day either side, the days
+  # together span six days, within the week in which no zone's offset has
+  # changed twice since 1900.
+  @days_together 4
+  @days_kept 20_000
+
   # The longest span `steady_offset/4` answers for: no zone's offset has
   # changed twice within it since 1900.
   @steady_span 2 * @day
@@ -133,10 +141,24 @@ defmodule Tempo.Zone do
     do: [minutes * 60 * @second]
 
   def offsets_at_wall(%__MODULE__{name: name}, wall) do
-    case periods_at_wall(name, seconds(wall)) do
-      {:ok, period} -> [offset(period)]
-      {:ambiguous, first, second} -> [offset(first), offset(second)]
-      {:gap, {before, _}, {after_change, _}} -> {:gap, offset(before), offset(after_change)}
+    case known_days(name, days_of(wall)) do
+      {_key, {:ok, offset}} ->
+        [offset]
+
+      {_key, {:change, before, later, _same_until, _changed_from}} ->
+        shown_at(name, wall, before, later)
+    end
+  end
+
+  # A wall reading near the one change of its days is shown at an offset
+  # where the moment it gives there has that offset: before the change,
+  # after it, at both (the clock going back) or at neither (going forward).
+  defp shown_at(name, wall, before, later) do
+    case {utc_offset(name, wall - before) == before, utc_offset(name, wall - later) == later} do
+      {true, true} -> [before, later]
+      {true, false} -> [before]
+      {false, true} -> [later]
+      {false, false} -> {:gap, before, later}
     end
   end
 
@@ -160,9 +182,83 @@ defmodule Tempo.Zone do
   def offset_at_utc(%__MODULE__{offset: minutes}, _utc) when is_integer(minutes),
     do: minutes * 60 * @second
 
-  def offset_at_utc(%__MODULE__{name: name}, utc) do
+  def offset_at_utc(%__MODULE__{name: name}, utc), do: utc_offset(name, utc)
+
+  defp utc_offset(name, utc) do
+    case known_days(name, days_of(utc)) do
+      {_key, {:ok, offset}} -> offset
+      {key, {:change, _, _, _, _} = change} -> beside_the_change(key, change, name, utc)
+    end
+  end
+
+  # Where the change of the days is known to come after a tick, or before
+  # it, the tick's offset is known; else the database is asked, and what it
+  # answers narrows where the change is.
+  defp beside_the_change(_key, {:change, before, _, same_until, _}, _name, utc)
+       when utc <= same_until,
+       do: before
+
+  defp beside_the_change(_key, {:change, _, later, _, changed_from}, _name, utc)
+       when utc >= changed_from,
+       do: later
+
+  defp beside_the_change(key, {:change, before, later, same_until, changed_from}, name, utc) do
+    offset = asked_at_utc(name, utc)
+
+    narrowed =
+      if offset == before,
+        do: {:change, before, later, utc, changed_from},
+        else: {:change, before, later, same_until, utc}
+
+    Process.put(key, narrowed)
+    offset
+  end
+
+  defp days_of(tick), do: Integer.floor_div(tick, @days_together * @day)
+
+  defp asked_at_utc(name, utc) do
     {:ok, period} = period_at_utc(name, seconds(utc))
     offset(period)
+  end
+
+  # What is known of a zone's offset through a few days and the day either
+  # side of them. The database is asked at the start of the day before and
+  # the end of the day after, six days apart. Since 1900 no zone's offset
+  # has changed twice within a week, so the two being the same is the offset
+  # throughout, and their differing is one change between the two: the
+  # offsets before and after it, the last tick known to be before it and
+  # the first known to be after. A UTC tick or a wall reading of the days is
+  # answered from that, an offset being less than a day, and the database is
+  # asked only of a tick between the two. What is known is kept in the
+  # process, as many days as `@days_kept`.
+  defp known_days(name, days) do
+    key = {__MODULE__, database(), name, days}
+
+    case Process.get(key) do
+      nil -> {key, kept(key, across(name, days * @days_together))}
+      known -> {key, known}
+    end
+  end
+
+  defp across(name, first_day) do
+    from = (first_day - 1) * @day
+    to = (first_day + @days_together + 1) * @day - @second
+    before = asked_at_utc(name, from)
+    later = asked_at_utc(name, to)
+
+    if later == before, do: {:ok, before}, else: {:change, before, later, from, to}
+  end
+
+  defp kept(key, answer) do
+    count = Process.get({__MODULE__, :days_kept}, 0)
+    if count >= @days_kept, do: forget_days()
+    Process.put({__MODULE__, :days_kept}, rem(count, @days_kept) + 1)
+    Process.put(key, answer)
+    answer
+  end
+
+  defp forget_days do
+    for {__MODULE__, _database, _name, _day} = key <- Process.get_keys(), do: Process.delete(key)
   end
 
   @doc """
@@ -363,17 +459,6 @@ defmodule Tempo.Zone do
 
   defp period_at_utc(name, utc_seconds) do
     database().time_zone_period_from_utc_iso_days(iso_days(utc_seconds), name)
-  end
-
-  defp periods_at_wall(_name, wall_seconds) when wall_seconds < @year_one_seconds,
-    do: {:ok, @before_year_one}
-
-  defp periods_at_wall(name, wall_seconds) do
-    {{year, month, day}, {hour, minute, second}} =
-      :calendar.gregorian_seconds_to_datetime(wall_seconds)
-
-    naive = NaiveDateTime.new!(year, month, day, hour, minute, second)
-    database().time_zone_periods_from_wall_datetime(naive, name)
   end
 
   defp iso_days(seconds),

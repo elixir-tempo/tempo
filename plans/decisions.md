@@ -397,3 +397,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 1.
 
 * **State.** Built. A selection holds `{:all, [parts, ...]}`, read from `{…,…}` inside `L…N` and written back so; `Tempo.selection/1` takes `all: [[...], ...]`. Each selection of the set is made in the period, or in each value the parts before it select (`L6M{1K1I,2K}N`, in June), and their values are taken in time order, a value two pick once; the parts after it select within each value, and a position after it counts among all it selects. `Tempo.RRule.parse/2` lowers numbered weekdays of several days, or numbered weekdays beside a `BYSETPOS`, to a set with one selection for each weekday (a weekday written plain beside a numbered one is every one of it), and `Tempo.RRule.to_string/1` writes it back as `BYDAY`. `test/tempo/selection_set_test.exs` holds it to `Date`, and `test/tempo/rrule_measure_test.exs` to the independent expander. The grammar guide and the conformance guides list it among Tempo's own extensions.
+
+## 35. How fast rule expansion must be before release
+
+* **Question.** How much faster must the expansion of a recurrence rule be before 2.0 is released?
+
+* **Context.** `bench/against_1_6_bench.exs` ran one set of cases against 1.6.4 and 2.0. Reading text was thirty times faster, walking and writing a little faster, the set operations about three times slower, and rule expansion 145 to 19,000 times slower: 240 last weekdays of a month took 28 seconds and 36 GB. Two fixes (a clock reading named by number found by arithmetic where the offset is steady, and the children of a steady span found without the zone database) brought that to 18 to 2,000 times slower: 50 yearly fourth Thursdays of November 0.61 s, 240 last weekdays 1.9 s, 720 hours 0.15 s. What remained was structural: each period of a rule is selected in afresh, and in a zone each period asks the database tens of times. The options were (1) to make it fast now, aiming at about ten times 1.6.4 on the same cases, (2) to release and optimise in 2.x, and (3) to fix the zone lookups alone.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** To build.

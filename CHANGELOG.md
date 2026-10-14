@@ -126,6 +126,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* An hourly rule across an hour a zone's clock shows twice gives each hour that passes, where it searched for ever; the end of a span at the second showing of a reading is written with its shift.
+
 * A time of day selected on a day a zone's clock goes back is each moment the clock shows it: the second showing of a repeated hour was dropped, and its minutes were not found.
 
 * An offset with seconds, as a local mean time has (`-07:52:58`), keeps them in the shift Tempo makes of it (`Z-7H52M58S`), where they were dropped.

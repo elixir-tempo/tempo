@@ -12,7 +12,7 @@ defmodule Tempo.ClockSelectionTest do
   # library: each wall time of the day it is asked for is the moment, or the
   # two moments, or none, it gives.
 
-  alias Tempo.IntervalSet
+  alias Tempo.{Interval, IntervalSet, RRule}
 
   @days [
     {"America/Chicago", ~D[2026-03-08]},
@@ -69,6 +69,42 @@ defmodule Tempo.ClockSelectionTest do
       for {parts, times} <- @selections do
         assert {unquote(zone), parts, selected(unquote(zone), unquote(Macro.escape(day)), parts)} ==
                  {unquote(zone), parts, shown(unquote(zone), unquote(Macro.escape(day)), times)}
+      end
+    end
+  end
+
+  describe "an hourly rule across a change of the clock" do
+    # Each occurrence is an hour after the last, the hours that pass: on a
+    # day the clock goes back the half past of the repeated hour comes twice,
+    # and on a day it goes forward the skipped hour has none.
+    for {zone, start} <- [
+          {"America/Chicago", ~N[2026-11-01 00:30:00]},
+          {"America/Chicago", ~N[2026-03-08 00:30:00]},
+          {"Pacific/Chatham", ~N[2026-04-05 01:50:00]},
+          {"Europe/Paris", ~N[2026-10-25 01:15:00]}
+        ] do
+      test "in #{zone} from #{start} is every hour that passes" do
+        {:ok, first} = DateTime.from_naive(unquote(Macro.escape(start)), unquote(zone))
+
+        {:ok, from} =
+          Tempo.new(
+            year: first.year,
+            month: first.month,
+            day: first.day,
+            hour: first.hour,
+            minute: first.minute,
+            zone: unquote(zone)
+          )
+
+        {:ok, rule} = RRule.parse("FREQ=HOURLY;COUNT=6", from: from)
+
+        given =
+          Enum.map(rule, fn occurrence ->
+            {:ok, moment} = Tempo.to_datetime(Interval.from(occurrence))
+            DateTime.to_unix(moment)
+          end)
+
+        assert given == for(n <- 0..5, do: DateTime.to_unix(first) + n * 3600)
       end
     end
   end

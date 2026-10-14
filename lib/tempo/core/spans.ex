@@ -1375,8 +1375,26 @@ defmodule Tempo.Spans do
           )
       end
 
-    %{model | form: {:value, units}, qualifications: nil, shift: model.shift}
+    value = %{model | form: {:value, units}, qualifications: nil, shift: model.shift}
+    if clock_unit?(resolution), do: at_its_showing(value, position, frame), else: value
   end
+
+  # A reading of the clock that a zone shows twice is written, at its second
+  # showing, with the shift the clock has then: the end of the hour from 00:00
+  # on a day the clock goes back from 02:00 is 01:00 at the second showing,
+  # and with no shift it would be read as the first, an hour earlier.
+  defp at_its_showing(%Tempo{shift: nil} = value, position, %{zone: %Zone{name: name} = zone})
+       when is_binary(name) do
+    {wall, offset} = Zone.wall_of_utc(zone, nil, position)
+    second_showing(Zone.offsets_at_wall(zone, wall), offset, value)
+  end
+
+  defp at_its_showing(value, _position, _frame), do: value
+
+  defp second_showing([first, offset], offset, value) when first != offset,
+    do: %{value | shift: Zone.shift_of(offset)}
+
+  defp second_showing(_offsets, _offset, value), do: value
 
   # A time of day on a week date or an ordinal date is written on that date's own axis.
   defp own_axis?(units),
