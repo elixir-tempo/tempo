@@ -379,7 +379,7 @@ Five predicates cover the interval-length comparison lattice:
 iv = ~o"2026-06-15T09/2026-06-15T10"
 
 %{
-  "duration":     Tempo.duration(iv),
+  duration:       Tempo.duration(iv),
   "≥ 1h":         Tempo.at_least?(iv, ~o"PT1H"),
   "≤ 1h":         Tempo.at_most?(iv, ~o"PT1H"),
   "exactly 1h":   Tempo.exactly?(iv, ~o"PT1H"),
