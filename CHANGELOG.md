@@ -122,6 +122,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* A yearly RRULE of every second year or more that counts a weekday in named months (`FREQ=YEARLY;INTERVAL=2;BYMONTH=10;BYDAY=-1SU`) keeps its interval, where it recurred every year.
+
 * `Tempo.duration/1` of an interval of quarters is three months for each: `2026-33/2026-34` is `P6M`, where it was `P18M`.
 
 * An intersection or a difference of a set written at UTC and one in a named zone writes each end at UTC; an end cut from the zoned operand had no offset, and was a floating value.

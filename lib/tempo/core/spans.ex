@@ -911,7 +911,7 @@ defmodule Tempo.Spans do
     rule = picking(rule)
 
     finest =
-      case Keyword.take(rule, @rule_units) do
+      case rule |> with_nested() |> Keyword.take(@rule_units) do
         [] -> :day
         parts -> parts |> Unit.resolution() |> Unit.grain() |> finer_of(cadence_unit(first))
       end
@@ -924,6 +924,15 @@ defmodule Tempo.Spans do
   end
 
   defp inherited_units(_from, _rule, _first), do: []
+
+  # What a rule names includes what a selection within it names: the last
+  # Sunday of October names a day, and takes no day from the start.
+  defp with_nested(rule) do
+    Enum.flat_map(rule, fn
+      {:selection, nested} -> with_nested(nested)
+      part -> [part]
+    end)
+  end
 
   # A rule whose parts are coarser than its cadence keeps the periods they
   # name (`FREQ=DAILY;BYMONTH=1` is each day of January), so its start gives

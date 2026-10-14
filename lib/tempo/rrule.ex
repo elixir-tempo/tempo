@@ -589,7 +589,13 @@ defmodule Tempo.RRule do
   # weekday in named months counts it in each month, so its cadence is the month.
   defp lowered(rule, cadence, duration) do
     numbered = numbered_weekday(rule)
-    monthly_count? = rule.freq == :year and numbered != nil and Map.has_key?(rule, :bymonth)
+    in_months? = rule.freq == :year and numbered != nil and Map.has_key?(rule, :bymonth)
+
+    # Every year, the months are the repeats and the weekday is counted in
+    # each. Every second year or more they are not, a month being no whole
+    # number of them: the rule keeps its years, and the weekday is selected
+    # in each month it names.
+    monthly_count? = in_months? and Map.get(rule, :interval, 1) == 1
     cadence = if monthly_count?, do: %Duration{units: [month: 1]}, else: cadence
 
     parts =
@@ -605,7 +611,7 @@ defmodule Tempo.RRule do
       |> push(rule, :bysecond)
       |> push_instance(rule, numbered)
       |> Enum.reverse()
-      |> numbered_before_times(numbered)
+      |> numbered_before_times(numbered, in_months? and not monthly_count?)
       |> windowed(duration)
 
     cond do
@@ -625,8 +631,8 @@ defmodule Tempo.RRule do
   # the times of day beside it are times on that day (RFC 5545 section
   # 3.3.10): it is selected first, where a position after the times would
   # count among the times too, as BYSETPOS does.
-  defp numbered_before_times(parts, {day, n}) do
-    if Enum.any?(parts, fn {unit, _} -> unit in [:hour, :minute, :second] end) do
+  defp numbered_before_times(parts, {day, n}, in_each_month?) do
+    if in_each_month? or Enum.any?(parts, fn {unit, _} -> unit in [:hour, :minute, :second] end) do
       {before, times} =
         parts
         |> Keyword.drop([:day_of_week, :instance])
@@ -638,7 +644,7 @@ defmodule Tempo.RRule do
     end
   end
 
-  defp numbered_before_times(parts, nil), do: parts
+  defp numbered_before_times(parts, nil, _in_each_month?), do: parts
 
   defp push_years(acc, %{byyear: years}), do: [{:year, years} | acc]
   defp push_years(acc, _rule), do: acc

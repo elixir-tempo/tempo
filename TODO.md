@@ -13,7 +13,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
     * [x] RFC 5545's own examples, read from the text of the standard (`test/tempo/rfc5545_examples_test.exs`).
     * [x] iCalendar and JSCalendar import, with the fixtures (`ical_test.exs`, `ical_availability_test.exs`, `jscalendar_test.exs`).
     * [x] Computed events, `explain/1`, reading text and profiles, conversions, intervals, territories (new files, from the lines no test ran).
-    * [ ] The rule tests beside the RFC's examples (`rrule/*_test.exs`, 30 files), for the cases the examples leave out.
+    * [x] The rule tests beside the RFC's examples (`rrule/*_test.exs`, 30 files), for the cases the examples leave out: `rrule_measure_test.exs` holds 162 rules from three starts to an expander written apart from the library (`test/support/rrule_measure.ex`), itself held to the RFC's examples. It found a yearly rule of every second year that lost its interval.
     * [x] Allen's axioms (`allen_axioms_test.exs`): the composition table held to what three spans give, meeting one way, and a chain of spans that meet as one.
     * [x] The set operations held to a measure written apart (`set_operations_measure_test.exs`): every pair of sets of up to two members between five points, of days, hours, hours in two zones, days in two calendars and times of day, each answer read back with `Date` and `DateTime` and held to arithmetic on whole numbers.
     * [x] Zones: a change of the clock (`change_of_the_clock_test.exs`), twenty-one days of twelve zones held to what `DateTime` says the clock showed.
