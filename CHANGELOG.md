@@ -38,7 +38,7 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * An option a function does not take is an `ArgumentError`, where it was passed over.
 
-* An argument that is no Tempo expression is a `Tempo.ConversionError` with reason `:not_an_expression`, returned or raised as the function's other errors are, where most functions raised `FunctionClauseError`.
+* An argument that is no Tempo expression is a `Tempo.ConversionError` with reason `:not_an_expression` in every public module, returned or raised as the function's other errors are, where most functions raised `FunctionClauseError`.
 
 * `Tempo.select/3` selects in every period of its base and answers values of the selector's resolution, where it selected in the first period and answered intervals.
 
@@ -173,6 +173,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * An intersection or a difference of a set written at UTC and one in a named zone writes each end at UTC; an end cut from the zoned operand had no offset, and was a floating value.
 
 * A zone that is a fixed offset is within a day of UTC, as a written shift is: `[+25:00]` is refused, where it was read.
+
+* `Tempo.trunc/2`, `round/2` and `at_resolution/2` return an `ArgumentError` for a unit that is not one, where `trunc/2` answered the value unchanged.
+
+* A value extended to the microsecond, or built with an integer `:microsecond`, holds `{microseconds, 6}` and is written, where the writer raised.
 
 * An offset behind UTC by less than an hour (`-00:30`) is read as behind; it was read as ahead.
 

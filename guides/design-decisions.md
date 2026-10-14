@@ -520,7 +520,7 @@ iex> grouped(~o"2026", 2, month: 3)
 
 * Leave each function to answer as it happens to.
 
-**The choice.** A named error. A function that returns its errors returns it; a function that answers a bare value raises it, as it raises its other errors.
+**The choice.** A named error. A function that returns its errors returns it; a function that answers a bare value raises it, as it raises its other errors. The rule holds in every public module and for every argument: a unit that is not one, or a function that is none, is an `ArgumentError`.
 
 ```elixir
 iex> Tempo.trunc(~D[2026-06-15], :month)

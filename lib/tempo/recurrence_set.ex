@@ -16,6 +16,7 @@ defmodule Tempo.RecurrenceSet do
 
   """
 
+  alias Tempo.ConversionError
   alias Tempo.IntervalSet
   alias Tempo.Options
 
@@ -53,6 +54,14 @@ defmodule Tempo.RecurrenceSet do
   @doc """
   `new/2`, returning the set or raising.
 
+  ### Arguments
+
+  * `members` and `options` are as for `new/2`.
+
+  ### Returns
+
+  * The set, a `t:Tempo.t/0`, or raises the error `new/2` returns.
+
   ### Examples
 
       iex> Tempo.RecurrenceSet.new!([~o"2026-12-25"]) |> Tempo.RecurrenceSet.members() |> length()
@@ -64,6 +73,16 @@ defmodule Tempo.RecurrenceSet do
 
   @doc """
   The members of a recurrence set, as they were given.
+
+  ### Arguments
+
+  * `set` is a recurrence set, or a rule on its own, a `t:Tempo.t/0`.
+
+  ### Returns
+
+  * The list of its members, each a `t:Tempo.t/0`; a rule on its own is
+    its one member. A value that is no expression raises a
+    `Tempo.ConversionError`.
 
   ### Examples
 
@@ -77,8 +96,22 @@ defmodule Tempo.RecurrenceSet do
   # A rule on its own is a set of one rule.
   def members(%Tempo{} = rule), do: [rule]
 
+  def members(other),
+    do: raise(ConversionError.exception(value: other, reason: :not_an_expression))
+
   @doc """
   The set with the members a function is truthy for.
+
+  ### Arguments
+
+  * `set` is a recurrence set, a `t:Tempo.t/0`.
+
+  * `fun` is given each member.
+
+  ### Returns
+
+  * The set of the members `fun` is truthy for, as `Tempo.IntervalSet.filter/2`
+    gives it.
 
   ### Examples
 
@@ -137,6 +170,8 @@ defmodule Tempo.RecurrenceSet do
     conditional(member, [keep: Keyword.take(options, [:at, :falls_on])], options)
   end
 
+  def keep_when(member, options), do: refused!(member, options)
+
   @doc """
   A member whose occurrence is moved when it falls on another member's
   occurrence: a holiday that gives way to another and is observed on the
@@ -176,6 +211,17 @@ defmodule Tempo.RecurrenceSet do
     Options.check!(options, [:falls_on, :to_next, :metadata], "Tempo.RecurrenceSet.move_when/2")
     conditional(member, [move: Keyword.take(options, [:falls_on, :to_next])], options)
   end
+
+  def move_when(member, options), do: refused!(member, options)
+
+  # A member and its options, wrongly given, raise what is wrong, as the
+  # functions that answer a bare value do (decision 39).
+  @spec refused!(term(), term()) :: no_return()
+  defp refused!(%Tempo{}, options),
+    do: raise(ArgumentError, "options are a keyword list, not #{inspect(options)}")
+
+  defp refused!(member, _options),
+    do: raise(ConversionError.exception(value: member, reason: :not_an_expression))
 
   defp conditional(member, conditions, options) do
     %Tempo{

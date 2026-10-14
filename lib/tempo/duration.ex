@@ -9,6 +9,7 @@ defmodule Tempo.Duration do
 
   """
 
+  alias Tempo.ConversionError
   alias Tempo.Options
   alias Tempo.Scale
   alias Tempo.Spans
@@ -30,7 +31,19 @@ defmodule Tempo.Duration do
 
   @type t :: %__MODULE__{units: units()}
 
-  @doc "The units a duration is written in, coarsest first."
+  @doc """
+  The units a duration is written in, coarsest first.
+
+  ### Returns
+
+  * The list of unit atoms, from `:year` to `:microsecond`.
+
+  ### Examples
+
+      iex> Tempo.Duration.units()
+      [:year, :month, :week, :day, :hour, :minute, :second, :microsecond]
+
+  """
   @spec units() :: [:year | :month | :week | :day | :hour | :minute | :second | :microsecond, ...]
   def units, do: @units
 
@@ -98,6 +111,14 @@ defmodule Tempo.Duration do
   @doc """
   Builds a duration as `new/1` does, returning it or raising.
 
+  ### Arguments
+
+  * `components` is a keyword list of units, as for `new/1`.
+
+  ### Returns
+
+  * The `t:t/0`, or raises the error `new/1` returns.
+
   ### Examples
 
       iex> Tempo.Duration.new!(day: 1)
@@ -119,6 +140,16 @@ defmodule Tempo.Duration do
   the clock alone. A month or a year is as long as the one it is counted
   from, so a duration with either is not exact.
 
+  ### Arguments
+
+  * `duration` is a `t:t/0`.
+
+  ### Returns
+
+  * `true` for a duration of weeks, days and units of the clock alone, and
+    `false` for one with a month or a year. A value that is no duration
+    raises a `Tempo.ConversionError`.
+
   ### Examples
 
       iex> Tempo.Duration.exact?(~o"P1W2DT3H")
@@ -132,6 +163,8 @@ defmodule Tempo.Duration do
   def exact?(%__MODULE__{units: units}),
     do: not Enum.any?(units, fn {unit, _} -> unit in [:year, :month] end)
 
+  def exact?(other), do: not_a_duration!(other)
+
   @doc """
   The length of an exact duration in microseconds, with a week seven days
   and a day twenty-four hours.
@@ -140,7 +173,12 @@ defmodule Tempo.Duration do
 
   * `{:ok, microseconds}`.
 
-  * `{:error, %ArgumentError{}}` for a duration with a month or a year.
+  * `{:error, %ArgumentError{}}` for a duration with a month or a year, and
+    `{:error, %Tempo.ConversionError{}}` for a value that is no duration.
+
+  ### Arguments
+
+  * `duration` is a `t:t/0`.
 
   ### Examples
 
@@ -159,6 +197,8 @@ defmodule Tempo.Duration do
     end
   end
 
+  def to_microseconds(other), do: {:error, not_a_duration(other)}
+
   defp ticks(:week, weeks), do: weeks * 7 * @day
   defp ticks(:day, days), do: days * @day
   defp ticks(:hour, hours), do: hours * 3_600_000_000
@@ -169,6 +209,15 @@ defmodule Tempo.Duration do
   @doc """
   A duration in the reverse direction: each unit negated.
 
+  ### Arguments
+
+  * `duration` is a `t:t/0`.
+
+  ### Returns
+
+  * The `t:t/0` with each unit negated. A value that is no duration raises
+    a `Tempo.ConversionError`.
+
   ### Examples
 
       iex> Tempo.Duration.negate(~o"P1DT2H")
@@ -177,9 +226,22 @@ defmodule Tempo.Duration do
   """
   @spec negate(t()) :: t()
   def negate(%__MODULE__{} = duration), do: multiply(duration, -1)
+  def negate(other), do: not_a_duration!(other)
 
   @doc """
   A duration taken a whole number of times: each unit multiplied.
+
+  ### Arguments
+
+  * `duration` is a `t:t/0`.
+
+  * `n` is a whole number.
+
+  ### Returns
+
+  * The `t:t/0` with each unit multiplied by `n`. A value that is no
+    duration raises a `Tempo.ConversionError`, and an `n` that is no whole
+    number an `ArgumentError`.
 
   ### Examples
 
@@ -202,6 +264,11 @@ defmodule Tempo.Duration do
         |> carried()
     }
   end
+
+  def multiply(%__MODULE__{}, n),
+    do: raise(ArgumentError, "a duration is multiplied by a whole number, not #{inspect(n)}")
+
+  def multiply(other, _n), do: not_a_duration!(other)
 
   # A fraction is of its second, so a million microseconds or more are whole
   # seconds: the one carry between a duration's units.
@@ -226,6 +293,15 @@ defmodule Tempo.Duration do
   because an hour is sixty minutes but a month is not a fixed number of days.
   A fraction of a second is the one exception, being part of its second.
 
+  ### Arguments
+
+  * `duration1` and `duration2` are each a `t:t/0`.
+
+  ### Returns
+
+  * The `t:t/0` of their units added. A value that is no duration raises a
+    `Tempo.ConversionError`.
+
   ### Examples
 
       iex> Tempo.Duration.add(~o"PT1H30M", ~o"PT45M")
@@ -239,6 +315,9 @@ defmodule Tempo.Duration do
 
   """
   @spec add(t(), t()) :: t()
+  def add(a, _b) when not is_struct(a, __MODULE__), do: not_a_duration!(a)
+  def add(_a, b) when not is_struct(b, __MODULE__), do: not_a_duration!(b)
+
   def add(%__MODULE__{units: a}, %__MODULE__{units: b}) do
     units =
       Enum.flat_map(@units, fn unit ->
@@ -259,6 +338,15 @@ defmodule Tempo.Duration do
   @doc """
   The first duration less the second: `add/2` of the second negated.
 
+  ### Arguments
+
+  * `a` and `b` are each a `t:t/0`.
+
+  ### Returns
+
+  * The `t:t/0` of `a` less `b`, unit by unit. A value that is no duration
+    raises a `Tempo.ConversionError`.
+
   ### Examples
 
       iex> Tempo.Duration.subtract(~o"PT2H", ~o"PT30M")
@@ -267,9 +355,20 @@ defmodule Tempo.Duration do
   """
   @spec subtract(t(), t()) :: t()
   def subtract(%__MODULE__{} = a, %__MODULE__{} = b), do: add(a, negate(b))
+  def subtract(a, %__MODULE__{}), do: not_a_duration!(a)
+  def subtract(_a, b), do: not_a_duration!(b)
 
   @doc """
   The sum of a list of durations, as `add/2` sums two.
+
+  ### Arguments
+
+  * `durations` is a list of `t:t/0`.
+
+  ### Returns
+
+  * The `t:t/0` of their units added, `P` with no units for an empty list.
+    A member that is no duration raises a `Tempo.ConversionError`.
 
   ### Examples
 
@@ -280,6 +379,9 @@ defmodule Tempo.Duration do
   @spec sum([t()]) :: t()
   def sum(durations) when is_list(durations),
     do: Enum.reduce(durations, %__MODULE__{units: []}, &add(&2, &1))
+
+  def sum(other),
+    do: raise(ArgumentError, "a sum is of a list of durations, not #{inspect(other)}")
 
   @doc """
   Orders two durations by length, so that `Tempo.Duration` is a sorter:
@@ -318,7 +420,9 @@ defmodule Tempo.Duration do
 
   """
   @spec compare(t(), t(), keyword()) :: :lt | :eq | :gt
-  def compare(%__MODULE__{} = a, %__MODULE__{} = b, options \\ []) do
+  def compare(a, b, options \\ [])
+
+  def compare(%__MODULE__{} = a, %__MODULE__{} = b, options) do
     Options.check!(options, [:relative_to], "Tempo.Duration.compare/3")
 
     case {laid(a, options), laid(b, options)} do
@@ -327,6 +431,9 @@ defmodule Tempo.Duration do
       {_, {:error, exception}} -> raise exception
     end
   end
+
+  def compare(%__MODULE__{}, b, _options), do: not_a_duration!(b)
+  def compare(a, _b, _options), do: not_a_duration!(a)
 
   @doc """
   The length of a duration in one unit of fixed length, as a float.
@@ -376,6 +483,8 @@ defmodule Tempo.Duration do
   def to_unit(%__MODULE__{}, unit, _options),
     do: {:error, argument("#{inspect(unit)} has no fixed length to count a duration in")}
 
+  def to_unit(other, _unit, _options), do: {:error, not_a_duration(other)}
+
   # A duration's length in microseconds: its own when exact, else from a date.
   defp laid(%__MODULE__{} = duration, options) do
     case {exact?(duration), options[:relative_to]} do
@@ -401,4 +510,10 @@ defmodule Tempo.Duration do
   defp whole?({_unit, value}), do: is_integer(value)
 
   defp argument(message), do: ArgumentError.exception(message)
+
+  defp not_a_duration(other),
+    do: ConversionError.exception(value: other, reason: :not_a_duration)
+
+  @spec not_a_duration!(term()) :: no_return()
+  defp not_a_duration!(other), do: raise(not_a_duration(other))
 end

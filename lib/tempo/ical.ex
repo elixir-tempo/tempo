@@ -103,7 +103,9 @@ if Code.ensure_loaded?(ICal) do
 
     """
     @spec parse(binary(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-    def parse(ics, options \\ []) when is_binary(ics), do: from_ical(ICal.from_ics(ics), options)
+    def parse(ics, options \\ [])
+    def parse(ics, options) when is_binary(ics), do: from_ical(ICal.from_ics(ics), options)
+    def parse(other, _options), do: {:error, not_text(other)}
 
     @doc """
     Reads an iCalendar file as `parse/2` reads text.
@@ -123,9 +125,18 @@ if Code.ensure_loaded?(ICal) do
     * `{:ok, set}`, or `{:error, exception}`, a `File.Error` when the file
       cannot be read.
 
+    ### Examples
+
+        iex> {:error, %File.Error{}} = Tempo.ICal.parse_file("no-such-calendar.ics")
+
     """
     @spec parse_file(Path.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-    def parse_file(path, options \\ []) do
+    def parse_file(path, options \\ [])
+
+    def parse_file(path, _options) when not is_binary(path),
+      do: {:error, ArgumentError.exception("a file's path is text, not #{inspect(path)}")}
+
+    def parse_file(path, options) do
       case File.read(path) do
         {:ok, ics} ->
           parse(ics, options)
@@ -153,9 +164,27 @@ if Code.ensure_loaded?(ICal) do
 
     * `{:ok, set}` or `{:error, exception}`, as for `parse/2`.
 
+    ### Examples
+
+        iex> calendar =
+        ...>   ICal.from_ics(\"""
+        ...>   BEGIN:VCALENDAR
+        ...>   VERSION:2.0
+        ...>   BEGIN:VEVENT
+        ...>   UID:offsite
+        ...>   DTSTART;VALUE=DATE:20260615
+        ...>   END:VEVENT
+        ...>   END:VCALENDAR
+        ...>   \""")
+        iex> {:ok, events} = Tempo.ICal.from_ical(calendar)
+        iex> Tempo.IntervalSet.map(events, &Tempo.to_iso8601!/1)
+        ["2026Y6M15D/2026Y6M15D"]
+
     """
     @spec from_ical(ICal.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-    def from_ical(%ICal{events: events} = calendar, options \\ []) do
+    def from_ical(calendar, options \\ [])
+
+    def from_ical(%ICal{events: events} = calendar, options) do
       with :ok <- Options.check(options, [:within], "Tempo.ICal.parse/2"),
            {:ok, spans} <- each_event(events, options),
            {:ok, kept} <- Occurrences.within(spans, options[:within]) do
@@ -166,6 +195,8 @@ if Code.ensure_loaded?(ICal) do
         )
       end
     end
+
+    def from_ical(other, _options), do: {:error, not_text(other)}
 
     @doc """
     The time an iCalendar's `VAVAILABILITY` components offer (RFC 7953).
@@ -225,6 +256,14 @@ if Code.ensure_loaded?(ICal) do
       with :ok <- Options.check(options, [:within], "Tempo.ICal.available/2"),
            do: available_in(availabilities, options[:within], options)
     end
+
+    def available(other, _options), do: {:error, not_text(other)}
+
+    defp not_text(other),
+      do:
+        ArgumentError.exception(
+          "a calendar is iCalendar text or an %ICal{}, not #{inspect(other)}"
+        )
 
     defp available_in(availabilities, %Tempo{} = window, options) do
       window = Spans.window_in(window, on_the_clock_of(availabilities, options))

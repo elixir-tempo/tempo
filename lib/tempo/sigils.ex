@@ -25,6 +25,20 @@ defmodule Tempo.Sigils do
   Reads an ISO 8601 text into an expression at compile time, or into a
   pattern that matches one.
 
+  ### Arguments
+
+  * The sigil's text, an ISO 8601 text as Tempo reads it. It is a literal:
+    a text with an interpolation is refused, since it would be read at
+    compile time.
+
+  * `modifiers`, which `~o` takes none of.
+
+  ### Returns
+
+  * The expression or the duration the text reads to, built when the code
+    is compiled, or a pattern matching it where the sigil is in a pattern.
+    A text that does not read is a compile error naming why.
+
   ### Examples
 
       iex> ~o"2026-06-15"

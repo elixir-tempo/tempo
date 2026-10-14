@@ -30,6 +30,7 @@ defmodule Tempo.ConversionError do
           | :not_an_expression
           | :not_an_elixir_value
           | :not_a_duration
+          | :not_an_interval
           | term()
 
   @type t :: %__MODULE__{value: term(), reason: reason()}
@@ -78,6 +79,9 @@ defmodule Tempo.ConversionError do
   defp describe(:no_such_value), do: "names a value its calendar has no room for"
   defp describe(:group), do: "holds a group, which names a span of values and none to count from"
   defp describe(:several), do: "names several spans, where one is asked for"
+
+  defp describe(:not_an_interval),
+    do: "is not an interval, which has the ends asked for; Tempo.to_interval/2 makes one"
 
   defp describe(:conditions),
     do:

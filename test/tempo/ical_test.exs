@@ -1,3 +1,13 @@
+defmodule Tempo.ICal.DocTest do
+  use ExUnit.Case, async: true
+
+  import Tempo.Sigils
+
+  # Apart from the tests, whose alias of `Tempo.ICal` would hide the `ICal`
+  # library the examples read a calendar with.
+  doctest Tempo.ICal
+end
+
 defmodule Tempo.ICal.Test do
   use ExUnit.Case, async: true
 
@@ -6,8 +16,6 @@ defmodule Tempo.ICal.Test do
   alias Tempo.Boundaries
   alias Tempo.ICal
   alias Tempo.IntervalSet
-
-  doctest Tempo.ICal
 
   # Tests for `Tempo.ICal.parse/2` — iCalendar → IntervalSet
   # conversion with event metadata preserved on each interval.

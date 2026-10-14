@@ -151,6 +151,14 @@ defmodule Tempo.RRule do
   @doc """
   `parse/2`, returning the recurrence or raising.
 
+  ### Arguments
+
+  * `text` and `options` are as for `parse/2`.
+
+  ### Returns
+
+  * The recurrence, a `t:Tempo.t/0`, or raises the error `parse/2` returns.
+
   ### Examples
 
       iex> Tempo.RRule.parse!("FREQ=DAILY;COUNT=10", from: ~o"2026-06-01") |> Enum.count()
@@ -773,6 +781,14 @@ defmodule Tempo.RRule do
 
   @doc """
   `to_string/1`, returning the text or raising.
+
+  ### Arguments
+
+  * `recurrence` is as for `to_string/1`.
+
+  ### Returns
+
+  * The RRULE text, or raises the error `to_string/1` returns.
 
   ### Examples
 

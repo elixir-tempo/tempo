@@ -15,6 +15,7 @@ defmodule Tempo.Allen do
   """
 
   alias Tempo.Allen.Classifier
+  alias Tempo.ConversionError
 
   @relations [
     :precedes,
@@ -60,6 +61,23 @@ defmodule Tempo.Allen do
     equal: [:equals]
   }
 
+  # Two spans in each relation, for the documentation of its predicate.
+  @examples [
+    precedes: {{1, 2}, {3, 4}},
+    meets: {{1, 3}, {3, 5}},
+    overlaps: {{1, 4}, {3, 6}},
+    finished_by: {{1, 5}, {3, 5}},
+    contains: {{1, 5}, {2, 3}},
+    starts: {{1, 3}, {1, 5}},
+    equals: {{1, 3}, {1, 3}},
+    started_by: {{1, 5}, {1, 3}},
+    during: {{2, 3}, {1, 5}},
+    finishes: {{3, 5}, {1, 5}},
+    overlapped_by: {{3, 6}, {1, 4}},
+    met_by: {{3, 5}, {1, 3}},
+    preceded_by: {{3, 4}, {1, 2}}
+  ]
+
   @type relation ::
           :precedes
           | :meets
@@ -81,7 +99,22 @@ defmodule Tempo.Allen do
   @typedoc "A span as two positions on one frame, `{from, to}`, half-open."
   @type span :: {integer(), integer()}
 
-  @doc "The thirteen relations, in Allen's order."
+  @doc """
+  The thirteen relations, in Allen's order.
+
+  ### Returns
+
+  * A list of the thirteen `t:relation/0` atoms.
+
+  ### Examples
+
+      iex> length(Tempo.Allen.relations())
+      13
+
+      iex> hd(Tempo.Allen.relations())
+      :precedes
+
+  """
   @spec relations() :: [relation(), ...]
   def relations, do: @relations
 
@@ -97,7 +130,8 @@ defmodule Tempo.Allen do
 
   * One of the thirteen `t:relation/0` atoms. For two expressions it is
     what `Tempo.relation/2` answers, and the error that would return is
-    raised.
+    raised; a value that is neither an expression nor a span raises a
+    `Tempo.ConversionError`.
 
   ### Examples
 
@@ -122,10 +156,27 @@ defmodule Tempo.Allen do
     end
   end
 
-  def relation(a, b), do: Classifier.relation(a, b)
+  def relation({_, _} = a, {_, _} = b), do: Classifier.relation(a, b)
+
+  def relation(a, b) do
+    neither = if span_or_expression?(a), do: b, else: a
+    raise ConversionError.exception(value: neither, reason: :not_an_expression)
+  end
+
+  defp span_or_expression?(%Tempo{}), do: true
+  defp span_or_expression?({from, to}) when is_integer(from) and is_integer(to), do: true
+  defp span_or_expression?(_other), do: false
 
   @doc """
   The inverse of a relation: the relation of the second span to the first.
+
+  ### Arguments
+
+  * `relation` is a `t:relation/0`.
+
+  ### Returns
+
+  * The `t:relation/0` the second span stands in to the first.
 
   ### Examples
 
@@ -137,7 +188,8 @@ defmodule Tempo.Allen do
 
   """
   @spec inverse(relation()) :: relation()
-  def inverse(relation), do: Map.fetch!(@inverses, relation)
+  def inverse(relation) when is_map_key(@inverses, relation), do: Map.fetch!(@inverses, relation)
+  def inverse(other), do: no_relation!(other)
 
   # The composition table, derived from the classifier: for every placing of
   # three spans on a short line, the relation of the first to the third is
@@ -169,6 +221,17 @@ defmodule Tempo.Allen do
   The composition of two relations: the relations a first span may stand in
   to a third, given its relation to a second and the second's to the third.
 
+  ### Arguments
+
+  * `first` is the `t:relation/0` of the first span to the second.
+
+  * `second` is the `t:relation/0` of the second span to the third.
+
+  ### Returns
+
+  * The `t:relation/0` atoms the first span may stand in to the third, in
+    Allen's order.
+
   ### Examples
 
       iex> Tempo.Allen.compose(:precedes, :precedes)
@@ -182,10 +245,23 @@ defmodule Tempo.Allen do
 
   """
   @spec compose(relation(), relation()) :: [relation(), ...]
-  def compose(first, second), do: Map.fetch!(@composition, {first, second})
+  def compose(first, second) when first in @relations and second in @relations,
+    do: Map.fetch!(@composition, {first, second})
+
+  def compose(first, second) when first in @relations, do: no_relation!(second)
+  def compose(first, _second), do: no_relation!(first)
 
   @doc """
   The relations an everyday predicate stands for.
+
+  ### Arguments
+
+  * `name` is a `t:predicate/0`, or a `t:relation/0`, which stands for
+    itself.
+
+  ### Returns
+
+  * The `t:relation/0` atoms the predicate holds for.
 
   ### Examples
 
@@ -200,12 +276,48 @@ defmodule Tempo.Allen do
   def predicate(name) when is_map_key(@predicates, name), do: Map.fetch!(@predicates, name)
   def predicate(relation) when relation in @relations, do: [relation]
 
-  @doc "The everyday predicates: `:before`, `:after`, `:adjacent`, `:within`, `:contains`, `:disjoint`, `:overlaps`, `:equal`."
+  def predicate(other),
+    do:
+      raise(
+        ArgumentError,
+        "#{inspect(other)} is none of the predicates #{inspect(Map.keys(@predicates))} or Allen's relations"
+      )
+
+  @spec no_relation!(term()) :: no_return()
+  defp no_relation!(other),
+    do: raise(ArgumentError, "#{inspect(other)} is not one of Allen's thirteen relations")
+
+  @doc """
+  The everyday predicates: `:before`, `:after`, `:adjacent`, `:within`,
+  `:contains`, `:disjoint`, `:overlaps` and `:equal`.
+
+  ### Returns
+
+  * A list of the `t:predicate/0` atoms.
+
+  ### Examples
+
+      iex> :within in Tempo.Allen.predicates()
+      true
+
+  """
   @spec predicates() :: [predicate(), ...]
   def predicates, do: Map.keys(@predicates)
 
   @doc """
   Whether a predicate or a relation holds between two spans.
+
+  ### Arguments
+
+  * `name` is a `t:predicate/0` or a `t:relation/0`.
+
+  * `a` and `b` are each a `t:Tempo.t/0` that names one span, or each a
+    `t:span/0`, as for `relation/2`.
+
+  ### Returns
+
+  * `true` when the relation of `a` to `b` is one the name stands for, and
+    `false` when it is not.
 
   ### Examples
 
@@ -219,8 +331,27 @@ defmodule Tempo.Allen do
   @spec holds?(predicate() | relation(), span() | Tempo.t(), span() | Tempo.t()) :: boolean()
   def holds?(name, a, b), do: relation(a, b) in predicate(name)
 
-  for relation <- @relations do
-    @doc "Whether the first span `#{relation}` the second."
+  for {relation, {a, b}} <- @examples do
+    @doc """
+    Whether the first span #{String.replace(Atom.to_string(relation), "_", " ")} the
+    second, under Allen's own name.
+
+    ### Arguments
+
+    * `a` and `b` are each a `t:Tempo.t/0` that names one span, or each a
+      `t:span/0`, as for `relation/2`.
+
+    ### Returns
+
+    * `true` when the relation of `a` to `b` is `#{inspect(relation)}`, and
+      `false` when it is not.
+
+    ### Examples
+
+        iex> Tempo.Allen.#{relation}?(#{inspect(a)}, #{inspect(b)})
+        true
+
+    """
     @spec unquote(:"#{relation}?")(span() | Tempo.t(), span() | Tempo.t()) :: boolean()
     def unquote(:"#{relation}?")(a, b), do: relation(a, b) == unquote(relation)
   end

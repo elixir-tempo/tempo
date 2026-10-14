@@ -18,6 +18,10 @@ defmodule Tempo.Clock do
   The clock in use: the calling process's, else the application's, else
   `Tempo.Clock.System`.
 
+  ### Returns
+
+  * The module of the clock in use, one that implements `Tempo.Clock`.
+
   ### Examples
 
       iex> Tempo.Clock.clock()

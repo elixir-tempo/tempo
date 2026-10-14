@@ -76,9 +76,16 @@ if Code.ensure_loaded?(JSCalendar) do
 
     """
     @spec parse(binary(), keyword()) :: {:ok, Tempo.t()} | {:error, term()}
-    def parse(json, options \\ []) when is_binary(json) do
+    def parse(json, options \\ [])
+
+    def parse(json, options) when is_binary(json) do
       with {:ok, object} <- JSCalendar.decode(json), do: from_jscalendar(object, options)
     end
+
+    def parse(other, _options),
+      do:
+        {:error,
+         ArgumentError.exception("a JSCalendar document is JSON text, not #{inspect(other)}")}
 
     @doc """
     The events of a JSCalendar object already decoded, as `parse/2` gives
@@ -98,6 +105,16 @@ if Code.ensure_loaded?(JSCalendar) do
     ### Returns
 
     * `{:ok, set}` or `{:error, exception}`, as for `parse/2`.
+
+    ### Examples
+
+        iex> {:ok, object} =
+        ...>   JSCalendar.decode(
+        ...>     ~s({"@type":"Event","uid":"e","updated":"2026-06-01T09:00:00Z","start":"2026-06-02T09:00:00","duration":"PT1H"})
+        ...>   )
+        iex> {:ok, events} = Tempo.JSCalendar.from_jscalendar(object)
+        iex> Tempo.IntervalSet.map(events, &Tempo.to_iso8601!/1)
+        ["2026Y6M2DT9H0M0S/T10H0M0S"]
 
     """
     @spec from_jscalendar(struct(), keyword()) :: {:ok, Tempo.t()} | {:error, term()}

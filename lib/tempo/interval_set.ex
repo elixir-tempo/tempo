@@ -105,6 +105,14 @@ defmodule Tempo.IntervalSet do
   @doc """
   Builds a set as `new/2` does, returning it or raising.
 
+  ### Arguments
+
+  * `members` and `options` are as for `new/2`.
+
+  ### Returns
+
+  * The set, a `t:Tempo.t/0`, or raises the error `new/2` returns.
+
   ### Examples
 
       iex> Tempo.IntervalSet.new!([~o"2026-01", ~o"2026-03"])
@@ -168,7 +176,15 @@ defmodule Tempo.IntervalSet do
   """
   @spec slots(Tempo.t(), Duration.t(), keyword()) ::
           {:ok, Tempo.t()} | {:error, Exception.t()}
-  def slots(%Tempo{} = expression, %Duration{} = duration, options \\ []) do
+  def slots(expression, duration, options \\ [])
+
+  def slots(expression, _duration, _options) when not is_struct(expression, Tempo),
+    do: {:error, ConversionError.exception(value: expression, reason: :not_an_expression)}
+
+  def slots(_expression, duration, _options) when not is_struct(duration, Duration),
+    do: {:error, ConversionError.exception(value: duration, reason: :not_a_duration)}
+
+  def slots(%Tempo{} = expression, %Duration{} = duration, options) do
     with :ok <- Options.check(options, [:every], "Tempo.IntervalSet.slots/3"),
          {:ok, length} <- Duration.to_microseconds(duration),
          {:ok, step} <- Duration.to_microseconds(Keyword.get(options, :every, duration)),
@@ -261,7 +277,13 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec coalesce(Tempo.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-  def coalesce(set, options \\ []), do: covered(set, Keyword.put_new(options, :at_least, 1))
+  def coalesce(set, options \\ [])
+
+  def coalesce(set, options) when is_list(options),
+    do: covered(set, Keyword.put_new(options, :at_least, 1))
+
+  def coalesce(_set, options),
+    do: {:error, ArgumentError.exception("options are a keyword list, not #{inspect(options)}")}
 
   @doc """
   The time covered by at least so many members of a set at once, as spans.
@@ -313,6 +335,17 @@ defmodule Tempo.IntervalSet do
 
   @doc """
   Whether a set covers every instant of a value.
+
+  ### Arguments
+
+  * `set` is a `t:Tempo.t/0` that has spans.
+
+  * `value` is a `t:Tempo.t/0`.
+
+  ### Returns
+
+  * `true` when every instant of `value` is in a member of `set`, as
+    `Tempo.within?/2` answers, and `false` when one is not.
 
   ### Examples
 
@@ -392,6 +425,8 @@ defmodule Tempo.IntervalSet do
   def filter(%Tempo{} = set, fun) when is_function(fun, 1),
     do: %{set | form: {:all, Enum.filter(members(set), fun)}}
 
+  def filter(set, fun), do: refused!(set, fun)
+
   @doc """
   A function applied to each member, giving its answers.
 
@@ -424,10 +459,31 @@ defmodule Tempo.IntervalSet do
     do: Stream.map(members, fun)
 
   def map(%Tempo{} = set, fun) when is_function(fun, 1), do: Enum.map(members(set), fun)
+  def map(set, fun), do: refused!(set, fun)
+
+  # A function that answers a bare value raises what it is given wrongly.
+  @spec refused!(term(), term()) :: no_return()
+  defp refused!(%Tempo{}, fun),
+    do: raise(ArgumentError, "a function of one member is given, not #{inspect(fun)}")
+
+  defp refused!(other, _fun), do: not_an_expression!(other)
+
+  @spec not_an_expression!(term()) :: no_return()
+  defp not_an_expression!(other),
+    do: raise(ConversionError.exception(value: other, reason: :not_an_expression))
 
   @doc """
   The spans of a set's members, lazily and in order: what the set covers,
   member by member.
+
+  ### Arguments
+
+  * `set` is a `t:Tempo.t/0`.
+
+  ### Returns
+
+  * An `Enumerable` of `t:Tempo.t/0` spans. An expression with no spans,
+    or that is no expression, raises its error.
 
   ### Examples
 
@@ -443,6 +499,8 @@ defmodule Tempo.IntervalSet do
       {:error, exception} -> raise exception
     end
   end
+
+  def walk(other), do: not_an_expression!(other)
 
   @doc """
   A set whose members are read from an enumerable as they are asked for, so
@@ -461,7 +519,7 @@ defmodule Tempo.IntervalSet do
   ### Returns
 
   * A `t:Tempo.t/0` of the `:all` form, whose members are read as they are
-    asked for.
+    asked for. A value that is no enumerable raises an `ArgumentError`.
 
   ### Examples
 
@@ -473,6 +531,10 @@ defmodule Tempo.IntervalSet do
   @spec from_stream(Enumerable.t(), keyword()) :: Tempo.t()
   def from_stream(enumerable, options \\ []) do
     Options.check!(options, [:metadata], "Tempo.IntervalSet.from_stream/2")
+
+    if Enumerable.impl_for(enumerable) == nil,
+      do: raise(ArgumentError, "a set is read from an enumerable, not #{inspect(enumerable)}")
+
     %Tempo{form: {:all, enumerable}, metadata: Keyword.get(options, :metadata, %{})}
   end
 
@@ -481,6 +543,16 @@ defmodule Tempo.IntervalSet do
   own one member, and a plural one has the members `Enum` gives of it (a
   recurrence its occurrences). One with no end, or with more members than
   the application's `:max_values_at_once`, raises a `Tempo.ConversionError`.
+
+  ### Arguments
+
+  * `expression` is a `t:Tempo.t/0`.
+
+  ### Returns
+
+  * The list of its members, each a `t:Tempo.t/0`. An expression with no
+    end, one of too many members, or a value that is no expression raises a
+    `Tempo.ConversionError`.
 
   ### Examples
 
@@ -508,6 +580,8 @@ defmodule Tempo.IntervalSet do
     if Spans.singular?(expression), do: [expression], else: plural_members(expression)
   end
 
+  def members(other), do: not_an_expression!(other)
+
   defp plural_members(expression) do
     case taken_members(expression) do
       {:ok, taken} -> taken
@@ -523,6 +597,15 @@ defmodule Tempo.IntervalSet do
   @doc """
   How many members a set has.
 
+  ### Arguments
+
+  * `expression` is a `t:Tempo.t/0`.
+
+  ### Returns
+
+  * The number of its members, as `members/1` gives them, raising as it
+    raises.
+
   ### Examples
 
       iex> Tempo.IntervalSet.count(~o"{2026-06,2026-08}")
@@ -535,6 +618,16 @@ defmodule Tempo.IntervalSet do
   @doc """
   The first member of a set. A recurrence with no end has a first
   occurrence, which is its first member.
+
+  ### Arguments
+
+  * `expression` is a `t:Tempo.t/0`.
+
+  ### Returns
+
+  * Its first member, a `t:Tempo.t/0`, or `nil` for an empty set. A
+    recurrence counted back with no start, or a value that is no
+    expression, raises a `Tempo.ConversionError`.
 
   ### Examples
 
@@ -552,6 +645,8 @@ defmodule Tempo.IntervalSet do
     if Spans.singular?(expression), do: expression, else: first_member(expression)
   end
 
+  def first(other), do: not_an_expression!(other)
+
   defp first_member(expression) do
     case Spans.members(expression, []) do
       {:ok, members} -> members |> Enum.take(1) |> List.first()
@@ -561,6 +656,15 @@ defmodule Tempo.IntervalSet do
 
   @doc """
   The last member of a set.
+
+  ### Arguments
+
+  * `expression` is a `t:Tempo.t/0`.
+
+  ### Returns
+
+  * Its last member, a `t:Tempo.t/0`, or `nil` for an empty set, raising
+    as `members/1` raises.
 
   ### Examples
 

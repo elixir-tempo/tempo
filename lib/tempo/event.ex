@@ -39,6 +39,10 @@ defmodule Tempo.Event do
   The names of the events `date/3` resolves: the built-ins and every name a
   registered `Tempo.Event.Resolver` claims, sorted.
 
+  ### Returns
+
+  * A sorted list of event names, each a string.
+
   ### Examples
 
       iex> "qingming" in Tempo.Event.known()
@@ -57,6 +61,15 @@ defmodule Tempo.Event do
   @doc """
   Whether a name is one of the twenty-four solar terms.
 
+  ### Arguments
+
+  * `name` is an event's name, a string.
+
+  ### Returns
+
+  * `true` for one of the twenty-four, and `false` for any other name. A
+    name that is no string raises an `ArgumentError`.
+
   ### Examples
 
       iex> Tempo.Event.solar_term?("qingming")
@@ -68,6 +81,9 @@ defmodule Tempo.Event do
   """
   @spec solar_term?(String.t()) :: boolean()
   def solar_term?(name) when is_binary(name), do: Map.has_key?(@solar_terms, name)
+
+  def solar_term?(other),
+    do: raise(ArgumentError, "an event's name is a string, not #{inspect(other)}")
 
   @doc """
   The date of a named event in a year of the proleptic Gregorian calendar.
@@ -116,12 +132,20 @@ defmodule Tempo.Event do
   """
   @spec date(String.t(), integer(), module()) :: {:ok, Date.t()} | {:error, term()}
   def date(name, year, calendar \\ Calendars.default())
-      when is_binary(name) and is_integer(year) do
+
+  def date(name, year, calendar) when is_binary(name) and is_integer(year) do
     case String.split(name, "@", parts: 2) do
       [event, zone] -> zoned_date(event, zone, year)
       [event] -> event_date(event, year, calendar)
     end
   end
+
+  def date(name, year, _calendar) when is_binary(name),
+    do:
+      {:error, ArgumentError.exception("an event's year is a whole number, not #{inspect(year)}")}
+
+  def date(name, _year, _calendar),
+    do: {:error, ArgumentError.exception("an event's name is a string, not #{inspect(name)}")}
 
   defp event_date(name, year, calendar) do
     case Map.fetch(@events, name) do

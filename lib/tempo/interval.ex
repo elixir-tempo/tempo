@@ -78,8 +78,29 @@ defmodule Tempo.Interval do
     end
   end
 
+  def new(other),
+    do:
+      {:error,
+       ArgumentError.exception(
+         "an interval is built from a keyword list of :from and :to, not #{inspect(other)}"
+       )}
+
   @doc """
   Builds an interval from its two ends, as `new/1` does.
+
+  ### Arguments
+
+  * `from` is the start: a value, a duration (when `to` is a value), or
+    `:open`.
+
+  * `to` is the end: a value, a duration (when `from` is a value), or
+    `:open`.
+
+  * `metadata` is a map the caller keeps on the interval. The default is `%{}`.
+
+  ### Returns
+
+  * `{:ok, interval}` or `{:error, exception}`, as `new/1` returns.
 
   ### Examples
 
@@ -129,6 +150,14 @@ defmodule Tempo.Interval do
   @doc """
   Builds an interval as `new/1` does, returning it or raising.
 
+  ### Arguments
+
+  * `options` is a keyword list with the two ends, as for `new/1`.
+
+  ### Returns
+
+  * The interval, a `t:Tempo.t/0`, or raises the error `new/1` returns.
+
   ### Examples
 
       iex> Tempo.Interval.new!(from: ~o"2026", to: ~o"2028")
@@ -146,6 +175,15 @@ defmodule Tempo.Interval do
   @doc """
   The start of an interval.
 
+  ### Arguments
+
+  * `interval` is a `t:Tempo.t/0` interval.
+
+  ### Returns
+
+  * The start as written: a value, a duration or `:open`. An expression
+    that is no interval raises a `Tempo.ConversionError`.
+
   ### Examples
 
       iex> Tempo.Interval.from(~o"2026-06-01/2026-06-30")
@@ -157,10 +195,20 @@ defmodule Tempo.Interval do
   """
   @spec from(Tempo.t()) :: endpoint()
   def from(%Tempo{form: {:span, from, _to}}), do: from
+  def from(other), do: no_interval!(other)
 
   @doc """
   The end of an interval, as written: a date end is the date the interval
   runs through.
+
+  ### Arguments
+
+  * `interval` is a `t:Tempo.t/0` interval.
+
+  ### Returns
+
+  * The end as written: a value, a duration or `:open`. An expression that
+    is no interval raises a `Tempo.ConversionError`.
 
   ### Examples
 
@@ -173,9 +221,19 @@ defmodule Tempo.Interval do
   """
   @spec to(Tempo.t()) :: endpoint()
   def to(%Tempo{form: {:span, _from, to}}), do: to
+  def to(other), do: no_interval!(other)
 
   @doc """
   Both ends of an interval.
+
+  ### Arguments
+
+  * `interval` is a `t:Tempo.t/0` interval.
+
+  ### Returns
+
+  * `{from, to}`, each as written. An expression that is no interval
+    raises a `Tempo.ConversionError`.
 
   ### Examples
 
@@ -185,6 +243,16 @@ defmodule Tempo.Interval do
   """
   @spec endpoints(Tempo.t()) :: {endpoint(), endpoint()}
   def endpoints(%Tempo{form: {:span, from, to}}), do: {from, to}
+  def endpoints(other), do: no_interval!(other)
+
+  # An accessor of an interval's ends raises, as decision 39 has the
+  # functions that answer a bare value do.
+  @spec no_interval!(term()) :: no_return()
+  defp no_interval!(%Tempo{} = other),
+    do: raise(ConversionError.exception(value: other, reason: :not_an_interval))
+
+  defp no_interval!(other),
+    do: raise(ConversionError.exception(value: other, reason: :not_an_expression))
 
   @doc """
   The instants an interval runs between: the one it begins at and the one
@@ -294,6 +362,9 @@ defmodule Tempo.Interval do
 
   """
   @spec leap_seconds_spanned(Tempo.t()) :: [LeapSeconds.date()] | {:error, Exception.t()}
+  def leap_seconds_spanned(interval) when not is_struct(interval, Tempo),
+    do: {:error, ConversionError.exception(value: interval, reason: :not_an_expression)}
+
   def leap_seconds_spanned(%Tempo{} = interval) do
     case LeapSeconds.spanned(interval) do
       {:ok, dates} -> dates
@@ -324,6 +395,9 @@ defmodule Tempo.Interval do
 
   """
   @spec spans_leap_second?(Tempo.t()) :: boolean()
+  def spans_leap_second?(interval) when not is_struct(interval, Tempo),
+    do: raise(ConversionError.exception(value: interval, reason: :not_an_expression))
+
   def spans_leap_second?(%Tempo{} = interval) do
     case LeapSeconds.spanned(interval) do
       {:ok, dates} -> dates != []

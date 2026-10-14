@@ -105,7 +105,9 @@ defmodule Tempo.Workdays do
       {:error,
        ArgumentError.exception("the days off (:except) are a Tempo value, not #{inspect(other)}")}
 
-  @doc "Whether a value, a day or finer, falls on a workday: a weekday that is not a day off."
+  # Whether a value, a day or finer, falls on a workday: a weekday that is
+  # not a day off. `Tempo.workday?/2` is the API.
+  @doc false
   @spec workday?(Tempo.t(), t()) :: boolean() | {:error, Exception.t()}
   def workday?(%Tempo{} = value, %__MODULE__{} = workdays) do
     case Tempo.day_of_week(value) do
@@ -114,7 +116,9 @@ defmodule Tempo.Workdays do
     end
   end
 
-  @doc "Whether a value, a day or finer, falls on the weekend."
+  # Whether a value, a day or finer, falls on the weekend. `Tempo.weekend?/2`
+  # is the API.
+  @doc false
   @spec weekend?(Tempo.t(), t()) :: boolean() | {:error, Exception.t()}
   def weekend?(%Tempo{} = value, %__MODULE__{weekend: weekend}) do
     case Tempo.day_of_week(value) do
@@ -132,7 +136,9 @@ defmodule Tempo.Workdays do
     end
   end
 
-  @doc "The value moved by a number of workdays: forward for a positive count, back for a negative one."
+  # The value moved by a number of workdays: forward for a positive count,
+  # back for a negative one. `Tempo.add_workdays/3` is the API.
+  @doc false
   @spec add(Tempo.t(), integer(), t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def add(%Tempo{} = value, 0, %__MODULE__{}), do: {:ok, value}
 
@@ -234,7 +240,10 @@ defmodule Tempo.Workdays do
     end
   end
 
-  @doc "The nearest workday: the value when it is one, else the closer of the next and the previous, the next on a tie."
+  # The nearest workday: the value when it is one, else the closer of the
+  # next and the previous, the next on a tie. `Tempo.nearest_workday/2` is
+  # the API.
+  @doc false
   @spec nearest(Tempo.t(), t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def nearest(%Tempo{} = value, %__MODULE__{} = workdays) do
     case whole_workday?(value, workdays) do
@@ -290,13 +299,9 @@ defmodule Tempo.Workdays do
   defp workday_of_month?(moved, value, workdays),
     do: Tempo.month(moved) == Tempo.month(value) and workday?(moved, workdays) == true
 
-  @doc """
-  A value rolled to a workday by a business day convention: itself when it
-  is a workday, else the first workday after it (`:following`), before it
-  (`:preceding`) or the closer of the two (`:nearest`, the one after on a
-  tie); the modified conventions turn back when the roll would leave the
-  month.
-  """
+  # A day moved to a workday by a convention. `Tempo.roll_to_workday/3` is
+  # the API.
+  @doc false
   @spec roll(Tempo.t(), t(), atom()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def roll(%Tempo{} = value, %__MODULE__{} = workdays, convention)
       when convention in @conventions do
@@ -338,7 +343,9 @@ defmodule Tempo.Workdays do
            )
   end
 
-  @doc "How many workdays an expression's days hold."
+  # How many workdays an expression's days hold. `Tempo.count_workdays/2` is
+  # the API.
+  @doc false
   @spec count(Tempo.t(), t()) :: {:ok, non_neg_integer()} | {:error, Exception.t()}
   def count(%Tempo{} = expression, %__MODULE__{} = workdays) do
     with :ok <- ended(expression),

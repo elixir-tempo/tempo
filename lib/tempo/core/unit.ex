@@ -97,7 +97,7 @@ defmodule Tempo.Unit do
     hour: 0,
     minute: 0,
     second: 0,
-    microsecond: 0
+    microsecond: {0, 6}
   }
 
   @ticks %{
@@ -254,7 +254,7 @@ defmodule Tempo.Unit do
   def cycle_chain(unit), do: Map.get(@cycle_chains, unit)
 
   @doc "The least value a unit holds."
-  @spec minimum(t()) :: integer()
+  @spec minimum(t()) :: integer() | {0, 6}
   def minimum(unit), do: Map.fetch!(@minimum, unit)
 
   @doc "Every unit, coarsest first."

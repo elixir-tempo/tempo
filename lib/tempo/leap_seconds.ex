@@ -119,7 +119,12 @@ defmodule Tempo.LeapSeconds do
 
   """
   @spec on_date?(integer(), integer(), integer()) :: boolean()
-  def on_date?(year, month, day), do: {year, month, day} in @insertions
+  def on_date?(year, month, day)
+      when is_integer(year) and is_integer(month) and is_integer(day),
+      do: {year, month, day} in @insertions
+
+  def on_date?(year, month, day),
+    do: raise(ArgumentError, "a date is three integers, not #{inspect({year, month, day})}")
 
   @doc """
   The most recent UTC date at whose end a leap second was inserted.
@@ -156,7 +161,8 @@ defmodule Tempo.LeapSeconds do
     spans none.
 
   * `{:error, %Tempo.ConversionError{}}` for an expression with no year
-    (`:needs_a_year`) or with no end (`:unbounded`).
+    (`:needs_a_year`), with no end (`:unbounded`), or anything that is no
+    expression (`:not_an_expression`).
 
   ### Examples
 
@@ -178,6 +184,8 @@ defmodule Tempo.LeapSeconds do
       {:error, _} = error -> error
     end
   end
+
+  def spanned(other), do: {:error, conversion(other, :not_an_expression)}
 
   defp within({:cycle, _unit}, _covered, expression),
     do: {:error, conversion(expression, :needs_a_year)}
@@ -218,6 +226,8 @@ defmodule Tempo.LeapSeconds do
       {:ok, Enum.count(dates, &(&1 in @insertions)) - Enum.count(dates, &(&1 in @removals))}
     end
   end
+
+  def count(other), do: spanned(other)
 
   defp conversion(expression, reason),
     do: ConversionError.exception(value: expression, reason: reason)

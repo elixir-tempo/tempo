@@ -63,6 +63,8 @@ defmodule Tempo do
   @relative_options [:from, :unit, :format, :locale, :numeric]
   # No unit asked is the largest of which a whole one lies between the two.
   @relative_units [nil, :year, :quarter, :month, :week, :day, :hour, :minute, :second]
+  # The days a week can be counted from by `day_of_week/2`.
+  @week_starts [:default, :monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday]
 
   @enforce_keys [:form]
   defstruct form: nil,
@@ -80,6 +82,14 @@ defmodule Tempo do
 
   defp not_an_expression(value),
     do: {:error, ConversionError.exception(value: value, reason: :not_an_expression)}
+
+  # A unit a value is written in, as `trunc/2`, `round/2` and
+  # `at_resolution/2` take one.
+  defp a_unit(unit) do
+    if unit in Unit.order(),
+      do: :ok,
+      else: {:error, ArgumentError.exception("#{inspect(unit)} is not a unit of a value")}
+  end
 
   @spec not_an_expression!(term()) :: no_return()
   defp not_an_expression!(value),
@@ -286,6 +296,15 @@ defmodule Tempo do
   @doc """
   Reads a text as `from_iso8601/2` does, returning the expression or raising.
 
+  ### Arguments
+
+  * The arguments are those of `from_iso8601/2`.
+
+  ### Returns
+
+  * What `from_iso8601/2` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
+
   ### Examples
 
       iex> Tempo.from_iso8601!("2026-06")
@@ -336,6 +355,15 @@ defmodule Tempo do
 
   @doc """
   Writes an expression as `to_iso8601/1` does, returning the text or raising.
+
+  ### Arguments
+
+  * The arguments are those of `to_iso8601/1`.
+
+  ### Returns
+
+  * What `to_iso8601/1` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
 
   ### Examples
 
@@ -424,6 +452,15 @@ defmodule Tempo do
   @doc """
   `parse/2`, returning the expression or raising.
 
+  ### Arguments
+
+  * The arguments are those of `parse/2`.
+
+  ### Returns
+
+  * What `parse/2` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
+
   ### Examples
 
       iex> Tempo.parse!("15 June 2026", locale: :en)
@@ -443,6 +480,10 @@ defmodule Tempo do
   iCalendar `DURATION`, a configured timeout. A date read where a duration
   was meant is an error here, where `from_iso8601/2` would succeed with a
   value of the wrong kind.
+
+  ### Arguments
+
+  * `text` is a string.
 
   ### Returns
 
@@ -472,8 +513,9 @@ defmodule Tempo do
   * `components` is a keyword list or a map of units (`:year`, `:month`,
     `:day`, `:week`, `:day_of_week`, `:day_of_year`, `:quarter`, `:season`,
     `:hour`, `:minute`, `:second`, `:microsecond`), in any order, each holding
-    what a written unit holds (`t:held/0`), with these keys beside
-    them:
+    what a written unit holds (`t:held/0`); a `:microsecond` holds
+    `{microseconds, digits}` as Elixir's `Time` does, or an integer, which
+    is six digits. These keys go beside them:
 
     * `:calendar` is the calendar the value is in. The default is
       `Calendar.ISO`.
@@ -568,6 +610,11 @@ defmodule Tempo do
 
   # A range alone is held as a list of it, as `{2020..2024}Y` is read.
   defp held_as_written({unit, %Range{} = range}), do: {unit, [range]}
+
+  # An integer of microseconds is six digits of them, as `Time.new/4` reads one.
+  defp held_as_written({:microsecond, microsecond}) when is_integer(microsecond),
+    do: {:microsecond, {microsecond, 6}}
+
   defp held_as_written(part), do: part
 
   # A value's qualifications, each of a unit it has, as `?`, `~` and `%`
@@ -602,6 +649,15 @@ defmodule Tempo do
 
   @doc """
   Builds a value as `new/1` does, returning the value or raising.
+
+  ### Arguments
+
+  * The arguments are those of `new/1`.
+
+  ### Returns
+
+  * What `new/1` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
 
   ### Examples
 
@@ -924,6 +980,15 @@ defmodule Tempo do
 
   @doc """
   `to_interval/2`, returning the interval or set or raising.
+
+  ### Arguments
+
+  * The arguments are those of `to_interval/2`.
+
+  ### Returns
+
+  * What `to_interval/2` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
 
   ### Examples
 
@@ -1700,6 +1765,17 @@ defmodule Tempo do
   @doc """
   Whether a predicate holds between two expressions for every reading of them.
 
+  ### Arguments
+
+  * `predicate` is a predicate or relation, as for `certainty/3`.
+
+  * `a` and `b` are each a `t:t/0`.
+
+  ### Returns
+
+  * `true` when `certainty/3` is `:certain`, otherwise `false`. The error
+    `certainty/3` returns is raised.
+
   ### Examples
 
       iex> Tempo.certainly?(:before, ~o"2018±2Y", ~o"2021")
@@ -1714,6 +1790,17 @@ defmodule Tempo do
 
   @doc """
   Whether a predicate holds between two expressions for some reading of them.
+
+  ### Arguments
+
+  * `predicate` is a predicate or relation, as for `certainty/3`.
+
+  * `a` and `b` are each a `t:t/0`.
+
+  ### Returns
+
+  * `true` when `certainty/3` is `:certain` or `:possible`, otherwise
+    `false`. The error `certainty/3` returns is raised.
 
   ### Examples
 
@@ -1887,6 +1974,14 @@ defmodule Tempo do
   unless it was written or built with another. Nil for an expression of a
   calendar that is not the Gregorian, whose weeks are its own.
 
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  ### Returns
+
+  * The day, 1 to 7, or `nil` for a calendar whose weeks are its own.
+
   ### Examples
 
       iex> Tempo.week_start(~o"2026-W25")
@@ -2036,6 +2131,15 @@ defmodule Tempo do
 
   @doc """
   `in_territory/2`, returning the expression or raising.
+
+  ### Arguments
+
+  * The arguments are those of `in_territory/2`.
+
+  ### Returns
+
+  * What `in_territory/2` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
 
   ### Examples
 
@@ -2335,6 +2439,16 @@ defmodule Tempo do
   `at/2` with its arguments the other way round, so that the code reads as
   English does: *10:30 on 4 January*.
 
+  ### Arguments
+
+  * `value` is a `t:t/0`, a time of day.
+
+  * `other` is a `t:t/0`, a date.
+
+  ### Returns
+
+  * What `at(other, value)` returns.
+
   ### Examples
 
       iex> Tempo.on(~o"T10:30", ~o"2026-01-04")
@@ -2509,7 +2623,10 @@ defmodule Tempo do
   @spec trunc(t(), unit()) :: {:ok, t()} | {:error, error()}
   def trunc(expression, unit \\ :day)
 
-  def trunc(expression, unit) when is_expression(expression), do: Shift.trunc(expression, unit)
+  def trunc(expression, unit) when is_expression(expression) do
+    with :ok <- a_unit(unit), do: Shift.trunc(expression, unit)
+  end
+
   def trunc(other, _unit), do: not_an_expression(other)
 
   @doc """
@@ -2551,7 +2668,10 @@ defmodule Tempo do
   @spec round(t(), unit()) :: {:ok, t()} | {:error, error()}
   def round(expression, unit \\ :day)
 
-  def round(expression, unit) when is_expression(expression), do: Shift.round(expression, unit)
+  def round(expression, unit) when is_expression(expression) do
+    with :ok <- a_unit(unit), do: Shift.round(expression, unit)
+  end
+
   def round(other, _unit), do: not_an_expression(other)
 
   @doc """
@@ -2628,8 +2748,9 @@ defmodule Tempo do
 
   """
   @spec at_resolution(t(), unit()) :: {:ok, t()} | {:error, error()}
-  def at_resolution(expression, unit) when is_expression(expression),
-    do: Shift.at_resolution(expression, unit)
+  def at_resolution(expression, unit) when is_expression(expression) do
+    with :ok <- a_unit(unit), do: Shift.at_resolution(expression, unit)
+  end
 
   def at_resolution(other, _unit), do: not_an_expression(other)
 
@@ -2906,14 +3027,27 @@ defmodule Tempo do
   @spec day_of_week(t(), atom()) :: 1..7 | nil
   def day_of_week(expression, starting_on \\ :default)
 
+  def day_of_week(expression, starting_on)
+      when is_expression(expression) and starting_on in @week_starts,
+      do: Parts.weekday(Parts.part(expression, :day_of_week), starting_on)
+
   def day_of_week(expression, starting_on) when is_expression(expression),
-    do: Parts.weekday(Parts.part(expression, :day_of_week), starting_on)
+    do: raise(ArgumentError, "a week starts on a day, as :monday, not #{inspect(starting_on)}")
 
   def day_of_week(other, _starting_on), do: not_an_expression!(other)
 
   @doc """
   The day of the year an expression names, counted from the year's first
   day.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  ### Returns
+
+  * The day of the year, from 1; `nil` when the expression names no single
+    day.
 
   ### Examples
 
@@ -2933,6 +3067,15 @@ defmodule Tempo do
   @doc """
   The quarter of the year an expression lies in, 1 to 4.
 
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  ### Returns
+
+  * The quarter, 1 to 4; `nil` when the expression lies in no single
+    quarter.
+
   ### Examples
 
       iex> Tempo.quarter_of_year(~o"2026-06-15")
@@ -2950,6 +3093,10 @@ defmodule Tempo do
 
   @doc """
   Whether the year an expression names is a leap year of its calendar.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
 
   ### Returns
 
@@ -2973,6 +3120,10 @@ defmodule Tempo do
 
   @doc """
   The number of days in the month an expression names, in its calendar.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
 
   ### Returns
 
@@ -3033,6 +3184,14 @@ defmodule Tempo do
   Whether an expression has a year, so a place on the time line. A value
   with an unspecified year (`X*Y`) has none.
 
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  ### Returns
+
+  * `true` or `false`.
+
   ### Examples
 
       iex> Tempo.anchored?(~o"2022")
@@ -3054,6 +3213,14 @@ defmodule Tempo do
   no time shift, which names a civil time but not whose. The complement of
   `zoned?/1`.
 
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  ### Returns
+
+  * `true` or `false`.
+
   ### Examples
 
       iex> Tempo.floating?(~o"2024-01-01")
@@ -3073,6 +3240,14 @@ defmodule Tempo do
   @doc """
   Whether an expression carries a zone or a time shift, so a place on the
   universal time line. The complement of `floating?/1`.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  ### Returns
+
+  * `true` or `false`.
 
   ### Examples
 
@@ -3123,6 +3298,14 @@ defmodule Tempo do
   @doc """
   Whether an expression covers no time: a set with no members.
 
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  ### Returns
+
+  * `true` or `false`.
+
   ### Examples
 
       iex> Tempo.empty?(~o"{}")
@@ -3138,27 +3321,21 @@ defmodule Tempo do
 
   @doc """
   The qualifications of a value: which of its units are uncertain (`?`),
-  approximate (`~`) or both (`%`), as a map from unit to qualification,
-  `nil` when the value has none; with a unit, that unit's.
+  approximate (`~`) or both (`%`), as a map from unit to qualification.
 
   ### Arguments
 
   * `value` is a `t:t/0`.
 
-  * `unit` is a unit.
-
   ### Returns
 
-  * A map, or `nil`; with a unit, `:uncertain`, `:approximate`, `:both` or
-    `nil`.
+  * A map from unit to `:uncertain`, `:approximate` or `:both`; `nil` when
+    the value has none.
 
   ### Examples
 
       iex> Tempo.qualification(~o"2026-06~-15")
       %{year: :approximate, month: :approximate}
-
-      iex> Tempo.qualification(~o"2026-06~-15", :month)
-      :approximate
 
       iex> Tempo.qualification(~o"2026-06-15")
       nil
@@ -3168,6 +3345,30 @@ defmodule Tempo do
   def qualification(%__MODULE__{qualifications: qualifications}), do: qualifications
   def qualification(other), do: not_an_expression!(other)
 
+  @doc """
+  The qualification of one unit of a value: whether it is uncertain (`?`),
+  approximate (`~`) or both (`%`).
+
+  ### Arguments
+
+  * `value` is a `t:t/0`.
+
+  * `unit` is a unit, such as `:year` or `:month`.
+
+  ### Returns
+
+  * `:uncertain`, `:approximate` or `:both`; `nil` when the unit is
+    neither.
+
+  ### Examples
+
+      iex> Tempo.qualification(~o"2026-06~-15", :month)
+      :approximate
+
+      iex> Tempo.qualification(~o"2026-06~-15", :day)
+      nil
+
+  """
   @spec qualification(t(), unit()) :: :uncertain | :approximate | :both | nil
   def qualification(%__MODULE__{qualifications: nil}, _unit), do: nil
 
@@ -3178,6 +3379,14 @@ defmodule Tempo do
 
   @doc """
   The metadata an expression carries: a map, empty by default.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  ### Returns
+
+  * The metadata, a map.
 
   ### Examples
 
@@ -3200,6 +3409,11 @@ defmodule Tempo do
   * `expression` is a `t:t/0`.
 
   * `metadata` is a map.
+
+  ### Returns
+
+  * The expression with the metadata merged in, a key given replacing
+    the one it carried.
 
   ### Examples
 
@@ -3305,6 +3519,15 @@ defmodule Tempo do
   @doc """
   `select/3`, returning the set or raising.
 
+  ### Arguments
+
+  * The arguments are those of `select/3`.
+
+  ### Returns
+
+  * What `select/3` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
+
   ### Examples
 
       iex> ~o"2026-06" |> Tempo.select!(~o"5K") |> Tempo.IntervalSet.count()
@@ -3363,13 +3586,24 @@ defmodule Tempo do
   `workdays/2`, returning the workdays or raising: for a territory written
   in the code, as in a module attribute.
 
+  ### Arguments
+
+  * The arguments are those of `workdays/2`.
+
+  ### Returns
+
+  * What `workdays/2` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
+
   ### Examples
 
-      iex> Tempo.workdays!(:SA).weekend
-      [5, 6]
+      iex> saudi_arabia = Tempo.workdays!(:SA)
+      iex> Tempo.workday?(~o"2026-06-19", saudi_arabia)
+      false
 
-      iex> Tempo.workdays!(:US, except: ~o"2026-07-03").except
-      ~o"2026-07-03"
+      iex> observed = Tempo.workdays!(:US, except: ~o"2026-07-03")
+      iex> Tempo.workday?(~o"2026-07-03", observed)
+      false
 
   """
   @spec workdays!(term(), keyword()) :: Workdays.t()
@@ -3383,6 +3617,16 @@ defmodule Tempo do
   @doc """
   The weekend of a territory as a selector: the days of the week its
   weekend falls on.
+
+  ### Arguments
+
+  * `territory` is a territory code or `nil`, as for `workdays/2`.
+
+  ### Returns
+
+  * `{:ok, selector}`, a `t:t/0` naming the days of the week.
+
+  * `{:error, exception}` for a territory Localize does not know.
 
   ### Examples
 
@@ -3719,6 +3963,15 @@ defmodule Tempo do
   @doc """
   `from_elixir/2`, returning the value or raising.
 
+  ### Arguments
+
+  * The arguments are those of `from_elixir/2`.
+
+  ### Returns
+
+  * What `from_elixir/2` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
+
   ### Examples
 
       iex> Tempo.from_elixir!(~T[10:30:00])
@@ -3742,6 +3995,15 @@ defmodule Tempo do
       ] do
     @doc """
     A Tempo value from a `#{inspect(struct)}`, as `from_elixir/2` reads one.
+
+    ### Arguments
+
+    * `value` is a `t:#{inspect(struct)}.t/0`.
+
+    ### Returns
+
+    * The value, a `t:t/0`. Anything but a `#{inspect(struct)}` raises a
+      `Tempo.ConversionError`.
 
     ### Examples
 
@@ -3812,6 +4074,17 @@ defmodule Tempo do
   @doc """
   The `Date` of a value written to the day or finer, on any axis.
 
+  ### Arguments
+
+  * `value` is a `t:t/0`.
+
+  ### Returns
+
+  * `{:ok, date}`, a `t:Date.t/0`.
+
+  * `{:error, %Tempo.ConversionError{}}` for a value coarser than a day, a
+    value with no date, or any other expression.
+
   ### Examples
 
       iex> Tempo.to_date(~o"2026-06-15T10:30")
@@ -3828,6 +4101,17 @@ defmodule Tempo do
   @doc """
   The `Time` of a value with a time of day; units it does not write are zero.
 
+  ### Arguments
+
+  * `value` is a `t:t/0`.
+
+  ### Returns
+
+  * `{:ok, time}`, a `t:Time.t/0`.
+
+  * `{:error, %Tempo.ConversionError{}}` for a value with no time of day,
+    or any other expression.
+
   ### Examples
 
       iex> Tempo.to_time(~o"2026-06-15T10:30")
@@ -3835,11 +4119,23 @@ defmodule Tempo do
 
   """
   @spec to_time(t()) :: {:ok, Time.t()} | {:error, error()}
-  def to_time(value), do: Interop.to_time(value)
+  def to_time(value) when is_expression(value), do: Interop.to_time(value)
+  def to_time(other), do: not_an_expression(other)
 
   @doc """
   The `NaiveDateTime` of a value written to the day or finer; units it does
   not write are zero, and a zone is dropped.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`.
+
+  ### Returns
+
+  * `{:ok, datetime}`, a `t:NaiveDateTime.t/0`.
+
+  * `{:error, %Tempo.ConversionError{}}` for a value coarser than a day, a
+    value with no date, or any other expression.
 
   ### Examples
 
@@ -3848,10 +4144,15 @@ defmodule Tempo do
 
   """
   @spec to_naive_datetime(t()) :: {:ok, NaiveDateTime.t()} | {:error, error()}
-  def to_naive_datetime(value), do: Interop.to_naive(value)
+  def to_naive_datetime(value) when is_expression(value), do: Interop.to_naive(value)
+  def to_naive_datetime(other), do: not_an_expression(other)
 
   @doc """
   The `DateTime` of a value with a zone or a time shift.
+
+  ### Arguments
+
+  * `value` is a `t:t/0`.
 
   ### Returns
 
@@ -3870,7 +4171,8 @@ defmodule Tempo do
 
   """
   @spec to_datetime(t()) :: {:ok, DateTime.t()} | {:error, error()}
-  def to_datetime(value), do: Interop.to_datetime(value)
+  def to_datetime(value) when is_expression(value), do: Interop.to_datetime(value)
+  def to_datetime(other), do: not_an_expression(other)
 
   # ── Now ───────────────────────────────────────────────────────────────
 
@@ -3904,6 +4206,10 @@ defmodule Tempo do
   @doc """
   The current second in UTC.
 
+  ### Returns
+
+  * The current second, a `t:t/0` in `Etc/UTC`.
+
   ### Examples
 
       iex> Tempo.zoned?(Tempo.utc_now())
@@ -3918,6 +4224,16 @@ defmodule Tempo do
 
   @doc """
   Today's date in a zone: a floating day.
+
+  ### Arguments
+
+  * `zone` is an IANA zone name; the default is `"Etc/UTC"`.
+
+  ### Returns
+
+  * `{:ok, value}`, a `t:t/0` at day resolution with no zone.
+
+  * `{:error, %Tempo.ZoneError{}}` for a zone the database does not know.
 
   ### Examples
 
@@ -3935,6 +4251,10 @@ defmodule Tempo do
 
   @doc """
   Today's date in UTC.
+
+  ### Returns
+
+  * Today's date in UTC, a `t:t/0` at day resolution with no zone.
 
   ### Examples
 
@@ -4028,6 +4348,15 @@ defmodule Tempo do
 
   @doc """
   `to_string/2`, returning the words or raising.
+
+  ### Arguments
+
+  * The arguments are those of `to_string/2`.
+
+  ### Returns
+
+  * What `to_string/2` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
 
   ### Examples
 
@@ -4201,6 +4530,9 @@ defmodule Tempo do
 
   * `{:error, exception}`, the first error the function answers.
 
+  * `{:error, %ArgumentError{}}` when `enumerable` is not enumerable or
+    `fun` is not a function of one argument.
+
   ### Examples
 
       iex> independence_days = [~o"2025-07-04", ~o"2026-07-04", ~o"2027-07-04"]
@@ -4214,6 +4546,14 @@ defmodule Tempo do
   @spec try_map(Enumerable.t(), (t() -> t() | {:ok, t()} | {:error, error()})) ::
           {:ok, t()} | {:error, error()}
   def try_map(enumerable, fun) when is_function(fun, 1) do
+    if Enumerable.impl_for(enumerable),
+      do: mapping(enumerable, fun),
+      else: {:error, not_enumerable(enumerable)}
+  end
+
+  def try_map(_enumerable, fun), do: {:error, not_a_function(fun)}
+
+  defp mapping(enumerable, fun) do
     enumerable
     |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
       case fun.(member) do
@@ -4233,6 +4573,12 @@ defmodule Tempo do
     |> mapped()
   end
 
+  defp not_enumerable(enumerable),
+    do: ArgumentError.exception("an enumerable of expressions, not #{inspect(enumerable)}")
+
+  defp not_a_function(fun),
+    do: ArgumentError.exception("a function of one argument, not #{inspect(fun)}")
+
   defp mapped({:ok, []}), do: {:ok, %__MODULE__{form: {:all, []}}}
 
   defp mapped({:ok, reversed}) do
@@ -4245,6 +4591,15 @@ defmodule Tempo do
   @doc """
   `try_map/2`, returning the set or raising.
 
+  ### Arguments
+
+  * The arguments are those of `try_map/2`.
+
+  ### Returns
+
+  * What `try_map/2` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
+
   ### Examples
 
       iex> [~o"2025-07-04", ~o"2026-07-04"] |> Tempo.map(&Tempo.nearest_workday(&1, :US)) |> Tempo.IntervalSet.count()
@@ -4252,7 +4607,7 @@ defmodule Tempo do
 
   """
   @spec map(Enumerable.t(), (t() -> t() | {:ok, t()} | {:error, error()})) :: t()
-  def map(enumerable, fun) when is_function(fun, 1) do
+  def map(enumerable, fun) do
     case try_map(enumerable, fun) do
       {:ok, set} -> set
       {:error, exception} -> raise exception
@@ -4305,6 +4660,15 @@ defmodule Tempo do
 
     @doc """
     `#{name}/#{arity}`, returning its answer or raising the error.
+
+    ### Arguments
+
+    * The arguments are those of `#{name}/#{arity}`.
+
+    ### Returns
+
+    * What `#{name}/#{arity}` returns as `{:ok, answer}`, the answer alone.
+      The error it returns as `{:error, exception}` is raised.
 
     ### Examples
 

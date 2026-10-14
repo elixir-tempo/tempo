@@ -96,7 +96,9 @@ defmodule Tempo.Cron do
 
   """
   @spec parse(String.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-  def parse(expression, options \\ []) when is_binary(expression) do
+  def parse(expression, options \\ [])
+
+  def parse(expression, options) when is_binary(expression) do
     with :ok <- Options.check(options, [:from, :metadata], "Tempo.Cron.parse/2"),
          {:ok, fields} <- fields(String.trim(expression)),
          {:ok, parsed} <- parse_fields(fields) do
@@ -104,8 +106,19 @@ defmodule Tempo.Cron do
     end
   end
 
+  def parse(other, _options),
+    do: {:error, ArgumentError.exception("a cron expression is text, not #{inspect(other)}")}
+
   @doc """
   `parse/2`, returning the recurrence or raising.
+
+  ### Arguments
+
+  * `expression` and `options` are as for `parse/2`.
+
+  ### Returns
+
+  * The recurrence, a `t:Tempo.t/0`, or raises the error `parse/2` returns.
 
   ### Examples
 
