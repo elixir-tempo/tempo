@@ -33,13 +33,12 @@ defmodule Tempo.Zone do
   @second 1_000_000
   @day 86_400 * @second
 
-  # The days of a zone whose offset is asked of the database together
-  # (`steady_days/2`), and how many such answers a process keeps before it
-  # forgets them and begins again. With the day either side, the days
-  # together span six days, within the week in which no zone's offset has
-  # changed twice since 1900.
-  @days_together 4
-  @days_kept 20_000
+  # The spacing of the points at which a zone's offset is asked of the
+  # database (`known_days/2`), within the week in which no zone's offset
+  # has changed twice since 1900, and how many answers a process keeps
+  # before it forgets them and begins again.
+  @sample_spacing 6 * 86_400 * 1_000_000
+  @stretches_kept 40_000
 
   # The longest span `steady_offset/4` answers for: no zone's offset has
   # changed twice within it since 1900.
@@ -140,19 +139,17 @@ defmodule Tempo.Zone do
   def offsets_at_wall(%__MODULE__{offset: minutes}, _wall) when is_integer(minutes),
     do: [minutes * 60 * @second]
 
+  # A wall reading is shown at the offsets in force a day either side of it
+  # (an offset is less than a day, and no zone's offset has changed twice in
+  # a week) at which the moment it gives has that offset: one, both of two
+  # where the clock goes back, or neither where it goes forward.
   def offsets_at_wall(%__MODULE__{name: name}, wall) do
-    case known_days(name, days_of(wall)) do
-      {_key, {:ok, offset}} ->
-        [offset]
+    before = utc_offset(name, wall - @day)
+    later = utc_offset(name, wall + @day)
 
-      {_key, {:change, before, later, _same_until, _changed_from}} ->
-        shown_at(name, wall, before, later)
-    end
+    if before == later, do: [before], else: shown_at(name, wall, before, later)
   end
 
-  # A wall reading near the one change of its days is shown at an offset
-  # where the moment it gives there has that offset: before the change,
-  # after it, at both (the clock going back) or at neither (going forward).
   defp shown_at(name, wall, before, later) do
     case {utc_offset(name, wall - before) == before, utc_offset(name, wall - later) == later} do
       {true, true} -> [before, later]
@@ -185,7 +182,7 @@ defmodule Tempo.Zone do
   def offset_at_utc(%__MODULE__{name: name}, utc), do: utc_offset(name, utc)
 
   defp utc_offset(name, utc) do
-    case known_days(name, days_of(utc)) do
+    case known_days(name, Integer.floor_div(utc, @sample_spacing)) do
       {_key, {:ok, offset}} -> offset
       {key, {:change, _, _, _, _} = change} -> beside_the_change(key, change, name, utc)
     end
@@ -214,53 +211,63 @@ defmodule Tempo.Zone do
     offset
   end
 
-  defp days_of(tick), do: Integer.floor_div(tick, @days_together * @day)
-
   defp asked_at_utc(name, utc) do
     {:ok, period} = period_at_utc(name, seconds(utc))
     offset(period)
   end
 
-  # What is known of a zone's offset through a few days and the day either
-  # side of them. The database is asked at the start of the day before and
-  # the end of the day after, six days apart. Since 1900 no zone's offset
-  # has changed twice within a week, so the two being the same is the offset
-  # throughout, and their differing is one change between the two: the
-  # offsets before and after it, the last tick known to be before it and
-  # the first known to be after. A UTC tick or a wall reading of the days is
-  # answered from that, an offset being less than a day, and the database is
-  # asked only of a tick between the two. What is known is kept in the
-  # process, as many days as `@days_kept`, by the zone's name: a process
-  # that changes its time zone database keeps what the last one answered.
-  defp known_days(name, days) do
-    key = {__MODULE__, name, days}
+  # What is known of a zone's offset between two points six days apart on
+  # the UTC line. The database is asked at each point once, each answer
+  # serving the stretch before the point and the one after. Since 1900 no
+  # zone's offset has changed twice within a week, so the two being the
+  # same is the offset throughout, and their differing is one change between
+  # them: the offsets before and after it, the last tick known to be before
+  # it and the first known to be after, the database being asked only of a
+  # tick between the two. What is known is kept in the process, as many
+  # stretches as `@stretches_kept`, by the zone's name: a process that
+  # changes its time zone database keeps what the last one answered.
+  defp known_days(name, stretch) do
+    key = {__MODULE__, name, stretch}
 
     case Process.get(key) do
-      nil -> {key, kept(key, across(name, days * @days_together))}
+      nil -> {key, kept(key, across(name, stretch))}
       known -> {key, known}
     end
   end
 
-  defp across(name, first_day) do
-    from = (first_day - 1) * @day
-    to = (first_day + @days_together + 1) * @day - @second
-    before = asked_at_utc(name, from)
-    later = asked_at_utc(name, to)
+  defp across(name, stretch) do
+    from = stretch * @sample_spacing
+    to = from + @sample_spacing
+    before = sampled(name, from)
+    later = sampled(name, to)
 
     if later == before, do: {:ok, before}, else: {:change, before, later, from, to}
   end
 
+  defp sampled(name, at) do
+    key = {__MODULE__, name, :at, at}
+
+    case Process.get(key) do
+      nil -> kept(key, asked_at_utc(name, at))
+      offset -> offset
+    end
+  end
+
   defp kept(key, answer) do
-    count = Process.get({__MODULE__, :days_kept}, 0)
-    if count >= @days_kept, do: forget_days()
-    Process.put({__MODULE__, :days_kept}, rem(count, @days_kept) + 1)
+    count = Process.get({__MODULE__, :kept}, 0)
+    if count >= @stretches_kept, do: forget_days()
+    Process.put({__MODULE__, :kept}, rem(count, @stretches_kept) + 1)
     Process.put(key, answer)
     answer
   end
 
   defp forget_days do
-    for {__MODULE__, _name, _days} = key <- Process.get_keys(), do: Process.delete(key)
+    for key <- Process.get_keys(), kept_key?(key), do: Process.delete(key)
   end
+
+  defp kept_key?({__MODULE__, name, _stretch}), do: is_binary(name)
+  defp kept_key?({__MODULE__, name, :at, _tick}), do: is_binary(name)
+  defp kept_key?(_key), do: false
 
   @doc """
   The offset a wall reading is placed by: the written shift where there is
