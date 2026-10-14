@@ -4,6 +4,8 @@ The questions put to the user while Tempo 2.0 was built, each with its context, 
 
 Each entry has the same parts: the question, the context it arose in (with what the code did at the time), the options, the decision and its date, and its state (built, or to build).
 
+`guides/design-decisions.md` is the published form, for users of the library and for anyone designing one: the decisions grouped by subject, each with its question, its alternatives, the choice and the reasons, and examples the guide tests run. A decision added here that bears on what Tempo does is added there too.
+
 ## 1. The golden comparison with 1.6
 
 * **Question.** Does the suite that compared every answer with the published 1.6 stay?

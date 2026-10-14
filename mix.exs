@@ -165,7 +165,8 @@ defmodule Tempo.MixProject do
       ],
       Foundations: [
         "guides/temporal-formalisms.md",
-        "guides/custom-calendars.md"
+        "guides/custom-calendars.md",
+        "guides/design-decisions.md"
       ]
     ]
   end
