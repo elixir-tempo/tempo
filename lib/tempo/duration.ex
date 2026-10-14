@@ -7,6 +7,14 @@ defmodule Tempo.Duration do
   given a start (`2026-06-01/P1M`) and what a value is shifted by
   (`Tempo.shift`).
 
+  `new/1` builds one from its units and `Tempo.duration/2` measures the
+  length of an expression. `add/2`, `subtract/2`, `sum/1`, `multiply/2` and
+  `negate/1` are its arithmetic; `compare/3` orders two, and `Tempo`'s
+  `at_least?/2`, `at_most?/2` and `exactly?/2` say how they compare.
+  `to_unit/3` and `to_microseconds/1` count one in a unit, and `exact?/1`
+  says whether it has a length without a place to begin, which a duration
+  of years or months does not.
+
   """
 
   alias Tempo.ConversionError

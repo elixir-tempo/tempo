@@ -34,7 +34,7 @@ Once every value is a bounded interval, set operations follow naturally: union, 
 
 ## What it looks like
 
-Full ISO 8601-2 / EDTF / IXDTF support, calendar-aware arithmetic, cross-zone set operations. In fact, probably the only fully ISO 8601 Parts 1 and 2 in existence (really, I couldn't find one anywhere - please let me know if you know of one).
+Full ISO 8601-2 / EDTF / IXDTF support, calendar-aware arithmetic, cross-zone set operations. In fact, probably the only full implementation of ISO 8601 Parts 1 and 2 in existence (really, I couldn't find one anywhere - please let me know if you know of one).
 
 Every example below uses the `~o` sigil to construct Tempo values at compile time. Before running any of them — in `iex`, a script, or a module — you must bring the sigil into scope:
 
@@ -60,7 +60,7 @@ true
 
 # Values in different zones are compared on the one time line
 iex> paris = Tempo.from_elixir!(DateTime.new!(~D[2026-06-15], ~T[10:00:00], "Europe/Paris"))
-iex> Tempo.overlaps?(paris, ~o"2026-06-15T07Z/2026-06-15T09Z")
+iex> Tempo.within?(paris, ~o"2026-06-15T07Z/2026-06-15T09Z")
 true
 
 # Values in different calendars too, with no conversion by hand
@@ -183,7 +183,7 @@ More in the [Pattern matching with sigils](https://hexdocs.pm/ex_tempo/pattern-m
 
 * **Correctness by construction.** Every value denotes half-open spans `[from, to)` on the time line, so adjacent spans join cleanly (`[a, b)` and `[b, c)` are `[a, c)`). An interval is read as it is written: one written to a date runs through that date (`2026/2028` is three years), and one written to a time of day runs to that reading. "End of day" ambiguity, midnight off-by-ones and DST-hour confusion vanish at the type level.
 
-* **Full support for the time standards that matter.** ISO 8601 Parts 1 and 2, EDTF Levels 0–2, IXDTF. 100% of the `unt-libraries/edtf-validate` corpus passes. Leap seconds, long years (`Y17E8`), significant-digits notation, mask syntax, open-ended intervals, per-endpoint qualifications — all parsed and queryable.
+* **Full support for the time standards that matter.** ISO 8601 Parts 1 and 2, EDTF Levels 0–2, IXDTF. 100% of the `unt-libraries/edtf-validate` corpus passes. Long years (`Y17E8`), significant-digits notation, mask syntax, open-ended intervals, per-endpoint qualifications — all parsed and queryable — and the leap seconds a span holds are counted into its length (`Tempo.LeapSeconds`).
 
 * **First-class set algebra on time.** Union, intersection, complement, difference, symmetric difference — plus the predicate set (`disjoint?`, `overlaps?`, `within?`, `contains?`, `equal?`) — all defined over any Tempo value. Cross-zone, cross-calendar, across resolutions.
 
@@ -203,9 +203,9 @@ The [ElixirConf '22 talk](https://www.youtube.com/watch?v=4VfPvCI901c) introduce
 
 Tempo draws on several bodies of work:
 
-* **Allen's Interval Algebra** — James F. Allen's 13 relations between intervals (`precedes`, `meets`, `overlaps`, `finishes`, `contains`, `starts`, `equals`, and their inverses). [See the survey](https://ics.uci.edu/~alspaugh/cls/shr/allen.html). Tempo's interval relations and `overlaps?/2` / `contains?/2` predicates descend directly from this work.
+* **Allen's Interval Algebra** — James F. Allen's 13 relations between intervals (`precedes`, `meets`, `overlaps`, `finished_by`, `contains`, `starts`, `equals`, and their inverses). [See the survey](https://ics.uci.edu/~alspaugh/cls/shr/allen.html). Tempo's interval relations and `overlaps?/2` / `contains?/2` predicates descend directly from this work.
 
-* **Temporal databases and the chronon concept.** Jensen, Dyreson, and Tansel's *Consensus Glossary of Temporal Database Concepts* (1998) defines the *chronon* — an indivisible time unit whose resolution determines how the surrounding value is interpreted. Tempo's "resolution" field is the direct analogue.
+* **Temporal databases and the chronon concept.** Jensen, Dyreson, and Tansel's *Consensus Glossary of Temporal Database Concepts* (1998) defines the *chronon* — an indivisible time unit whose resolution determines how the surrounding value is interpreted. Tempo's resolution (`Tempo.resolution/1`) is the direct analogue.
 
 * **Eric Evans' "Exploring Time"** talk. Evans makes the case for considering time as an interval rather than an instant in a domain-driven-design setting. His framing influenced the earliest design sketches of Tempo.
 
@@ -219,7 +219,7 @@ Tempo draws on several bodies of work:
 
 * **RFC 9557, the Internet Extended Date/Time Format (IXDTF).** The extended date-time format for annotations such as `[Europe/Paris][u-ca=hebrew]`. Supported in both parse and round-trip.
 
-Tempo is published on hex as `ex_tempo` because the `tempo` name on hex was already taken; the library is imported as `use Tempo` / `alias Tempo` and feels like `tempo` in code. Docs at [https://hexdocs.pm/ex_tempo](https://hexdocs.pm/ex_tempo).
+Tempo is published on hex as `ex_tempo` because the `tempo` name on hex was already taken; its modules are `Tempo` and `Tempo.*`, so in code it is `tempo`. Docs at [https://hexdocs.pm/ex_tempo](https://hexdocs.pm/ex_tempo).
 
 ### Time-zone database
 
@@ -321,4 +321,4 @@ Further reading:
 
 ## Licence
 
-See [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v1.0.0/LICENSE.md). Copyright © Kip Cole.
+See [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.0.0/LICENSE.md). Copyright © Kip Cole.

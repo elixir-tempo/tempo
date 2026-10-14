@@ -10,6 +10,11 @@ defmodule Tempo.Interval do
   reading it runs to, as the text is read (law 9); the span the interval
   denotes is half-open either way.
 
+  `new/1` builds one from its two ends, and `from/1`, `to/1` and
+  `endpoints/1` read them back. `instants/1` gives the instants it begins
+  and ends at, and `leap_seconds_spanned/1` and `spans_leap_second?/1`
+  the leap seconds within it.
+
   """
 
   alias Tempo.ConversionError

@@ -6,6 +6,13 @@ defmodule Tempo.IntervalSet do
   members are in one calendar (law 5), and enumerating the set yields them
   (law 6). The set operations of `Tempo` return one.
 
+  `new/2` builds one from its members and `members/1` gives them back.
+  `count/1`, `first/1` and `last/1` read it; `filter/2` and `map/2` work
+  member by member, and `coalesce/2` joins the members that touch.
+  `walk/1` gives the spans the set covers, `covered?/2` asks whether a
+  value lies within them, and `slots/3` cuts free time into lengths.
+  `from_stream/2` makes one from a stream of expressions.
+
   """
 
   alias Tempo.Algebra

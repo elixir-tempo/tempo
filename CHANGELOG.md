@@ -86,6 +86,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * The modifiers of the `~o` sigil; write a calendar as a `[u-ca=…]` suffix.
 
+* `Tempo.Clock.Test`; a test sets its own clock with `Process.put({Tempo.Clock, :clock}, MyClock)`.
+
 ### Added
 
 * A guide to selection: every part of a selection, written and built with `Tempo.selection/1`, with positions, nesting, sets, events, rolls, skips and zones.
@@ -119,6 +121,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * `Tempo.RecurrenceSet` with `keep_when/2` and `move_when/2`, for a holiday observed on another day.
 
 * `Tempo.Event`: named days a calendar computes (Easter, the solar terms), written in a rule as `(easter)e`.
+
+* `Tempo.Event.Resolver`: an application's own computed events, registered under `config :ex_tempo, :event_resolvers`.
+
+* A value that asks for more than `:max_values_at_once` values at once (10,000 by default) is a `Tempo.ConversionError` with reason `:too_many_values`.
 
 * `Tempo.Workdays`, with days left out by `:except`, and `Tempo.roll_to_workday/3`.
 
