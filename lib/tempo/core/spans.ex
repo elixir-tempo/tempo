@@ -883,7 +883,23 @@ defmodule Tempo.Spans do
     end
   end
 
-  defp begins_at?(%Tempo{} = value, position), do: match?({:ok, {^position, _}}, extent(value))
+  # A reading built at a position begins there where its clock keeps one
+  # offset about it: always on the floating line, and in a zone whose clock
+  # does not change within a day of it. Elsewhere it is placed to see, since
+  # the clock may skip or repeat where it would begin.
+  defp begins_at?(%Tempo{zone: nil, shift: nil}, _position), do: true
+
+  defp begins_at?(%Tempo{zone: %Zone{name: name} = zone, shift: nil} = value, position)
+       when is_binary(name) do
+    case Zone.steady_offset(zone, nil, position - @day, position + @day) do
+      {:ok, _offset} -> true
+      :changes -> placed_at?(value, position)
+    end
+  end
+
+  defp begins_at?(value, position), do: placed_at?(value, position)
+
+  defp placed_at?(value, position), do: match?({:ok, {^position, _}}, extent(value))
 
   # A reading that ends where its zone's clock changes may end on no reading
   # of its own unit at its own shift: the half hour from midnight that ends

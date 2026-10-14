@@ -176,6 +176,12 @@ The `.credo.exs` config runs every check at its **default threshold** — there 
 
 The only standing config deviations are disables with concrete, documented reasons in `.credo.exs`: `Design.AliasUsage` is **enabled** (nested `Tempo.*` modules are aliased to collapse the namespace by the primary level — `Tempo.Foo.Bar` → `Bar`) but carries an `excluded_lastnames` list so an alias never shadows an Elixir/Erlang built-in (`Calendar`, `Inspect`, `Duration`, `Range`, …); `Design.TagTODO` and `Design.TagFIXME` are off because inline tags are intentional pointers. Changing a threshold or adding a new disable is itself a change that needs its own justification — refactor first.
 
+## Performance — hand on what is found, within the module
+
+**A step that finds a position hands it to the next step that needs it, within its module, rather than writing a value and having the next step place it again.** Placing a value on the line (`Tempo.Spans.extent/1`) and building one at a position (`Tempo.Spans.value_at/4`) are each a few hundred nanoseconds, and a walk that throws away what it has just found pays them again at every step: a plain recurrence that placed its unchanging first start twice an occurrence was half its time (decisions 62 and 63, `plans/carried-position.md`). A review that finds a position computed, discarded and recomputed within one module hands it on.
+
+Positions cross a module boundary only where they already do, as the occurrence-and-extent pairs of a walk (`Tempo.Recurrence`, `Tempo.Spans.windowed/2`), dropped before an occurrence is handed back. A second representation of a value through the engine was measured and declined (decisions 57 and 63): it threads two shapes through a module's pipeline and keeps the rule that a carried extent is the value's own by hand, for a gain the measurement put at about a quarter of an occurrence. Measure first (`bench/against_1_6_bench.exs`, profiled by layer), and record what a change bought in its decision.
+
 ## Reference documents
 
 The following documents are **critical** when working on this project. Consult them whenever behaviour, syntax, or semantics need to be verified — do not guess.

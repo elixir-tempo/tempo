@@ -307,12 +307,15 @@ defmodule Tempo.Unit do
   def coarsest([{:group, {_nth, [{unit, _size}]}} | _]), do: unit
   def coarsest(units), do: units |> hd() |> elem(0)
 
-  @doc "Whether a value has a year, a decade or a century, and so a place on the time line."
+  @doc """
+  Whether a value has a year, a decade or a century, and so a place on the
+  time line. A value's units are coarsest first (`ordered/1`), so it has one
+  where its first unit is one: it is answered without a walk along them.
+  """
   @spec anchored?(units()) :: boolean()
-  def anchored?(units) do
-    (Keyword.has_key?(units, :year) and Keyword.get(units, :year) != :any) or
-      Keyword.has_key?(units, :decade) or Keyword.has_key?(units, :century)
-  end
+  def anchored?([{unit, _held} | _]) when unit in [:century, :decade], do: true
+  def anchored?([{:year, held} | _]), do: held != :any
+  def anchored?(_units), do: false
 
   @doc "The units with an unspecified year (`X*Y6M`) left off: what places a value on a cycle."
   @spec cyclic(units()) :: units()
