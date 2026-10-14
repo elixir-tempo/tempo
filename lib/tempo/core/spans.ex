@@ -1138,8 +1138,9 @@ defmodule Tempo.Spans do
   defp taken_before(stream, stop), do: Stream.take_while(stream, &starts_before?(&1, stop))
 
   @doc "Whether a span, or an occurrence with its extent, ends at or before a position."
-  @spec ends_by?(Tempo.t() | {Tempo.t(), extent()}, Scale.position()) :: boolean()
+  @spec ends_by?(Tempo.t() | {Tempo.t(), extent() | nil}, Scale.position()) :: boolean()
   def ends_by?({%Tempo{}, {_, stop}}, start), do: stop <= start
+  def ends_by?({%Tempo{} = occurrence, nil}, start), do: ends_by?(occurrence, start)
 
   def ends_by?(occurrence, start) do
     case extent(occurrence) do
@@ -1149,8 +1150,9 @@ defmodule Tempo.Spans do
   end
 
   @doc "Whether a span, or an occurrence with its extent, starts before a position."
-  @spec starts_before?(Tempo.t() | {Tempo.t(), extent()}, Scale.position()) :: boolean()
+  @spec starts_before?(Tempo.t() | {Tempo.t(), extent() | nil}, Scale.position()) :: boolean()
   def starts_before?({%Tempo{}, {start, _}}, stop), do: Scale.compare(start, stop) == :lt
+  def starts_before?({%Tempo{} = occurrence, nil}, stop), do: starts_before?(occurrence, stop)
 
   def starts_before?(occurrence, stop) do
     case extent(occurrence) do

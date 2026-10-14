@@ -167,6 +167,13 @@ defmodule Tempo.Zone do
   # a week) at which the moment it gives has that offset: one, both of two
   # where the clock goes back, or neither where it goes forward.
   def offsets_at_wall(%__MODULE__{name: name}, wall) do
+    case known_steady(name, wall - @day, wall + @day) do
+      {:ok, offset} -> [offset]
+      :unknown -> asked_at_wall(name, wall)
+    end
+  end
+
+  defp asked_at_wall(name, wall) do
     before = utc_offset(name, wall - @day)
     later = utc_offset(name, wall + @day)
 
@@ -205,11 +212,61 @@ defmodule Tempo.Zone do
   def offset_at_utc(%__MODULE__{name: name}, utc), do: utc_offset(name, utc)
 
   defp utc_offset(name, utc) do
-    case known_days(name, Integer.floor_div(utc, @sample_spacing)) do
-      {_key, {:ok, offset}} -> offset
+    case known_steady(name, utc, utc) do
+      {:ok, offset} -> offset
+      :unknown -> sampled_offset(name, utc)
+    end
+  end
+
+  defp sampled_offset(name, utc) do
+    stretch = Integer.floor_div(utc, @sample_spacing)
+
+    case known_days(name, stretch) do
+      {_key, {:ok, offset}} -> steady_through(name, stretch, offset)
       {key, {:change, _, _, _, _} = change} -> beside_the_change(key, change, name, utc)
     end
   end
+
+  # The stretches of a zone's clock known to keep one offset, as a walk comes
+  # to them: the sampled stretches (`known_days/2`) of one offset next to
+  # each other are one, since each keeps its offset throughout, so a walk
+  # forward or back grows one until the clock changes. The two last grown
+  # are kept, the clock's offset before a change and after it, since a walk
+  # near a change asks on both sides of it. A question within one, of a
+  # tick, of the days about a wall reading or of a span, is answered by
+  # comparing integers, where it would ask for a stretch's samples at each
+  # end of what it asks of.
+  defp known_steady(name, from, to) do
+    case Process.get({__MODULE__, name, :steady}, []) do
+      [{first, until, offset} | _] when first <= from and to < until -> {:ok, offset}
+      [_, {first, until, offset}] when first <= from and to < until -> {:ok, offset}
+      _not_known -> :unknown
+    end
+  end
+
+  defp steady_through(name, stretch, offset) do
+    start = stretch * @sample_spacing
+    key = {__MODULE__, name, :steady}
+    Process.put(key, grown(Process.get(key, []), {start, start + @sample_spacing, offset}))
+    offset
+  end
+
+  # A stretch next to a kept one of the same offset grows it; any other is
+  # kept with the last grown, before it.
+  defp grown([{first, start, offset} | older], {start, stop, offset}),
+    do: [{first, stop, offset} | older]
+
+  defp grown([{stop, until, offset} | older], {start, stop, offset}),
+    do: [{start, until, offset} | older]
+
+  defp grown([last, {first, start, offset}], {start, stop, offset}),
+    do: [{first, stop, offset}, last]
+
+  defp grown([last, {stop, until, offset}], {start, stop, offset}),
+    do: [{start, until, offset}, last]
+
+  defp grown([last | _older], stretch), do: [stretch, last]
+  defp grown([], stretch), do: [stretch]
 
   # Where the change of the days is known to come after a tick, or before
   # it, the tick's offset is known; else the database is asked, and what it
@@ -452,14 +509,24 @@ defmodule Tempo.Zone do
   @spec steady_offset(t(), shift() | nil, tick(), tick()) :: {:ok, tick()} | :changes
   def steady_offset(%__MODULE__{name: name} = zone, shift, start, stop)
       when is_binary(name) and stop - start <= @steady_span do
+    case known_steady(name, start, stop - 1) do
+      {:ok, offset} ->
+        if shift == nil or shift_ticks(shift) == offset, do: {:ok, offset}, else: :changes
+
+      :unknown ->
+        asked_steady(zone, shift, start, stop)
+    end
+  end
+
+  def steady_offset(_zone, _shift, _start, _stop), do: :changes
+
+  defp asked_steady(zone, shift, start, stop) do
     offset = offset_at_utc(zone, start)
 
     if offset_at_utc(zone, stop - 1) == offset and (shift == nil or shift_ticks(shift) == offset),
       do: {:ok, offset},
       else: :changes
   end
-
-  def steady_offset(_zone, _shift, _start, _stop), do: :changes
 
   # A shift written beside a zone says which of two showings a reading is,
   # and is then the zone's offset there; one that is not the zone's gives a

@@ -658,3 +658,23 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Restated after 58 and 59, against the code as it then stands, each module's measured size with the reason it exceeds its first budget.
 
 * **State.** Done: section 5.5 of `plans/architecture-redesign.md`, each budget the module's size rounded up to the next fifty lines, which a review holds the code to.
+
+## 61. A zone asked once for each stretch of one offset
+
+* **Question.** `Tempo.Zone` answers an offset at a tick from what it keeps in the process, sampled six days apart, and a weekly rule's occurrence asks it about 100 times. Is the zone asked for a stretch of one offset instead?
+
+* **Context.** Found profiling rule expansion by layer (2026-10-15): the zone was 11 to 22% of a rule's time. A zone's offset changes a few times a year; `Calendar.TimeZoneDatabase` answers at an instant and gives no bounds, so the stretch's ends are found as `Zone` already finds a change, by halving.
+
+* **Decision (2026-10-15).** Yes.
+
+* **State.** Built inside `Tempo.Zone`, its callers unchanged. Sampled stretches of one offset next to each other are kept as one, as a walk comes to them, and the two last grown are kept (the offsets before and after a change, which a walk near one asks on both sides of); a question of a tick, of the days about a wall reading or of a span within one is answered by comparing integers. The stretch's ends are where the samples are, not the change itself, so nothing is halved to find them. A question of the zone went from 53 to 45 ns, of the days about a wall reading from 98 to 45, of a span's one offset from 109 to 41. Weekly MWF went from 17.5 to 13.6 ms, last weekday from 29.8 to 26.9, weekdays from 3.84 to 3.64; hourly and daily are unchanged, and yearly went from 1.52 to 1.69 ms, a walk that jumps a year at a time missing the stretch it keeps at each step, and walking the hours of a day the clock springs forward from 2.1 to 3.1 µs, every question near the change missing too. `Zone` is 613 lines, its budget raised to 650 (section 5.5).
+
+## 62. An engine value that carries its position
+
+* **Question.** A value is held as its units as written, and each question of it (its resolution, whether it is plain or has a year, which units are of the date and which of the clock, its extent) walks them again: 35 to 50% of a rule's time. Is a value inside the engine held with its frame, extent and resolution reckoned once, written as units only when it is handed back?
+
+* **Context.** The same profile. Decision 56 carried an extent along one path; decision 57 weighed the cost of a second representation in `Tempo.Select`. The options were (1) a short design and a prototype on one path, measured, before deciding; (2) after 2.0.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Designed and prototyped: `plans/carried-position.md`. A daily occurrence is about a quarter placing values and a fifth building them, so a second representation through the engine has a ceiling of about a quarter, at the cost decision 57 declined. The prototype builds plain recurrences with the rule walk's builder (`occurrence_at/4`), the first start placed once and each next start kept: 36 to 50% faster, one builder where two were in use. The design recommends keeping it, and a rule for review in place of a second representation: a step that finds a position hands it to the next step that needs it, within its module.

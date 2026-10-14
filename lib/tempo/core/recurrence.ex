@@ -639,21 +639,45 @@ defmodule Tempo.Recurrence do
          {:ok, cadence} <- cadence(from, to, base, recurrence),
          {:ok, indexes} <- indexes(from, bound, recurrence),
          {:ok, until} <- until_position(bound) do
+      # Each occurrence is made with its extent, as a rule's periods are
+      # (`occurrence_at/4`): where the first starts placed once, and where
+      # each next starts kept for it. The extents bound and order the
+      # occurrences, which are handed back without them.
+      walk = make_ref()
+      first_start = start_extent(base)
+
       stream =
         indexes
-        |> Stream.map(fn n -> occurrence(base, {from, to}, cadences(cadence, n), recurrence) end)
+        |> Stream.map(fn n ->
+          base
+          |> occurrence_at({from, to}, cadences(cadence, n), {recurrence, walk, n, first_start})
+          |> placed()
+        end)
         |> Stream.dedup_by(&landing/1)
-        |> Stream.map(&%{&1 | metadata: Map.merge(recurrence.metadata, &1.metadata)})
+        |> Stream.map(fn {occurrence, extent} ->
+          {%{occurrence | metadata: Map.merge(recurrence.metadata, occurrence.metadata)}, extent}
+        end)
         |> bounded(bound, until, options)
+        |> Stream.map(fn {occurrence, _extent} -> occurrence end)
 
       {:ok, stream}
     end
   end
 
+  defp placed({occurrence, nil}), do: {occurrence, Spans.extent(occurrence) |> placed_extent()}
+  defp placed(placed), do: placed
+
+  # An extent on a line; on a cycle each occurrence is its own (`landing/1`).
+  defp placed_extent({:ok, {start, stop} = extent}) when is_integer(start) and is_integer(stop),
+    do: extent
+
+  defp placed_extent(_cycle_or_none), do: nil
+
   # Where an occurrence starts on a line. Two steps that land on one start
   # (the second having stepped over a day the clock left out) are one
   # occurrence; on a cycle each is its own.
   defp landing({%Tempo{}, {start, _stop}}), do: start
+  defp landing({%Tempo{} = occurrence, nil}), do: landing(occurrence)
 
   defp landing(occurrence) do
     case Spans.extent(occurrence) do
