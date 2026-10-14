@@ -467,15 +467,15 @@ defmodule Tempo.Reader.Implied do
 
     case Number.split_while(rest, &(&1 in ?0..?9)) do
       {<<h::binary-size(2)>>, <<":", m::binary-size(2), rest::binary>>} when m != "" ->
-        {:ok, Zone.signed([hour: String.to_integer(h), minute: String.to_integer(m)], behind?),
+        {:ok, Zone.numeric([hour: String.to_integer(h), minute: String.to_integer(m)], behind?),
          rest}
 
       {<<h::binary-size(2), m::binary-size(2)>>, rest} ->
-        {:ok, Zone.signed([hour: String.to_integer(h), minute: String.to_integer(m)], behind?),
+        {:ok, Zone.numeric([hour: String.to_integer(h), minute: String.to_integer(m)], behind?),
          rest}
 
       {<<h::binary-size(2)>>, rest} ->
-        {:ok, Zone.signed([hour: String.to_integer(h)], behind?), rest}
+        {:ok, Zone.numeric([hour: String.to_integer(h)], behind?), rest}
 
       _ ->
         :error

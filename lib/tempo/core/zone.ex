@@ -78,6 +78,25 @@ defmodule Tempo.Zone do
     end
   end
 
+  @doc """
+  A shift written in numbers, as it is held. An offset of nothing ahead of
+  UTC (`+00:00`, `Z0H`) says the local time is UTC's, and is held apart
+  from `Z`, which says no local time: `[hour: 0, minute: 0]`. One of
+  nothing behind (`-00:00`) is `Z`, as RFC 9557 section 2 has it.
+  """
+  @spec numeric(shift(), boolean()) :: shift()
+  def numeric(units, behind?) do
+    case {Enum.all?(units, fn {_unit, value} -> value == 0 end), behind?} do
+      {true, true} -> [hour: 0]
+      {true, false} -> [hour: 0, minute: 0]
+      {false, _} -> signed(units, behind?)
+    end
+  end
+
+  @doc "Whether a shift asserts a local time: any but `Z`, which names UTC and no offset of a place."
+  @spec asserted?(shift() | nil) :: boolean()
+  def asserted?(shift), do: shift not in [nil, [hour: 0]]
+
   @doc "A written shift as ticks: `[hour: -5, minute: 30]` is five and a half hours behind UTC."
   @spec shift_ticks(shift()) :: tick()
   def shift_ticks(shift) do

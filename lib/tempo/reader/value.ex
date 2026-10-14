@@ -235,7 +235,7 @@ defmodule Tempo.Reader.Value do
     case shift_units(rest, []) do
       {[], rest} when sign == 1 -> {:ok, [hour: 0], rest}
       {[], _rest} -> :error
-      {units, rest} -> {:ok, Zone.signed(units, sign == -1), rest}
+      {units, rest} -> {:ok, Zone.numeric(units, sign == -1), rest}
     end
   end
 

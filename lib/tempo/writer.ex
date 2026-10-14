@@ -271,9 +271,12 @@ defmodule Tempo.Writer do
 
   defp shift(nil), do: ""
 
+  defp shift(hour: 0), do: "Z"
+
+  # An offset of nothing is written as one, where `Z` asserts no local time.
   defp shift(shift) do
     if Enum.all?(shift, fn {_, value} -> value == 0 end) do
-      "Z"
+      "Z0H0M"
     else
       sign = if Zone.shift_ticks(shift) < 0, do: "-", else: ""
 

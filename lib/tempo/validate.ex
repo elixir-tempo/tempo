@@ -49,7 +49,8 @@ defmodule Tempo.Validate do
   defp form({:value, units}, expression) do
     with :ok <- value(units, expression),
          :ok <- shift(expression.shift, expression),
-         :ok <- events(units, expression) do
+         :ok <- events(units, expression),
+         :ok <- consistent(units, expression) do
       shown(units, expression)
     end
   end
@@ -106,6 +107,43 @@ defmodule Tempo.Validate do
   end
 
   defp shown(_units, _expression), do: :ok
+
+  # A time shift beside a critical zone is one the zone has then (RFC 9557
+  # section 3.4): `+00:00[!Europe/London]` in July says a local time London's
+  # clock does not show, and the flag says to act on it. `Z` says no local
+  # time, and a zone that is not critical leaves the moment as the shift
+  # gives it.
+  defp consistent(units, %Tempo{zone: %Zone{critical: true} = zone, shift: shift} = expression) do
+    if Zone.asserted?(shift) and Unit.concrete?(units) and day_or_finer?(units),
+      do: has_shift(position(units, %{expression | zone: nil, shift: nil}), zone, expression),
+      else: :ok
+  end
+
+  defp consistent(_units, _expression), do: :ok
+
+  defp has_shift({:ok, {start, stop}}, zone, %Tempo{shift: shift} = expression)
+       when is_integer(start) and is_integer(stop) do
+    offset = Zone.shift_ticks(shift)
+
+    if Zone.offset_at_utc(zone, start - offset) == offset or
+         Zone.offset_at_utc(zone, stop - 1 - offset) == offset,
+       do: :ok,
+       else:
+         {:error,
+          ZoneError.exception(zone: name_of(zone), reason: :inconsistent, value: expression)}
+  end
+
+  defp has_shift(_no_position, _zone, _expression), do: :ok
+
+  defp name_of(%Zone{name: name}) when is_binary(name), do: name
+
+  defp name_of(%Zone{offset: minutes}) do
+    sign = if minutes < 0, do: "-", else: "+"
+    [hours, minutes] = Enum.map([div(abs(minutes), 60), rem(abs(minutes), 60)], &two/1)
+    sign <> hours <> ":" <> minutes
+  end
+
+  defp two(number), do: number |> Integer.to_string() |> String.pad_leading(2, "0")
 
   defp day_or_finer?(units) do
     Keyword.has_key?(units, :year) and

@@ -6,7 +6,8 @@ defmodule Tempo.ZoneError do
 
   * `:reason` is `:unknown` for a name the database does not have, `:gap` for
     a reading the zone's clock skips, `:mixed` for an expression whose parts
-    are in two zones, or `:critical` for a critical suffix Tempo cannot act on.
+    are in two zones, `:critical` for a critical suffix Tempo cannot act on, or
+    `:inconsistent` for a time shift a critical zone does not have then.
 
   """
 
@@ -14,7 +15,7 @@ defmodule Tempo.ZoneError do
 
   @type t :: %__MODULE__{
           zone: term(),
-          reason: :unknown | :gap | :mixed | :critical,
+          reason: :unknown | :gap | :mixed | :critical | :inconsistent,
           value: term()
         }
 
@@ -30,6 +31,11 @@ defmodule Tempo.ZoneError do
 
   def message(%__MODULE__{reason: :mixed, value: value}),
     do: "#{inspect(value)} has parts in two zones; an expression is in one zone"
+
+  def message(%__MODULE__{zone: zone, reason: :inconsistent, value: value}) do
+    "#{inspect(value)} has a time shift the clock of #{inspect(zone)} does not have then, " <>
+      "and the zone is critical"
+  end
 
   def message(%__MODULE__{zone: zone, reason: :critical}),
     do: "The critical suffix #{inspect(zone)} is not one Tempo can act on"

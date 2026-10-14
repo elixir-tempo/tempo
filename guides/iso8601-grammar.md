@@ -97,7 +97,7 @@ shift-extended  = sign hour ":" minute                       ; §5.3.4.1 b) [shi
 shift           = utc / shift-basic / shift-hour / shift-extended
 ```
 
-A shift is written after a time of day, without a space (§5.3.4.2), and belongs to the written end it follows (`plans/architecture-redesign.md`, law 5). Tempo also reads a shift after a date with no time of day, as ISO 8601-2 §7.5 allows in the explicit form.
+A shift is written after a time of day, without a space (§5.3.4.2), and belongs to the written end it follows (`plans/architecture-redesign.md`, law 5). Tempo also reads a shift after a date with no time of day, as ISO 8601-2 §7.5 allows in the explicit form. `Z` names UTC and asserts no local time; `+00:00` asserts a local time at no offset, is held apart from `Z` and is written back as `Z0H0M`; `-00:00` is `Z` (RFC 9557 §2).
 
 ### 2.7 Date and time of day
 

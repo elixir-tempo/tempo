@@ -34,7 +34,7 @@ defmodule Tempo.IntervalTest do
             {[from: ~o"2026-06-01", to: ~o"5786-03-15[u-ca=hebrew]"], :calendars},
             {[from: ~o"2026-06-01[Europe/Paris]", to: ~o"2026-06-30[America/New_York]"], :zones}
           ] do
-        assert {ends, {:error, %IntervalEndpointsError{reason: ^reason}}} =
+        assert {^ends, {:error, %IntervalEndpointsError{reason: ^reason}}} =
                  {ends, Interval.new(ends)}
       end
     end

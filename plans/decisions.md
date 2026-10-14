@@ -375,3 +375,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 1.
 
 * **State.** As built, now documented in `Tempo.to_relative_string/2` as the one place a floating value stands beside a zoned one, and held by `test/tempo/words_test.exs`.
+
+## 33. A time shift that disagrees with the zone beside it
+
+* **Question.** What does Tempo make of a time shift written beside a named zone that the zone does not have at that moment, as in RFC 9557's `2022-07-08T00:14:07+00:00[!Europe/London]`?
+
+* **Context.** RFC 9557 section 3.4 says an application MUST act on such an inconsistency where the zone's suffix has the critical flag `!`, and MAY where it has not; and that `Z` in place of the offset asserts no local time, so `2022-07-08T00:14:07Z[Europe/London]` is never inconsistent. Tempo read all four of the section's figures, critical or not, as the moment the shift gives, and read `+00:00` as `Z`, so it could not tell the form that asserts a local time from the one that does not. Decision 30 had settled that a shift a zone never has within a unit is still the moment itself. The options were (1) to refuse the critical case and keep the rest, (2) to refuse every disagreement, as JavaScript's Temporal does by default, which makes a stored meeting unreadable after a zone's rules change, and (3) to leave it and record the gap.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built. `Tempo.Validate` refuses a value of a day or finer whose shift asserts a local time the critical zone has neither as the value begins nor as it ends (so either shift of a reading shown twice stands): a `Tempo.ZoneError` with reason `:inconsistent`. It holds at an end of an interval, a member of a set and the start of a recurrence, and for a critical offset written as the zone (`+08:45[!+08:00]`). `+00:00`, `+00` and `Z0H` are held as `[hour: 0, minute: 0]`, apart from `Z` (`[hour: 0]`), and written back as `Z0H0M`; `-00:00` is `Z`, as RFC 9557 section 2 has it. `test/tempo/zone_validation_test.exs` holds the section's figures.

@@ -122,6 +122,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* A time shift a critical zone does not have then (`2022-07-08T00:14:07+00:00[!Europe/London]`) is a `Tempo.ZoneError` with reason `:inconsistent`, as RFC 9557 §3.4 requires; without the flag, or with `Z`, the moment stands.
+
+* `+00:00` is held apart from `Z` and written back as `Z0H0M`, where both were read as `Z`; they are still the same moment.
+
 * `Tempo.to_string/2` and `Tempo.to_relative_string/2` return an `ArgumentError` for an option they do not take, options that are no keyword list or a unit that is not counted in, where they passed it over or raised.
 
 * `Tempo.to_relative_string/2` counts weeks and quarters by the calendar's own (1 July is next quarter from 30 June), and hours, minutes and seconds by those that pass across a change of a zone's clock.

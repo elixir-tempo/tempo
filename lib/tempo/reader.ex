@@ -274,14 +274,7 @@ defmodule Tempo.Reader do
   defp furthest(explicit, :error), do: explicit
 
   defp build(%{units: units, qualifications: qualifications, shift: shift}) do
-    %Tempo{form: {:value, units}, qualifications: qualifications, shift: zero_shift(shift)}
-  end
-
-  # `+00:00`, `Z0H` and `Z` are one shift, written `Z`.
-  defp zero_shift(nil), do: nil
-
-  defp zero_shift(shift) do
-    if Enum.all?(shift, fn {_, value} -> value == 0 end), do: [hour: 0], else: shift
+    %Tempo{form: {:value, units}, qualifications: qualifications, shift: shift}
   end
 
   # ── intervals ─────────────────────────────────────────────────────────

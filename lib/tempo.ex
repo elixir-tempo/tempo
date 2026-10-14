@@ -431,7 +431,8 @@ defmodule Tempo do
 
     * `:zone` is the name of the value's time zone, as the database knows it.
 
-    * `:shift` is the time shift, `[hour: 2]` for `Z2H`, `[hour: 0]` for `Z`.
+    * `:shift` is the time shift, `[hour: 2]` for `Z2H`, `[hour: 0]` for `Z`,
+      and `[hour: 0, minute: 0]` for `+00:00`, a local time at no offset.
 
     * `:metadata` is a map the caller keeps on the value. The default is `%{}`.
 

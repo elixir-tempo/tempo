@@ -57,7 +57,7 @@ defmodule Tempo.OtherCalendarsTest do
                      {name, year, week, gregorian(measured)}
 
           {:error, _} ->
-            assert {name, year, week, {:error, _}} = {name, year, week, read}
+            assert {^name, ^year, ^week, {:error, _}} = {name, year, week, read}
         end
       end
     end
