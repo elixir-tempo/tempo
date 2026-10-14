@@ -290,6 +290,27 @@ defmodule Tempo.WordsTest do
                {:ok, "30 minutes ago"}
     end
 
+    # Decision 32: the one place a floating value stands beside a zoned one.
+    test "counts a floating expression on the clock of a zoned :from, and a zoned one on its own" do
+      assert relative("2026-06-16", "2026-06-15T09:00[Europe/Paris]") == {:ok, "tomorrow"}
+      assert relative("2026-06-16[Europe/Paris]", "2026-06-15") == {:ok, "tomorrow"}
+      assert relative("2026-06-16T10:00[Europe/Paris]", "2026-06-15T09:00") == {:ok, "tomorrow"}
+
+      assert relative("2026-06-15T15:00", "2026-06-15T12:00[Australia/Sydney]") ==
+               {:ok, "in 3 hours"}
+
+      # 22:30 UTC on the 15th is half past midnight on the 16th in Paris:
+      # the same moment, and the day each clock shows.
+      assert relative("2026-06-16", "2026-06-15T22:30Z") == {:ok, "tomorrow"}
+      assert relative("2026-06-16", "2026-06-16T00:30[Europe/Paris]") == {:ok, "today"}
+    end
+
+    test "counts from the current second where no :from is given" do
+      {:ok, now} = Tempo.to_date(Tempo.utc_today())
+      assert Tempo.to_relative_string(value(Date.add(now, 1))) == {:ok, "tomorrow"}
+      assert Tempo.to_relative_string(value(Date.add(now, -1))) == {:ok, "yesterday"}
+    end
+
     test "is the unit asked for where one is" do
       {:ok, next_year} = Tempo.new(year: 2027)
 

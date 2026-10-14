@@ -3680,6 +3680,12 @@ defmodule Tempo do
   A `:from` of another calendar is brought to the expression's, so a Hebrew
   date is counted in Hebrew months and years from a Gregorian one.
 
+  A floating expression, one with no zone, is counted from a zoned `:from`
+  on that zone's clock, and a zoned one from a floating `:from` on its own:
+  the day after the day a clock shows is tomorrow, whichever of the two the
+  clock belongs to. This is the one place a floating value stands beside a
+  zoned one.
+
   ### Returns
 
   * `{:ok, words}`.
@@ -3708,6 +3714,9 @@ defmodule Tempo do
 
       iex> Tempo.to_relative_string(~o"2026", from: ~o"2026-06-15")
       {:ok, "this year"}
+
+      iex> Tempo.to_relative_string(~o"2026-06-16", from: ~o"2026-06-15T23:30[Europe/Paris]")
+      {:ok, "tomorrow"}
 
       iex> Tempo.to_relative_string(~o"2026-01-01T00:01", from: ~o"2025-12-31T23:59")
       {:ok, "in 2 minutes"}

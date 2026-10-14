@@ -365,3 +365,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 1.
 
 * **State.** Built in `Tempo.Format`. The unit is the largest of year, month, week, day, hour, minute and second of which a whole one lies between the two starts (a year and a month by the calendar's own, from a day and a time to the same again), unless that is finer than the unit the expression is written to, which is then the unit. A year, a quarter, a month, a week and a day are counted by the calendar's periods on the expression's clock; an hour, a minute and a second by those that pass, so `2026-03-29T04[Europe/Paris]` is "in 2 hours" from `T01` of that day. A unit asked for is counted in as it is. `test/tempo/words_test.exs` holds the examples above and the old suite's.
+
+## 32. Relative words for a floating value beside a zoned one
+
+* **Question.** May `Tempo.to_relative_string/2` count a floating expression from a zoned `:from`, or a zoned one from a floating `:from`, where every other operation on the two is a `Tempo.FrameError`?
+
+* **Context.** The default `:from` is the current second of UTC, so the answer decides what `Tempo.to_relative_string(~o"2026-06-16")` does with no `:from` at all. As built, the floating one was read on the zoned one's clock: `2026-06-16` from `2026-06-15T09:00[Europe/Paris]` was "tomorrow", and so were `2026-06-16[Europe/Paris]` from `2026-06-15` and `2026-06-16T10:00[Europe/Paris]` from `2026-06-15T09:00`. The options were (1) to keep answering on the zoned one's clock, (2) to answer for dates and refuse a floating time of day, close to what the old suite did, and (3) to refuse always, which makes the default `:from` an error for every floating value.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** As built, now documented in `Tempo.to_relative_string/2` as the one place a floating value stands beside a zoned one, and held by `test/tempo/words_test.exs`.
