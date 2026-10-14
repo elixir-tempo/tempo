@@ -15,7 +15,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
     * [x] Computed events, `explain/1`, reading text and profiles, conversions, intervals, territories (new files, from the lines no test ran).
     * [ ] The rule tests beside the RFC's examples (`rrule/*_test.exs`, 30 files), for the cases the examples leave out.
     * [x] Allen's axioms (`allen_axioms_test.exs`): the composition table held to what three spans give, meeting one way, and a chain of spans that meet as one.
-    * [ ] The set operations held to a measure written apart (`set_operations_measure_test.exs`).
+    * [x] The set operations held to a measure written apart (`set_operations_measure_test.exs`): every pair of sets of up to two members between five points, of days, hours, hours in two zones, days in two calendars and times of day, each answer read back with `Date` and `DateTime` and held to arithmetic on whole numbers.
     * [x] Zones: a change of the clock (`change_of_the_clock_test.exs`), twenty-one days of twelve zones held to what `DateTime` says the clock showed.
     * [x] Zones: a fixed offset (`fixed_offset_test.exs`), held to the `DateTime` and its instant.
     * [x] Zones: a day a zone left out, over the six zones that left one (`day_left_out_test.exs`), and what a zone's clock makes of a reading (`zone_validation_test.exs`), each held to `Date` and `DateTime`.

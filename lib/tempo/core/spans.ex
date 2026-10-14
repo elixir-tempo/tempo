@@ -1393,8 +1393,10 @@ defmodule Tempo.Spans do
     model =
       if model.calendar == calendar and not season?(model), do: model, else: day_model(model)
 
-    # In a named zone the ends are its wall readings, with no shift of their own.
-    model = if zone == nil, do: model, else: %{model | shift: nil}
+    # In a named zone the ends are its wall readings, with no shift of their
+    # own. With none, an end that an operand wrote in a zone has that zone no
+    # longer and is written at UTC, so that it is the moment still.
+    model = placed_model(model, zone)
     context = %Tempo{form: {:span, model, model}, calendar: calendar, zone: zone}
     %{value_at(position, model, kind, context) | calendar: calendar, zone: zone}
   end
@@ -1402,6 +1404,13 @@ defmodule Tempo.Spans do
   # A season is no unit a position is written at: its ends are days.
   defp season?(%Tempo{form: {:value, units}}), do: Keyword.has_key?(units, :season)
   defp season?(_model), do: false
+
+  defp placed_model(%Tempo{} = model, %Zone{}), do: %{model | shift: nil}
+
+  defp placed_model(%Tempo{zone: %Zone{}, shift: nil} = model, nil),
+    do: %{model | zone: nil, shift: [hour: 0]}
+
+  defp placed_model(%Tempo{} = model, nil), do: model
 
   defp day_model(%Tempo{form: {:value, units}} = model) do
     if Unit.clock?(Unit.resolution(units)),
