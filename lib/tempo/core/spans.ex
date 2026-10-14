@@ -41,6 +41,10 @@ defmodule Tempo.Spans do
 
   @day Scale.ticks_per_day()
 
+  # The periods of a day or finer a rule tries one by one, selecting
+  # nothing, before it looks ahead for where its parts next name a value.
+  @quiet_periods 2
+
   @type frame :: %{
           calendar: module(),
           zone: Zone.t() | nil,
@@ -593,19 +597,28 @@ defmodule Tempo.Spans do
 
   defp step([_ | _] = picked, _period, k, _quiet_since, _walk), do: {picked, {k + 1, nil}}
 
+  # A day or a finer period that selects nothing is followed by the next,
+  # for a few: a weekend in a daily rule of weekdays is passed over a day at
+  # a time, each day's weekday asked of it. A longer quiet, and a quiet of
+  # coarser periods, is passed over to where the parts next name a value.
   defp step([], period, k, quiet_since, walk) do
     {start, stop} = ends_of(period)
-    quiet_since = quiet_since || start
+    {since, quiet_from} = quiet_since || {start, k}
 
-    if start - quiet_since > walk.horizon,
-      do: nil,
-      else: stepped_on(next_named(stop, period, walk), k, quiet_since, walk)
+    cond do
+      start - since > walk.horizon -> nil
+      k - quiet_from < quiet_periods(walk.first) -> {[], {k + 1, {since, quiet_from}}}
+      true -> stepped_on(next_named(stop, period, walk), k, {since, quiet_from}, walk)
+    end
   end
 
   defp stepped_on(nil, _k, _quiet_since, _walk), do: nil
 
   defp stepped_on(tick, k, quiet_since, walk),
     do: {[], {index_at(tick, walk.period_at, k, k + 1), quiet_since}}
+
+  defp quiet_periods(first),
+    do: if(cadence_unit(first) in [:day, :hour, :minute, :second], do: @quiet_periods, else: 0)
 
   defp ends_of(period) do
     case extent(period) do

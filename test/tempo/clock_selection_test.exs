@@ -1,16 +1,17 @@
 defmodule Tempo.ClockSelectionTest do
   use ExUnit.Case, async: true
 
-  # A time of day selected in a day of a zone is each moment the zone's
-  # clock shows that time: none where the clock skips it, two where it shows
-  # it twice. The engine finds a reading by arithmetic where the clock keeps
+  # A time of day selected in a day of a zone is the moment the zone's clock
+  # shows that time: none where the clock skips it, and the first where it
+  # shows it twice, as a value written to that time is read (decision 36,
+  # RFC 5545 section 3.3.5). The engine finds a reading by arithmetic where the clock keeps
   # one offset through the day, and walks the day where it changes, so the
   # days are ordinary days and days the clock changes, in zones whose offsets
   # are whole hours, half hours and three quarters of an hour.
   #
   # The measure is `DateTime`, which reads the zone database apart from the
   # library: each wall time of the day it is asked for is the moment, or the
-  # two moments, or none, it gives.
+  # first of the two, or none, it gives.
 
   alias Tempo.{Interval, IntervalSet, RRule}
 
@@ -36,13 +37,13 @@ defmodule Tempo.ClockSelectionTest do
     {[second: 30], for(hour <- 0..23, minute <- 0..59, do: {hour, minute, 30})}
   ]
 
-  # Every moment the zone's clock shows a wall time on a day.
+  # The moment the zone's clock first shows each wall time of a day.
   defp shown(zone, day, times) do
     times
     |> Enum.flat_map(fn {hour, minute, second} ->
       case DateTime.new(day, Time.new!(hour, minute, second), zone) do
         {:ok, moment} -> [moment]
-        {:ambiguous, first, second_showing} -> [first, second_showing]
+        {:ambiguous, first, _second_showing} -> [first]
         {:gap, _before, _after} -> []
       end
     end)
@@ -65,7 +66,7 @@ defmodule Tempo.ClockSelectionTest do
   end
 
   for {zone, day} <- @days do
-    test "a time of day in #{zone} on #{day} is each moment its clock shows it" do
+    test "a time of day in #{zone} on #{day} is the moment its clock first shows it" do
       for {parts, times} <- @selections do
         assert {unquote(zone), parts, selected(unquote(zone), unquote(Macro.escape(day)), parts)} ==
                  {unquote(zone), parts, shown(unquote(zone), unquote(Macro.escape(day)), times)}
@@ -107,5 +108,46 @@ defmodule Tempo.ClockSelectionTest do
         assert given == for(n <- 0..5, do: DateTime.to_unix(first) + n * 3600)
       end
     end
+  end
+
+  describe "a daily rule across a change of the clock" do
+    # One occurrence a day: the first showing of a time the clock shows
+    # twice, and none on the day it skips the time (RFC 5545 section 3.3.10).
+    test "at a time shown twice is its first showing" do
+      {:ok, from} =
+        Tempo.new(year: 2026, month: 10, day: 31, hour: 1, minute: 30, zone: "America/Chicago")
+
+      {:ok, rule} = RRule.parse("FREQ=DAILY;COUNT=3", from: from)
+
+      expected =
+        for day <- [~D[2026-10-31], ~D[2026-11-01], ~D[2026-11-02]] do
+          case DateTime.new(day, ~T[01:30:00], "America/Chicago") do
+            {:ok, moment} -> DateTime.to_unix(moment)
+            {:ambiguous, first, _second} -> DateTime.to_unix(first)
+          end
+        end
+
+      assert Enum.map(rule, &unix/1) == expected
+    end
+
+    test "at a time skipped has no occurrence that day" do
+      {:ok, from} =
+        Tempo.new(year: 2026, month: 3, day: 7, hour: 2, minute: 30, zone: "America/Chicago")
+
+      {:ok, rule} = RRule.parse("FREQ=DAILY;COUNT=3", from: from)
+
+      expected =
+        for day <- [~D[2026-03-07], ~D[2026-03-09], ~D[2026-03-10]] do
+          {:ok, moment} = DateTime.new(day, ~T[02:30:00], "America/Chicago")
+          DateTime.to_unix(moment)
+        end
+
+      assert Enum.map(rule, &unix/1) == expected
+    end
+  end
+
+  defp unix(occurrence) do
+    {:ok, moment} = Tempo.to_datetime(Interval.from(occurrence))
+    DateTime.to_unix(moment)
   end
 end

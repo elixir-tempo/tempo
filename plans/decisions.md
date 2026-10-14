@@ -406,4 +406,14 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-14).** Option 1.
 
-* **State.** To build.
+* **State.** In progress; `TODO.md` holds the numbers. On 2026-10-14 rule expansion stands at 5 to 26 times 1.6.4 on the benchmark's cases, from 145 to 19,000. The work found and fixed three defects: an hourly rule across a repeated hour searched for ever, a time of day selected on a fall-back day missed moments, and decision 36 was put.
+
+## 36. A time of day the clock shows twice, or skips, within a period
+
+* **Question.** What does a selection, or a rule, give for a time of day that a zone's clock shows twice, or skips, within the period it selects in?
+
+* **Context.** Making rule expansion fast (decision 35) found that a selection of a time of day in a day gave both showings of a repeated reading: a daily rule at 01:30 in Chicago had two occurrences on 1 November 2026 (at -05:00 and -06:00), and `Tempo.select` of minute 30 in that day gave 25 values. A value written `2026-11-01T01:30[America/Chicago]` is read as the first showing. RFC 5545 section 3.3.5 says a local time that occurs twice "refers to the first occurrence", and section 3.3.10 says the same of a rule's instances; of a time that does not occur, 3.3.10 says such instances "MUST be ignored" and also that they are read as 3.3.5 reads them, by the offset before the gap. A daily rule at 02:30 gave nothing on 8 March. The options were (1) one answer for selections and rules alike, a reading shown twice within a period being its first showing, as a value written to it is, (2) every moment for a selection and the first showing for a rule, and (3) every moment everywhere.
+
+* **Decision (2026-10-14).** Option 1. A reading the clock skips stays no value, following section 3.3.10's "MUST be ignored".
+
+* **State.** Built in `Tempo.Select`: a period's values are taken once by their reading, the first showing in time. The second showing is kept where the period holds it and not the first, so an hourly rule across a repeated hour still gives each hour that passes. `test/tempo/clock_selection_test.exs` holds both to `DateTime`.

@@ -258,7 +258,35 @@ defmodule Tempo.Expand do
     end
   end
 
+  # A month of a year, or a day of a month, named by number is found by the
+  # calendar, without the others of its year or month.
+  def candidates(prefix, unit, n, frame)
+      when unit in [:month, :day] and is_integer(n) and n > 0 do
+    case named_date(prefix, unit, n, frame.calendar) do
+      {:ok, children} -> {:ok, shown(children, unit, frame)}
+      :walk -> walked(prefix, unit, n, frame)
+    end
+  end
+
   def candidates(prefix, unit, held, frame), do: walked(prefix, unit, held, frame)
+
+  defp named_date([year: year], :month, n, calendar) when is_integer(year) do
+    if n <= Calendar.months_in_year(calendar, year),
+      do: {:ok, [{n, period!(calendar, :month, year, n)}]},
+      else: {:ok, []}
+  end
+
+  defp named_date([year: year, month: month], :day, n, calendar)
+       when is_integer(year) and is_integer(month) do
+    if Calendar.valid_date?(calendar, year, month, n) do
+      day = Calendar.iso_days(calendar, year, month, n)
+      {:ok, [{n, {day, day + 1}}]}
+    else
+      {:ok, []}
+    end
+  end
+
+  defp named_date(_prefix, _unit, _n, _calendar), do: :walk
 
   defp walked(prefix, unit, held, frame) do
     with {:ok, children} <- children(prefix, unit, frame), do: {:ok, select(held, children)}

@@ -180,7 +180,9 @@ defmodule Tempo.Select do
     |> in_time_order()
   end
 
-  defp in_time_order({:ok, picked}), do: {:ok, picked |> Enum.uniq() |> Enum.sort_by(&start_of/1)}
+  defp in_time_order({:ok, picked}),
+    do: {:ok, picked |> Enum.uniq() |> Enum.sort_by(&start_of/1) |> first_showings()}
+
   defp in_time_order(error), do: error
 
   defp windowed(value, nil, _period), do: value
@@ -224,20 +226,142 @@ defmodule Tempo.Select do
     case bounded_extent(period) do
       {:ok, extent} ->
         extent = clipped(extent, outer)
+        moved? = event != nil or roll != nil or skip != nil
 
-        period
-        |> candidates(parts, event, extent, options)
-        |> Kernel.++(skipped(period, parts, skip, extent))
-        |> Enum.uniq()
-        |> Enum.filter(&in_years?(&1, years))
-        |> rolled(roll, options)
-        |> Enum.sort_by(&start_of/1)
-        |> positioned(instance)
+        case on_its_day(moved?, period, parts, extent) do
+          :none ->
+            []
+
+          {:day, []} ->
+            positioned([period], instance)
+
+          {:times, values} ->
+            values |> Enum.flat_map(&met(&1, period, extent)) |> positioned(instance)
+
+          {_kept_or_day, parts} ->
+            period
+            |> candidates(parts, event, extent, options)
+            |> Kernel.++(skipped(period, parts, skip, extent))
+            |> Enum.uniq()
+            |> Enum.filter(&in_years?(&1, years))
+            |> rolled(roll, options)
+            |> Enum.sort_by(&start_of/1)
+            |> first_showings()
+            |> positioned(instance)
+        end
 
       {:error, _} ->
         []
     end
   end
+
+  # A period within one day is a day the parts naming a month, a day of the
+  # month or a weekday are true of or not: the period selects nothing where
+  # one is not, and the parts finer than a day select within it where all
+  # are. A daily rule of weekdays asks of each day whether it is one, and
+  # does not look for the weekdays of its month.
+  defp on_its_day(false = _moved?, period, parts, {start, stop}) do
+    {dated, finer} =
+      Enum.split_with(parts, fn {unit, _} -> unit in [:month, :day, :day_of_week] end)
+
+    if Enum.all?(finer, fn {unit, _} -> Unit.clock?(unit) end) and
+         Enum.all?(dated, &plain_held?/1) do
+      day = one_day(period, start, stop)
+      day |> day_tested(dated, finer, period.calendar) |> at_times(period, day)
+    else
+      {:ok, parts}
+    end
+  end
+
+  defp on_its_day(true, _period, parts, _extent), do: {:ok, parts}
+
+  defp one_day(period, start, stop) do
+    frame = frame(period)
+    first = Shift.period_units(start, :day, frame)
+    if Shift.period_units(stop - 1, :day, frame) == first, do: first, else: nil
+  end
+
+  defp day_tested(nil, dated, finer, _calendar), do: {:ok, dated ++ finer}
+
+  defp day_tested(_day, [], finer, _calendar), do: {:ok, finer}
+
+  defp day_tested([year: year, month: month, day: day], dated, finer, calendar) do
+    weekday = Tempo.Calendar.day_of_week(calendar, year, month, day)
+    actual = [month: month, day: day, day_of_week: weekday]
+
+    if Enum.all?(dated, fn {unit, held} -> holds?(held, actual[unit]) end),
+      do: {:day, finer},
+      else: :none
+  end
+
+  defp day_tested(_units, dated, finer, _calendar), do: {:ok, dated ++ finer}
+
+  # Times of day named by number on a day are its values, each shown at
+  # the reading's first showing and none where the clock skips the reading:
+  # nothing need be looked for. Anything else is looked for as it is.
+  defp at_times({:day, finer} = tested, period, day) do
+    if whole_times?(finer) and Enum.all?(finer, &named_time?/1),
+      do: {:times, times_on(period, day, finer)},
+      else: tested
+  end
+
+  defp at_times({:ok, [_ | _] = finer}, period, day) when is_list(day),
+    do: at_times({:day, finer}, period, day)
+
+  defp at_times(tested, _period, _day), do: tested
+
+  # An hour, an hour and a minute, or all three: a reading of the day.
+  defp whole_times?(finer),
+    do: Enum.sort(Keyword.keys(finer)) in [[:hour], [:hour, :minute], [:hour, :minute, :second]]
+
+  defp named_time?({unit, held}) when unit in [:hour, :minute, :second],
+    do: natural?(held) or (is_list(held) and Enum.all?(held, &natural?/1))
+
+  defp named_time?(_part), do: false
+
+  defp times_on(period, day, finer) do
+    finer
+    |> Enum.sort_by(fn {unit, _} -> unit_index(unit) end)
+    |> Enum.reduce([day], fn {unit, held}, prefixes ->
+      for prefix <- prefixes, n <- Enum.sort(List.wrap(held)), n >= 0, do: prefix ++ [{unit, n}]
+    end)
+    |> Enum.map(&as_value(period, &1))
+    |> Enum.reject(&skipped_reading?/1)
+  end
+
+  defp skipped_reading?(%Tempo{zone: %Zone{name: name} = zone, shift: nil} = value)
+       when is_binary(name) do
+    case Spans.extent(%{value | zone: nil}) do
+      {:ok, {wall, _}} when is_integer(wall) ->
+        match?({:gap, _, _}, Zone.offsets_at_wall(zone, wall))
+
+      _no_reading ->
+        true
+    end
+  end
+
+  defp skipped_reading?(_value), do: false
+
+  # A whole number of a unit, or a list of them and of ranges, all counted
+  # from the start.
+  defp plain_held?({_unit, n}) when is_integer(n), do: n > 0
+
+  defp plain_held?({_unit, held}) when is_list(held),
+    do:
+      Enum.all?(
+        held,
+        &(positive?(&1) or match?(%Range{first: f, last: l, step: 1} when f > 0 and l >= f, &1))
+      )
+
+  defp plain_held?(_part), do: false
+
+  defp positive?(n), do: is_integer(n) and n > 0
+  defp natural?(n), do: is_integer(n) and n >= 0
+
+  defp holds?(n, value) when is_integer(n), do: n == value
+
+  defp holds?(held, value) when is_list(held),
+    do: Enum.any?(held, &(&1 == value or (is_struct(&1, Range) and value in &1)))
 
   # What a selection with a skip is given for the days and months it names
   # that a year lacks (`Tempo.Skip`): the day after or the day before, with
@@ -395,6 +519,8 @@ defmodule Tempo.Select do
     do: :year
 
   defp container_of(unit) when unit in [:day, :day_of_week], do: :month
+  defp container_of(:minute), do: :hour
+  defp container_of(:second), do: :minute
   defp container_of(_clock), do: :day
 
   # The weeks asked of one whole month are that month's.
@@ -411,17 +537,17 @@ defmodule Tempo.Select do
   # next until the period's end.
   defp containers(%Tempo{} = period, unit, {start, stop}) do
     frame = frame(period)
-    first = %{period | form: {:value, Shift.period_units(start, unit, frame)}}
 
-    first
+    period
+    |> container_at(start, unit, frame)
     |> Stream.unfold(fn
       nil ->
         nil
 
       container ->
         case Spans.extent(container) do
-          {:ok, {container_start, _}} when container_start < stop ->
-            {container, next(container, unit)}
+          {:ok, {container_start, container_stop}} when container_start < stop ->
+            {container, next(container, {container_start, container_stop}, unit, period, frame)}
 
           _ ->
             nil
@@ -430,23 +556,67 @@ defmodule Tempo.Select do
     |> Enum.to_list()
   end
 
-  defp next(container, unit) do
+  defp container_at(period, position, unit, frame) do
+    container = %{period | form: {:value, Shift.period_units(position, unit, frame)}}
+    at_showing(container, position, unit, frame)
+  end
+
+  # A unit of the clock is followed by the one the clock shows as it ends,
+  # which across a change of the clock is not an hour on by the clock; any
+  # other by the next of its unit.
+  defp next(_container, {container_start, container_stop}, unit, period, frame)
+       when unit in [:hour, :minute] do
+    following = container_at(period, container_stop, unit, frame)
+
+    case Spans.extent(following) do
+      {:ok, {next_start, _}} when next_start > container_start -> following
+      _ -> nil
+    end
+  end
+
+  defp next(container, _extent, unit, _period, _frame), do: next_of_unit(container, unit)
+
+  defp next_of_unit(container, unit) do
     case Shift.shift(container, Shift.one(unit)) do
       {:ok, moved} -> moved
       {:error, _} -> nil
     end
   end
 
+  # A container of the clock that begins at the second showing of its
+  # reading carries the shift the clock has then, and is expanded there.
+  defp at_showing(container, start, unit, %{zone: %Zone{name: name} = zone, shift: nil})
+       when unit in [:hour, :minute] and is_binary(name) do
+    {wall, offset} = Zone.wall_of_utc(zone, nil, start)
+
+    shown_again(
+      Zone.offsets_at_wall(zone, wall),
+      %{container | shift: Zone.shift_of(offset)},
+      container
+    )
+  end
+
+  defp at_showing(container, _start, _unit, _frame), do: container
+
   # A container's units with the parts beneath: every concrete value they allow.
-  defp expanded(period, %Tempo{form: {:value, container}}, parts) do
-    case Expand.expand(container ++ parts, frame(period)) do
+  defp expanded(period, %Tempo{form: {:value, container}} = scope, parts) do
+    case Expand.expand(container ++ parts, scope_frame(period, scope)) do
       {:ok, values} ->
-        values |> Enum.take(Limit.values()) |> Enum.map(&as_value(period, &1)) |> showings()
+        values
+        |> Enum.take(Limit.values())
+        |> Enum.map(&in_scope(as_value(period, &1), scope))
+        |> showings()
 
       {:error, _} ->
         []
     end
   end
+
+  # A reading a zone's clock shows twice is selected in a period once, at its
+  # first showing there, as a value written to that reading is read (decision
+  # 36, and RFC 5545 section 3.3.5): the second showing is kept where the
+  # period holds it and not the first, an hour of an hourly rule.
+  defp first_showings(values), do: Enum.uniq_by(values, & &1.form)
 
   # A reading a zone's clock shows twice is expanded twice, in the order the
   # clock shows it; the second is the second showing, and carries the shift
@@ -477,6 +647,22 @@ defmodule Tempo.Select do
 
   defp shown_again([_first, second], value), do: %{value | shift: Zone.shift_of(second)}
   defp shown_again(_one_or_a_gap, value), do: value
+
+  defp shown_again([first, second], at_second, container) when first != second do
+    if at_second.shift == Zone.shift_of(second), do: at_second, else: container
+  end
+
+  defp shown_again(_offsets, _at_second, container), do: container
+
+  # A value found in a container at the second showing of its reading is in
+  # that showing.
+  defp in_scope(value, %Tempo{shift: shift}) when is_list(shift), do: %{value | shift: shift}
+  defp in_scope(value, _scope), do: value
+
+  defp scope_frame(period, %Tempo{shift: shift}) when is_list(shift),
+    do: %{frame(period) | shift: shift}
+
+  defp scope_frame(period, _scope), do: frame(period)
 
   # A value in the period's frame: a span's ends carry the shift, a value
   # itself; in a named zone the shift is the zone's at the value.
@@ -620,7 +806,7 @@ defmodule Tempo.Select do
 
       picked =
         first
-        |> Stream.iterate(&next(&1, unit))
+        |> Stream.iterate(&next_of_unit(&1, unit))
         |> Stream.take_while(&(&1 != nil))
         |> Stream.flat_map(&picked_in(selector, %{&1 | metadata: base.metadata}, options))
         |> Stream.filter(&(start_of(&1) >= start))

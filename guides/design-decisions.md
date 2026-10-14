@@ -208,6 +208,31 @@ iex> Tempo.duration(second_showing)
 
 **Why.** An hour in a zone is what the zone's clock shows of it, and the hours of a day should not overlap. Most zones change by whole hours at the start of an hour, where the question does not arise; Chatham's change at 03:45 by an hour is where "an hour is what the clock shows" and "a shift gives the moment" disagree, and the first is the law.
 
+### A time of day the clock shows twice, or skips, within a period (decision 36)
+
+**The question.** On 1 November 2026 Chicago's clock shows 01:30 twice, an hour apart. What does a selection of 01:30 in that day give, and what does a daily rule at 01:30 give that day? And on 8 March, when 02:30 is never shown?
+
+**The alternatives.**
+
+* One answer for selections and rules alike: a reading shown twice within the period is its first showing, as a value written `2026-11-01T01:30[America/Chicago]` is read.
+
+* Every moment the clock shows it for a selection, and the first showing for a rule.
+
+* Every moment the clock shows it, everywhere, so that a daily rule has two occurrences that day.
+
+**Tempo's choice.** The first. A reading the clock skips is no value. The second showing is kept only where a period holds it and not the first, as an hour of an hourly rule does, so an hourly rule still gives each hour that passes.
+
+```elixir
+iex> {:ok, half_past_one} = Tempo.selection(hour: 1, minute: 30)
+iex> Tempo.select(~o"2026-11-01[America/Chicago]", half_past_one)
+{:ok, ~o"{2026Y11M1DT1H30M}[America/Chicago]"}
+iex> {:ok, hourly} = Tempo.RRule.parse("FREQ=HOURLY;COUNT=4", from: ~o"2026-11-01T00:30[America/Chicago]")
+iex> Enum.map(hourly, &Tempo.to_iso8601!/1)
+["2026Y11M1DT0H30M/T31M[America/Chicago]", "2026Y11M1DT1H30M/T31M[America/Chicago]", "2026Y11M1DT1H30MZ-6H0M/T31MZ-6H0M[America/Chicago]", "2026Y11M1DT2H30M/T31M[America/Chicago]"]
+```
+
+**Why.** It is how Tempo already reads a value written to that time, and it is what RFC 5545 §3.3.5 says of a local time that occurs twice. Having a selection answer one way and the same selection inside a rule another would make one written form mean two things. On a time that does not occur RFC 5545 contradicts itself: §3.3.10 says such instances "MUST be ignored", and later that they are read by the offset before the gap. Tempo follows the first, which needs no invented time.
+
 ### A time shift that disagrees with its zone (decision 33)
 
 **The question.** RFC 9557 §3.4 gives `2022-07-08T00:14:07+00:00[!Europe/London]` as its example: London was at +01:00 that day, so the offset and the zone disagree. With the critical flag `!` an application MUST act on that; without it, it MAY. `Z` in place of the offset asserts no local time, so `…Z[Europe/London]` never disagrees. What does Tempo do?

@@ -230,9 +230,10 @@ defmodule Tempo.Zone do
   # the first known to be after. A UTC tick or a wall reading of the days is
   # answered from that, an offset being less than a day, and the database is
   # asked only of a tick between the two. What is known is kept in the
-  # process, as many days as `@days_kept`.
+  # process, as many days as `@days_kept`, by the zone's name: a process
+  # that changes its time zone database keeps what the last one answered.
   defp known_days(name, days) do
-    key = {__MODULE__, database(), name, days}
+    key = {__MODULE__, name, days}
 
     case Process.get(key) do
       nil -> {key, kept(key, across(name, days * @days_together))}
@@ -258,7 +259,7 @@ defmodule Tempo.Zone do
   end
 
   defp forget_days do
-    for {__MODULE__, _database, _name, _day} = key <- Process.get_keys(), do: Process.delete(key)
+    for {__MODULE__, _name, _days} = key <- Process.get_keys(), do: Process.delete(key)
   end
 
   @doc """
