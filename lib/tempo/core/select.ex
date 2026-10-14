@@ -620,16 +620,9 @@ defmodule Tempo.Select do
 
   # A container of the clock that begins at the second showing of its
   # reading carries the shift the clock has then, and is expanded there.
-  defp at_showing(container, start, unit, %{zone: %Zone{name: name} = zone, shift: nil})
-       when unit in [:hour, :minute] and is_binary(name) do
-    {wall, offset} = Zone.wall_of_utc(zone, nil, start)
-
-    shown_again(
-      Zone.offsets_at_wall(zone, wall),
-      %{container | shift: Zone.shift_of(offset)},
-      container
-    )
-  end
+  defp at_showing(container, start, unit, %{zone: zone, shift: nil})
+       when unit in [:hour, :minute],
+       do: Zone.at_showing(container, zone, start)
 
   defp at_showing(container, _start, _unit, _frame), do: container
 
@@ -681,11 +674,10 @@ defmodule Tempo.Select do
     shown
   end
 
-  defp second_showing(%Tempo{zone: %Zone{name: name} = zone, shift: nil} = value)
-       when is_binary(name) do
+  defp second_showing(%Tempo{zone: %Zone{} = zone, shift: nil} = value) do
     case Spans.extent(%{value | zone: nil}) do
       {:ok, {wall, _}} when is_integer(wall) ->
-        shown_again(Zone.offsets_at_wall(zone, wall), value)
+        shifted_to(value, Zone.second_showing_of(zone, wall))
 
       _no_reading ->
         value
@@ -694,14 +686,8 @@ defmodule Tempo.Select do
 
   defp second_showing(value), do: value
 
-  defp shown_again([_first, second], value), do: %{value | shift: Zone.shift_of(second)}
-  defp shown_again(_one_or_a_gap, value), do: value
-
-  defp shown_again([first, second], at_second, container) when first != second do
-    if at_second.shift == Zone.shift_of(second), do: at_second, else: container
-  end
-
-  defp shown_again(_offsets, _at_second, container), do: container
+  defp shifted_to(value, nil), do: value
+  defp shifted_to(value, shift), do: %{value | shift: shift}
 
   # A value found in a container at the second showing of its reading is in
   # that showing.

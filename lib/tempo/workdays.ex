@@ -13,6 +13,7 @@ defmodule Tempo.Workdays do
 
   """
 
+  alias Tempo.Children
   alias Tempo.{ConversionError, Duration, Options, Shift, Spans, Territory}
 
   @conventions [
@@ -349,7 +350,7 @@ defmodule Tempo.Workdays do
   @spec count(Tempo.t(), t()) :: {:ok, non_neg_integer()} | {:error, Exception.t()}
   def count(%Tempo{} = expression, %__MODULE__{} = workdays) do
     with :ok <- ended(expression),
-         {:ok, days} <- Spans.walk(expression, :day, []) do
+         {:ok, days} <- Children.walk(expression, :day, []) do
       {:ok, Enum.count(days, &(workday?(&1, workdays) == true))}
     end
   end

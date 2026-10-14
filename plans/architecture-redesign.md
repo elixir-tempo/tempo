@@ -395,6 +395,42 @@ end
 
 This is the whole of today's `Tempo.Calendars`, `inside/1`, `outside/1`, `outside?/1`, `is_outside/1`, `Calendars.inspect/2`, the engine proxies in `test/support` and the 393 border sites. A value's `calendar` field is what the caller gave; an error message inspects the term it was given. Which module answers for `Calendar.ISO` is configuration (`config :ex_tempo, :calendar_implementations`), so a consumer without Localize can supply another, and Calendrical can become the optional dependency the plans want with no conditional code in Tempo.
 
+### 5.5 The budgets restated (2026-10-15, decision 60)
+
+The budgets of 5.3 were estimates made before the code; the review of 2026-10-15 found the core at about 2.6 times its budget. After `Tempo.Spans` was split along its sections (decision 58) and a reading the clock shows twice given one home in `Tempo.Zone` (decision 59), each module's budget is restated as its measured size rounded up to the next fifty lines. A review holds the code to these: a module that grows past its budget says why in the decision that grows it. Lines are all lines; code is lines that are neither documentation, comment nor blank.
+
+| Layer | Module | First budget | Lines | Code | Budget | Why it exceeds its first budget |
+|---|---|---:|---:|---:|---:|---|
+| 0 | `Tempo.Calendar` (with `WeeksFrom`) | 300 | 534 | 338 | 550 | Calendars of weeks of other week starts, and every question answered or refused by name. |
+| 0 | `Tempo.Zone` | 300 | 546 | 305 | 550 | A change of the clock found to the second; gaps, folds and a written shift beside a zone; the readings shown twice (decision 59). |
+| 0 | `Tempo.Unit` | 300 | 354 | 216 | 400 | The ordering and one-axis checks of building from parts, and the rank of a unit. |
+| 0 | `Tempo.Limit` | 50 | 50 | 17 | 50 | Within. |
+| 1 | `Tempo.Scale` | 400 | 355 | 226 | 400 | Within. |
+| 2 | `Tempo.Expand` | 600 | 1,045 | 714 | 1,050 | Masks, groups, counts from the end, labels, days a zone leaves out, readings found by arithmetic and the extents they carry (decision 56). |
+| 2 | `Tempo.Walk` | 300 | 243 | 163 | 250 | Within. |
+| 2 | `Tempo.Validate` | 500 | 446 | 322 | 450 | Within. |
+| 3 | `Tempo.Spans` | 500 | 1,225 | 820 | 1,250 | Written spans with duration and open ends, plural ends, placing in a window, the merging of a set's members, the conditions' widened window. |
+| 3 | `Tempo.Recurrence` | (in `Spans`) | 851 | 568 | 900 | The rule walk: periods by number, looking ahead past quiet periods (decision 37), domains of years, counts and untils. |
+| 3 | `Tempo.Exclusions` | (in `Spans`) | 148 | 100 | 150 | New, from `Spans`. |
+| 3 | `Tempo.Children` | (in `Spans`) | 363 | 258 | 400 | New, from `Spans`: law 6 and the readings of certainty. |
+| 3 | `Tempo.Select` | 400 | 1,045 | 700 | 1,050 | Rolls, skips, events, nested selections and sets of them, windows, readings shown twice, a day tested whole. |
+| 3 | `Tempo.Algebra` | 300 | 938 | 616 | 950 | Results ended where their members end (decision 42), operands with no end streamed, frames brought to agree. |
+| 3 | `Tempo.Allen` (with `Classifier`) | 400 | 409 | 185 | 450 | Within its code. |
+| 3 | `Tempo.Shift` | 500 | 1,031 | 743 | 1,050 | Truncating, rounding and extending across axes, seasons, a value with no year shifted where the answer is one. |
+| 3 | The core modules the map did not name: `Build` 680, `Parts` 222, `Measure` 274, `Interop` 265, `Season` 182, `Conditions` 158, `Occurrences` 126, `Skip` 123, `Text` 113, `Options` 51 | — | 2,194 | 1,515 | each its size, rounded up | Building from parts (decisions 45 to 51), the parts and lengths of a value, Elixir's types, seasons, conditional holidays, iCalendar events, RFC 7529's skip, text in a locale, the options check. |
+| 4 | `Tempo.Reader` | 2,000 | 2,101 | 1,489 | 2,150 | The grammar of ISO 8601-1, ISO 8601-2 and RFC 9557 whole. |
+| 4 | `Tempo.Writer` | 400 | 494 | 341 | 500 | Every form written back, including what the builder makes. |
+| 4 | `Format`, `Explain`, `Sigils`, the protocols | 2,500 | 900 | 582 | 900 | Within. |
+| 5 | `Tempo` | 3,000 | 4,721 | 1,216 | 4,750 | Its documentation: every function's Arguments, Options, Returns and Examples. Its code is 1,216. |
+| 5 | `Interval`, `IntervalSet`, `RecurrenceSet`, `Duration` | 800 | 1,872 | 580 | 1,900 | Their documentation; their code is within. |
+| 5 | `RRule`, `Cron`, `ICal`, `JSCalendar` | 2,000 | 2,371 | 1,399 | 2,400 | The RRULE writer, iCalendar availability, cron's extensions. |
+| 5 | `Event`, `Workdays`, `Territory`, `Clock` (with `Test`), `LeapSeconds` | 800 | 1,170 | 534 | 1,200 | Event resolvers, workday conventions, the test clock (decision 55). |
+| 5 | `Tempo.Builder` | — | 1,034 | 325 | 1,050 | New (decisions 45 to 51): its documentation. |
+| 5 | Exceptions | — | 422 | 252 | 450 | One named error for each refusal (law 8). |
+| | **The library** | **about 15,000** | **26,862** | **14,524** | | The core (layers 0 to 3) is 11,777 lines and 7,806 of code, against about 4,500. |
+
+The 2.0 it replaced was 82,875 lines and 46,326 of code.
+
 ## 6. Reference implementation, part one: the scale, the calendar and expansion
 
 The code in sections 6 and 7 is the design written as Elixir: complete in its algorithms, abbreviated in its error shaping and docs. Where a block was executed as a prototype the section says so and gives the result. Names follow the glossary; `options` is always `options`.

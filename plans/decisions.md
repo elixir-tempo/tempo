@@ -628,3 +628,33 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Option 1.
 
 * **State.** Reverted before it was committed. `Select` answers values; decision 56's carrying stays inside `Expand.placed/2`, `Select`'s judging of a candidate and its containers, and the walk. Further work on rule expansion starts from the zone: about 100 questions of it in each weekly occurrence, for skipped days, readings shown twice and steady offsets.
+
+## 58. `Tempo.Spans` split along its sections
+
+* **Question.** `Tempo.Spans`, budgeted at 500 lines as the meaning of any expression, had grown to 2,452: repeat rules, recurrences, exclusions, children and readings beside the meaning. Is it split?
+
+* **Context.** Found in the review of the redesign against the 2.0 it replaced (2026-10-15). Each section was a module's job; every change of the performance work landed there.
+
+* **Decision (2026-10-15).** Yes, one module for each job, with no change of behaviour.
+
+* **State.** Built: `Tempo.Spans` keeps the meaning (frames, extents, `spans/2`, written spans, plural ends and sets, placing in a window, windows, members), 1,225 lines; `Tempo.Recurrence` has the occurrences of the `:every` form and the rule walk, 851; `Tempo.Exclusions` what a set or a rule leaves out, 148; `Tempo.Children` law 6 and the readings, 363. Each function another module calls is public with a `@doc` and a `@spec`; each module keeps its own `conversion/2`.
+
+## 59. One home for a reading the clock shows twice
+
+* **Question.** How a reading a zone's clock shows twice is found and written was implemented in `Tempo.Zone`, `Tempo.Expand`, `Tempo.Select` and `Tempo.Spans`. Is it brought to one place?
+
+* **Context.** Found in the same review: the proposal's one classifier of a change of the clock, where 2.0 had three.
+
+* **Decision (2026-10-15).** Yes, in `Tempo.Zone`, which the others call.
+
+* **State.** Built: `Tempo.Zone.at_showing/3` gives a value, a container or a frame the shift of the second showing where the reading at a UTC tick is one, and `second_showing_of/2` the shift of a wall reading's second showing. `Expand`, `Select` and `Spans` call them, and their eight helpers for it are gone.
+
+## 60. The module budgets restated
+
+* **Question.** The budgets of the proposal's module map (section 5.3) are exceeded: the core is about 2.6 times its budget, `Spans` 4.9. Is the code held to them, or are they restated?
+
+* **Context.** Found in the same review. Some of the excess is documentation and scope the budgets did not foresee (the builder, conditional holidays, named errors throughout).
+
+* **Decision (2026-10-15).** Restated after 58 and 59, against the code as it then stands, each module's measured size with the reason it exceeds its first budget.
+
+* **State.** Done: section 5.5 of `plans/architecture-redesign.md`, each budget the module's size rounded up to the next fifty lines, which a review holds the code to.

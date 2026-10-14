@@ -8,6 +8,7 @@ defimpl Enumerable, for: Tempo do
   # yielded, so a sequence with no end is read as far as it is asked and no
   # further.
 
+  alias Tempo.Children
   alias Tempo.ConversionError
   alias Tempo.Limit
   alias Tempo.Spans
@@ -15,7 +16,7 @@ defimpl Enumerable, for: Tempo do
 
   @impl Enumerable
   def reduce(%Tempo{} = expression, acc, fun) do
-    case Spans.children(expression) do
+    case Children.children(expression) do
       {:ok, stream} -> Enumerable.reduce(limited(stream, expression), acc, fun)
       {:error, exception} -> raise exception
     end
@@ -24,7 +25,7 @@ defimpl Enumerable, for: Tempo do
   # A singular expression walked at a clock unit has a closed count.
   @impl Enumerable
   def count(%Tempo{} = expression) do
-    unit = Spans.singular?(expression) and Spans.child_unit(expression)
+    unit = Spans.singular?(expression) and Children.child_unit(expression)
 
     case {unit in [:hour, :minute, :second], Spans.extent(expression)} do
       {true, {:ok, {start, stop}}} when is_integer(start) and is_integer(stop) ->

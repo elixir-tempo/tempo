@@ -1030,18 +1030,11 @@ defmodule Tempo.Expand do
 
   # The frame a unit of the clock that a zone shows twice is descended in:
   # at the second showing, the shift the clock has then.
-  defp showing(true, unit, {start, _}, %{zone: %Zone{name: name} = zone, shift: nil} = frame)
-       when unit in [:hour, :minute, :second] and is_binary(name) and is_integer(start) do
-    {wall, offset} = Zone.wall_of_utc(zone, nil, start)
-    shown_again(Zone.offsets_at_wall(zone, wall), offset, frame)
-  end
+  defp showing(true, unit, {start, _}, %{zone: zone, shift: nil} = frame)
+       when unit in [:hour, :minute, :second] and is_integer(start),
+       do: Zone.at_showing(frame, zone, start)
 
   defp showing(_descends?, _unit, _span, frame), do: frame
-
-  defp shown_again([first, offset], offset, frame) when first != offset,
-    do: %{frame | shift: Zone.shift_of(offset)}
-
-  defp shown_again(_offsets, _offset, frame), do: frame
 
   defp label_in_place?(prefix, unit) do
     case List.last(prefix) do

@@ -8,6 +8,7 @@ defmodule Tempo.Explain do
 
   """
 
+  alias Tempo.Children
   alias Tempo.{Duration, Format, Parts, Spans, Unit}
 
   @weekdays ~w(Monday Tuesday Wednesday Thursday Friday Saturday Sunday)
@@ -285,7 +286,7 @@ defmodule Tempo.Explain do
   defp walk(%Tempo{} = expression) do
     cond do
       not Spans.singular?(expression) -> "Walking it gives its members."
-      unit = Spans.child_unit(expression) -> "Walking it gives its #{plural_name(unit)}."
+      unit = Children.child_unit(expression) -> "Walking it gives its #{plural_name(unit)}."
       true -> "It is written to the finest unit and has nothing finer to walk."
     end
   end

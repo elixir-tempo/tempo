@@ -330,6 +330,40 @@ defmodule Tempo.Zone do
   end
 
   @doc """
+  A value, a container or a frame at the showing the clock is at a UTC
+  tick: with the shift the clock has there where the reading it shows is
+  the second of two, as the clock goes back, and as it is where the reading
+  is the first or only one. A reading written with no shift is read at its
+  first showing, so the second carries the shift that says which it is.
+  """
+  @spec at_showing(shown, t() | nil, tick()) :: shown
+        when shown: %{required(:shift) => term(), optional(atom()) => term()}
+  def at_showing(%{shift: _} = term, %__MODULE__{name: name} = zone, utc) when is_binary(name) do
+    {wall, offset} = wall_of_utc(zone, nil, utc)
+
+    case offsets_at_wall(zone, wall) do
+      [first, ^offset] when first != offset -> %{term | shift: shift_of(offset)}
+      _first_or_only -> term
+    end
+  end
+
+  def at_showing(term, _zone, _utc), do: term
+
+  @doc """
+  The shift of the second showing of a wall reading a zone's clock shows
+  twice, as it goes back; `nil` for a reading it shows once or skips.
+  """
+  @spec second_showing_of(t(), tick()) :: shift() | nil
+  def second_showing_of(%__MODULE__{name: name} = zone, wall) when is_binary(name) do
+    case offsets_at_wall(zone, wall) do
+      [_first, second] -> shift_of(second)
+      _once_or_skipped -> nil
+    end
+  end
+
+  def second_showing_of(_zone, _wall), do: nil
+
+  @doc """
   The UTC tick at which a zone's clock first shows a reading or, where the
   clock skips it, the first reading after it: the moment the clock goes
   forward. An hour whose start is skipped is shown from there, where a part

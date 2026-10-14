@@ -30,6 +30,7 @@ defmodule Tempo do
   alias Tempo.Algebra
   alias Tempo.Allen
   alias Tempo.Build
+  alias Tempo.Children
   alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Expand
@@ -1102,7 +1103,7 @@ defmodule Tempo do
 
   def walk(expression, unit, options) when is_expression(expression) do
     with :ok <- Options.check(options, [:within], "Tempo.walk/3"),
-         do: Spans.walk(expression, unit, options)
+         do: Children.walk(expression, unit, options)
   end
 
   def walk(other, _unit, _options), do: not_an_expression(other)
@@ -1736,8 +1737,8 @@ defmodule Tempo do
   def certainty(predicate, a, b) do
     with :ok <- known_predicate(predicate),
          :ok <- one_frame(a, b),
-         {:ok, readings_a} <- Spans.readings(a),
-         {:ok, readings_b} <- Spans.readings(b),
+         {:ok, readings_a} <- Children.readings(a),
+         {:ok, readings_b} <- Children.readings(b),
          :ok <- few_enough(readings_a, readings_b, a) do
       holds = for ra <- readings_a, rb <- readings_b, do: Allen.holds?(predicate, ra, rb)
 
