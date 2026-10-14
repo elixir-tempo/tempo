@@ -20,7 +20,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
     * [x] Zones: a fixed offset (`fixed_offset_test.exs`), held to the `DateTime` and its instant.
     * [x] Zones: a day a zone left out, over the six zones that left one (`day_left_out_test.exs`), and what a zone's clock makes of a reading (`zone_validation_test.exs`), each held to `Date` and `DateTime`.
     * [ ] Words: `to_string/2` and `to_relative_string/2` (`format_test.exs`, `to_relative_string_test.exs`).
-    * [ ] Calendars other than `Calendar.ISO`: weeks, composites, a year that starts in March (`week_calendar_test.exs`, `composite_calendar_test.exs`, `year_start_test.exs`).
+    * [x] Calendars other than `Calendar.ISO` (`other_calendars_test.exs`): a calendar of weeks, one that left days out as it changed and one whose year begins in the middle of a month, each held to Calendrical's own answers. The old files were of the old design's forms and were not carried; their questions were.
 
 * [ ] **Calendrical 1.4 and Localize on hex.** `mix.exs` takes both from GitHub `main`; a release needs published versions. Calendrical has one behaviour that every calendar answers, `Localize.Calendar.ISO` among them by shape (Calendrical's `localize_calendar_iso_test.exs` and its laws test hold it there); `leap_month/1`, `weeks_in_month/2` and `month_week/3` left the behaviour on 2026-10-14, as nothing called them and another callback answers each.
 

@@ -120,7 +120,10 @@ defmodule Tempo.Measure do
     }
   end
 
-  defp counted_in(unit, count), do: Duration.multiply(Shift.one(unit), count)
+  # A unit that is a label (a quarter, a day of the week) is counted in the
+  # unit it is found by, and the count is of that unit: an interval of one
+  # quarter is three months counted, and is three months.
+  defp counted_in(unit, count), do: Duration.multiply(Shift.one(Unit.grain(unit)), count)
 
   defp count({start, stop}, {:microsecond, _}, _frame, _expression), do: {:ok, stop - start}
 

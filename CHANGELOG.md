@@ -122,6 +122,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* `Tempo.duration/1` of an interval of quarters is three months for each: `2026-33/2026-34` is `P6M`, where it was `P18M`.
+
 * An intersection or a difference of a set written at UTC and one in a named zone writes each end at UTC; an end cut from the zoned operand had no offset, and was a floating value.
 
 * A zone that is a fixed offset is within a day of UTC, as a written shift is: `[+25:00]` is refused, where it was read.
