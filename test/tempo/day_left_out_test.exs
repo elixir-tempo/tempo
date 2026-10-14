@@ -99,7 +99,7 @@ defmodule Tempo.DayLeftOutTest do
 
         assert {zone, measured} == {zone, [day]}
 
-        assert {zone, {:error, %Tempo.ZoneError{reason: :gap}}} =
+        assert {^zone, {:error, %Tempo.ZoneError{reason: :gap}}} =
                  {zone, Tempo.new(year: day.year, month: day.month, day: day.day, zone: zone)}
       end
     end

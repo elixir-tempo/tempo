@@ -53,14 +53,20 @@ defmodule Tempo.Zone do
   def fixed(minutes) when is_integer(minutes), do: %__MODULE__{offset: minutes}
 
   @doc "An offset in ticks as a written shift: five hours behind UTC is `[hour: -5, minute: 0]`."
-  @spec shift_of(tick()) :: [{:hour, integer()} | {:minute, integer()}, ...]
+  @spec shift_of(tick()) :: [
+          {:hour, integer()} | {:minute, integer()} | {:second, integer()},
+          ...
+        ]
   # No shift from UTC is held as it is read from `Z`.
   def shift_of(0), do: [hour: 0]
 
   def shift_of(offset) do
-    behind? = offset < 0
-    minutes = div(abs(offset), 60 * @second)
-    signed([hour: div(minutes, 60), minute: rem(minutes, 60)], behind?)
+    seconds = div(abs(offset), @second)
+    units = [hour: div(seconds, 3600), minute: rem(div(seconds, 60), 60)]
+
+    # An offset of a local mean time has seconds (`-07:52:58`), and keeps them.
+    units = if rem(seconds, 60) == 0, do: units, else: units ++ [second: rem(seconds, 60)]
+    signed(units, offset < 0)
   end
 
   @doc """

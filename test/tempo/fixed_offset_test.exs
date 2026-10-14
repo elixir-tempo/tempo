@@ -103,6 +103,35 @@ defmodule Tempo.FixedOffsetTest do
     end
   end
 
+  describe "an offset with seconds" do
+    # Los Angeles kept local mean time until 1883, eight hours less one
+    # minute and two seconds behind UTC: -07:52:58.
+    @local_mean_time -28_378
+
+    test "keeps its seconds, and is the instant the DateTime is" do
+      date_time = date_time("Etc/UTC", @local_mean_time)
+      value = Tempo.from_elixir!(date_time)
+
+      assert value.shift == [hour: -7, minute: 52, second: 58]
+      assert instant(value) == DateTime.to_unix(date_time)
+      assert Tempo.to_iso8601(value) == {:ok, "2026Y5M23DT14H30M0SZ-7H52M58S"}
+      assert Tempo.from_iso8601(elem(Tempo.to_iso8601(value), 1)) == {:ok, value}
+    end
+
+    test "is the offset of a zone in its local mean time, hour by hour" do
+      {:ok, morning} = DateTime.new(~D[1880-06-15], ~T[10:00:00], "America/Los_Angeles")
+      assert morning.utc_offset == @local_mean_time
+
+      {:ok, day} = Tempo.new(year: 1880, month: 6, day: 15, zone: "America/Los_Angeles")
+      {:ok, hours} = Tempo.walk(day, :hour)
+
+      for {hour, n} <- Enum.with_index(hours) do
+        {:ok, expected} = DateTime.new(~D[1880-06-15], Time.new!(n, 0, 0), "America/Los_Angeles")
+        assert {n, instant(hour)} == {n, DateTime.to_unix(expected)}
+      end
+    end
+  end
+
   describe "a DateTime in a zone" do
     test "keeps its zone" do
       {:ok, new_york} = DateTime.new(~D[2026-05-23], ~T[14:30:00], "America/New_York")

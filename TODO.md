@@ -36,7 +36,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ### Defects and gaps
 
-* [ ] **An offset with seconds is held to the minute.** A `DateTime` whose offset has seconds (`-07:52:58`, a local mean time) is converted with a shift of hours and minutes, the seconds dropped, though ISO 8601-2 writes a shift with them (`Z7H33M14S`) and the reader reads one.
+* [x] **An offset with seconds is held to the minute.** Fixed: a shift made from an offset keeps its seconds (`Z-7H52M58S`), held to `DateTime` in `fixed_offset_test.exs`. It was: a `DateTime` whose offset has seconds (`-07:52:58`, a local mean time) is converted with a shift of hours and minutes, the seconds dropped, though ISO 8601-2 writes a shift with them (`Z7H33M14S`) and the reader reads one.
 
 * [ ] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused.
 
