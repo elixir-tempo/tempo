@@ -46,6 +46,10 @@ defmodule Tempo do
 
   # The options of the set operations: a window to place their operands in, and whose metadata a result carries.
   @set_options [:within, :metadata]
+  @words_options [:locale, :format, :within, :number_system, :prefer, :except]
+  @relative_options [:from, :unit, :format, :locale, :numeric]
+  # No unit asked is the unit the two differ in.
+  @relative_units [nil, :year, :quarter, :month, :week, :day, :hour, :minute, :second]
 
   @enforce_keys [:form]
   defstruct form: nil,
@@ -3574,13 +3578,19 @@ defmodule Tempo do
   * `:within` is a `t:t/0`, the window an expression with no year or no end
     is placed in.
 
+  * `:number_system` and `:prefer` are Localize's: the digits a number is
+    written in, and which of a locale's variants of a format is taken.
+
+  * `:except` is a list of the units a duration's words leave out.
+
   ### Returns
 
   * `{:ok, words}`.
 
   * `{:error, exception}`: a `Tempo.ConversionError` with reason `:open`
     for an interval with an open end and `:needs_a_year` for an expression
-    with no year that the units alone cannot show, or Localize's own error.
+    with no year that the units alone cannot show, an `ArgumentError` for
+    an option it does not take, or Localize's own error.
 
   ### Examples
 
@@ -3612,7 +3622,10 @@ defmodule Tempo do
 
   """
   @spec to_string(t() | Duration.t(), keyword()) :: {:ok, String.t()} | {:error, error()}
-  def to_string(expression, options \\ []), do: Format.to_string(expression, options)
+  def to_string(expression, options \\ []) do
+    with :ok <- Options.check(options, @words_options, "Tempo.to_string/2"),
+         do: Format.to_string(expression, options)
+  end
 
   @doc """
   `to_string/2`, returning the words or raising.
@@ -3655,12 +3668,22 @@ defmodule Tempo do
   * `:format` is `:standard` (the default), `:short` or `:narrow`, and
     `:locale` a CLDR locale.
 
+  * `:numeric` is `:auto` (the default), which takes a locale's word for a
+    difference it has one for (yesterday, next year), or `:always`, which
+    counts it (1 day ago, in 1 year).
+
+  A `:from` of another calendar is brought to the expression's, so a Hebrew
+  date is counted in Hebrew months and years from a Gregorian one.
+
   ### Returns
 
   * `{:ok, words}`.
 
   * `{:error, %Tempo.ConversionError{reason: :needs_a_year}}` when either
     has no year, and `:open` when the expression has no start.
+
+  * `{:error, %ArgumentError{}}` for an option it does not take or a unit
+    it does not count in.
 
   ### Examples
 
@@ -3679,8 +3702,37 @@ defmodule Tempo do
 
   """
   @spec to_relative_string(t(), keyword()) :: {:ok, String.t()} | {:error, error()}
-  def to_relative_string(expression, options \\ []),
-    do: Format.to_relative_string(expression, options)
+  def to_relative_string(expression, options \\ []) do
+    with :ok <- Options.check(options, @relative_options, "Tempo.to_relative_string/2"),
+         :ok <- relative_unit(options[:unit]),
+         {:ok, options} <- from_in_calendar(expression, options),
+         do: Format.to_relative_string(expression, options)
+  end
+
+  defp relative_unit(unit) when unit in @relative_units, do: :ok
+
+  defp relative_unit(unit) do
+    counted = @relative_units |> Enum.reject(&is_nil/1) |> Enum.map_join(", ", &inspect/1)
+    message = "Tempo.to_relative_string/2 does not count in #{inspect(unit)}: it counts in "
+    {:error, ArgumentError.exception(message <> counted)}
+  end
+
+  # The reference is brought to the calendar of what is counted from it.
+  defp from_in_calendar(%__MODULE__{calendar: calendar}, options) do
+    case Keyword.fetch(options, :from) do
+      {:ok, %__MODULE__{} = from} ->
+        with {:ok, from} <- to_calendar(from, calendar),
+             do: {:ok, Keyword.put(options, :from, from)}
+
+      {:ok, other} ->
+        {:error, ConversionError.exception(value: other, reason: :not_an_expression)}
+
+      :error ->
+        {:ok, options}
+    end
+  end
+
+  defp from_in_calendar(_other, options), do: {:ok, options}
 
   @doc """
   A description of an expression in prose: what it is, the time it covers,

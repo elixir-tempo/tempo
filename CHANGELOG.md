@@ -122,6 +122,12 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* `Tempo.to_string/2` and `Tempo.to_relative_string/2` return an `ArgumentError` for an option they do not take, options that are no keyword list or a unit that is not counted in, where they passed it over or raised.
+
+* `Tempo.to_relative_string/2` counts weeks and quarters by the calendar's own (1 July is next quarter from 30 June), and hours, minutes and seconds by those that pass across a change of a zone's clock.
+
+* `Tempo.to_relative_string/2` brings a `:from` of another calendar to the expression's, where a Hebrew date from a Gregorian one was thousands of years away.
+
 * A yearly RRULE of every second year or more that counts a weekday in named months (`FREQ=YEARLY;INTERVAL=2;BYMONTH=10;BYDAY=-1SU`) keeps its interval, where it recurred every year.
 
 * `Tempo.duration/1` of an interval of quarters is three months for each: `2026-33/2026-34` is `P6M`, where it was `P18M`.

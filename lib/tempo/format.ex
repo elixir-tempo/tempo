@@ -14,7 +14,7 @@ defmodule Tempo.Format do
 
   alias Localize.DateTime.Relative
   alias Localize.Interval
-  alias Tempo.{ConversionError, Duration, Limit, Shift, Spans, Unit, Walk}
+  alias Tempo.{Calendar, ConversionError, Duration, Limit, Shift, Spans, Unit, Walk}
 
   @to_minus " – "
   @units [:year, :month, :day, :hour, :minute, :second]
@@ -296,7 +296,8 @@ defmodule Tempo.Format do
          {:ok, [first | _]} <- one_span(expression),
          {:ok, {start, _}} <- extent_start(first) do
       wall = Walk.wall(start, frame)
-      {:ok, %{units: Walk.at_tick(wall, :second, frame.calendar), wall: wall}}
+      units = Walk.at_tick(wall, :second, frame.calendar)
+      {:ok, %{units: units, wall: wall, at: start, line: frame.frame, calendar: frame.calendar}}
     end
   end
 
@@ -318,17 +319,38 @@ defmodule Tempo.Format do
 
   defp difference(there, here, :year), do: there.units[:year] - here.units[:year]
 
-  defp difference(there, here, :quarter), do: div(difference(there, here, :month), 3)
+  # A quarter and a week are counted as a year and a month are, by the
+  # periods of the calendar: the first of July is next quarter from the
+  # last of June, and a Monday next week from the Friday before it.
+  defp difference(there, here, :quarter), do: quarter(there) - quarter(here)
 
   defp difference(there, here, :month),
     do:
       there.units[:year] * 12 + there.units[:month] -
         (here.units[:year] * 12 + here.units[:month])
 
-  defp difference(there, here, :week), do: div(difference(there, here, :day), 7)
+  defp difference(there, here, :week),
+    do: div(week_begins(there) - week_begins(here), Calendar.days_in_week(there.calendar))
 
   defp difference(there, here, :day),
     do: Integer.floor_div(there.wall, @day) - Integer.floor_div(here.wall, @day)
 
+  # Hours, minutes and seconds are those that pass: across a change of a
+  # zone's clock that is not the difference of the two readings.
+  defp difference(%{line: :utc} = there, %{line: :utc} = here, unit),
+    do: div(there.at - here.at, Unit.ticks(unit))
+
   defp difference(there, here, unit), do: div(there.wall - here.wall, Unit.ticks(unit))
+
+  defp day_of(%{wall: wall}), do: Integer.floor_div(wall, @day)
+
+  defp quarter(%{calendar: calendar} = reading) do
+    [year: year, quarter: quarter] = Walk.at_day(day_of(reading), :quarter, calendar)
+    year * 4 + quarter
+  end
+
+  defp week_begins(%{calendar: calendar} = reading) do
+    {:ok, day} = Calendar.first_day(calendar, Walk.at_day(day_of(reading), :week, calendar))
+    day
+  end
 end
