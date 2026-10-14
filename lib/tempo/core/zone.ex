@@ -58,7 +58,24 @@ defmodule Tempo.Zone do
   def shift_of(0), do: [hour: 0]
 
   def shift_of(offset) do
-    [hour: div(offset, 3600 * @second), minute: div(rem(offset, 3600 * @second), 60 * @second)]
+    behind? = offset < 0
+    minutes = div(abs(offset), 60 * @second)
+    signed([hour: div(minutes, 60), minute: rem(minutes, 60)], behind?)
+  end
+
+  @doc """
+  The units of a shift with its sign: a shift behind UTC carries a minus on
+  its first unit that is not zero, so half an hour behind is `[hour: 0,
+  minute: -30]` and five and a half hours behind `[hour: -5, minute: 30]`.
+  """
+  @spec signed(keyword(non_neg_integer()), boolean()) :: shift()
+  def signed(units, false), do: units
+
+  def signed(units, true) do
+    case Enum.split_while(units, fn {_unit, value} -> value == 0 end) do
+      {_all_zero, []} -> units
+      {zeros, [{unit, value} | rest]} -> zeros ++ [{unit, -value} | rest]
+    end
   end
 
   @doc "A written shift as ticks: `[hour: -5, minute: 30]` is five and a half hours behind UTC."

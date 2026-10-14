@@ -13,6 +13,7 @@ defmodule Tempo.Reader.Value do
   alias Tempo.Reader.Number
   alias Tempo.Reader.Selection
   alias Tempo.Unit
+  alias Tempo.Zone
 
   @type read :: %{units: Tempo.Unit.units(), qualifications: map() | nil, shift: keyword() | nil}
 
@@ -234,7 +235,7 @@ defmodule Tempo.Reader.Value do
     case shift_units(rest, []) do
       {[], rest} when sign == 1 -> {:ok, [hour: 0], rest}
       {[], _rest} -> :error
-      {[{first, value} | units], rest} -> {:ok, [{first, sign * value} | units], rest}
+      {units, rest} -> {:ok, Zone.signed(units, sign == -1), rest}
     end
   end
 

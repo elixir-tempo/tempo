@@ -36,12 +36,21 @@ defmodule Tempo.Measure do
     cond do
       Keyword.has_key?(units, :selection) -> {:error, conversion(value, :selection)}
       Keyword.has_key?(units, :season) -> covered_duration(value)
+      shown_by_a_clock?(value, units) -> covered_duration(value)
       Unit.concrete?(units) -> unit_duration(List.last(units))
       true -> covered_duration(value)
     end
   end
 
   def duration(%Tempo{} = expression), do: covered_duration(expression)
+
+  # An hour, a minute or a second in a named zone is as long as the zone's
+  # clock shows it, which is not always one of it: half an hour where the
+  # clock skips the other half.
+  defp shown_by_a_clock?(%Tempo{zone: %Tempo.Zone{name: name}}, units) when is_binary(name),
+    do: Unit.concrete?(units) and Unit.resolution(units) in [:hour, :minute, :second]
+
+  defp shown_by_a_clock?(_value, _units), do: false
 
   defp unit_duration({:group, {_nth, [{unit, size}]}}),
     do: Duration.multiply(Shift.one(unit), size)
@@ -70,11 +79,34 @@ defmodule Tempo.Measure do
       Enum.map(covered, fn {start, stop} -> count({start, stop}, unit, frame, expression) end)
 
     case Enum.find(counts, &match?({:error, _}, &1)) do
+      nil when unit in [:hour, :minute, :second] ->
+        clock_length(
+          unit,
+          covered |> Enum.map(fn {start, stop} -> stop - start end) |> Enum.sum()
+        )
+
       nil ->
         counted_in(unit, counts |> Enum.map(&elem(&1, 1)) |> Enum.sum())
 
       error ->
         error
+    end
+  end
+
+  # A length on the clock in a unit and, where it is not whole units of it,
+  # the finer units that are left: an hour and a half is `PT1H30M` and half
+  # an hour `PT30M`, where a count of whole hours would say one and none.
+  defp clock_length(unit, ticks) do
+    {parts, _left} =
+      [:hour, :minute, :second]
+      |> Enum.drop_while(&(&1 != unit))
+      |> Enum.map_reduce(ticks, fn finer, left ->
+        {{finer, div(left, Unit.ticks(finer))}, rem(left, Unit.ticks(finer))}
+      end)
+
+    case Enum.reject(parts, fn {_unit, count} -> count == 0 end) do
+      [] -> %Duration{units: [{unit, 0}]}
+      units -> %Duration{units: units}
     end
   end
 

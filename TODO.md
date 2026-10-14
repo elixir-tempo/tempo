@@ -17,7 +17,8 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
     * [x] Allen's axioms (`allen_axioms_test.exs`): the composition table held to what three spans give, meeting one way, and a chain of spans that meet as one.
     * [ ] The set operations held to a measure written apart (`set_operations_measure_test.exs`).
     * [x] Zones: a change of the clock (`change_of_the_clock_test.exs`), twenty-one days of twelve zones held to what `DateTime` says the clock showed.
-    * [ ] Zones: a day a zone left out, a fixed offset, and what a zone refuses (`day_left_out_test.exs`, `fixed_offset_test.exs`, `zone_validation_test.exs`).
+    * [x] Zones: a fixed offset (`fixed_offset_test.exs`), held to the `DateTime` and its instant.
+    * [ ] Zones: a day a zone left out, and what a zone refuses (`day_left_out_test.exs`, `zone_validation_test.exs`).
     * [ ] Words: `to_string/2` and `to_relative_string/2` (`format_test.exs`, `to_relative_string_test.exs`).
     * [ ] Calendars other than `Calendar.ISO`: weeks, composites, a year that starts in March (`week_calendar_test.exs`, `composite_calendar_test.exs`, `year_start_test.exs`).
 
@@ -35,7 +36,7 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ### Defects and gaps
 
-* [ ] **A length shorter than its own unit is written as none.** `Tempo.duration/1` counts whole units of an expression's resolution, so the half hour the clock shows of an hour it half skips (Lord Howe Island, 4 October 2026, `T2H`) is `PT0H`, and so is the quarter hour of decision 30. It wants the finer unit: `PT30M`.
+* [ ] **An offset with seconds is held to the minute.** A `DateTime` whose offset has seconds (`-07:52:58`, a local mean time) is converted with a shift of hours and minutes, the seconds dropped, though ISO 8601-2 writes a shift with them (`Z7H33M14S`) and the reader reads one.
 
 * [ ] **`BYDAY` with numbered weekdays of several days** (`BYDAY=2MO,2WE`) is refused.
 
@@ -56,6 +57,8 @@ Each decision is recorded in `plans/decisions.md` when it is made, with its ques
 
 ## Done since the rewrite
 
+* [x] Offsets (2026-10-14): half an hour behind UTC (`-00:30`) is read as behind, where it was read as ahead; a `DateTime` whose time zone is an offset, UTC beside an offset, or a zone no database has is read by its own offset, where the first and third were errors and the second was five hours out; a value in `[-05:00]` has a `DateTime`; "EST" in words is the shift it is.
+* [x] A length on the clock that is not whole units of its resolution has the finer units that say it (2026-10-14): the half hour of a half-skipped hour is `PT30M`, where it was `PT0H`.
 * [x] Decision 30 built (2026-10-14): an hour a fall-back shows in two parts is, the second time, the part the clock shows.
 * [x] An hour of a zone's clock is from where the clock comes to it to where the clock leaves it (2026-10-14): thirty minutes where the clock skips half of it, ninety where it shows half of it twice. The hours of a day with such a change were each a whole hour long and ran over one another.
 * [x] An interval with an open end is read as a member of a set (`{2026-06-03/..}`), as "and later" is written back; a member with several ranges is an error where it raised (2026-10-14).

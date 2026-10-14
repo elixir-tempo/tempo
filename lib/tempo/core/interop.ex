@@ -67,11 +67,24 @@ defmodule Tempo.Interop do
   defp clock(%{hour: h, minute: m, second: s, microsecond: {us, precision}}),
     do: [hour: h, minute: m, second: s, microsecond: {us, precision}]
 
-  defp zone_of(%DateTime{time_zone: "Etc/UTC"}), do: {:ok, nil, [hour: 0]}
+  # A `DateTime` in a zone the database has is in that zone. Any other says
+  # its moment by its own offset, which is then its shift: UTC, a time zone
+  # that is an offset (`"-05:00"`, as RFC 9557 and Localize name one), UTC
+  # named beside an offset that is not zero, and a zone no database has.
+  defp zone_of(%DateTime{time_zone: "Etc/UTC", utc_offset: 0, std_offset: 0}),
+    do: {:ok, nil, [hour: 0]}
 
-  defp zone_of(%DateTime{time_zone: name}) do
-    with {:ok, zone} <- Zone.named(name), do: {:ok, zone, nil}
+  defp zone_of(%DateTime{time_zone: "Etc/UTC"} = datetime), do: {:ok, nil, own_shift(datetime)}
+
+  defp zone_of(%DateTime{time_zone: name} = datetime) do
+    case Zone.named(name) do
+      {:ok, zone} -> {:ok, zone, nil}
+      {:error, _not_in_the_database} -> {:ok, nil, own_shift(datetime)}
+    end
   end
+
+  defp own_shift(%DateTime{utc_offset: utc_offset, std_offset: std_offset}),
+    do: Zone.shift_of((utc_offset + std_offset) * 1_000_000)
 
   # ── To Elixir ─────────────────────────────────────────────────────────
 
@@ -179,6 +192,13 @@ defmodule Tempo.Interop do
         {:error, reason} -> {:error, ConversionError.exception(value: value, reason: reason)}
       end
     end
+  end
+
+  # A zone that is a fixed offset (`[-05:00]`) is that offset, and the
+  # moment is the reading at it; a shift written beside it says the moment.
+  def to_datetime(%Tempo{zone: %Zone{name: nil, offset: minutes}, shift: shift} = value)
+      when is_integer(minutes) do
+    to_datetime(%{value | zone: nil, shift: shift || Zone.shift_of(minutes * 60 * 1_000_000)})
   end
 
   def to_datetime(%Tempo{shift: shift} = value) when is_list(shift) do

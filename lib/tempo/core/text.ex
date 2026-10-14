@@ -4,6 +4,7 @@ defmodule Tempo.Text do
   # declares for a text, and a locale's own words for a date or a time.
 
   alias Tempo.{Duration, Interval, ParseError, Reader, Unit}
+  alias Tempo.Zone
 
   @profiles [:date, :time, :datetime, :interval, :duration]
 
@@ -83,15 +84,30 @@ defmodule Tempo.Text do
          do: Interval.new(from: from, to: to)
   end
 
-  # Calendrical's fields as Tempo's units: a zone by name, UTC as a zero shift.
+  # Calendrical's fields as Tempo's units: a zone by name, UTC as a zero
+  # shift, and a time zone that is an offset (`"-05:00"`, what "EST" and
+  # "GMT+5" are read as) as the shift it is.
   defp named(fields) do
     {zone, fields} = Map.pop(fields, :time_zone)
     fields = Map.drop(fields, [:microsecond, :zone_abbr, :utc_offset, :std_offset])
 
     case zone do
-      nil -> fields
-      "Etc/UTC" -> Map.put(fields, :shift, hour: 0)
-      name -> Map.put(fields, :zone, name)
+      nil ->
+        fields
+
+      "Etc/UTC" ->
+        Map.put(fields, :shift, hour: 0)
+
+      <<sign, h1, h2, ?:, m1, m2>> when sign in [?+, ?-] ->
+        offset(fields, sign, [h1, h2], [m1, m2])
+
+      name ->
+        Map.put(fields, :zone, name)
     end
+  end
+
+  defp offset(fields, sign, hours, minutes) do
+    units = [hour: List.to_integer(hours), minute: List.to_integer(minutes)]
+    Map.put(fields, :shift, Zone.signed(units, sign == ?-))
   end
 end

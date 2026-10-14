@@ -18,6 +18,31 @@ defmodule Tempo.ChangeOfTheClockTest do
 
   @minute 60
 
+  describe "the length of an hour the clock does not show whole" do
+    import Tempo.Sigils
+
+    test "is the part it shows, in the units that say it" do
+      # Lord Howe Island, 4 October 2026: the clock goes from 02:00 to 02:30.
+      skipped = ChangeOfTheClock.day("Australia/Lord_Howe", ~D[2026-10-04])
+      assert Tempo.duration(Enum.at(skipped, 2)) == ~o"PT30M"
+      assert Tempo.duration(Tempo.to_interval!(Enum.at(skipped, 2))) == ~o"PT30M"
+      assert Tempo.duration(Enum.at(skipped, 3)) == ~o"PT1H"
+
+      # 5 April 2026: it goes from 02:00 back to 01:30.
+      shown_twice = ChangeOfTheClock.day("Australia/Lord_Howe", ~D[2026-04-05])
+      assert Tempo.duration(Enum.at(shown_twice, 1)) == ~o"PT1H30M"
+
+      # The Chatham Islands, the same day: from 03:45 back to 02:45.
+      two_parts = ChangeOfTheClock.day("Pacific/Chatham", ~D[2026-04-05])
+      assert Tempo.duration(Enum.at(two_parts, 4)) == ~o"PT15M"
+    end
+
+    test "is a whole hour where the clock shows a whole hour" do
+      assert Tempo.duration(~o"2026-06-15T10[Europe/Paris]") == ~o"PT1H"
+      assert Tempo.duration(~o"2026-03-29T01/2026-03-29T04[Europe/Paris]") == ~o"PT2H"
+    end
+  end
+
   for {zone, date, change} <- ChangeOfTheClock.gaps() ++ ChangeOfTheClock.folds() do
     describe "#{zone} on #{date}, #{change}" do
       @zone zone

@@ -14,6 +14,7 @@ defmodule Tempo.Reader.Implied do
   alias Tempo.Reader.Duration
   alias Tempo.Reader.Number
   alias Tempo.Reader.Value
+  alias Tempo.Zone
 
   @type read :: Value.read()
 
@@ -462,17 +463,19 @@ defmodule Tempo.Reader.Implied do
   defp shift(<<"Z", rest::binary>>), do: {:ok, [hour: 0], rest}
 
   defp shift(<<sign, rest::binary>>) when sign in [?+, ?-] do
-    factor = if sign == ?-, do: -1, else: 1
+    behind? = sign == ?-
 
     case Number.split_while(rest, &(&1 in ?0..?9)) do
       {<<h::binary-size(2)>>, <<":", m::binary-size(2), rest::binary>>} when m != "" ->
-        {:ok, [hour: factor * String.to_integer(h), minute: String.to_integer(m)], rest}
+        {:ok, Zone.signed([hour: String.to_integer(h), minute: String.to_integer(m)], behind?),
+         rest}
 
       {<<h::binary-size(2), m::binary-size(2)>>, rest} ->
-        {:ok, [hour: factor * String.to_integer(h), minute: String.to_integer(m)], rest}
+        {:ok, Zone.signed([hour: String.to_integer(h), minute: String.to_integer(m)], behind?),
+         rest}
 
       {<<h::binary-size(2)>>, rest} ->
-        {:ok, [hour: factor * String.to_integer(h)], rest}
+        {:ok, Zone.signed([hour: String.to_integer(h)], behind?), rest}
 
       _ ->
         :error

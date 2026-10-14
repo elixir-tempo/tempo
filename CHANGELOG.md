@@ -122,7 +122,13 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* An offset behind UTC by less than an hour (`-00:30`) is read as behind; it was read as ahead.
+
+* `Tempo.from_elixir/2` reads a `DateTime` whose time zone is an offset (`"-05:00"`), is UTC beside an offset, or is no zone of the database by its own offset, and `Tempo.to_datetime/1` answers for a value in a fixed-offset zone (`[-05:00]`). `Tempo.parse/2` reads "EST" and "GMT+5" as the shifts they are.
+
 * An hour or a minute in a zone runs from where the clock comes to it to where the clock leaves it. Where a clock changes by half an hour or at a quarter to (Lord Howe Island, the Chatham Islands) the hours were each sixty minutes and overlapped; `Enum.count/1` of such a day counts the hours the clock shows.
+
+* `Tempo.duration/1` of a span of the clock that is not whole units of its resolution has the finer units that say it: an hour a zone's clock half skips is `PT30M`.
 
 * An interval with an open end is read as a member of a set (`{2026-06-03/..}`), as "and later" is written back; it was misread, and raised when asked for its spans.
 
