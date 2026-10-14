@@ -44,6 +44,9 @@ defmodule Tempo.Reader.WrittenFormsTest do
     {"2026-37", "2026Y1G4MU"},
     {"2026-40", "2026Y1G6MU"},
     {"2026Y2G3MU", "2026Y2G3MU"},
+    # A recurrence starts at a value whose year is a set, where a set alone is a domain.
+    {"R3/{2026,2028}Y6M15D/P1D", "R3/{2026,2028}Y6M15D/P1D"},
+    {"R3/{2026..2028}Y6M15D/P1D", "R3/{2026..2028}Y6M15D/P1D"},
     # Durations: nothing, a negative, a fraction.
     {"PT0S", "PT0S"},
     {"-P1D", "P-1D"},

@@ -201,7 +201,7 @@ defmodule Tempo.Unit do
   """
   @spec ordered(keyword()) :: {:ok, units()} | {:error, Exception.t()}
   def ordered(units) do
-    keys = Keyword.keys(units)
+    keys = Enum.map(units, &ordered_as/1)
 
     cond do
       Enum.any?(keys, &(&1 not in @order)) ->
@@ -216,9 +216,14 @@ defmodule Tempo.Unit do
         {:error, argument("#{inspect(keys)} name a date two ways; a value is written one way")}
 
       true ->
-        {:ok, Enum.sort_by(units, fn {unit, _} -> index(unit) end)}
+        {:ok, Enum.sort_by(units, &index(ordered_as(&1)))}
     end
   end
+
+  # A group is written where the unit it groups is (`2026Y2G3MU`, two groups
+  # of three months, after the year), and stands for that unit beside the rest.
+  defp ordered_as({:group, {_nth, [{unit, size}]}}) when is_integer(size), do: unit
+  defp ordered_as({unit, _held}), do: unit
 
   defp argument(message), do: ArgumentError.exception(message)
 

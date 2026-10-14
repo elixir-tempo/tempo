@@ -418,8 +418,17 @@ defmodule Tempo.Reader do
 
   # A start may be a domain: a set of years with exclusions and a filter,
   # or every year a filter keeps (`..e`), the years a window gives.
-  defp recurrence_start(<<open, _::binary>> = body, text) when open in [?{, ?^],
-    do: set(body, text)
+  # A set as the start is a domain (`R/{2026Y..2030Y}/P1Y`), with a filter
+  # of its years or none after it; a set followed by units is one unit of a
+  # value (`R3/{2026,2028}Y6M15D/P1D`), which starts the recurrence.
+  defp recurrence_start(<<"{", rest::binary>> = body, text) do
+    case split_top(rest, "}") do
+      [_inside, filter] when filter in ["", "e", "o", "l", "c"] -> set(body, text)
+      _a_value -> interval_end(body, nil, text)
+    end
+  end
+
+  defp recurrence_start(<<"^", _::binary>> = body, text), do: set(body, text)
 
   defp recurrence_start(<<"..", filter::binary-size(1)>>, text) when filter in ~w(e o l c),
     do: filtered(%Tempo{form: {:span, :open, :open}}, filter, text)

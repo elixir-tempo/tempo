@@ -9,71 +9,107 @@ defmodule Tempo.CalendarsTest do
   # iCalendar, JSCalendar and recurrence sets read through the one
   # occurrences engine (`plans/architecture-redesign.md`, section 18).
 
-  defp ics(event_lines) do
-    """
-    BEGIN:VCALENDAR
-    VERSION:2.0
-    PRODID:-//Test//Test//EN
-    BEGIN:VEVENT
-    UID:event-1
-    DTSTAMP:20260101T000000Z
-    #{Enum.join(event_lines, "\n")}
-    END:VEVENT
-    END:VCALENDAR
-    """
-  end
-
   defp texts({:ok, set}), do: IntervalSet.map(set, &Tempo.to_iso8601!/1)
 
   describe "Tempo.ICal" do
     test "an all-day event is a span of days, written to its last day" do
       assert texts(
-               ICal.parse(
-                 ics([
-                   "DTSTART;VALUE=DATE:20260615",
-                   "DTEND;VALUE=DATE:20260618",
-                   "SUMMARY:Offsite"
-                 ])
-               )
+               ICal.parse("""
+               BEGIN:VCALENDAR
+               VERSION:2.0
+               PRODID:-//Test//Test//EN
+               BEGIN:VEVENT
+               UID:event-1
+               DTSTAMP:20260101T000000Z
+               DTSTART;VALUE=DATE:20260615
+               DTEND;VALUE=DATE:20260618
+               SUMMARY:Offsite
+               END:VEVENT
+               END:VCALENDAR
+               """)
              ) ==
                ["2026Y6M15D/17D"]
 
-      assert texts(ICal.parse(ics(["DTSTART;VALUE=DATE:20260615"]))) == [
+      assert texts(
+               ICal.parse("""
+               BEGIN:VCALENDAR
+               VERSION:2.0
+               PRODID:-//Test//Test//EN
+               BEGIN:VEVENT
+               UID:event-1
+               DTSTAMP:20260101T000000Z
+               DTSTART;VALUE=DATE:20260615
+               END:VEVENT
+               END:VCALENDAR
+               """)
+             ) == [
                "2026Y6M15D/2026Y6M15D"
              ]
     end
 
     test "a recurring event gives its occurrences, with RDATE added and EXDATE removed" do
-      lines = [
-        "DTSTART:20260601T090000Z",
-        "DTEND:20260601T100000Z",
-        "RRULE:FREQ=DAILY;COUNT=4",
-        "EXDATE:20260602T090000Z",
-        "RDATE:20260610T090000Z",
-        "SUMMARY:Standup"
-      ]
+      ics =
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//Test//EN
+        BEGIN:VEVENT
+        UID:event-1
+        DTSTAMP:20260101T000000Z
+        DTSTART:20260601T090000Z
+        DTEND:20260601T100000Z
+        RRULE:FREQ=DAILY;COUNT=4
+        EXDATE:20260602T090000Z
+        RDATE:20260610T090000Z
+        SUMMARY:Standup
+        END:VEVENT
+        END:VCALENDAR
+        """
 
-      {:ok, set} = ICal.parse(ics(lines))
+      {:ok, set} = ICal.parse(ics)
       assert IntervalSet.map(set, &Tempo.day/1) == [1, 3, 4, 10]
       assert IntervalSet.map(set, &Tempo.metadata(&1).summary) |> Enum.uniq() == ["Standup"]
       assert Tempo.metadata(set).prodid == "-//Test//Test//EN"
     end
 
     test "an endless rule needs a window, and a window keeps what overlaps it" do
-      lines = ["DTSTART:20260601T090000Z", "DTEND:20260601T100000Z", "RRULE:FREQ=WEEKLY"]
-      assert {:error, %Tempo.ConversionError{reason: :unbounded}} = ICal.parse(ics(lines))
-      {:ok, set} = ICal.parse(ics(lines), within: ~o"2026-06-01T00Z/2026-06-16T00Z")
+      ics =
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//Test//EN
+        BEGIN:VEVENT
+        UID:event-1
+        DTSTAMP:20260101T000000Z
+        DTSTART:20260601T090000Z
+        DTEND:20260601T100000Z
+        RRULE:FREQ=WEEKLY
+        END:VEVENT
+        END:VCALENDAR
+        """
+
+      assert {:error, %Tempo.ConversionError{reason: :unbounded}} = ICal.parse(ics)
+      {:ok, set} = ICal.parse(ics, within: ~o"2026-06-01T00Z/2026-06-16T00Z")
       assert IntervalSet.map(set, &Tempo.day/1) == [1, 8, 15]
     end
 
     test "a window with no zone is read on each event's clock" do
-      lines = [
-        "DTSTART;TZID=Europe/London:20260601T093000",
-        "DTEND;TZID=Europe/London:20260601T094500",
-        "RRULE:FREQ=DAILY"
-      ]
+      ics =
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//Test//EN
+        BEGIN:VEVENT
+        UID:event-1
+        DTSTAMP:20260101T000000Z
+        DTSTART;TZID=Europe/London:20260601T093000
+        DTEND;TZID=Europe/London:20260601T094500
+        RRULE:FREQ=DAILY
+        END:VEVENT
+        END:VCALENDAR
+        """
 
-      {:ok, set} = ICal.parse(ics(lines), within: ~o"2026-06-01/2026-06-02")
+      {:ok, set} = ICal.parse(ics, within: ~o"2026-06-01/2026-06-02")
 
       assert texts({:ok, set}) == [
                "2026Y6M1DT9H30M0S/T45M0S[Europe/London]",
@@ -119,7 +155,20 @@ defmodule Tempo.CalendarsTest do
     end
 
     test "events are busy time that availability is cut by" do
-      {:ok, busy} = ICal.parse(ics(["DTSTART:20260601T090000Z", "DTEND:20260601T100000Z"]))
+      {:ok, busy} =
+        ICal.parse("""
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//Test//EN
+        BEGIN:VEVENT
+        UID:event-1
+        DTSTAMP:20260101T000000Z
+        DTSTART:20260601T090000Z
+        DTEND:20260601T100000Z
+        END:VEVENT
+        END:VCALENDAR
+        """)
+
       {:ok, free} = Tempo.difference(~o"2026-06-01T08:00:00Z/2026-06-01T12:00:00Z", busy)
       assert texts({:ok, free}) == ["2026Y6M1DT8H0M0SZ/T9H0M0SZ", "2026Y6M1DT10H0M0SZ/T12H0M0SZ"]
     end

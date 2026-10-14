@@ -4,17 +4,17 @@ defmodule Tempo.Matrix.Selections do
   from its parts alone (see `plans/validated-core.md`).
 
   A selection (`L…N`) is a small language of its own within a value: the
-  units it names, the way each is written (a number, a count from the end,
-  a set, a range, a range that reaches the end), the period it is selected
-  in and that period's calendar. `entries/0` writes one part in each of
-  those ways in each of a list of periods, as `Tempo.Matrix.Shapes` does a
-  value's units.
+  units it names, what each holds (a number, a count from the end, a set, a
+  range, a range that reaches the end), the period it is selected in and
+  that period's calendar. `entries/0` gives one part in each of those ways
+  in each of a list of periods, as `Tempo.Matrix.Shapes` does a value's
+  units, each built from its parts with Tempo's builders (`value/1`).
 
   `members/1` is what a selection selects: the days of its period that
   every part names, at the resolution of its finest part and in the order
   of time, counted with `Date`, `:calendar` and the calendar module's own
-  functions. Nothing here calls `Tempo`, so a conversion that gives the
-  same spans is evidence about the conversion.
+  functions. Nothing it counts calls `Tempo`, so a conversion that gives
+  the same spans is evidence about the conversion.
 
   The readings it holds: a part is a condition on the days of the period,
   and a day is selected when every part names it; a count from the end is
@@ -26,9 +26,9 @@ defmodule Tempo.Matrix.Selections do
 
   A week beside a month, in the period or among the parts, is a week of
   that month (decided 2026-10-07 and 2026-10-08), and is written here as
-  `:week_of_month`. The rule is the calendar's (decided 2026-10-11), and
-  the text here is read with no calendar, so it is `Calendar.ISO`'s, which
-  is TR35's: a month's weeks are whole and begin on Monday, and the first
+  `:week_of_month`. The rule is the calendar's (decided 2026-10-11), and a
+  Gregorian selection here is built in no calendar, so it is
+  `Calendar.ISO`'s, which is TR35's: a month's weeks are whole and begin on Monday, and the first
   is the one that holds four or more of the month's days. So a week of a
   month may start in the month before, and a month's first and last days
   may be in no week of it.
@@ -38,6 +38,7 @@ defmodule Tempo.Matrix.Selections do
   alias Calendrical.Gregorian
   alias Calendrical.Hebrew
   alias Calendrical.ISOWeek
+  alias Tempo.Matrix.Corpus
   alias Tempo.Matrix.Reference
 
   @typedoc """
@@ -68,19 +69,6 @@ defmodule Tempo.Matrix.Selections do
     :instance
   ]
 
-  @designators %{
-    month: "M",
-    week_of_month: "W",
-    week: "W",
-    day_of_year: "O",
-    day: "D",
-    day_of_week: "K",
-    hour: "H",
-    minute: "M",
-    instance: "I"
-  }
-
-  @clock_units [:hour, :minute]
   @day_units [:day_of_year, :day, :day_of_week]
 
   # The ways a part is written: one value, a count from the end, a set, a
@@ -221,7 +209,8 @@ defmodule Tempo.Matrix.Selections do
   ]
 
   @doc """
-  The generated selections, each a corpus entry that holds its datum.
+  The generated selections, each a corpus entry of the value built from its
+  datum, holding the datum.
 
   ### Returns
 
@@ -235,23 +224,10 @@ defmodule Tempo.Matrix.Selections do
         {_way, values} <- Map.fetch!(@written, varied) do
       datum = %{calendar: calendar, period: period, parts: in_order([{varied, values} | fixed])}
 
-      %{
-        class: :selection,
-        level: :generated,
-        text: text(datum),
-        calendar: read_in(calendar),
-        selection: datum
-      }
+      :selection
+      |> Corpus.built(:generated, value(datum))
+      |> Map.put(:selection, datum)
     end
-  end
-
-  # A Gregorian text is read with no calendar given, as the corpus's others.
-  defp read_in(Gregorian) do
-    nil
-  end
-
-  defp read_in(calendar) do
-    calendar
   end
 
   defp in_order(parts) do
@@ -262,10 +238,12 @@ defmodule Tempo.Matrix.Selections do
     Enum.find_index(@unit_order, &(&1 == unit))
   end
 
-  ## The text
+  ## The value
 
   @doc """
-  A selection's text: its period, then its parts between `L` and `N`.
+  A selection's value, built from its parts: its period with
+  `Tempo.new/1`, its parts with `Tempo.selection/1`, the one placed on the
+  other with `Tempo.on/2`.
 
   ### Arguments
 
@@ -273,89 +251,32 @@ defmodule Tempo.Matrix.Selections do
 
   ### Returns
 
-  * The ISO 8601-2 text, `2026Y6ML{28..-1}DN`.
+  * `{:ok, value}`, or `{:error, exception}` where the builders refuse a
+    part (a value no period has).
 
   """
-  @spec text(datum()) :: String.t()
-  def text(%{period: period, parts: parts}) do
-    period_text(period) <> "L" <> parts_text(parts) <> "N"
+  @spec value(datum()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def value(%{calendar: calendar, period: period, parts: parts}) do
+    with {:ok, period} <- Tempo.new(period ++ in_calendar(calendar)),
+         {:ok, selection} <- Tempo.selection(Enum.map(parts, &held/1)) do
+      Tempo.on(selection, period)
+    end
   end
 
-  @doc """
-  The text of a selection's period alone, `2026Y6M`.
+  # A Gregorian selection is in the default calendar, as the corpus's others.
+  defp in_calendar(Gregorian), do: []
+  defp in_calendar(calendar), do: [calendar: calendar]
 
-  ### Arguments
+  # A week of a month is a week selected in a month; a part of one value
+  # holds it, and one of several holds them, a range as one.
+  defp held({:week_of_month, values}), do: {:week, held_values(values)}
+  defp held({unit, values}), do: {unit, held_values(values)}
 
-  * `datum` is a `t:datum/0`.
+  defp held_values([value]) when is_integer(value), do: value
+  defp held_values(values), do: Enum.map(values, &held_value/1)
 
-  ### Returns
-
-  * The period's text.
-
-  """
-  @spec period_text(datum() | keyword(integer())) :: String.t()
-  def period_text(%{period: period}) do
-    period_text(period)
-  end
-
-  def period_text(period) do
-    {date, clock} = Enum.split_with(period, fn {unit, _value} -> unit != :hour end)
-    Enum.map_join(date, &period_unit/1) <> time_text(Enum.map(clock, &period_unit/1))
-  end
-
-  defp period_unit({:year, year}) do
-    "#{year}Y"
-  end
-
-  defp period_unit({unit, value}) do
-    "#{value}#{@designators[unit]}"
-  end
-
-  @doc """
-  The text of a selection's parts alone, as a value with no year writes
-  them: `-1M-1D`.
-
-  ### Arguments
-
-  * `parts` is a datum's parts.
-
-  ### Returns
-
-  * The parts' text.
-
-  """
-  @spec parts_text(keyword([written()])) :: String.t()
-  def parts_text(parts) do
-    {clock, rest} = Enum.split_with(parts, fn {unit, _values} -> unit in @clock_units end)
-    {position, date} = Enum.split_with(rest, fn {unit, _values} -> unit == :instance end)
-
-    Enum.map_join(date, &part_text/1) <>
-      time_text(Enum.map(clock, &part_text/1)) <> Enum.map_join(position, &part_text/1)
-  end
-
-  defp time_text([]) do
-    ""
-  end
-
-  defp time_text(units) do
-    "T" <> Enum.join(units)
-  end
-
-  defp part_text({unit, [value]}) when is_integer(value) do
-    "#{value}#{@designators[unit]}"
-  end
-
-  defp part_text({unit, values}) do
-    "{" <> Enum.map_join(values, ",", &written_text/1) <> "}#{@designators[unit]}"
-  end
-
-  defp written_text({first, last}) do
-    "#{first}..#{last}"
-  end
-
-  defp written_text(value) do
-    "#{value}"
-  end
+  defp held_value({first, last}), do: Range.new(first, last, 1)
+  defp held_value(value), do: value
 
   ## What it selects
 

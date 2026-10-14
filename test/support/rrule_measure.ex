@@ -14,8 +14,9 @@ defmodule Tempo.RRuleMeasure do
   # day the rule names, and those that pass are the occurrences; `BYSETPOS`
   # then picks among those of each period, and `COUNT` and `UNTIL` end them.
   #
-  # It reads the rule's text itself, with `String` and `Date`, and knows
-  # weeks that begin on Monday and an `UNTIL` on the start's own clock.
+  # It takes a rule as the map `Tempo.RRule.from_rule/2` takes, or reads a
+  # rule's text into one itself, with `String` and `Date`; it knows weeks
+  # that begin on Monday and an `UNTIL` on the start's own clock.
 
   @weekdays %{"MO" => 1, "TU" => 2, "WE" => 3, "TH" => 4, "FR" => 5, "SA" => 6, "SU" => 7}
   # The days of the longest period a rule recurs by, a leap year.
@@ -23,13 +24,37 @@ defmodule Tempo.RRuleMeasure do
 
   @frequencies %{"YEARLY" => :year, "MONTHLY" => :month, "WEEKLY" => :week, "DAILY" => :day}
 
+  @keys %{
+    "FREQ" => :freq,
+    "INTERVAL" => :interval,
+    "COUNT" => :count,
+    "UNTIL" => :until,
+    "WKST" => :wkst,
+    "BYMONTH" => :bymonth,
+    "BYMONTHDAY" => :bymonthday,
+    "BYYEARDAY" => :byyearday,
+    "BYWEEKNO" => :byweekno,
+    "BYDAY" => :byday,
+    "BYHOUR" => :byhour,
+    "BYMINUTE" => :byminute,
+    "BYSECOND" => :bysecond,
+    "BYSETPOS" => :bysetpos
+  }
+
   @doc """
   The occurrences of a rule from a start, each a `NaiveDateTime`, that begin
-  before a day: the first `COUNT` of them, or those to `UNTIL`.
+  before a day: the first `COUNT` of them, or those to `UNTIL`. The start is
+  a reading of the clock of the zone given as `:zone`, where an `UNTIL` at
+  UTC (`19971224T000000Z`) is read.
   """
-  @spec occurrences(String.t(), NaiveDateTime.t(), Date.t()) :: [NaiveDateTime.t()]
-  def occurrences(text, %NaiveDateTime{} = start, %Date{} = before) do
-    rule = read(text)
+  @spec occurrences(String.t() | map(), NaiveDateTime.t(), Date.t(), keyword()) ::
+          [NaiveDateTime.t()]
+  def occurrences(rule, start, before, options \\ [])
+
+  def occurrences(text, start, before, options) when is_binary(text),
+    do: occurrences(read(text, Keyword.get(options, :zone)), start, before, options)
+
+  def occurrences(%{freq: _} = rule, %NaiveDateTime{} = start, %Date{} = before, _options) do
     first = NaiveDateTime.to_date(start)
 
     # A period's days are all of them, those before the start among them:
@@ -47,16 +72,20 @@ defmodule Tempo.RRuleMeasure do
 
   ## The rule, read
 
-  defp read(text) do
+  # A rule's text as the map `Tempo.RRule.from_rule/2` takes: RFC 5545's
+  # keys, lower-cased, a weekday as `{ordinal, day}`.
+  defp read(text, zone) do
     for part <- String.split(text, ";", trim: true), into: %{} do
       [key, value] = String.split(part, "=", parts: 2)
-      {key, value(key, value)}
+      {Map.fetch!(@keys, key), value(key, value, zone)}
     end
   end
 
+  defp value("UNTIL", value, zone), do: until(value, zone)
+  defp value(key, value, _zone), do: value(key, value)
+
   defp value("FREQ", value), do: Map.fetch!(@frequencies, value)
   defp value("BYDAY", value), do: value |> String.split(",") |> Enum.map(&weekday/1)
-  defp value("UNTIL", value), do: until(value)
   # Weeks begin on Monday, and a rule may say so.
   defp value("WKST", "MO"), do: 1
 
@@ -69,13 +98,23 @@ defmodule Tempo.RRuleMeasure do
     {if(ordinal == "", do: nil, else: String.to_integer(ordinal)), Map.fetch!(@weekdays, code)}
   end
 
-  defp until(<<y::binary-size(4), m::binary-size(2), d::binary-size(2)>>),
+  defp until(<<y::binary-size(4), m::binary-size(2), d::binary-size(2)>>, _zone),
     do: NaiveDateTime.new!(Date.new!(int(y), int(m), int(d)), ~T[23:59:59])
 
+  # A time at UTC is the reading the start's clock shows then.
+  defp until(<<local::binary-size(15), "Z">>, zone) when is_binary(zone) do
+    local
+    |> until(nil)
+    |> DateTime.from_naive!("Etc/UTC")
+    |> DateTime.shift_zone!(zone)
+    |> DateTime.to_naive()
+  end
+
   defp until(
-         <<date::binary-size(8), "T", h::binary-size(2), mi::binary-size(2), s::binary-size(2)>>
+         <<date::binary-size(8), "T", h::binary-size(2), mi::binary-size(2), s::binary-size(2)>>,
+         _zone
        ) do
-    %NaiveDateTime{} = day = until(date)
+    %NaiveDateTime{} = day = until(date, nil)
     NaiveDateTime.new!(NaiveDateTime.to_date(day), Time.new!(int(h), int(mi), int(s)))
   end
 
@@ -84,8 +123,8 @@ defmodule Tempo.RRuleMeasure do
   ## A day's period, and whether it is a whole number of intervals on
 
   defp in_step?(day, first, rule) do
-    periods = periods_between(first, day, rule["FREQ"])
-    periods >= 0 and rem(periods, Map.get(rule, "INTERVAL", 1)) == 0
+    periods = periods_between(first, day, rule[:freq])
+    periods >= 0 and rem(periods, Map.get(rule, :interval, 1)) == 0
   end
 
   defp periods_between(first, day, :year), do: day.year - first.year
@@ -108,36 +147,36 @@ defmodule Tempo.RRuleMeasure do
   defp admitted?(day, first, rule) do
     rule = with_start(rule, first)
 
-    month?(day, rule["BYMONTH"]) and month_day?(day, rule["BYMONTHDAY"]) and
-      year_day?(day, rule["BYYEARDAY"]) and week?(day, rule["BYWEEKNO"]) and
-      weekday?(day, rule["BYDAY"], rule)
+    month?(day, rule[:bymonth]) and month_day?(day, rule[:bymonthday]) and
+      year_day?(day, rule[:byyearday]) and week?(day, rule[:byweekno]) and
+      weekday?(day, rule[:byday], rule)
   end
 
   # What a rule leaves to its start.
-  defp with_start(%{"FREQ" => :week} = rule, first),
-    do: Map.put_new(rule, "BYDAY", [{nil, Date.day_of_week(first)}])
+  defp with_start(%{freq: :week} = rule, first),
+    do: Map.put_new(rule, :byday, [{nil, Date.day_of_week(first)}])
 
-  defp with_start(%{"FREQ" => :month} = rule, first) do
-    if names_a_day?(rule), do: rule, else: Map.put(rule, "BYMONTHDAY", [first.day])
+  defp with_start(%{freq: :month} = rule, first) do
+    if names_a_day?(rule), do: rule, else: Map.put(rule, :bymonthday, [first.day])
   end
 
-  defp with_start(%{"FREQ" => :year} = rule, first) do
+  defp with_start(%{freq: :year} = rule, first) do
     cond do
-      Map.has_key?(rule, "BYWEEKNO") ->
-        Map.put_new(rule, "BYDAY", [{nil, Date.day_of_week(first)}])
+      Map.has_key?(rule, :byweekno) ->
+        Map.put_new(rule, :byday, [{nil, Date.day_of_week(first)}])
 
       names_a_day?(rule) ->
         rule
 
       true ->
-        rule |> Map.put_new("BYMONTH", [first.month]) |> Map.put("BYMONTHDAY", [first.day])
+        rule |> Map.put_new(:bymonth, [first.month]) |> Map.put(:bymonthday, [first.day])
     end
   end
 
   defp with_start(rule, _first), do: rule
 
   defp names_a_day?(rule),
-    do: Enum.any?(["BYMONTHDAY", "BYDAY", "BYYEARDAY"], &Map.has_key?(rule, &1))
+    do: Enum.any?([:bymonthday, :byday, :byyearday], &Map.has_key?(rule, &1))
 
   defp month?(_day, nil), do: true
   defp month?(day, months), do: day.month in months
@@ -173,8 +212,8 @@ defmodule Tempo.RRuleMeasure do
 
   # A numbered weekday is the nth of its month, or of its year in a yearly
   # rule that names no month.
-  defp counted_in(%{"FREQ" => :year} = rule),
-    do: if(Map.has_key?(rule, "BYMONTH"), do: :month, else: :year)
+  defp counted_in(%{freq: :year} = rule),
+    do: if(Map.has_key?(rule, :bymonth), do: :month, else: :year)
 
   defp counted_in(_rule), do: :month
 
@@ -193,15 +232,15 @@ defmodule Tempo.RRuleMeasure do
   ## The times of day on a day
 
   defp times(day, start, rule) do
-    for hour <- Map.get(rule, "BYHOUR", [start.hour]),
-        minute <- Map.get(rule, "BYMINUTE", [start.minute]),
-        second <- Map.get(rule, "BYSECOND", [start.second]),
+    for hour <- Map.get(rule, :byhour, [start.hour]),
+        minute <- Map.get(rule, :byminute, [start.minute]),
+        second <- Map.get(rule, :bysecond, [start.second]),
         do: NaiveDateTime.new!(day, Time.new!(hour, minute, second))
   end
 
   ## Positions among a period's occurrences, and the end
 
-  defp positioned(occurrences, _first, %{"BYSETPOS" => positions, "FREQ" => frequency}) do
+  defp positioned(occurrences, _first, %{bysetpos: positions, freq: frequency}) do
     occurrences
     |> Enum.sort(NaiveDateTime)
     |> Enum.chunk_by(&period(NaiveDateTime.to_date(&1), frequency))
@@ -216,9 +255,9 @@ defmodule Tempo.RRuleMeasure do
 
   defp positioned(occurrences, _first, _rule), do: Enum.sort(occurrences, NaiveDateTime)
 
-  defp bounded(occurrences, %{"COUNT" => count}), do: Enum.take(occurrences, count)
+  defp bounded(occurrences, %{count: count}), do: Enum.take(occurrences, count)
 
-  defp bounded(occurrences, %{"UNTIL" => until}),
+  defp bounded(occurrences, %{until: until}),
     do: Enum.take_while(occurrences, &(NaiveDateTime.compare(&1, until) != :gt))
 
   defp bounded(occurrences, _rule), do: occurrences

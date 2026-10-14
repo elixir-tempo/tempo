@@ -9,13 +9,34 @@ defmodule Tempo.CensusTest do
   # answer out with the calendar's own functions and `Date`, never with Tempo.
   #
   # The observational Islamic calendars are left out, as the census leaves
-  # them apart; selections wait for phase 6.
+  # them apart; selections wait for phase 6. Each value is built from the
+  # parts the census gives (decision 48), never read from text.
 
+  alias Tempo.Interval
   alias Tempo.IntervalSet
   alias Tempo.Matrix.CalendarCensus
   alias Tempo.Spans
 
   @walk_limit 400
+
+  # A census entry's parts, built in the calendar it asks.
+  defp built({:value, units}, calendar), do: Tempo.new(units ++ [calendar: calendar])
+
+  defp built({:span, from, to}, calendar) do
+    with {:ok, from} <- built({:value, from}, calendar),
+         {:ok, to} <- built({:value, to}, calendar),
+         do: Interval.new(from: from, to: to)
+  end
+
+  defp built({:every, count, start, cadence}, calendar) do
+    with {:ok, start} <- built({:value, start}, calendar),
+         do: Tempo.every(cadence, from: start, count: count)
+  end
+
+  defp built!(parts, calendar) do
+    {:ok, value} = built(parts, calendar)
+    value
+  end
 
   defp extent!(value) do
     {:ok, extent} = Spans.extent(value)
@@ -43,14 +64,14 @@ defmodule Tempo.CensusTest do
       test "a value in each full form covers what the calendar says, and is walked by its parts" do
         calendar = unquote(calendar)
 
-        for %{form: form, text: text, expect: expect} <- CalendarCensus.forms(calendar) do
+        for %{form: form, parts: parts, expect: expect} <- CalendarCensus.forms(calendar) do
           {span, walk} = CalendarCensus.expected(expect, calendar)
-          value = Tempo.from_iso8601!(text, calendar)
+          value = built!(parts, calendar)
 
-          assert {form, text, extent!(value)} == {form, text, span}
+          assert {form, parts, extent!(value)} == {form, parts, span}
 
           if walk != :unchecked do
-            assert {form, text, walked(value)} == {form, text, Enum.take(walk, @walk_limit)}
+            assert {form, parts, walked(value)} == {form, parts, Enum.take(walk, @walk_limit)}
           end
         end
       end
@@ -58,15 +79,13 @@ defmodule Tempo.CensusTest do
       test "a value with no year covers what the calendar counts in any year, or needs a year" do
         calendar = unquote(calendar)
 
-        for %{text: text, covers: covers, walk: walk} <- CalendarCensus.no_year(calendar) do
+        for %{parts: parts, covers: covers, walk: walk} <- CalendarCensus.no_year(calendar) do
           case covers do
             {:ok, span} ->
-              assert {text, Spans.extent(Tempo.from_iso8601!(text, calendar))} ==
-                       {text, {:ok, span}}
+              assert {parts, Spans.extent(built!(parts, calendar))} == {parts, {:ok, span}}
 
             :no_such_value ->
-              assert {text, match?({:error, _}, Tempo.from_iso8601(text, calendar))} ==
-                       {text, true}
+              assert {parts, match?({:error, _}, built(parts, calendar))} == {parts, true}
 
             :needs_a_year ->
               :ok
@@ -74,16 +93,15 @@ defmodule Tempo.CensusTest do
 
           case walk do
             {:ok, expected} ->
-              assert {text, starts(Tempo.from_iso8601!(text, calendar))} == {text, expected}
+              assert {parts, starts(built!(parts, calendar))} == {parts, expected}
 
             {:count, count} ->
-              assert {text,
-                      Enum.count(Enum.take(Tempo.from_iso8601!(text, calendar), @walk_limit))} ==
-                       {text, count}
+              assert {parts, Enum.count(Enum.take(built!(parts, calendar), @walk_limit))} ==
+                       {parts, count}
 
             :needs_a_year ->
               assert_raise Tempo.ConversionError, fn ->
-                Enum.take(Tempo.from_iso8601!(text, calendar), @walk_limit)
+                Enum.take(built!(parts, calendar), @walk_limit)
               end
 
             :unchecked ->
@@ -95,14 +113,14 @@ defmodule Tempo.CensusTest do
       test "a value in each shape converts to the spans the calendar says, and is walked by its parts" do
         calendar = unquote(calendar)
 
-        for %{shape: shape, text: text, members: expected, walk: walk} <-
+        for %{shape: shape, parts: parts, members: expected, walk: walk} <-
               CalendarCensus.shapes(calendar) do
-          value = Tempo.from_iso8601!(text, calendar)
-          assert {shape, text, members(value)} == {shape, text, expected}
+          value = built!(parts, calendar)
+          assert {shape, parts, members(value)} == {shape, parts, expected}
 
           case walk do
             {:ok, expected_starts} ->
-              assert {shape, text, starts(value)} == {shape, text, expected_starts}
+              assert {shape, parts, starts(value)} == {shape, parts, expected_starts}
 
             :unchecked ->
               :ok

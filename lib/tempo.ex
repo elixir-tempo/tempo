@@ -122,15 +122,18 @@ defmodule Tempo do
   @typedoc """
   What a unit holds in a written value: a whole number; a list of whole
   numbers and ranges, a negative counting from the end; a mask of digits,
-  `:x` for one unspecified; a group, the nth of a size; a number with its
-  significant digits or its margin of error; a traditional leap month.
+  `:x` for one unspecified; `:any`, a unit unspecified (`X*`); a number
+  with its significant digits or its margin of error; a traditional leap
+  month. A group is a unit of its own, `:group`, holding the nth group, or
+  several, and the length it counts in: `{2, [month: 3]}` is `2G3MU`, the
+  second three months.
   """
   @type held ::
           integer()
           | [integer() | Range.t()]
           | {:mask, [0..9 | :x | :negative]}
           | :any
-          | {:group, held(), pos_integer()}
+          | {pos_integer() | [pos_integer() | Range.t()], [{unit(), pos_integer()}]}
           | {integer(), [significant: pos_integer()]}
           | {integer(), [margin: pos_integer()]}
           | {integer(), :leap}
@@ -480,6 +483,10 @@ defmodule Tempo do
     * `:shift` is the time shift, `[hour: 2]` for `Z2H`, `[hour: 0]` for `Z`,
       and `[hour: 0, minute: 0]` for `+00:00`, a local time at no offset.
 
+    * `:qualifications` marks units of the value as ISO 8601-2's `?`, `~`
+      and `%` do: a map of the unit to `:uncertain`, `:approximate` or
+      `:both`, so `%{year: :uncertain}` is `2026?Y`.
+
     * `:metadata` is a map the caller keeps on the value. The default is `%{}`.
 
   ### Returns
@@ -512,6 +519,12 @@ defmodule Tempo do
       iex> Tempo.new(year: 2020..2024)
       {:ok, ~o"{2020..2024}Y"}
 
+      iex> Tempo.new(year: 2026, month: 6, qualifications: %{month: :approximate})
+      {:ok, ~o"2026Y6~M"}
+
+      iex> Tempo.new(year: 2026, group: {2, [month: 3]})
+      {:ok, ~o"2026Y2G3MU"}
+
       iex> {:error, %Tempo.InvalidDateError{}} = Tempo.new(year: 2026, month: 13)
 
       iex> {:error, %ArgumentError{}} = Tempo.new(year: 2026, month: 6, week: 24)
@@ -528,16 +541,19 @@ defmodule Tempo do
     do: components |> Map.to_list() |> new()
 
   def new(components) when is_list(components) do
-    {frame, units} = Keyword.split(components, [:calendar, :zone, :shift, :metadata])
+    {frame, units} =
+      Keyword.split(components, [:calendar, :zone, :shift, :qualifications, :metadata])
 
     with {:ok, units} <- units |> Enum.map(&held_as_written/1) |> Unit.ordered(),
          {:ok, calendar} <- calendar_of(Keyword.get(frame, :calendar, Tempo.Calendar.default())),
-         {:ok, zone} <- zone_of(Keyword.get(frame, :zone)) do
+         {:ok, zone} <- zone_of(Keyword.get(frame, :zone)),
+         {:ok, qualifications} <- qualifications_of(Keyword.get(frame, :qualifications), units) do
       Validate.run(%__MODULE__{
         form: {:value, units},
         calendar: calendar,
         zone: zone,
         shift: Keyword.get(frame, :shift),
+        qualifications: qualifications,
         metadata: Keyword.get(frame, :metadata, %{})
       })
     end
@@ -553,6 +569,36 @@ defmodule Tempo do
   # A range alone is held as a list of it, as `{2020..2024}Y` is read.
   defp held_as_written({unit, %Range{} = range}), do: {unit, [range]}
   defp held_as_written(part), do: part
+
+  # A value's qualifications, each of a unit it has, as `?`, `~` and `%`
+  # write them on that unit: `2026Y6~M` is `%{month: :approximate}`.
+  defp qualifications_of(nil, _units), do: {:ok, nil}
+  defp qualifications_of(qualifications, _units) when qualifications == %{}, do: {:ok, nil}
+
+  defp qualifications_of(%{} = qualifications, units) do
+    held = Enum.map(units, fn {unit, _} -> unit end)
+
+    case Enum.reject(qualifications, fn {unit, mark} ->
+           unit in held and mark in [:uncertain, :approximate, :both]
+         end) do
+      [] ->
+        {:ok, qualifications}
+
+      [{unit, mark} | _] ->
+        {:error,
+         ArgumentError.exception(
+           ":qualifications marks a unit the value has as :uncertain, :approximate or :both, " <>
+             "not #{inspect(unit)} as #{inspect(mark)}"
+         )}
+    end
+  end
+
+  defp qualifications_of(other, _units),
+    do:
+      {:error,
+       ArgumentError.exception(
+         ":qualifications is a map of a value's units to their marks, not #{inspect(other)}"
+       )}
 
   @doc """
   Builds a value as `new/1` does, returning the value or raising.

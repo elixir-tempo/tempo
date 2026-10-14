@@ -183,13 +183,17 @@ defmodule Tempo.Matrix.Cells do
   defp partners_of(%{level: :core}, partners), do: partners
 
   defp partners_of(entry, partners) do
-    zoned? = String.contains?(entry.text, ["Z", "[", "+0", "-0"])
+    zoned? = entry |> Corpus.read() |> zoned?()
 
-    case Enum.filter(partners, fn {text, _} -> String.contains?(text, ["Z", "["]) == zoned? end) do
+    case Enum.filter(partners, fn {_text, value} -> zoned?({:ok, value}) == zoned? end) do
       [partner | _] -> [partner]
       [] -> Enum.take(partners, 1)
     end
   end
+
+  # Whether a value is on the UTC line, in a zone or at a shift.
+  defp zoned?({:ok, %Tempo{} = value}), do: Tempo.zoned?(value)
+  defp zoned?(_no_expression), do: false
 
   defp orders(%{level: :core}, arg, partner),
     do: [{"self", :self}, {arg, {:with, partner}}, {"#{arg} |", {:after, partner}}]

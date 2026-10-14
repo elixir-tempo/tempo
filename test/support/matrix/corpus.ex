@@ -3,9 +3,11 @@ defmodule Tempo.Matrix.Corpus do
   The values the matrix runs every operation against, grouped into classes
   of shape and levels of guarantee (see `plans/validated-core.md`).
 
-  Each class is a short list of ISO 8601 texts. The values are read with
+  Each class written by hand is a short list of ISO 8601 texts, read with
   `Tempo.from_iso8601/2`, so a text that stops parsing is the matrix's
-  first failure.
+  first failure. The generated classes are values built from their parts
+  (`Tempo.Matrix.Shapes`, `Tempo.Matrix.Selections`), each with the text
+  Tempo writes for it as its label.
 
   """
 
@@ -16,10 +18,12 @@ defmodule Tempo.Matrix.Corpus do
   @type level :: :core | :extended | :open | :generated | :exhaustive
 
   @type entry :: %{
-          class: atom() | String.t(),
-          level: level(),
-          text: String.t(),
-          calendar: module() | nil
+          required(:class) => atom() | String.t(),
+          required(:level) => level(),
+          required(:text) => String.t(),
+          required(:calendar) => module() | nil,
+          optional(:value) => Tempo.t(),
+          optional(:error) => Exception.t()
         }
 
   # Dates and times, each one whole value on the time line.
@@ -215,8 +219,8 @@ defmodule Tempo.Matrix.Corpus do
   @spec generated() :: [entry()]
   def generated do
     shapes =
-      for {shape, text} <- Shapes.texts() ++ Shapes.zoned() ++ Shapes.in_calendar() do
-        %{class: shape, level: :generated, text: text, calendar: nil}
+      for {shape, value} <- Shapes.values() ++ Shapes.zoned() ++ Shapes.in_calendar() do
+        built(shape, :generated, value)
       end
 
     shapes ++ Selections.entries()
@@ -235,20 +239,20 @@ defmodule Tempo.Matrix.Corpus do
   @spec exhaustive() :: [entry()]
   def exhaustive do
     intervals =
-      for {shape, text} <- Shapes.intervals() do
-        %{class: shape, level: :exhaustive, text: text, calendar: nil}
+      for {shape, expression} <- Shapes.intervals() do
+        built(shape, :exhaustive, expression)
       end
 
     pairs =
-      for {{first, second}, text} <- Shapes.pairs() do
-        %{class: "#{first} and #{second}", level: :exhaustive, text: text, calendar: nil}
+      for {{first, second}, value} <- Shapes.pairs() do
+        built({first, second}, :exhaustive, value)
       end
 
     Enum.uniq_by(intervals ++ pairs, & &1.text)
   end
 
   @doc """
-  Reads an entry's text into the value it names.
+  The value an entry names: the value built, or its text read.
 
   ### Arguments
 
@@ -256,10 +260,14 @@ defmodule Tempo.Matrix.Corpus do
 
   ### Returns
 
-  * `{:ok, value}` or `{:error, exception}`, as `Tempo.from_iso8601/2` gives.
+  * `{:ok, value}`, or `{:error, exception}` as `Tempo.from_iso8601/2`
+    gives for a text that is no value.
 
   """
   @spec read(entry()) :: {:ok, term()} | {:error, Exception.t()}
+  def read(%{value: value}), do: {:ok, value}
+  def read(%{error: exception}), do: {:error, exception}
+
   def read(%{text: text, calendar: nil}) do
     Tempo.from_iso8601(text)
   end
@@ -288,6 +296,43 @@ defmodule Tempo.Matrix.Corpus do
           "2026-06-15[Europe/Paris]"
         ] do
       {text, Tempo.from_iso8601!(text)}
+    end
+  end
+
+  @doc """
+  An entry of a value built from its parts, its label the text Tempo writes
+  for it.
+
+  ### Arguments
+
+  * `class` is the entry's class.
+
+  * `level` is its `t:level/0`.
+
+  * `value` is the `t:Tempo.t/0` built, or a builder's result.
+
+  ### Returns
+
+  * A `t:entry/0` with the value, or with the error the builder returned.
+
+  """
+  @spec built(term(), level(), Tempo.t() | {:ok, Tempo.t()} | {:error, Exception.t()}) ::
+          entry()
+  def built(class, level, {:ok, value}), do: built(class, level, value)
+
+  # What the builders refuse is an entry still, answered by its error.
+  def built(class, level, {:error, exception}) do
+    %{class: class, level: level, text: inspect(exception), calendar: nil, error: exception}
+  end
+
+  def built(class, level, %Tempo{} = value) do
+    %{class: class, level: level, text: label(value), calendar: nil, value: value}
+  end
+
+  defp label(value) do
+    case Tempo.to_iso8601(value) do
+      {:ok, text} -> text
+      {:error, _no_text} -> inspect(value)
     end
   end
 

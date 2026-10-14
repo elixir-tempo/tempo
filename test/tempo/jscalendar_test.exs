@@ -8,8 +8,22 @@ defmodule Tempo.JSCalendarTest do
 
   doctest Tempo.JSCalendar
 
+  # An event's document, made as data and encoded, its properties beside
+  # those every event has.
   defp event(properties) do
-    ~s({"@type":"Event","uid":"e","updated":"2026-06-01T09:00:00Z",#{properties}})
+    %{"@type" => "Event", "uid" => "e", "updated" => "2026-06-01T09:00:00Z"}
+    |> Map.merge(properties)
+    |> :json.encode()
+    |> IO.iodata_to_binary()
+  end
+
+  # An event of an hour with one rule, its parts beside the given ones.
+  defp ruled(start, given, rule) do
+    event(%{
+      "start" => start,
+      "duration" => "PT1H",
+      "recurrenceRules" => [Map.merge(%{"@type" => "RecurrenceRule"}, Map.merge(given, rule))]
+    })
   end
 
   # The Gregorian day each member begins on.
@@ -31,7 +45,9 @@ defmodule Tempo.JSCalendarTest do
   describe "a single event" do
     test "becomes one interval, start to start plus duration" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s("start":"2026-06-02T09:00:00","duration":"PT1H")))
+               Tempo.JSCalendar.parse(
+                 event(%{"start" => "2026-06-02T09:00:00", "duration" => "PT1H"})
+               )
 
       assert spans(set) == ["2026Y6M2DT9H0M0S/T10H0M0S"]
     end
@@ -40,7 +56,7 @@ defmodule Tempo.JSCalendarTest do
       # No span has zero extent, so an event with no length is the one
       # unit its start is written to: here a second.
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s("start":"2026-06-02T09:00:00")))
+               Tempo.JSCalendar.parse(event(%{"start" => "2026-06-02T09:00:00"}))
 
       assert [interval] = IntervalSet.members(set)
       assert Tempo.duration(interval) == ~o"PT1S"
@@ -49,14 +65,14 @@ defmodule Tempo.JSCalendarTest do
     test "a multi-part duration is applied whole" do
       assert {:ok, set} =
                Tempo.JSCalendar.parse(
-                 event(~s("start":"2026-06-02T09:00:00","duration":"P1DT2H30M"))
+                 event(%{"start" => "2026-06-02T09:00:00", "duration" => "P1DT2H30M"})
                )
 
       assert spans(set) == ["2026Y6M2DT9H0M0S/3DT11H30M0S"]
     end
 
     test "an event with no start is skipped, not fatal" do
-      assert {:ok, set} = Tempo.JSCalendar.parse(event(~s("title":"Someday")))
+      assert {:ok, set} = Tempo.JSCalendar.parse(event(%{"title" => "Someday"}))
 
       assert IntervalSet.count(set) == 0
     end
@@ -64,7 +80,11 @@ defmodule Tempo.JSCalendarTest do
     test "metadata rides along on the interval" do
       assert {:ok, set} =
                Tempo.JSCalendar.parse(
-                 event(~s("start":"2026-06-02T09:00:00","title":"Review","status":"confirmed"))
+                 event(%{
+                   "start" => "2026-06-02T09:00:00",
+                   "title" => "Review",
+                   "status" => "confirmed"
+                 })
                )
 
       assert [interval] = IntervalSet.members(set)
@@ -78,9 +98,11 @@ defmodule Tempo.JSCalendarTest do
     test "a zoned event is anchored to that zone" do
       assert {:ok, set} =
                Tempo.JSCalendar.parse(
-                 event(
-                   ~s("start":"2026-06-02T09:00:00","timeZone":"Australia/Sydney","duration":"PT1H")
-                 )
+                 event(%{
+                   "start" => "2026-06-02T09:00:00",
+                   "timeZone" => "Australia/Sydney",
+                   "duration" => "PT1H"
+                 })
                )
 
       assert [interval] = IntervalSet.members(set)
@@ -89,7 +111,7 @@ defmodule Tempo.JSCalendarTest do
 
     test "an event with no zone floats, rather than adopting the reader's" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s("start":"2026-06-02T09:00:00")))
+               Tempo.JSCalendar.parse(event(%{"start" => "2026-06-02T09:00:00"}))
 
       assert [interval] = IntervalSet.members(set)
       assert Tempo.floating?(interval)
@@ -97,7 +119,9 @@ defmodule Tempo.JSCalendarTest do
 
     test "an explicit null zone floats too" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s("start":"2026-06-02T09:00:00","timeZone":null)))
+               Tempo.JSCalendar.parse(
+                 event(%{"start" => "2026-06-02T09:00:00", "timeZone" => :null})
+               )
 
       assert [interval] = IntervalSet.members(set)
       assert Tempo.floating?(interval)
@@ -110,9 +134,11 @@ defmodule Tempo.JSCalendarTest do
       # wall clock either way.
       assert {:ok, set} =
                Tempo.JSCalendar.parse(
-                 event(
-                   ~s("start":"2026-04-05T01:00:00","timeZone":"Australia/Sydney","duration":"PT1H")
-                 )
+                 event(%{
+                   "start" => "2026-04-05T01:00:00",
+                   "timeZone" => "Australia/Sydney",
+                   "duration" => "PT1H"
+                 })
                )
 
       assert [interval] = IntervalSet.members(set)
@@ -122,7 +148,7 @@ defmodule Tempo.JSCalendarTest do
     test "an unknown zone is an error naming it" do
       assert {:error, %Tempo.ZoneError{zone: "Mars/Olympus_Mons", reason: :unknown}} =
                Tempo.JSCalendar.parse(
-                 event(~s("start":"2026-06-02T09:00:00","timeZone":"Mars/Olympus_Mons"))
+                 event(%{"start" => "2026-06-02T09:00:00", "timeZone" => "Mars/Olympus_Mons"})
                )
     end
   end
@@ -130,10 +156,15 @@ defmodule Tempo.JSCalendarTest do
   describe "recurrence" do
     test "a counted rule expands to that many occurrences" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":3}]
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "daily", "count" => 3}
+                   ]
+                 })
+               )
 
       assert IntervalSet.count(set) == 3
     end
@@ -142,10 +173,15 @@ defmodule Tempo.JSCalendarTest do
       # The bug this guards: materialising a recurrence yields start
       # moments with a one-unit span unless the duration is carried.
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":2}]
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "daily", "count" => 2}
+                   ]
+                 })
+               )
 
       for interval <- IntervalSet.members(set) do
         assert Tempo.hour(Interval.to(interval)) - Tempo.hour(Interval.from(interval)) ==
@@ -155,10 +191,11 @@ defmodule Tempo.JSCalendarTest do
 
     test "an unbounded rule needs a :within window" do
       json =
-        event(~s(
-          "start":"2026-06-01T09:00:00","duration":"PT1H",
-          "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily"}]
-        ))
+        event(%{
+          "start" => "2026-06-01T09:00:00",
+          "duration" => "PT1H",
+          "recurrenceRules" => [%{"@type" => "RecurrenceRule", "frequency" => "daily"}]
+        })
 
       assert {:error, _needs_window} = Tempo.JSCalendar.parse(json)
 
@@ -169,10 +206,9 @@ defmodule Tempo.JSCalendarTest do
 
     test "a rule passes over a month that lacks the start's day, unless it says to keep the last" do
       monthly = fn rule ->
-        Tempo.JSCalendar.parse(event(~s(
-          "start":"2026-01-31T09:00:00","duration":"PT1H",
-          "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"monthly","count":4#{rule}}]
-        )))
+        Tempo.JSCalendar.parse(
+          ruled("2026-01-31T09:00:00", %{"frequency" => "monthly", "count" => 4}, rule)
+        )
       end
 
       # RFC 8984 §4.3.3: `skip` is "omit" where a rule does not say.
@@ -183,15 +219,15 @@ defmodule Tempo.JSCalendarTest do
         "2026Y7M31DT9H0M0S/T10H0M0S"
       ]
 
-      assert {:ok, set} = monthly.("")
+      assert {:ok, set} = monthly.(%{})
       assert spans(set) == omitted
 
-      assert {:ok, set} = monthly.(~s(,"skip":"omit"))
+      assert {:ok, set} = monthly.(%{"skip" => "omit"})
       assert spans(set) == omitted
 
       # RFC 7529's other ways with a day a month lacks: the month's last
       # day, or the first of the month after.
-      assert {:ok, set} = monthly.(~s(,"skip":"backward"))
+      assert {:ok, set} = monthly.(%{"skip" => "backward"})
 
       assert spans(set) == [
                "2026Y1M31DT9H0M0S/T10H0M0S",
@@ -200,7 +236,7 @@ defmodule Tempo.JSCalendarTest do
                "2026Y4M30DT9H0M0S/T10H0M0S"
              ]
 
-      assert {:ok, set} = monthly.(~s(,"skip":"forward"))
+      assert {:ok, set} = monthly.(%{"skip" => "forward"})
 
       assert spans(set) == [
                "2026Y1M31DT9H0M0S/T10H0M0S",
@@ -210,7 +246,7 @@ defmodule Tempo.JSCalendarTest do
              ]
 
       assert {:error, %Tempo.ConversionError{value: "sideways", reason: {:unsupported, :skip}}} =
-               monthly.(~s(,"skip":"sideways"))
+               monthly.(%{"skip" => "sideways"})
     end
 
     # RFC 8984 §4.3.3: `rscale` names the calendar a rule counts its months
@@ -219,32 +255,40 @@ defmodule Tempo.JSCalendarTest do
     # occurrences.
     test "a rule counted in another calendar has its occurrences in it" do
       yearly = fn rule ->
-        Tempo.JSCalendar.parse(event(~s(
-          "start":"2026-04-05T09:00:00","duration":"PT1H",
-          "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"yearly","count":2#{rule}}]
-        )))
+        Tempo.JSCalendar.parse(
+          ruled("2026-04-05T09:00:00", %{"frequency" => "yearly", "count" => 2}, rule)
+        )
       end
 
-      assert {:ok, gregorian} = yearly.(~s(,"rscale":"gregorian"))
-      assert {:ok, unsaid} = yearly.("")
+      assert {:ok, gregorian} = yearly.(%{"rscale" => "gregorian"})
+      assert {:ok, unsaid} = yearly.(%{})
       assert spans(gregorian) == spans(unsaid)
       assert spans(unsaid) == ["2026Y4M5DT9H0M0S/T10H0M0S", "2027Y4M5DT9H0M0S/T10H0M0S"]
 
       # 5 April 2026 is 18 Nisan 5786, and 18 Nisan 5787 is 25 April 2027.
-      assert {:ok, hebrew} = yearly.(~s(,"rscale":"hebrew"))
+      assert {:ok, hebrew} = yearly.(%{"rscale" => "hebrew"})
 
       assert gregorian_dates(hebrew) == [~D[2026-04-05], ~D[2027-04-25]]
 
-      assert {:error, %ArgumentError{}} = yearly.(~s(,"rscale":"klingon"))
+      assert {:error, %ArgumentError{}} = yearly.(%{"rscale" => "klingon"})
     end
 
     test "byDay carries its ordinal" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"monthly","count":3,
-                     "byDay":[{"@type":"NDay","day":"mo","nthOfPeriod":1}]}]
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceRules" => [
+                     %{
+                       "@type" => "RecurrenceRule",
+                       "frequency" => "monthly",
+                       "count" => 3,
+                       "byDay" => [%{"@type" => "NDay", "day" => "mo", "nthOfPeriod" => 1}]
+                     }
+                   ]
+                 })
+               )
 
       # The first Monday of three consecutive months.
       assert IntervalSet.count(set) == 3
@@ -256,12 +300,23 @@ defmodule Tempo.JSCalendarTest do
 
     test "excludedRecurrenceRules removes occurrences" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":6}],
-                   "excludedRecurrenceRules":[
-                     {"@type":"RecurrenceRule","frequency":"daily","interval":2,"count":3}]
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "daily", "count" => 6}
+                   ],
+                   "excludedRecurrenceRules" => [
+                     %{
+                       "@type" => "RecurrenceRule",
+                       "frequency" => "daily",
+                       "interval" => 2,
+                       "count" => 3
+                     }
+                   ]
+                 })
+               )
 
       # Six daily occurrences, every second one excluded.
       assert IntervalSet.count(set) == 3
@@ -270,34 +325,42 @@ defmodule Tempo.JSCalendarTest do
     test "an unsupported frequency is reported, not guessed at" do
       assert {:error,
               %Tempo.ConversionError{value: "fortnightly", reason: :unsupported_frequency}} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"fortnightly"}]
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "fortnightly"}
+                   ]
+                 })
+               )
     end
 
     test "a leap month is a month of a calendar that has one" do
       # RFC 8984 writes byMonth as strings so that `"5L"` can name a leap
       # month of the calendar `rscale` names.
       yearly = fn rule ->
-        Tempo.JSCalendar.parse(event(~s(
-          "start":"2014-02-08T09:00:00","duration":"PT1H",
-          "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"yearly","count":5#{rule}}]
-        )))
+        Tempo.JSCalendar.parse(
+          ruled("2014-02-08T09:00:00", %{"frequency" => "yearly", "count" => 5}, rule)
+        )
       end
 
-      assert {:error, %ArgumentError{message: message}} = yearly.(~s(,"byMonth":["3L"]))
+      assert {:error, %ArgumentError{message: message}} = yearly.(%{"byMonth" => ["3L"]})
       assert message =~ "a leap month"
 
       # RFC 7529 section 4.3.3: the eighth of Adar I, taken as the eighth of
       # Adar in a year with no leap month.
       assert {:ok, anniversary} =
-               yearly.(~s(,"rscale":"hebrew","byMonth":["5L"],"byMonthDay":[8],"skip":"forward"))
+               yearly.(%{
+                 "rscale" => "hebrew",
+                 "byMonth" => ["5L"],
+                 "byMonthDay" => [8],
+                 "skip" => "forward"
+               })
 
       assert gregorian_dates(anniversary) ==
                [~D[2014-02-08], ~D[2015-02-27], ~D[2016-02-17], ~D[2017-03-06], ~D[2018-02-23]]
 
-      assert {:ok, set} = yearly.(~s(,"byMonth":["3"]))
+      assert {:ok, set} = yearly.(%{"byMonth" => ["3"]})
       assert set |> IntervalSet.members() |> hd() |> Interval.from() |> Tempo.month() == 3
     end
   end
@@ -305,11 +368,16 @@ defmodule Tempo.JSCalendarTest do
   describe "recurrence overrides" do
     test "an override with no matching rule adds an occurrence" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":2}],
-                   "recurrenceOverrides":{"2026-06-05T09:00:00":{}}
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "daily", "count" => 2}
+                   ],
+                   "recurrenceOverrides" => %{"2026-06-05T09:00:00" => %{}}
+                 })
+               )
 
       assert spans(set) == [
                "2026Y6M1DT9H0M0S/T10H0M0S",
@@ -320,11 +388,16 @@ defmodule Tempo.JSCalendarTest do
 
     test "an excluded override removes one occurrence" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":3}],
-                   "recurrenceOverrides":{"2026-06-02T09:00:00":{"excluded":true}}
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "daily", "count" => 3}
+                   ],
+                   "recurrenceOverrides" => %{"2026-06-02T09:00:00" => %{"excluded" => true}}
+                 })
+               )
 
       assert spans(set) == [
                "2026Y6M1DT9H0M0S/T10H0M0S",
@@ -334,13 +407,18 @@ defmodule Tempo.JSCalendarTest do
 
     test "a patched start moves an occurrence without duplicating it" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":3}],
-                   "recurrenceOverrides":{
-                     "2026-06-02T09:00:00":{"start":"2026-06-02T14:00:00"}
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "daily", "count" => 3}
+                   ],
+                   "recurrenceOverrides" => %{
+                     "2026-06-02T09:00:00" => %{"start" => "2026-06-02T14:00:00"}
                    }
-                 )))
+                 })
+               )
 
       assert spans(set) == [
                "2026Y6M1DT9H0M0S/T10H0M0S",
@@ -351,11 +429,16 @@ defmodule Tempo.JSCalendarTest do
 
     test "a patched duration changes only that occurrence" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":2}],
-                   "recurrenceOverrides":{"2026-06-02T09:00:00":{"duration":"PT3H"}}
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "daily", "count" => 2}
+                   ],
+                   "recurrenceOverrides" => %{"2026-06-02T09:00:00" => %{"duration" => "PT3H"}}
+                 })
+               )
 
       assert spans(set) == [
                "2026Y6M1DT9H0M0S/T10H0M0S",
@@ -365,10 +448,13 @@ defmodule Tempo.JSCalendarTest do
 
     test "an event with overrides and no rules is still recurring" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceOverrides":{"2026-06-08T09:00:00":{"duration":"PT2H"}}
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceOverrides" => %{"2026-06-08T09:00:00" => %{"duration" => "PT2H"}}
+                 })
+               )
 
       assert spans(set) == [
                "2026Y6M1DT9H0M0S/T10H0M0S",
@@ -378,23 +464,34 @@ defmodule Tempo.JSCalendarTest do
 
     test "an override matches on the recurrence id in the event's own zone" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "timeZone":"Australia/Sydney",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":3}],
-                   "recurrenceOverrides":{"2026-06-02T09:00:00":{"excluded":true}}
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "timeZone" => "Australia/Sydney",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "daily", "count" => 3}
+                   ],
+                   "recurrenceOverrides" => %{"2026-06-02T09:00:00" => %{"excluded" => true}}
+                 })
+               )
 
       assert IntervalSet.count(set) == 2
     end
 
     test "an override title reaches the interval metadata" do
       assert {:ok, set} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H","title":"Standup",
-                   "recurrenceRules":[{"@type":"RecurrenceRule","frequency":"daily","count":2}],
-                   "recurrenceOverrides":{"2026-06-02T09:00:00":{"title":"Retro"}}
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "title" => "Standup",
+                   "recurrenceRules" => [
+                     %{"@type" => "RecurrenceRule", "frequency" => "daily", "count" => 2}
+                   ],
+                   "recurrenceOverrides" => %{"2026-06-02T09:00:00" => %{"title" => "Retro"}}
+                 })
+               )
 
       assert [first, second] = IntervalSet.members(set)
       assert first.metadata.title == "Standup"
@@ -404,10 +501,13 @@ defmodule Tempo.JSCalendarTest do
 
     test "an invalid patch fails the import rather than being half applied" do
       assert {:error, _reason} =
-               Tempo.JSCalendar.parse(event(~s(
-                   "start":"2026-06-01T09:00:00","duration":"PT1H",
-                   "recurrenceOverrides":{"2026-06-08T09:00:00":{"a":1,"a/b":2}}
-                 )))
+               Tempo.JSCalendar.parse(
+                 event(%{
+                   "start" => "2026-06-01T09:00:00",
+                   "duration" => "PT1H",
+                   "recurrenceOverrides" => %{"2026-06-08T09:00:00" => %{"a" => 1, "a/b" => 2}}
+                 })
+               )
     end
   end
 
@@ -455,7 +555,7 @@ defmodule Tempo.JSCalendarTest do
       # spellings of the same calendar, and both land on a timeline
       # where set operations work.
       {:ok, from_js} =
-        Tempo.JSCalendar.parse(event(~s("start":"2026-06-02T09:00:00","duration":"PT8H")))
+        Tempo.JSCalendar.parse(event(%{"start" => "2026-06-02T09:00:00", "duration" => "PT8H"}))
 
       {:ok, busy} =
         Tempo.JSCalendar.parse(
@@ -473,12 +573,7 @@ defmodule Tempo.JSCalendarTest do
   # was read as no count, and a day that is no day (`"TU"`, or one left
   # out) was read as Monday. The measure for a day of the week is Elixir's
   # own `Date.day_of_week/1`.
-  defp rule_event(rule) do
-    event(
-      ~s("start":"2026-06-01T09:00:00","duration":"PT1H",) <>
-        ~s("recurrenceRules":[{"@type":"RecurrenceRule",#{rule}}])
-    )
-  end
+  defp rule_event(rule), do: ruled("2026-06-01T09:00:00", %{}, rule)
 
   defp starts({:ok, %Tempo{} = set}) do
     Enum.map(IntervalSet.members(set), &Interval.from/1)
@@ -500,17 +595,23 @@ defmodule Tempo.JSCalendarTest do
     test "that steps by nothing is refused, and one with a count of none has no occurrences" do
       assert {:error, %Tempo.IntervalEndpointsError{reason: :empty}} =
                Tempo.JSCalendar.parse(
-                 rule_event(~s("frequency":"monthly","count":3,"interval":0))
+                 rule_event(%{"frequency" => "monthly", "count" => 3, "interval" => 0})
                )
 
-      assert starts(Tempo.JSCalendar.parse(rule_event(~s("frequency":"daily","count":0)))) == []
+      assert starts(Tempo.JSCalendar.parse(rule_event(%{"frequency" => "daily", "count" => 0}))) ==
+               []
     end
 
     test "names each day of the week by its two letters" do
       # 1 June 2026 is a Monday, so the first of each day after it is in
       # that week.
       for {code, weekday} <- Enum.with_index(~w(mo tu we th fr sa su), 1) do
-        rule = ~s("frequency":"weekly","count":2,"byDay":[{"@type":"NDay","day":"#{code}"}])
+        rule = %{
+          "frequency" => "weekly",
+          "count" => 2,
+          "byDay" => [%{"@type" => "NDay", "day" => code}]
+        }
+
         on = dates(Tempo.JSCalendar.parse(rule_event(rule)))
 
         assert {code, Enum.map(on, &Date.day_of_week/1)} == {code, [weekday, weekday]}
@@ -523,13 +624,17 @@ defmodule Tempo.JSCalendarTest do
 
     test "with a day of the week that is no day is refused" do
       for day <- [
-            ~s("day":"xx"),
-            ~s("day":"TU"),
-            ~s("day":"monday"),
-            ~s("day":""),
-            ~s("nthOfPeriod":1)
+            %{"day" => "xx"},
+            %{"day" => "TU"},
+            %{"day" => "monday"},
+            %{"day" => ""},
+            %{"nthOfPeriod" => 1}
           ] do
-        rule = ~s("frequency":"weekly","count":3,"byDay":[{"@type":"NDay",#{day}}])
+        rule = %{
+          "frequency" => "weekly",
+          "count" => 3,
+          "byDay" => [Map.merge(%{"@type" => "NDay"}, day)]
+        }
 
         assert {^day, {:error, %Tempo.ConversionError{reason: :unsupported_day}}} =
                  {day, Tempo.JSCalendar.parse(rule_event(rule))}
@@ -540,11 +645,11 @@ defmodule Tempo.JSCalendarTest do
       # weeks that begin on it, and where it does not it changes nothing.
       assert {:ok, _events} =
                Tempo.JSCalendar.parse(
-                 rule_event(~s("frequency":"weekly","count":3,"firstDayOfWeek":"su"))
+                 rule_event(%{"frequency" => "weekly", "count" => 3, "firstDayOfWeek" => "su"})
                )
 
       assert {:ok, %Tempo{}} =
-               Tempo.JSCalendar.parse(rule_event(~s("frequency":"weekly","count":3)))
+               Tempo.JSCalendar.parse(rule_event(%{"frequency" => "weekly", "count" => 3}))
     end
   end
 end

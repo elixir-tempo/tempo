@@ -106,6 +106,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.in_zone/2` takes a fixed offset as IXDTF writes one (`"+02:00"`).
 
+* `Tempo.new/1` takes a group (`group: {2, [month: 3]}`, `2026Y2G3MU`) and `:qualifications` (`%{month: :approximate}`, `2026Y6~M`).
+
 * `Tempo.Interval.instants/1` gives the instants an interval runs between, its end the instant after its last date, for a store of timestamps.
 
 * `Tempo.members/2` and `Tempo.walk/3`: the spans of any expression, and any span walked at a unit.
@@ -207,6 +209,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * A set whose member is a recurrence with an open start (`{R/../P1Y/FL12M25DN}`) is read; the reader took the start's `..` for a range, so such a set written by `Tempo.to_iso8601/1` did not read back.
 
 * `Tempo.every/2` and `Tempo.RRule.parse/2` give an `:until` the calendar and zone of the recurrence's start, as the reader gives a suffix's to every value before it.
+
+* A recurrence whose start's year is a set (`R3/{2026,2028}Y6M15D/P1D`) is read; the reader took the set for a domain, so such a recurrence was written and not read.
 
 * `Tempo.RRule.to_string/1` writes the `UNTIL` of a rule in a zone or at UTC as a UTC time with `Z`, as RFC 5545 requires; it wrote the local reading with no `Z`, which read back floating.
 

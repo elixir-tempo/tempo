@@ -396,7 +396,12 @@ defmodule Tempo.ICal.Test do
       # RFC 5545 §3.3.10: an instance with an invalid date is ignored and not
       # counted. A rule on the 31st lists the months of 31 days, and one on
       # 29 February the leap years.
-      event = fn dtstart, rrule ->
+      occurrences = fn ics ->
+        {:ok, set} = ICal.parse(ics)
+        Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1)
+      end
+
+      on_the_31st =
         """
         BEGIN:VCALENDAR
         VERSION:2.0
@@ -404,20 +409,14 @@ defmodule Tempo.ICal.Test do
         BEGIN:VEVENT
         UID:missing-day
         DTSTAMP:20260101T000000Z
-        #{dtstart}
+        DTSTART;VALUE=DATE:20260131
         SUMMARY:On a day some months lack
-        RRULE:#{rrule}
+        RRULE:FREQ=MONTHLY;COUNT=4
         END:VEVENT
         END:VCALENDAR
         """
-      end
 
-      occurrences = fn ics ->
-        {:ok, set} = ICal.parse(ics)
-        Enum.map(IntervalSet.members(set), &Tempo.to_iso8601!/1)
-      end
-
-      assert occurrences.(event.("DTSTART;VALUE=DATE:20260131", "FREQ=MONTHLY;COUNT=4")) ==
+      assert occurrences.(on_the_31st) ==
                [
                  "2026Y1M31D/2026Y1M31D",
                  "2026Y3M31D/2026Y3M31D",
@@ -425,13 +424,42 @@ defmodule Tempo.ICal.Test do
                  "2026Y7M31D/2026Y7M31D"
                ]
 
-      assert occurrences.(event.("DTSTART;VALUE=DATE:20240229", "FREQ=YEARLY;COUNT=3")) ==
+      on_the_29th =
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:missing-day
+        DTSTAMP:20260101T000000Z
+        DTSTART;VALUE=DATE:20240229
+        SUMMARY:On a day some months lack
+        RRULE:FREQ=YEARLY;COUNT=3
+        END:VEVENT
+        END:VCALENDAR
+        """
+
+      assert occurrences.(on_the_29th) ==
                ["2024Y2M29D/2024Y2M29D", "2028Y2M29D/2028Y2M29D", "2032Y2M29D/2032Y2M29D"]
 
       # An event with an end keeps its length on each day it is listed.
-      timed = "DTSTART:20260131T090000\nDTEND:20260131T100000"
+      timed =
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:missing-day
+        DTSTAMP:20260101T000000Z
+        DTSTART:20260131T090000
+        DTEND:20260131T100000
+        SUMMARY:On a day some months lack
+        RRULE:FREQ=MONTHLY;COUNT=3
+        END:VEVENT
+        END:VCALENDAR
+        """
 
-      assert occurrences.(event.(timed, "FREQ=MONTHLY;COUNT=3")) ==
+      assert occurrences.(timed) ==
                [
                  "2026Y1M31DT9H0M0S/T10H0M0S",
                  "2026Y3M31DT9H0M0S/T10H0M0S",
@@ -607,20 +635,6 @@ defmodule Tempo.ICal.Test do
     # from its midnight to the next.
     @epoch ~N[0000-01-01 00:00:00]
 
-    defp all_day(lines) do
-      Enum.join(
-        [
-          "BEGIN:VCALENDAR",
-          "VERSION:2.0",
-          "PRODID:-//Test//EN",
-          "BEGIN:VEVENT",
-          "UID:all-day",
-          "DTSTAMP:20260101T000000Z"
-        ] ++ lines ++ ["END:VEVENT", "END:VCALENDAR", ""],
-        "\r\n"
-      )
-    end
-
     defp spans(ics) do
       {:ok, set} = ICal.parse(ics)
 
@@ -652,21 +666,94 @@ defmodule Tempo.ICal.Test do
     end
 
     test "recurs on its days, whatever times of day the rule names" do
-      for {rule, dates} <- [
-            {"FREQ=DAILY;BYHOUR=9", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
-            {"FREQ=DAILY;BYHOUR=9,15", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
-            {"FREQ=DAILY;BYMINUTE=30", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
-            {"FREQ=DAILY;BYSECOND=15", [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
-            {"FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=15",
-             [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+      for {ics, dates} <- [
+            {"""
+             BEGIN:VCALENDAR
+             VERSION:2.0
+             PRODID:-//Test//EN
+             BEGIN:VEVENT
+             UID:all-day
+             DTSTAMP:20260101T000000Z
+             DTSTART;VALUE=DATE:20260131
+             RRULE:FREQ=DAILY;BYHOUR=9;COUNT=3
+             END:VEVENT
+             END:VCALENDAR
+             """, [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"""
+             BEGIN:VCALENDAR
+             VERSION:2.0
+             PRODID:-//Test//EN
+             BEGIN:VEVENT
+             UID:all-day
+             DTSTAMP:20260101T000000Z
+             DTSTART;VALUE=DATE:20260131
+             RRULE:FREQ=DAILY;BYHOUR=9,15;COUNT=3
+             END:VEVENT
+             END:VCALENDAR
+             """, [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"""
+             BEGIN:VCALENDAR
+             VERSION:2.0
+             PRODID:-//Test//EN
+             BEGIN:VEVENT
+             UID:all-day
+             DTSTAMP:20260101T000000Z
+             DTSTART;VALUE=DATE:20260131
+             RRULE:FREQ=DAILY;BYMINUTE=30;COUNT=3
+             END:VEVENT
+             END:VCALENDAR
+             """, [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"""
+             BEGIN:VCALENDAR
+             VERSION:2.0
+             PRODID:-//Test//EN
+             BEGIN:VEVENT
+             UID:all-day
+             DTSTAMP:20260101T000000Z
+             DTSTART;VALUE=DATE:20260131
+             RRULE:FREQ=DAILY;BYSECOND=15;COUNT=3
+             END:VEVENT
+             END:VCALENDAR
+             """, [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
+            {"""
+             BEGIN:VCALENDAR
+             VERSION:2.0
+             PRODID:-//Test//EN
+             BEGIN:VEVENT
+             UID:all-day
+             DTSTAMP:20260101T000000Z
+             DTSTART;VALUE=DATE:20260131
+             RRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=15;COUNT=3
+             END:VEVENT
+             END:VCALENDAR
+             """, [~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]]},
             # 31 January 2026 is a Saturday: the weekday is kept, and the hour is not.
-            {"FREQ=WEEKLY;BYDAY=SA;BYHOUR=9", [~D[2026-01-31], ~D[2026-02-07], ~D[2026-02-14]]},
-            {"FREQ=MONTHLY;BYMONTHDAY=31;BYHOUR=9",
-             [~D[2026-01-31], ~D[2026-03-31], ~D[2026-05-31]]}
+            {"""
+             BEGIN:VCALENDAR
+             VERSION:2.0
+             PRODID:-//Test//EN
+             BEGIN:VEVENT
+             UID:all-day
+             DTSTAMP:20260101T000000Z
+             DTSTART;VALUE=DATE:20260131
+             RRULE:FREQ=WEEKLY;BYDAY=SA;BYHOUR=9;COUNT=3
+             END:VEVENT
+             END:VCALENDAR
+             """, [~D[2026-01-31], ~D[2026-02-07], ~D[2026-02-14]]},
+            {"""
+             BEGIN:VCALENDAR
+             VERSION:2.0
+             PRODID:-//Test//EN
+             BEGIN:VEVENT
+             UID:all-day
+             DTSTAMP:20260101T000000Z
+             DTSTART;VALUE=DATE:20260131
+             RRULE:FREQ=MONTHLY;BYMONTHDAY=31;BYHOUR=9;COUNT=3
+             END:VEVENT
+             END:VCALENDAR
+             """, [~D[2026-01-31], ~D[2026-03-31], ~D[2026-05-31]]}
           ] do
-        ics = all_day(["DTSTART;VALUE=DATE:20260131", "RRULE:#{rule};COUNT=3"])
-
-        assert {rule, spans(ics)} == {rule, days(dates)}
+        assert {ics, spans(ics)} == {ics, days(dates)}
       end
 
       assert Date.day_of_week(~D[2026-01-31]) == 6
@@ -674,20 +761,73 @@ defmodule Tempo.ICal.Test do
 
     test "is the rule without them" do
       with_times =
-        all_day(["DTSTART;VALUE=DATE:20260131", "RRULE:FREQ=DAILY;BYHOUR=9,15;COUNT=5"])
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:all-day
+        DTSTAMP:20260101T000000Z
+        DTSTART;VALUE=DATE:20260131
+        RRULE:FREQ=DAILY;BYHOUR=9,15;COUNT=5
+        END:VEVENT
+        END:VCALENDAR
+        """
 
-      without = all_day(["DTSTART;VALUE=DATE:20260131", "RRULE:FREQ=DAILY;COUNT=5"])
+      without =
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:all-day
+        DTSTAMP:20260101T000000Z
+        DTSTART;VALUE=DATE:20260131
+        RRULE:FREQ=DAILY;COUNT=5
+        END:VEVENT
+        END:VCALENDAR
+        """
 
       assert spans(with_times) == spans(without)
     end
 
+    test "is read the same with the CRLF line endings RFC 5545 writes" do
+      crlf =
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\nBEGIN:VEVENT\r\nUID:all-day\r\nDTSTAMP:20260101T000000Z\r\nDTSTART;VALUE=DATE:20260131\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+
+      lf =
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:all-day
+        DTSTAMP:20260101T000000Z
+        DTSTART;VALUE=DATE:20260131
+        RRULE:FREQ=DAILY;COUNT=3
+        END:VEVENT
+        END:VCALENDAR
+        """
+
+      assert spans(crlf) == spans(lf)
+      assert spans(crlf) == days([~D[2026-01-31], ~D[2026-02-01], ~D[2026-02-02]])
+    end
+
     test "keeps the event's own end on each day" do
       ics =
-        all_day([
-          "DTSTART;VALUE=DATE:20260131",
-          "DTEND;VALUE=DATE:20260202",
-          "RRULE:FREQ=WEEKLY;BYHOUR=9;COUNT=2"
-        ])
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:all-day
+        DTSTAMP:20260101T000000Z
+        DTSTART;VALUE=DATE:20260131
+        DTEND;VALUE=DATE:20260202
+        RRULE:FREQ=WEEKLY;BYHOUR=9;COUNT=2
+        END:VEVENT
+        END:VCALENDAR
+        """
 
       two_days = fn date ->
         {microseconds(NaiveDateTime.new!(date, ~T[00:00:00])),
@@ -699,7 +839,19 @@ defmodule Tempo.ICal.Test do
 
     test "leaves the times of day of an event that has one" do
       # The hours named are after the start at 08:00, so each day has two.
-      ics = all_day(["DTSTART:20260131T080000", "RRULE:FREQ=DAILY;BYHOUR=9,15;COUNT=4"])
+      ics =
+        """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Test//EN
+        BEGIN:VEVENT
+        UID:all-day
+        DTSTAMP:20260101T000000Z
+        DTSTART:20260131T080000
+        RRULE:FREQ=DAILY;BYHOUR=9,15;COUNT=4
+        END:VEVENT
+        END:VCALENDAR
+        """
 
       at = fn date, hour ->
         from = NaiveDateTime.new!(date, Time.new!(hour, 0, 0))
