@@ -14,19 +14,21 @@ defmodule Tempo.Reader.Duration do
   @doc "A duration and what follows it."
   @spec read(String.t()) :: {:ok, Tempo.Duration.t(), String.t()} | :error
   def read(<<"-P", rest::binary>>) do
-    with {:ok, %Tempo.Duration{units: units}, rest} <- read("P" <> rest) do
+    with {:ok, %Tempo.Duration{units: units}, rest} <- after_p(rest) do
       {:ok, %Tempo.Duration{units: Enum.map(units, &negated/1)}, rest}
     end
   end
 
-  def read(<<"P", rest::binary>>) do
+  def read(<<"P", rest::binary>>), do: after_p(rest)
+
+  def read(_text), do: :error
+
+  defp after_p(rest) do
     case units(rest, :date) do
       {:ok, [], _rest} -> alternative(rest)
       {:ok, units, rest} -> {:ok, %Tempo.Duration{units: units}, rest}
     end
   end
-
-  def read(_text), do: :error
 
   # The alternative format of ISO 8601-1 §5.5.2.4: a duration written as a
   # date and a time of day, by month or by day of the year, `P0002-01-10T22:33:55`.

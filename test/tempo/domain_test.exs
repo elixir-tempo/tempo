@@ -8,6 +8,7 @@ defmodule Tempo.DomainTest do
   # the dates of other calendars converted by Calendrical alone.
 
   import Tempo.Sigils
+  import Tempo.Builder
 
   alias Tempo.{Interval, IntervalSet}
 
@@ -20,8 +21,22 @@ defmodule Tempo.DomainTest do
     |> Enum.sort()
   end
 
-  defp gregorian_starts(text, window) do
-    {:ok, set} = Tempo.to_interval(Tempo.from_iso8601!(text), within: window)
+  # Mawlid, the 12th of Rabi al-awwal, in a domain of Islamic years.
+  defp mawlid_in(years) do
+    {:ok, mawlid} =
+      every(:year)
+      |> on(month: 3, day: 12)
+      |> in_calendar(Calendrical.Islamic.UmmAlQura)
+      |> in_years(years)
+
+    mawlid
+  end
+
+  defp gregorian_starts(text, window) when is_binary(text),
+    do: gregorian_starts(Tempo.from_iso8601!(text), window)
+
+  defp gregorian_starts(%Tempo{} = recurrence, window) do
+    {:ok, set} = Tempo.to_interval(recurrence, within: window)
 
     for interval <- IntervalSet.members(set) do
       {:ok, date} = interval |> Interval.from() |> Tempo.to_date()
@@ -125,19 +140,18 @@ defmodule Tempo.DomainTest do
       assert mawlid.(1435).year == 2014
 
       for domain <- [
-            "{..1435Y}",
-            "{1435Y..}",
-            "{..1433Y,1435Y,1439Y..}",
-            "{..1436Y}",
-            "{1434Y..}"
+            [through: 1435],
+            [from: 1435],
+            [{:through, 1433}, 1435, {:from, 1439}],
+            [through: 1436],
+            [from: 1434]
           ] do
-        text = "R/#{domain}/P1Y/FL3M12DN[u-ca=islamic-umalqura]"
-        assert {domain, gregorian_starts(text, ~o"2014Y")} == {domain, [mawlid.(1435)]}
+        assert {domain, gregorian_starts(mawlid_in(domain), ~o"2014Y")} ==
+                 {domain, [mawlid.(1435)]}
       end
 
-      for domain <- ["{..1434Y}", "{1436Y..}", "{..1434Y,1436Y..}"] do
-        text = "R/#{domain}/P1Y/FL3M12DN[u-ca=islamic-umalqura]"
-        assert {domain, gregorian_starts(text, ~o"2014Y")} == {domain, []}
+      for domain <- [[through: 1434], [from: 1436], [through: 1434, from: 1436]] do
+        assert {domain, gregorian_starts(mawlid_in(domain), ~o"2014Y")} == {domain, []}
       end
     end
 
@@ -272,29 +286,31 @@ defmodule Tempo.DomainTest do
 
   describe "a filter of years" do
     # Even and odd by the year's number, leap and common by `Date`.
-    defp kept_by("e", year), do: rem(year, 2) == 0
-    defp kept_by("o", year), do: rem(year, 2) != 0
-    defp kept_by("l", year), do: Date.leap_year?(Date.new!(year, 1, 1))
-    defp kept_by("c", year), do: not Date.leap_year?(Date.new!(year, 1, 1))
+    defp kept_by(:even, year), do: rem(year, 2) == 0
+    defp kept_by(:odd, year), do: rem(year, 2) != 0
+    defp kept_by(:leap, year), do: Date.leap_year?(Date.new!(year, 1, 1))
+    defp kept_by(:common, year), do: not Date.leap_year?(Date.new!(year, 1, 1))
+
+    defp christmas, do: every(:year) |> on(month: 12, day: 25)
 
     test "keeps the years of a domain it names" do
-      for filter <- ~w(e o l c), {first, last} <- [{2000, 2010}, {2096, 2104}] do
-        text = "R/{#{first}Y..#{last}Y}#{filter}/P1Y/FL12M25DN"
+      for filter <- [:even, :odd, :leap, :common],
+          {first, last} <- [{2000, 2010}, {2096, 2104}] do
+        {:ok, christmas} = christmas() |> in_years(first..last) |> in_years(filter)
 
-        assert {text, years(Tempo.to_interval(Tempo.from_iso8601!(text)))} ==
-                 {text, Enum.filter(first..last, &kept_by(filter, &1))}
+        assert {filter, first, years(Tempo.to_interval(christmas))} ==
+                 {filter, first, Enum.filter(first..last, &kept_by(filter, &1))}
       end
     end
 
     test "keeps the years of a window, on a domain with no ends" do
-      for filter <- ~w(e o l c) do
-        text = "R/..#{filter}/P1Y/FL12M25DN"
-        recurrence = Tempo.from_iso8601!(text)
+      for filter <- [:even, :odd, :leap, :common] do
+        {:ok, christmas} = christmas() |> in_years(filter)
 
-        assert {text, years(Tempo.to_interval(recurrence, within: ~o"2000Y/2010Y"))} ==
-                 {text, Enum.filter(2000..2010, &kept_by(filter, &1))}
+        assert {filter, years(Tempo.to_interval(christmas, within: ~o"2000Y/2010Y"))} ==
+                 {filter, Enum.filter(2000..2010, &kept_by(filter, &1))}
 
-        assert {:error, _} = Tempo.to_interval(recurrence)
+        assert {:error, _} = Tempo.to_interval(christmas)
       end
     end
 
@@ -304,8 +320,16 @@ defmodule Tempo.DomainTest do
     end
 
     test "is written back as it was read" do
-      for filter <- ~w(e o l c),
-          text <- ["R/{2000Y..2010Y}#{filter}/P1Y/FL12M25DN", "R/..#{filter}/P1Y/FL12M25DN"] do
+      for text <- [
+            "R/{2000Y..2010Y}e/P1Y/FL12M25DN",
+            "R/{2000Y..2010Y}o/P1Y/FL12M25DN",
+            "R/{2000Y..2010Y}l/P1Y/FL12M25DN",
+            "R/{2000Y..2010Y}c/P1Y/FL12M25DN",
+            "R/..e/P1Y/FL12M25DN",
+            "R/..o/P1Y/FL12M25DN",
+            "R/..l/P1Y/FL12M25DN",
+            "R/..c/P1Y/FL12M25DN"
+          ] do
         assert Tempo.to_iso8601(Tempo.from_iso8601!(text)) == {:ok, text}
       end
     end

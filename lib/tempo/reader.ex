@@ -471,7 +471,10 @@ defmodule Tempo.Reader do
   # expression, a range of two (`a..b`), an open range (`..a`, `a..`) or an
   # exclusion (`^a`); a filter letter after the braces keeps the even, odd,
   # leap or common years.
-  defp set(<<"^", _::binary>> = body, text), do: set("{" <> body <> "}", text)
+  # An exclusion with no braces about it (`^2026Y`) is a set of it alone.
+  defp set(<<"^", _::binary>> = body, text) do
+    with {:ok, members} <- members(body, text), do: {:ok, %Tempo{form: {:all, members}}}
+  end
 
   defp set(<<open, rest::binary>>, text) when open in [?{, ?[] do
     close = if open == ?{, do: "}", else: "]"

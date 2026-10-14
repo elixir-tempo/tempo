@@ -36,7 +36,7 @@ defmodule Tempo.OtherCalendarsTest do
   defp gregorian(%Date{} = date), do: Date.convert!(date, Calendar.ISO)
 
   describe "a week date in a calendar of weeks" do
-    test "is the day its calendar says" do
+    test "built from its parts is the day its calendar says" do
       for {calendar, name, week, day} <- [
             {ISOWeek, "iso-week", 25, 2},
             {NRF, "nrf", 20, 3},
@@ -46,10 +46,7 @@ defmodule Tempo.OtherCalendarsTest do
           year <- [2023, 2026] do
         measured = calendar.date_from_week_date(year, week, day)
 
-        read =
-          Tempo.from_iso8601(
-            "#{year}-W#{String.pad_leading("#{week}", 2, "0")}-#{day}[u-ca=#{name}]"
-          )
+        read = Tempo.new(year: year, week: week, day_of_week: day, calendar: calendar)
 
         case measured do
           %Date{} ->

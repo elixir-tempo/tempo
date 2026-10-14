@@ -106,16 +106,18 @@ defmodule Tempo.ZoneValidationTest do
     # The zone database keeps the names zones have had: `US/Pacific` is
     # `America/Los_Angeles`, and `Asia/Calcutta` is `Asia/Kolkata`.
     test "is read, kept as it is written, and is the zone it names" do
-      for {old, current} <- [
-            {"US/Pacific", "America/Los_Angeles"},
-            {"Asia/Calcutta", "Asia/Kolkata"},
-            {"Pacific/Enderbury", "Pacific/Kanton"}
+      for {text, current, written} <- [
+            {"2024-06-15T12:00:00[US/Pacific]", "America/Los_Angeles",
+             "2024Y6M15DT12H0M0S[US/Pacific]"},
+            {"2024-06-15T12:00:00[Asia/Calcutta]", "Asia/Kolkata",
+             "2024Y6M15DT12H0M0S[Asia/Calcutta]"},
+            {"2024-06-15T12:00:00[Pacific/Enderbury]", "Pacific/Kanton",
+             "2024Y6M15DT12H0M0S[Pacific/Enderbury]"}
           ] do
-        text = "2024-06-15T12:00:00[#{old}]"
         {:ok, shown} = DateTime.new(~D[2024-06-15], ~T[12:00:00], current)
 
-        assert {old, unix(text)} == {old, DateTime.to_unix(shown)}
-        assert Tempo.to_iso8601!(Tempo.from_iso8601!(text)) =~ "[#{old}]"
+        assert {text, unix(text)} == {text, DateTime.to_unix(shown)}
+        assert Tempo.to_iso8601!(Tempo.from_iso8601!(text)) == written
       end
     end
   end
