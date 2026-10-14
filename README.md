@@ -225,7 +225,7 @@ config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
 Any implementation works — [`:tz`](https://hex.pm/packages/tz) (compile-time IANA data, no runtime downloads), [`:tzdata`](https://hex.pm/packages/tzdata), [`:time_zone_info`](https://hex.pm/packages/time_zone_info), or [`:zoneinfo`](https://hex.pm/packages/zoneinfo) (reads the OS zone files). Tempo can also be pointed at a database independently of the global Elixir setting with `config :ex_tempo, :time_zone_database, ...`. Tempo's own dev and test environments use `:tz`.
 
-Without a configured database, parsing still works fully — zone names in IXDTF suffixes are accepted without registry validation — but any operation that needs the zone's rules (UTC projection, `Tempo.shift_zone/2`, DST-aware walks, offset validation) will error or degrade. iCalendar import also needs the database: the upstream `:ical` library only populates an event's `dtstart`/`dtend` fields when a default `Calendar.TimeZoneDatabase` is installed, so `DTSTART;TZID=...` events silently come through empty without one.
+Without a configured database, a named zone has no rules to read a time by, so one is refused where it is given — by the reader (`[Europe/Paris]`), `Tempo.in_zone/2`, `Tempo.shift_zone/2` and `Tempo.now/1` — with a `Tempo.ZoneError` whose reason is `:no_database`. UTC, a fixed offset (`[+02:00]`) and a time shift (`+02:00`) need no database. iCalendar import also needs the database: the upstream `:ical` library only populates an event's `dtstart`/`dtend` fields when a default `Calendar.TimeZoneDatabase` is installed, so `DTSTART;TZID=...` events silently come through empty without one.
 
 ### The most values at once
 

@@ -196,6 +196,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.Interval.new/1` refuses an interval or a set as an end, where it built an interval with an interval in it.
 
+* A named zone given where no time zone database is configured is a `Tempo.ZoneError` with reason `:no_database`, where it was accepted and reading a time in it raised a `MatchError`.
+
 ## [v1.6.4] — 2026-09-03
 
 ### Fixed

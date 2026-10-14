@@ -56,12 +56,17 @@ defmodule Tempo.Zone do
 
   @type shift :: Tempo.shift()
 
-  @doc "A named zone, checked against the zone database."
+  @doc """
+  A named zone, checked against the zone database. A name is refused where
+  no database is configured that has zones (Elixir's UTC-only default), as
+  every reading in the zone needs its rules.
+  """
   @spec named(String.t(), keyword()) :: {:ok, t()} | {:error, Exception.t()}
   def named(name, options \\ []) when is_binary(name) do
-    if exists?(name),
-      do: {:ok, %__MODULE__{name: name, critical: Keyword.get(options, :critical, false)}},
-      else: {:error, ZoneError.exception(zone: name, reason: :unknown)}
+    case known(name) do
+      :ok -> {:ok, %__MODULE__{name: name, critical: Keyword.get(options, :critical, false)}}
+      {:error, reason} -> {:error, ZoneError.exception(zone: name, reason: reason)}
+    end
   end
 
   @doc "A zone of a fixed offset, in minutes from UTC."
@@ -211,9 +216,14 @@ defmodule Tempo.Zone do
     offset
   end
 
+  # A zone is made only where the database knows it (`named/2`); one asked of
+  # a database configured since, which does not, is raised as the zone error
+  # it would have been.
   defp asked_at_utc(name, utc) do
-    {:ok, period} = period_at_utc(name, seconds(utc))
-    offset(period)
+    case period_at_utc(name, seconds(utc)) do
+      {:ok, period} -> offset(period)
+      {:error, reason} -> raise ZoneError.exception(zone: name, reason: unknown(reason))
+    end
   end
 
   # What is known of a zone's offset between two points six days apart on
@@ -442,9 +452,8 @@ defmodule Tempo.Zone do
   # Tempo is time zone database agnostic: it asks the `Calendar.TimeZoneDatabase`
   # the application configures (`:ex_tempo, :time_zone_database`, else Elixir's
   # own). Before 0001-01-01 no rule exists, and the database is not asked:
-  # the offset is zero. With Elixir's UTC-only default, any zone name is
-  # accepted at construction, and the operations that need the zone's rules
-  # surface their own errors.
+  # the offset is zero. With Elixir's UTC-only default, a zone name other
+  # than UTC's is refused where it is given, as `:no_database`.
 
   @doc "The `Calendar.TimeZoneDatabase` Tempo asks."
   @spec database() :: Calendar.time_zone_database()
@@ -452,15 +461,19 @@ defmodule Tempo.Zone do
     Application.get_env(:ex_tempo, :time_zone_database) || Calendar.get_time_zone_database()
   end
 
-  @doc "Whether the database knows a zone; with no database configured, every name is accepted."
+  @doc "Whether the database knows a zone."
   @spec exists?(String.t()) :: boolean()
-  def exists?(name) when is_binary(name) do
+  def exists?(name) when is_binary(name), do: known(name) == :ok
+
+  defp known(name) do
     case database().time_zone_period_from_utc_iso_days(iso_days(@probe_seconds), name) do
-      {:ok, _period} -> true
-      {:error, :utc_only_time_zone_database} -> true
-      {:error, _reason} -> false
+      {:ok, _period} -> :ok
+      {:error, reason} -> {:error, unknown(reason)}
     end
   end
+
+  defp unknown(:utc_only_time_zone_database), do: :no_database
+  defp unknown(_not_found), do: :unknown
 
   defp period_at_utc(_name, utc_seconds) when utc_seconds < @year_one_seconds,
     do: {:ok, @before_year_one}

@@ -1,0 +1,53 @@
+defmodule Tempo.ZoneDatabaseTest do
+  # Tempo asks the time zone database the application configures. Under
+  # Elixir's default, which knows only UTC, a named zone has no rules to
+  # read a time by, and is refused where it is given. The tests set the
+  # database Tempo asks, so they run alone.
+  use ExUnit.Case, async: false
+
+  import Tempo.Sigils
+
+  setup do
+    paris = DateTime.new!(~D[2026-06-15], ~T[09:00:00], "Europe/Paris", Tz.TimeZoneDatabase)
+    built = ~o"2026-06-15T09:00:00[Europe/Paris]"
+
+    Application.put_env(:ex_tempo, :time_zone_database, Calendar.UTCOnlyTimeZoneDatabase)
+    on_exit(fn -> Application.delete_env(:ex_tempo, :time_zone_database) end)
+
+    %{paris: paris, built: built}
+  end
+
+  test "a named zone given with no database is refused, saying what to configure" do
+    assert {:error, %Tempo.ZoneError{zone: "Europe/Paris", reason: :no_database} = error} =
+             Tempo.from_iso8601("2026-06-15T09:00:00[Europe/Paris]")
+
+    assert Exception.message(error) =~ "needs a time zone database"
+  end
+
+  test "every operation that takes a zone's name refuses it" do
+    for answer <- [
+          Tempo.in_zone(~o"2026-06-15T09", "Europe/Paris"),
+          Tempo.shift_zone(~o"2026-06-15T09Z", "Europe/Paris"),
+          Tempo.now("Europe/Paris")
+        ] do
+      assert {:error, %Tempo.ZoneError{reason: :no_database}} = answer
+    end
+  end
+
+  test "UTC, a fixed offset and a time shift need no database" do
+    assert {:ok, _} = Tempo.from_iso8601("2026-06-15T09:00:00[Etc/UTC]")
+    assert {:ok, _} = Tempo.from_iso8601("2026-06-15T09:00:00[+02:00]")
+    assert {:ok, ~o"2026-06-15T09:00:00+02:00"} = Tempo.from_iso8601("2026-06-15T09:00:00+02:00")
+  end
+
+  test "a DateTime in a zone the database cannot answer keeps its own offset", %{paris: paris} do
+    assert Tempo.from_elixir(paris) == {:ok, ~o"2026-06-15T09:00:00+02:00"}
+  end
+
+  test "a zone made before the database was changed raises the error it would have been",
+       %{built: built} do
+    assert_raise Tempo.ZoneError, ~r/needs a time zone database/, fn ->
+      Tempo.shift(built, year: 30)
+    end
+  end
+end
