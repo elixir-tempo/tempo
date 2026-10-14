@@ -27,7 +27,7 @@ defmodule Tempo.Build do
   @clock [:hour, :minute, :second]
   @parts @units ++ [:instance, :event, :roll, :skip, :selection, :window, :all]
 
-  @every_options [:from, :count, :until, :select, :calendar, :years, :metadata]
+  @every_options [:from, :to, :count, :until, :select, :calendar, :years, :metadata]
 
   # The years a domain may be filtered to, as `e`, `o`, `l` and `c` write them.
   @year_filters [:even, :odd, :leap, :common]
@@ -176,7 +176,7 @@ defmodule Tempo.Build do
   def every(cadence, options) do
     with :ok <- Options.check(options, @every_options, "Tempo.every/2"),
          {:ok, cadence} <- cadence(cadence),
-         {:ok, first} <- first(Keyword.get(options, :from), cadence),
+         {:ok, first} <- first(Keyword.get(options, :from), Keyword.get(options, :to), cadence),
          {:ok, first} <- in_calendar(first, Keyword.get(options, :calendar)),
          {:ok, first} <- in_years(first, Keyword.get(options, :years)),
          {:ok, bound} <- bound(Keyword.get(options, :count), Keyword.get(options, :until)),
@@ -197,16 +197,26 @@ defmodule Tempo.Build do
     do: {:error, argument("a cadence is a duration or its units, not #{inspect(other)}")}
 
   # The first repeat: from a value, from each member of a set (a domain), or with no start.
-  defp first(nil, cadence),
+  defp first(nil, nil, cadence),
     do: {:ok, %Tempo{form: {:span, :open, cadence}}}
 
-  defp first(%Tempo{form: {kind, _}} = from, cadence) when kind in [:value, :all, :one],
+  # A recurrence counted back from where it ends (`R5/P1M/2026-06-01`).
+  defp first(nil, %Tempo{form: {:value, _}} = to, cadence),
+    do: {:ok, %Tempo{form: {:span, cadence, to}, calendar: to.calendar, zone: to.zone}}
+
+  defp first(nil, other, _cadence),
+    do: {:error, argument(":to is the value a recurrence ends with, not #{inspect(other)}")}
+
+  defp first(%Tempo{form: {kind, _}} = from, nil, cadence) when kind in [:value, :all, :one],
     do: {:ok, %Tempo{form: {:span, from, cadence}, calendar: from.calendar, zone: from.zone}}
 
-  defp first(%Tempo{form: {:when, _, _}} = from, cadence),
+  defp first(%Tempo{form: {:when, _, _}} = from, nil, cadence),
     do: {:ok, %Tempo{form: {:span, from, cadence}, calendar: from.calendar, zone: from.zone}}
 
-  defp first(other, _cadence),
+  defp first(_from, %Tempo{}, _cadence),
+    do: {:error, argument("a recurrence starts at :from or ends at :to, not both")}
+
+  defp first(other, nil, _cadence),
     do: {:error, argument(":from is a value, or a set as a domain, not #{inspect(other)}")}
 
   # A recurrence with no start is in the calendar given; one with a start

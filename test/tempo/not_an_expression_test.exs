@@ -8,6 +8,8 @@ defmodule Tempo.NotAnExpressionTest do
 
   import Tempo.Sigils
 
+  alias Tempo.{IntervalSet, RecurrenceSet}
+
   # Functions whose first argument is not an expression: a builder's parts,
   # an Elixir value, text, a zone, a territory, or any enumerable.
   @not_expressions [
@@ -82,6 +84,16 @@ defmodule Tempo.NotAnExpressionTest do
     end
 
     assert_raise Tempo.ConversionError, fn -> Tempo.anchored?(nil) end
+  end
+
+  test "a set of what is no expression is named" do
+    assert {:error, %Tempo.ConversionError{value: 1, reason: :not_an_expression}} =
+             IntervalSet.new([1, 2])
+
+    assert {:error, %Tempo.ConversionError{value: nil, reason: :not_an_expression}} =
+             RecurrenceSet.new([~o"2026", nil])
+
+    assert {:error, %ArgumentError{}} = IntervalSet.new(:members)
   end
 
   test "text that is no string, and a zone that is no string, are named" do

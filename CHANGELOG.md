@@ -98,9 +98,11 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.every/2`, `Tempo.selection/1` and `Tempo.one_of/1` build a recurrence, a selection and a one-of set from parts, so a program never writes text to have it read back.
 
-* `Tempo.every/2` takes `:calendar` for a recurrence with no start and `:years` for a domain's even, odd, leap or common years; `Tempo.IntervalSet.new/2` takes `:except`.
+* `Tempo.every/2` takes `:calendar` for a recurrence with no start, `:years` for a domain's even, odd, leap or common years, and `:to` for one counted back from its end; `Tempo.IntervalSet.new/2` takes `:except`.
 
 * `Tempo.to_calendar/2` converts a recurrence with no end as a rule, read in the other calendar, so one set holds rules of several calendars.
+
+* `Tempo.Interval.instants/1` gives the instants an interval runs between, its end the instant after its last date, for a store of timestamps.
 
 * `Tempo.members/2` and `Tempo.walk/3`: the spans of any expression, and any span walked at a unit.
 
@@ -187,6 +189,12 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * A predicate with an operand that has no end is answered where the answer follows from the ends: every Monday for ever is not `within?/2` June. Two operands with no end need `:within`.
 
 * A set has ISO 8601 text and is inspected as it, where `Tempo.to_iso8601/1` raised on one.
+
+* `Tempo.IntervalSet.first/1` of a recurrence with no end is its first occurrence, where it raised.
+
+* `Tempo.IntervalSet.new/2` and `Tempo.RecurrenceSet.new/2` return a `Tempo.ConversionError` for a member that is no expression, where they raised.
+
+* `Tempo.Interval.new/1` refuses an interval or a set as an end, where it built an interval with an interval in it.
 
 ## [v1.6.4] — 2026-09-03
 

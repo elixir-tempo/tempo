@@ -41,8 +41,13 @@ defmodule Tempo.IntervalSetTest do
       assert_raise Tempo.ConversionError, fn -> IntervalSet.members(mondays) end
       assert_raise Tempo.ConversionError, fn -> IntervalSet.count(~o"R/2026-06-01/P1W") end
 
-      # The first member of a set read as it is walked is taken alone.
+      # The first member of a set read as it is walked is taken alone, as
+      # is the first occurrence of a recurrence with no end.
       assert IntervalSet.first(mondays) == ~o"2026-06-01"
+      assert date(Interval.from(IntervalSet.first(~o"R/2026-06-01/P1W"))) == ~D[2026-06-01]
+
+      # One counted back from no end has no first.
+      assert_raise Tempo.ConversionError, fn -> IntervalSet.first(~o"R/P1W/2026-06-01") end
     end
 
     test "of a recurrence set are its rules, a rule on its own the one" do

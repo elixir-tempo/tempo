@@ -44,6 +44,10 @@ defmodule Tempo.IntervalSet do
   * `{:error, %Tempo.FrameError{}}` when one member is zoned and another has
     no zone: place it with `Tempo.in_zone/2`.
 
+  * `{:error, %Tempo.ConversionError{reason: :not_an_expression}}` for a
+    member that is no `t:Tempo.t/0`, and `{:error, %ArgumentError{}}` for
+    members that are no list.
+
   ### Examples
 
       iex> Tempo.IntervalSet.new([~o"2026-06", ~o"2026-08"])
@@ -62,13 +66,26 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec new([Tempo.t()], keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-  def new(members, options \\ []) when is_list(members) do
+  def new(members, options \\ [])
+
+  def new(members, options) when is_list(members) do
     with :ok <- Options.check(options, [:metadata, :except], "Tempo.IntervalSet.new/2"),
+         :ok <- expressions(members),
          {:ok, excluded} <- excluded(Keyword.get(options, :except, [])),
          {:ok, set} <-
            Algebra.gathered(members ++ excluded, metadata: Keyword.get(options, :metadata, %{})) do
       {kept, out} = Enum.split(elem(set.form, 1), length(members))
       {:ok, %{set | form: {:all, kept ++ Enum.map(out, &{:except, &1})}}}
+    end
+  end
+
+  def new(other, _options),
+    do: {:error, ArgumentError.exception("a set has a list of members, not #{inspect(other)}")}
+
+  defp expressions(members) do
+    case Enum.reject(members, &is_struct(&1, Tempo)) do
+      [] -> :ok
+      [other | _] -> {:error, ConversionError.exception(value: other, reason: :not_an_expression)}
     end
   end
 
@@ -516,17 +533,31 @@ defmodule Tempo.IntervalSet do
   def count(expression), do: expression |> members() |> length()
 
   @doc """
-  The first member of a set.
+  The first member of a set. A recurrence with no end has a first
+  occurrence, which is its first member.
 
   ### Examples
 
       iex> Tempo.IntervalSet.first(~o"{2026-06,2026-08}")
       ~o"2026-06"
 
+      iex> Tempo.IntervalSet.first(~o"R/2026-06-01/P1W")
+      ~o"2026-06-01/2026-06-07"
+
   """
   @spec first(Tempo.t()) :: Tempo.t() | nil
   def first(%Tempo{form: {:all, members}}), do: members |> Enum.take(1) |> List.first()
-  def first(expression), do: expression |> members() |> List.first()
+
+  def first(%Tempo{} = expression) do
+    if Spans.singular?(expression), do: expression, else: first_member(expression)
+  end
+
+  defp first_member(expression) do
+    case Spans.members(expression, []) do
+      {:ok, members} -> members |> Enum.take(1) |> List.first()
+      {:error, exception} -> raise exception
+    end
+  end
 
   @doc """
   The last member of a set.

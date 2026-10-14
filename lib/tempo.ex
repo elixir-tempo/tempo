@@ -674,6 +674,10 @@ defmodule Tempo do
     (`~o"{2026Y..2030Y}"`). With none the recurrence has an open start and
     is placed by a `:within` window.
 
+  * `:to` is where a recurrence counted back ends, a `t:t/0` value: its
+    last repeat ends with it (`R5/P1M/2026-06-01`). A recurrence starts at
+    `:from` or ends at `:to`, not both.
+
   * `:count` is how many occurrences it has.
 
   * `:until` is a `t:t/0` value it runs to. A recurrence ends by one of

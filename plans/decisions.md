@@ -478,3 +478,23 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **State.** Built. `Tempo.Algebra`'s sweep credits a result, on each side, to the member covering its start that opened last, and ends it where that member ends while the result goes on; the time-covered sweep (`covered/3`, for free time) still joins. `Tempo.Matrix.Sets.by_member/3` works the same out on whole numbers apart from the code, and `test/tempo/set_operations_test.exs` holds intersection, difference and symmetric difference to it over every pair of sets of up to two members between four points and generated sets of four between nine. The iCal and cookbook guides join with `coalesce/1` where they ask for the time covered.
 
+## 43. What `tempo_sql`'s Ecto types take and give on 2.0
+
+* **Question.** `tempo_sql` 0.2.0 has a type for each 1.x struct: `Tempo.Ecto.Interval` (a `%Tempo.Interval{}` in a `tstzrange`), `Tempo.Ecto.IntervalSet` (a `%Tempo.IntervalSet{}` in a `tstzmultirange`), `Tempo.Ecto.Tempo` (a bare `%Tempo{}`, stored as its span) and the composite `Tempo.Ecto.TempoRange` and `TempoMultirange`. Every value is a `%Tempo{}` in 2.0. What does each type take and give?
+
+* **Context.** Found porting `tempo_sql` to 2.0. The types can no longer tell a value from an interval or a set by its struct, and a companion is not to match Tempo's forms. The options were (1) types named for what the column holds: `Interval` takes any expression that is one span and loads an interval, `IntervalSet` any expression with a last span and loads a set, `Tempo` is `Interval` under its old name, the composites take any expression with ISO 8601 text, all through `Tempo.to_interval/2`; (2) 1.x's strictness, each type taking its one shape; (3) two plain types and the composites, `Tempo.Ecto.Tempo` dropped.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built in `tempo_sql`. `Tempo.Ecto.Interval` casts and dumps any expression of one span through `Tempo.to_interval/2` and `Tempo.Interval.instants/1`, and `Tempo.Ecto.IntervalSet` any expression with a last span. The composites keep any expression with ISO 8601 text and a place on the time line, their range the stretch it covers: its first start to its last end, unbounded above for a recurrence with no end; `../..`, a value with no year and a recurrence counted back with no start are refused. The port found four defects in Tempo, fixed: `IntervalSet.first/1` of a recurrence with no end raised, `IntervalSet.new/2` raised on a member that is no expression, `Interval.new/1` took an interval as an end, and `Interval.instants/1` of `../..` asked for a year.
+
+## 44. Composite rows written by `tempo_sql` 0.2.0
+
+* **Question.** The composite types' `meta` column holds each end of an interval as ISO 8601 text. A row written by 0.2.0 holding `from: "2026-06-15", to: "2026-06-21"` meant 15 June up to the 21st, the end exclusive as 1.x read it; 2.0 reads an end written to a day through it, a day longer. How are such rows read?
+
+* **Context.** Found porting `tempo_sql` to 2.0. The plain `tstzrange` columns hold UTC instants and mean the same under 2.0. The options were (1) a meta version 3 holding the whole expression's 2.0 text, with versions 1 and 2 read as 1.x wrote them, an end written to a calendar unit moved back one unit to the end 2.0 reads and 1.x's forms translated, so no stored row is misread and none needs migrating; (2) version 3 for new rows, and versions 1 and 2 refused with an error naming a one-off migration task the library provides; (3) the version 2 format kept, its ends converted to and from 1.x's reading on every write and read.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built in `tempo_sql`. Meta version 3 holds the expression's text, its metadata and each member's for a set. A version 1 or 2 row is read with its end written to a calendar unit moved back a unit, a recurrence rebuilt with `Tempo.every/2` (`:to` for one counted back), and a set of version 2 intervals read member by member; a document with neither an expression nor both ends is refused.
+

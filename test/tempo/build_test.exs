@@ -38,6 +38,7 @@ defmodule Tempo.BuildTest do
            years: :leap
          )
      )},
+    {"R5/P1M/2026-06-01", quote(do: Tempo.every(~o"P1M", to: ~o"2026-06-01", count: 5))},
     {"{2020Y..2024Y,^2022Y}",
      quote(do: IntervalSet.new([Tempo.new!(year: 2020..2024)], except: [Tempo.new!(year: 2022)]))},
     {"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN",
@@ -127,6 +128,11 @@ defmodule Tempo.BuildTest do
       assert {:error, %ArgumentError{}} = Tempo.every(~o"P1M", strat: ~o"2026")
       assert {:error, %ArgumentError{}} = Tempo.every(~o"P1Y", from: ~o"2026", years: :even)
       assert {:error, %ArgumentError{}} = Tempo.every(~o"P1Y", years: :fortnightly)
+
+      assert {:error, %ArgumentError{}} =
+               Tempo.every(~o"P1M", from: ~o"2026-01-01", to: ~o"2026-06-01")
+
+      assert {:error, %ArgumentError{}} = Tempo.every(~o"P1M", to: ~o"2026/2027")
 
       assert {:error, %ArgumentError{}} =
                Tempo.every(~o"P1Y", from: ~o"2026", calendar: Calendrical.Hebrew)

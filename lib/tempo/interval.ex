@@ -12,10 +12,13 @@ defmodule Tempo.Interval do
 
   """
 
+  alias Tempo.ConversionError
   alias Tempo.Duration
+  alias Tempo.Interop
   alias Tempo.IntervalEndpointsError
   alias Tempo.LeapSeconds
   alias Tempo.Options
+  alias Tempo.Spans
   alias Tempo.Validate
 
   @type endpoint :: Tempo.t() | Duration.t() | :open
@@ -42,7 +45,9 @@ defmodule Tempo.Interval do
   * `{:ok, interval}`, a `t:Tempo.t/0` of the `:span` form.
 
   * `{:error, %Tempo.IntervalEndpointsError{}}` when the ends are in two
-    calendars or two zones, are both durations, both open, or out of order.
+    calendars or two zones, are both durations, both open, or out of order,
+    or when an end is no value, duration or `:open` (an interval or a set
+    is not an end).
 
   ### Examples
 
@@ -91,7 +96,7 @@ defmodule Tempo.Interval do
   def new(:open, :open, _metadata),
     do: {:error, IntervalEndpointsError.exception(from: :open, to: :open, reason: :open)}
 
-  def new(%Tempo{} = from, %Tempo{} = to, metadata) do
+  def new(%Tempo{form: {:value, _}} = from, %Tempo{form: {:value, _}} = to, metadata) do
     cond do
       from.calendar != to.calendar ->
         {:error, IntervalEndpointsError.exception(from: from, to: to, reason: :calendars)}
@@ -104,11 +109,13 @@ defmodule Tempo.Interval do
     end
   end
 
-  def new(%Tempo{} = from, to, metadata) when is_struct(to, Duration) or to == :open,
-    do: validated(from, to, from, metadata)
+  def new(%Tempo{form: {:value, _}} = from, to, metadata)
+      when is_struct(to, Duration) or to == :open,
+      do: validated(from, to, from, metadata)
 
-  def new(from, %Tempo{} = to, metadata) when is_struct(from, Duration) or from == :open,
-    do: validated(from, to, to, metadata)
+  def new(from, %Tempo{form: {:value, _}} = to, metadata)
+      when is_struct(from, Duration) or from == :open,
+      do: validated(from, to, to, metadata)
 
   def new(from, to, _metadata),
     do:
@@ -178,6 +185,92 @@ defmodule Tempo.Interval do
   """
   @spec endpoints(Tempo.t()) :: {endpoint(), endpoint()}
   def endpoints(%Tempo{form: {:span, from, to}}), do: {from, to}
+
+  @doc """
+  The instants an interval runs between: the one it begins at and the one
+  it ends at, the end not in it. An end written to a date is read through
+  (law 9), so `2026-06-15/2026-06-20` ends as the 21st begins. It is what a
+  store of instants, a database's range of timestamps, holds of an
+  interval.
+
+  ### Arguments
+
+  * `interval` is a `t:Tempo.t/0` interval with a year.
+
+  ### Returns
+
+  * `{:ok, {from, to}}`, each a `NaiveDateTime` for an interval with no
+    zone, a `DateTime` for one in a zone or at a shift, or `nil` for an
+    open end, so `{nil, nil}` for `../..`. The date-times are of the
+    interval's calendar.
+
+  * `{:error, exception}` for an interval with no year, as for
+    `Tempo.to_interval/2`.
+
+  ### Examples
+
+      iex> Tempo.Interval.instants(~o"2026-06-15/2026-06-20")
+      {:ok, {~N[2026-06-15 00:00:00], ~N[2026-06-21 00:00:00]}}
+
+      iex> Tempo.Interval.instants(~o"2026-06-15T09:00Z/2026-06-15T17:00Z")
+      {:ok, {~U[2026-06-15 09:00:00Z], ~U[2026-06-15 17:00:00Z]}}
+
+      iex> Tempo.Interval.instants(~o"2026-06-15/..")
+      {:ok, {~N[2026-06-15 00:00:00], nil}}
+
+  """
+  @spec instants(Tempo.t()) ::
+          {:ok, {NaiveDateTime.t() | DateTime.t() | nil, NaiveDateTime.t() | DateTime.t() | nil}}
+          | {:error, Exception.t()}
+  def instants(%Tempo{form: {:span, :open, :open}}), do: {:ok, {nil, nil}}
+
+  def instants(%Tempo{form: {:span, _from, _to}} = interval) do
+    with :ok <- with_a_year(interval),
+         {:ok, resolved} <- Tempo.to_interval(interval),
+         {:ok, {start, stop}} <- Spans.extent(resolved),
+         {:ok, from} <- instant(start, resolved),
+         {:ok, to} <- instant(stop, resolved) do
+      {:ok, {from, to}}
+    end
+  end
+
+  def instants(%Tempo{} = other),
+    do: {:error, ConversionError.exception(value: other, reason: :several)}
+
+  def instants(other),
+    do: {:error, ConversionError.exception(value: other, reason: :not_an_expression)}
+
+  defp with_a_year(interval) do
+    if Tempo.anchored?(interval),
+      do: :ok,
+      else: {:error, ConversionError.exception(value: interval, reason: :needs_a_year)}
+  end
+
+  # A position as the instant it is: a reading of the interval's clock, at
+  # UTC where it was written at a shift and has no zone to read it in.
+  defp instant(nil, _interval), do: {:ok, nil}
+
+  defp instant(position, %Tempo{calendar: calendar, zone: zone} = interval) do
+    shift = if zone == nil and Spans.frame(interval) == :utc, do: [hour: 0]
+
+    model = %Tempo{
+      form:
+        {:value, [year: 1, month: 1, day: 1, hour: 0, minute: 0, second: 0, microsecond: {0, 6}]},
+      calendar: calendar,
+      zone: zone,
+      shift: shift
+    }
+
+    with {:ok, instant} <-
+           position |> Spans.at_position(model, :start, calendar, zone) |> Interop.to(),
+         do: {:ok, whole_seconds(instant)}
+  end
+
+  # A whole second is written with no fraction, as Elixir writes one.
+  defp whole_seconds(%{microsecond: {0, _precision}} = instant),
+    do: %{instant | microsecond: {0, 0}}
+
+  defp whole_seconds(instant), do: instant
 
   @doc """
   The leap seconds an interval spans, each as the UTC date it ends:
