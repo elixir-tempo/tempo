@@ -610,7 +610,7 @@ defmodule Tempo.Spans do
 
       stream =
         periods
-        |> selected_in(walk, first_step(periods, bound, options) - carried_back(bound, parts))
+        |> selected_in(walk, first_period(periods, bound, parts, from, options))
         |> left_out(excluded)
         |> to_range_end(from)
         |> in_range_years(from, first.calendar)
@@ -712,14 +712,23 @@ defmodule Tempo.Spans do
 
   defp first_step(_periods, _bound, _options), do: 0
 
-  # A selection that opens a window (a day observed on the Monday after)
-  # may carry an occurrence into the next period: a window's occurrences
-  # are looked for from the period before it, and those before it dropped.
-  # A count counts from the rule's start, which no period before reaches.
+  # The period a rule's occurrences are looked for from: the window's, or
+  # the one before it where an occurrence may run on into the window, and
+  # never one before a domain's first.
+  defp first_period(periods, bound, parts, from, options) do
+    first = first_step(periods, bound, options) - carried_back(bound, parts)
+    if range_start(from), do: max(first, 0), else: first
+  end
+
+  # A selection that opens a window (a day observed on the Monday after, a
+  # holiday of several days from 19 December) may carry an occurrence into
+  # the next period: a window's occurrences are looked for from the period
+  # before it, and those before it dropped. A count counts from the rule's
+  # start, which no period before reaches.
   defp carried_back(count, _parts) when is_integer(count), do: 0
 
   defp carried_back(_bound, parts) do
-    if Keyword.has_key?(with_nested(picking(parts)), :window), do: 1, else: 0
+    if Keyword.has_key?(with_nested(parts), :window), do: 1, else: 0
   end
 
   # The number of the last period that begins by a position, no less than a
@@ -941,10 +950,39 @@ defmodule Tempo.Spans do
   # A count counts from the domain's first member, so a counted recurrence
   # takes all of a domain that has an end, and the window the occurrences.
   defp each_member(domain, first, recurrence, options) do
-    options = if counted?(recurrence), do: Keyword.delete(options, :within), else: options
+    options = domain_window(options, recurrence)
 
     with {:ok, members} <- spans(domain, options) do
-      {:ok, {:each, on_steps(members, domain_start(domain), first, recurrence)}}
+      periods = Stream.flat_map(members, &cadence_periods(&1, first, options))
+      {:ok, {:each, on_steps(periods, domain_start(domain), first, recurrence)}}
+    end
+  end
+
+  # A range in a domain (`{..2019Y,2021Y..}`) is each period of the cadence
+  # it holds, from the first the window reaches, as a domain of one range is;
+  # a year or a set of years is its periods already.
+  defp cadence_periods(
+         %Tempo{form: {:span, _from, _to}} = range,
+         %Tempo{form: {:span, _domain, %Duration{units: [{unit, _n}]}}},
+         options
+       ) do
+    case walk(range, unit, []) do
+      {:ok, periods} -> from_window(periods, options[:within])
+      {:error, _} -> [range]
+    end
+  end
+
+  defp cadence_periods(member, _first, _options), do: [member]
+
+  defp from_window(periods, nil), do: periods
+
+  defp from_window(periods, window) do
+    case window_extent(window) do
+      {:ok, {start, _stop}} when is_integer(start) ->
+        Stream.drop_while(periods, &ends_by?(&1, start))
+
+      _none ->
+        periods
     end
   end
 
@@ -965,7 +1003,17 @@ defmodule Tempo.Spans do
 
   defp on_steps(members, _start, _first, _recurrence), do: members
 
-  defp counted?(%Tempo{form: {:every, _first, count, _rule}}), do: is_integer(count)
+  # The domain's members a window reaches: every one where the rule is
+  # counted, as the count counts from the first; and the year before the
+  # window too where an occurrence may run on into it from the period before
+  # (a holiday from 19 December into January).
+  defp domain_window(options, %Tempo{form: {:every, _first, count, _rule}})
+       when is_integer(count),
+       do: Keyword.delete(options, :within)
+
+  defp domain_window(options, %Tempo{form: {:every, _first, bound, rule}}) do
+    if carried_back(bound, rule) == 1, do: widened(options), else: options
+  end
 
   defp on_step?(member, period_at) do
     start = start_position(member)
@@ -1430,11 +1478,14 @@ defmodule Tempo.Spans do
     with {:ok, {_start, stop}} <- extent(value), do: {:ok, span_of(value, stop)}
   end
 
+  # The span a value names carries its metadata; its ends are points, and
+  # carry none.
   defp span_of(value, stop) do
-    to = if clock_resolution?(value), do: clock_end(value, stop), else: value
+    from = %{value | metadata: %{}}
+    to = if clock_resolution?(from), do: clock_end(from, stop), else: from
 
     %Tempo{
-      form: {:span, value, to},
+      form: {:span, from, to},
       calendar: value.calendar,
       zone: value.zone,
       metadata: value.metadata

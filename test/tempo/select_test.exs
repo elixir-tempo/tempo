@@ -383,4 +383,16 @@ defmodule Tempo.SelectTest do
       assert Tempo.to_interval(~o"15D", within: ~o"6M") == {:ok, ~o"6M15D/6M15D"}
     end
   end
+
+  describe "a span of one day" do
+    test "selects its day as a value, as a longer span selects each of its days" do
+      workdays = Tempo.workdays!(:AU)
+
+      assert Tempo.select(~o"2023-04-24/2023-04-24", workdays) == {:ok, ~o"{2023-04-24}"}
+      assert Tempo.select(~o"2023-04-22/2023-04-22", workdays) == {:ok, ~o"{}"}
+
+      assert Tempo.select(~o"2023-04-24/2023-04-25", workdays) ==
+               {:ok, ~o"{2023-04-24,2023-04-25}"}
+    end
+  end
 end

@@ -22,6 +22,24 @@ defmodule Tempo.BuildTest do
     {"R/{2026Y..2030Y}/P1Y/FL7M4DN",
      quote(do: Tempo.every(~o"P1Y", from: ~o"{2026Y..2030Y}", select: [month: 7, day: 4]))},
     {"R/../P1Y/FL(easter)eN", quote(do: Tempo.every(~o"P1Y", select: [event: "easter"]))},
+    {"R/..e/P1Y/FL12M25DN",
+     quote(do: Tempo.every(~o"P1Y", select: [month: 12, day: 25], years: :even))},
+    {"R/../P1Y/FL7M1DN[u-ca=hebrew]",
+     quote(do: Tempo.every(~o"P1Y", select: [month: 7, day: 1], calendar: Calendrical.Hebrew))},
+    {"R/{2017Y..}l/P1Y/FL2M29DN",
+     quote(
+       do:
+         Tempo.every(~o"P1Y",
+           from:
+             IntervalSet.new!([
+               Interval.new!(from: Tempo.new!(year: 2017), to: :open)
+             ]),
+           select: [month: 2, day: 29],
+           years: :leap
+         )
+     )},
+    {"{2020Y..2024Y,^2022Y}",
+     quote(do: IntervalSet.new([Tempo.new!(year: 2020..2024)], except: [Tempo.new!(year: 2022)]))},
     {"R/../P1Y/FLLL(easter)eN/-P7DN5K-1IN",
      quote(
        do:
@@ -107,6 +125,14 @@ defmodule Tempo.BuildTest do
 
       assert {:error, %ArgumentError{}} = Tempo.every(~o"P1M", count: 0)
       assert {:error, %ArgumentError{}} = Tempo.every(~o"P1M", strat: ~o"2026")
+      assert {:error, %ArgumentError{}} = Tempo.every(~o"P1Y", from: ~o"2026", years: :even)
+      assert {:error, %ArgumentError{}} = Tempo.every(~o"P1Y", years: :fortnightly)
+
+      assert {:error, %ArgumentError{}} =
+               Tempo.every(~o"P1Y", from: ~o"2026", calendar: Calendrical.Hebrew)
+
+      assert {:error, %Tempo.InvalidCalendarError{}} = Tempo.every(~o"P1Y", calendar: Date)
+      assert {:error, %ArgumentError{}} = IntervalSet.new([~o"2026"], except: ["2027"])
       assert {:error, %ArgumentError{}} = Tempo.every("P1M")
       assert {:error, %ArgumentError{}} = Tempo.every(~o"P1M", from: ~o"2026/2027")
 

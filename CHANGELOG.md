@@ -36,6 +36,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * An option a function does not take is an `ArgumentError`, where it was passed over.
 
+* An argument that is no Tempo expression is a `Tempo.ConversionError` with reason `:not_an_expression`, returned or raised as the function's other errors are, where most functions raised `FunctionClauseError`.
+
 * `Tempo.select/3` selects in every period of its base and answers values of the selector's resolution, where it selected in the first period and answered intervals.
 
 * `Tempo.select/3` by a list of selectors or of days answers in the order of time, each span once, whatever the order of the list.
@@ -93,6 +95,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * `Tempo.Allen`: the thirteen relations as predicates, `relation/2`, `inverse/1` and `compose/2`.
 
 * `Tempo.every/2`, `Tempo.selection/1` and `Tempo.one_of/1` build a recurrence, a selection and a one-of set from parts, so a program never writes text to have it read back.
+
+* `Tempo.every/2` takes `:calendar` for a recurrence with no start and `:years` for a domain's even, odd, leap or common years; `Tempo.IntervalSet.new/2` takes `:except`.
 
 * `Tempo.members/2` and `Tempo.walk/3`: the spans of any expression, and any span walked at a unit.
 

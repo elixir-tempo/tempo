@@ -9,7 +9,7 @@ defmodule Tempo.Build do
   # back. What `Tempo.new/1`, `Tempo.Interval.new/1`, `Tempo.Duration.new/1`
   # and `Tempo.IntervalSet.new/2` build are the parts these take.
 
-  alias Tempo.{Duration, Options, Validate, Workdays}
+  alias Tempo.{Duration, InvalidCalendarError, Options, Validate, Workdays}
 
   # The units a selection names, coarsest first, as a rule's parts are held.
   @units [
@@ -27,7 +27,10 @@ defmodule Tempo.Build do
   @clock [:hour, :minute, :second]
   @parts @units ++ [:instance, :event, :roll, :skip, :selection, :window, :all]
 
-  @every_options [:from, :count, :until, :select, :metadata]
+  @every_options [:from, :count, :until, :select, :calendar, :years, :metadata]
+
+  # The years a domain may be filtered to, as `e`, `o`, `l` and `c` write them.
+  @year_filters [:even, :odd, :leap, :common]
 
   # ── A selection ───────────────────────────────────────────────────────
 
@@ -174,6 +177,8 @@ defmodule Tempo.Build do
     with :ok <- Options.check(options, @every_options, "Tempo.every/2"),
          {:ok, cadence} <- cadence(cadence),
          {:ok, first} <- first(Keyword.get(options, :from), cadence),
+         {:ok, first} <- in_calendar(first, Keyword.get(options, :calendar)),
+         {:ok, first} <- in_years(first, Keyword.get(options, :years)),
          {:ok, bound} <- bound(Keyword.get(options, :count), Keyword.get(options, :until)),
          {:ok, rule} <- rule(Keyword.get(options, :select)) do
       Validate.run(%Tempo{
@@ -203,6 +208,48 @@ defmodule Tempo.Build do
 
   defp first(other, _cadence),
     do: {:error, argument(":from is a value, or a set as a domain, not #{inspect(other)}")}
+
+  # A recurrence with no start is in the calendar given; one with a start
+  # is in its start's, which a calendar given must be.
+  defp in_calendar(first, nil), do: {:ok, first}
+  defp in_calendar(%Tempo{calendar: calendar} = first, calendar), do: {:ok, first}
+
+  defp in_calendar(%Tempo{form: {:span, :open, _cadence}} = first, calendar) do
+    if Tempo.Calendar.calendar?(calendar),
+      do: {:ok, %{first | calendar: calendar}},
+      else: {:error, InvalidCalendarError.exception(calendar: calendar)}
+  end
+
+  defp in_calendar(_first, calendar),
+    do:
+      {:error,
+       argument(
+         ":calendar is the calendar of a recurrence with no :from, or that of its :from, not #{inspect(calendar)}"
+       )}
+
+  # A domain filtered to some of its years (`R/..e`, `R/{2017Y..}l`): every
+  # year where the recurrence has no start, or those of the set it starts in.
+  defp in_years(first, nil), do: {:ok, first}
+
+  defp in_years(%Tempo{form: {:span, :open, cadence}} = first, filter)
+       when filter in @year_filters do
+    every_year = %Tempo{form: {:span, :open, :open}, calendar: first.calendar}
+    {:ok, %{first | form: {:span, filtered(every_year, filter), cadence}}}
+  end
+
+  defp in_years(%Tempo{form: {:span, %Tempo{form: {:all, _}} = domain, cadence}} = first, filter)
+       when filter in @year_filters,
+       do: {:ok, %{first | form: {:span, filtered(domain, filter), cadence}}}
+
+  defp in_years(_first, filter) when filter in @year_filters,
+    do:
+      {:error, argument(":years filters a domain, a set given as :from, or every year with none")}
+
+  defp in_years(_first, filter),
+    do: {:error, argument(":years is one of #{inspect(@year_filters)}, not #{inspect(filter)}")}
+
+  defp filtered(domain, filter),
+    do: %Tempo{form: {:when, domain, years: filter}, calendar: domain.calendar, zone: domain.zone}
 
   defp bound(nil, nil), do: {:ok, :infinity}
   defp bound(count, nil) when is_integer(count) and count > 0, do: {:ok, count}

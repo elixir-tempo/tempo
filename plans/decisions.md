@@ -437,3 +437,14 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-14).** Option 1.
 
 * **State.** Built: `Tempo.union/3` takes a member once where both operands hold it (or one holds it twice), with an endless operand too (`Tempo.Algebra.merged/2`). The models of `test/tempo/set_operations_test.exs` and `set_operations_measure_test.exs` say so, and its tests hold June beside 1 to 30 June, and two bookings of one hour with different metadata, as two members.
+
+## 39. An argument that is no expression
+
+* **Question.** What does a public function answer when an argument that should be an expression is not one: `nil`, a string, a `Date`, a number?
+
+* **Context.** Found porting the `tempo_holidays` cases, whose tests passed `nil`, `""`, `:""` and `42` to `Tempo.on/2`, `Tempo.at/2` and `Tempo.duration/1`. A survey of every public function of one or two arguments found about sixty that raised `FunctionClauseError`, about thirty that returned a named error (the set operations, `relation/2`, `to_string/2`: `Tempo.ConversionError` with reason `:not_an_expression`), eleven accessors (`year/1`, `day_of_week/1`) that returned `nil`, and the relation predicates, which raised a `Tempo.ConversionError`. The rule the redesign holds every function to on every shape of expression is that it answers or returns a named error. The options were (1) every public function returns `{:error, %Tempo.ConversionError{reason: :not_an_expression}}`, as the set operations did; (2) raise `FunctionClauseError`, as Elixir does by convention, and leave the type to Dialyzer, changing the functions that returned an error; (3) leave it mixed.
+
+* **Decision (2026-10-14).** Option 1.
+
+* **State.** Built. A function that returns its errors returns `:not_an_expression`; a function that answers a bare value (a predicate, an accessor, `metadata/1`, `compare/3`) raises it, as it raises its other errors, since an `{:error, _}` tuple from a predicate would read as true in `Enum.filter/2`. Text given to a reader that is not a string is an `ArgumentError`, a zone that is not a string a `Tempo.ZoneError`, and an Elixir value of the wrong kind to `from_date/1` and its siblings is `:not_an_elixir_value`. `Tempo.map/2` and `try_map/2`, which take any enumerable, are left to `Enum`. The `Tempo` moduledoc states the rule, and `test/tempo/not_an_expression_test.exs` calls every public function of one to three arguments with one.
+

@@ -252,8 +252,8 @@ defmodule Tempo.Select do
   # select, moved, filtered and positioned as they say.
   defp picked(:none, _period, _extent, _moves, _options), do: []
 
-  defp picked({:day, []}, period, _extent, moves, _options),
-    do: positioned([period], moves.instance)
+  defp picked({:day, []}, period, {start, _stop}, moves, _options),
+    do: positioned([the_day(period, start)], moves.instance)
 
   defp picked({:times, values}, period, extent, moves, _options),
     do: values |> Enum.flat_map(&met(&1, period, extent)) |> positioned(moves.instance)
@@ -269,6 +269,13 @@ defmodule Tempo.Select do
     |> first_showings()
     |> positioned(moves.instance)
   end
+
+  # The day a period within one day is, as a value: a span of one day is
+  # the day it holds.
+  defp the_day(%Tempo{form: {:value, _units}} = period, _start), do: period
+
+  defp the_day(period, start),
+    do: as_value(period, Shift.period_units(start, :day, frame(period)))
 
   # A period within one day is a day the parts naming a month, a day of the
   # month or a weekday are true of or not: the period selects nothing where

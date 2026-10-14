@@ -27,6 +27,9 @@ defmodule Tempo.ConversionError do
           | :group
           | :several
           | :conditions
+          | :not_an_expression
+          | :not_an_elixir_value
+          | :not_a_duration
           | term()
 
   @type t :: %__MODULE__{value: term(), reason: reason()}
@@ -102,6 +105,14 @@ defmodule Tempo.ConversionError do
   defp describe({:no_rrule, :month_end}),
     do:
       "steps to the last day of a month that lacks its start's day, where RFC 5545 would pass the month over"
+
+  defp describe(:not_an_expression), do: "is not a Tempo expression"
+
+  defp describe(:not_an_elixir_value),
+    do: "is not one of Elixir's date and time values Tempo reads"
+
+  defp describe(:not_a_duration),
+    do: "is not a duration, its ISO 8601 text or a keyword list of units"
 
   defp describe(reason) when is_binary(reason), do: reason
   defp describe(reason), do: inspect(reason)

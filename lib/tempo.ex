@@ -12,6 +12,19 @@ defmodule Tempo do
   See `plans/architecture-redesign.md` for the model: nine laws every
   module holds to, and the forms below.
 
+  ## Errors
+
+  A function that can fail returns `{:ok, value}` or `{:error, exception}`,
+  and has a `!` form that raises. A predicate, an accessor and `compare/3`
+  answer a bare value (a boolean, a part, `:lt`), and raise their errors, so
+  that an error is never read as an answer.
+
+  An argument that should be an expression and is not one (`nil`, a string,
+  a `Date`) is a `Tempo.ConversionError` with reason `:not_an_expression`,
+  returned or raised as the function's other errors are. Text given to a
+  reader that is not a string is an `ArgumentError`, and a zone that is not
+  a string a `Tempo.ZoneError`.
+
   """
 
   alias Tempo.Algebra
@@ -58,6 +71,24 @@ defmodule Tempo do
             shift: nil,
             qualifications: nil,
             metadata: %{}
+
+  # An argument a function takes as an expression: a `%Tempo{}`, or a
+  # duration, which a function answers for or refuses by name. Anything else
+  # is `:not_an_expression`, returned as a function's other errors are, or
+  # raised by one that answers a bare value (decision 39).
+  defguardp is_expression(value) when is_struct(value, __MODULE__) or is_struct(value, Duration)
+
+  defp not_an_expression(value),
+    do: {:error, ConversionError.exception(value: value, reason: :not_an_expression)}
+
+  @spec not_an_expression!(term()) :: no_return()
+  defp not_an_expression!(value),
+    do: raise(ConversionError.exception(value: value, reason: :not_an_expression))
+
+  defp not_text(value),
+    do: {:error, ArgumentError.exception("text to read is a string, not #{inspect(value)}")}
+
+  defp not_a_zone(value), do: {:error, ZoneError.exception(zone: value, reason: :unknown)}
 
   @typedoc "A unit a value is written in, or a label a day carries."
   @type unit ::
@@ -228,7 +259,16 @@ defmodule Tempo do
   def from_iso8601(text, calendar) when is_binary(text) and is_atom(calendar),
     do: Reader.read(text, calendar: calendar)
 
-  def from_iso8601(text, options) when is_binary(text) and is_list(options) do
+  def from_iso8601(text, _calendar_or_options) when not is_binary(text), do: not_text(text)
+
+  def from_iso8601(_text, other) when not is_list(other),
+    do:
+      {:error,
+       ArgumentError.exception(
+         "Tempo.from_iso8601/2 takes a calendar or a keyword list, not #{inspect(other)}"
+       )}
+
+  def from_iso8601(text, options) do
     with :ok <-
            Options.check(
              options,
@@ -288,7 +328,8 @@ defmodule Tempo do
 
   """
   @spec to_iso8601(t() | Duration.t()) :: {:ok, String.t()} | {:error, error()}
-  def to_iso8601(expression), do: Writer.to_iso8601(expression)
+  def to_iso8601(expression) when is_expression(expression), do: Writer.to_iso8601(expression)
+  def to_iso8601(other), do: not_an_expression(other)
 
   @doc """
   Writes an expression as `to_iso8601/1` does, returning the text or raising.
@@ -361,7 +402,11 @@ defmodule Tempo do
 
   """
   @spec parse(String.t(), keyword()) :: {:ok, t() | Duration.t()} | {:error, error()}
-  def parse(text, options \\ []) when is_binary(text) do
+  def parse(text, options \\ [])
+
+  def parse(text, _options) when not is_binary(text), do: not_text(text)
+
+  def parse(text, options) do
     with :ok <-
            Options.check(
              options,
@@ -412,6 +457,7 @@ defmodule Tempo do
   """
   @spec parse_duration(String.t()) :: {:ok, Duration.t()} | {:error, error()}
   def parse_duration(text) when is_binary(text), do: Text.read(text, profile: :duration)
+  def parse_duration(other), do: not_text(other)
 
   # ── Construction ──────────────────────────────────────────────────────
 
@@ -463,6 +509,9 @@ defmodule Tempo do
       iex> Tempo.new(hour: 10, minute: 30, second: 45, microsecond: {500_000, 1})
       {:ok, ~o"T10:30:45.5"}
 
+      iex> Tempo.new(year: 2020..2024)
+      {:ok, ~o"{2020..2024}Y"}
+
       iex> {:error, %Tempo.InvalidDateError{}} = Tempo.new(year: 2026, month: 13)
 
       iex> {:error, %ArgumentError{}} = Tempo.new(year: 2026, month: 6, week: 24)
@@ -481,7 +530,7 @@ defmodule Tempo do
   def new(components) when is_list(components) do
     {frame, units} = Keyword.split(components, [:calendar, :zone, :shift, :metadata])
 
-    with {:ok, units} <- Unit.ordered(units),
+    with {:ok, units} <- units |> Enum.map(&held_as_written/1) |> Unit.ordered(),
          {:ok, calendar} <- calendar_of(Keyword.get(frame, :calendar, Tempo.Calendar.default())),
          {:ok, zone} <- zone_of(Keyword.get(frame, :zone)) do
       Validate.run(%__MODULE__{
@@ -500,6 +549,10 @@ defmodule Tempo do
        "a value is built from a keyword list or a map of units, not #{inspect(other)}"
      )}
   end
+
+  # A range alone is held as a list of it, as `{2020..2024}Y` is read.
+  defp held_as_written({unit, %Range{} = range}), do: {unit, [range]}
+  defp held_as_written(part), do: part
 
   @doc """
   Builds a value as `new/1` does, returning the value or raising.
@@ -628,6 +681,13 @@ defmodule Tempo do
 
   * `:select` is what it selects in each repeat: the parts of a selection,
     or what `selection/1` returns. With none each repeat is an occurrence.
+
+  * `:calendar` is the calendar of a recurrence with no `:from`
+    (`R/../P1Y/FL7M1DN[u-ca=hebrew]`). One with a `:from` is in its start's.
+
+  * `:years` keeps the years of its domain that are `:even`, `:odd`,
+    `:leap` or `:common`: of every year where there is no `:from`
+    (`R/..e`), or of the set given as `:from` (`R/{2017Y..}l`).
 
   * `:metadata` is a map the recurrence and every occurrence carry.
 
@@ -760,12 +820,16 @@ defmodule Tempo do
 
   """
   @spec to_interval(t() | Duration.t(), keyword()) :: {:ok, t()} | {:error, error()}
-  def to_interval(expression, options \\ []) do
+  def to_interval(expression, options \\ [])
+
+  def to_interval(expression, options) when is_expression(expression) do
     with :ok <- Options.check(options, [:within, :territory, :locale], "Tempo.to_interval/2"),
          {:ok, expression} <- seasons_placed(expression, options) do
       spanned(expression, Keyword.take(options, [:within, :locale]))
     end
   end
+
+  def to_interval(other, _options), do: not_an_expression(other)
 
   defp spanned(%Tempo.Duration{} = duration, _options),
     do: {:error, ConversionError.exception(value: duration, reason: :bare_duration)}
@@ -863,11 +927,15 @@ defmodule Tempo do
 
   """
   @spec members(t() | Duration.t(), keyword()) :: {:ok, [t()]} | {:error, error()}
-  def members(expression, options \\ []) do
+  def members(expression, options \\ [])
+
+  def members(expression, options) when is_expression(expression) do
     with :ok <- Options.check(options, [:within, :locale], "Tempo.members/2"),
          {:ok, members} <- Spans.members(expression, options),
          do: bounded(members, expression)
   end
+
+  def members(other, _options), do: not_an_expression(other)
 
   @doc """
   An expression walked at a unit: the values of that unit its extent holds,
@@ -915,10 +983,14 @@ defmodule Tempo do
   """
   @spec walk(t(), unit() | {:microsecond, 1..6}, keyword()) ::
           {:ok, Enumerable.t()} | {:error, error()}
-  def walk(expression, unit, options \\ []) do
+  def walk(expression, unit, options \\ [])
+
+  def walk(expression, unit, options) when is_expression(expression) do
     with :ok <- Options.check(options, [:within], "Tempo.walk/3"),
          do: Spans.walk(expression, unit, options)
   end
+
+  def walk(other, _unit, _options), do: not_an_expression(other)
 
   # ── Set operations ────────────────────────────────────────────────────
 
@@ -1175,6 +1247,8 @@ defmodule Tempo do
 
   """
   @spec complement(t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def complement(a, _options) when not is_expression(a), do: not_an_expression(a)
+
   def complement(a, options) do
     case Keyword.get(options, :within) do
       %__MODULE__{} = window ->
@@ -1514,7 +1588,9 @@ defmodule Tempo do
 
   * `:certain`, `:possible` or `:impossible`.
 
-  * `{:error, exception}` as for `relation/2`.
+  * `{:error, %ArgumentError{}}` for a predicate that is none of
+    `Tempo.Allen.predicates/0` or `Tempo.Allen.relations/0`, and
+    `{:error, exception}` as for `relation/2`.
 
   ### Examples
 
@@ -1533,8 +1609,12 @@ defmodule Tempo do
   """
   @spec certainty(Tempo.Allen.predicate() | Allen.relation(), t(), t()) ::
           :certain | :possible | :impossible | {:error, error()}
+  def certainty(_predicate, a, _b) when not is_expression(a), do: not_an_expression(a)
+  def certainty(_predicate, _a, b) when not is_expression(b), do: not_an_expression(b)
+
   def certainty(predicate, a, b) do
-    with :ok <- one_frame(a, b),
+    with :ok <- known_predicate(predicate),
+         :ok <- one_frame(a, b),
          {:ok, readings_a} <- Spans.readings(a),
          {:ok, readings_b} <- Spans.readings(b),
          :ok <- few_enough(readings_a, readings_b, a) do
@@ -1590,6 +1670,16 @@ defmodule Tempo do
   @spec possibly?(Tempo.Allen.predicate() | Allen.relation(), t(), t()) :: boolean()
   def possibly?(predicate, a, b), do: verdict(certainty(predicate, a, b)) in [:certain, :possible]
 
+  defp known_predicate(predicate) do
+    if predicate in Allen.predicates() or predicate in Allen.relations(),
+      do: :ok,
+      else:
+        {:error,
+         ArgumentError.exception(
+           "a predicate is one of #{inspect(Allen.predicates())} or an Allen relation, not #{inspect(predicate)}"
+         )}
+  end
+
   # Every pairing of readings is judged, so there may be no more pairings than values at once.
   defp few_enough(readings_a, readings_b, expression) do
     if length(readings_a) * length(readings_b) > Limit.values(),
@@ -1634,6 +1724,9 @@ defmodule Tempo do
 
   """
   @spec to_calendar(t(), module()) :: {:ok, t()} | {:error, error()}
+  def to_calendar(other, _calendar) when not is_struct(other, __MODULE__),
+    do: not_an_expression(other)
+
   def to_calendar(%__MODULE__{calendar: calendar} = expression, calendar), do: {:ok, expression}
 
   def to_calendar(%__MODULE__{} = expression, calendar) do
@@ -1690,6 +1783,9 @@ defmodule Tempo do
 
   """
   @spec to_week_start(t(), 1..7) :: {:ok, t()} | {:error, error()}
+  def to_week_start(other, _day) when not is_struct(other, __MODULE__),
+    do: not_an_expression(other)
+
   def to_week_start(%__MODULE__{calendar: calendar} = expression, day) do
     with {:ok, calendar} <- Tempo.Calendar.with_week_start(calendar, day),
          do: to_calendar(expression, calendar)
@@ -1717,6 +1813,8 @@ defmodule Tempo do
       true -> nil
     end
   end
+
+  def week_start(other), do: not_an_expression!(other)
 
   # A span's ends written in the calendar at day resolution, or at the clock's where they have one.
   defp converted_span(
@@ -1780,7 +1878,10 @@ defmodule Tempo do
 
   """
   @spec in_zone(t(), String.t()) :: {:ok, t()} | {:error, error()}
-  def in_zone(%__MODULE__{} = expression, zone) when is_binary(zone) do
+  def in_zone(other, _zone) when not is_struct(other, __MODULE__), do: not_an_expression(other)
+  def in_zone(_expression, zone) when not is_binary(zone), do: not_a_zone(zone)
+
+  def in_zone(%__MODULE__{} = expression, zone) do
     with :ok <- Spans.whole(expression),
          :ok <- floating(expression),
          {:ok, zone} <- Zone.named(zone) do
@@ -1832,6 +1933,9 @@ defmodule Tempo do
 
   """
   @spec in_territory(t(), atom() | String.t()) :: {:ok, t()} | {:error, error()}
+  def in_territory(other, _territory) when not is_struct(other, __MODULE__),
+    do: not_an_expression(other)
+
   def in_territory(%__MODULE__{} = expression, territory) do
     with {:ok, territory} <- Tempo.Territory.resolve(territory),
          {:ok, placed} <- Season.in_territory(expression, territory) do
@@ -1936,7 +2040,10 @@ defmodule Tempo do
 
   """
   @spec shift_zone(t(), String.t()) :: {:ok, t()} | {:error, error()}
-  def shift_zone(%__MODULE__{} = expression, zone) when is_binary(zone) do
+  def shift_zone(other, _zone) when not is_struct(other, __MODULE__), do: not_an_expression(other)
+  def shift_zone(_expression, zone) when not is_binary(zone), do: not_a_zone(zone)
+
+  def shift_zone(%__MODULE__{} = expression, zone) do
     with :ok <- zoned(expression),
          {:ok, zone} <- Zone.named(zone),
          {:ok, _frame, positioned} <- Algebra.positioned(expression, []) do
@@ -2255,10 +2362,14 @@ defmodule Tempo do
   """
   @spec shift(t(), Duration.t() | keyword() | String.t(), keyword()) ::
           {:ok, t()} | {:error, error()}
-  def shift(expression, by, options \\ []) do
+  def shift(expression, by, options \\ [])
+
+  def shift(expression, by, options) when is_expression(expression) do
     with :ok <- Options.check(options, [:skipping], "Tempo.shift/3"),
          do: shift_by(expression, by, options)
   end
+
+  def shift(other, _by, _options), do: not_an_expression(other)
 
   defp shift_by(expression, by, options) when is_list(by) do
     {skipping, units} = Keyword.pop(by, :skipping)
@@ -2331,7 +2442,10 @@ defmodule Tempo do
 
   """
   @spec trunc(t(), unit()) :: {:ok, t()} | {:error, error()}
-  def trunc(expression, unit \\ :day), do: Shift.trunc(expression, unit)
+  def trunc(expression, unit \\ :day)
+
+  def trunc(expression, unit) when is_expression(expression), do: Shift.trunc(expression, unit)
+  def trunc(other, _unit), do: not_an_expression(other)
 
   @doc """
   A value rounded to the nearest period of a unit: the period it starts in,
@@ -2370,7 +2484,10 @@ defmodule Tempo do
 
   """
   @spec round(t(), unit()) :: {:ok, t()} | {:error, error()}
-  def round(expression, unit \\ :day), do: Shift.round(expression, unit)
+  def round(expression, unit \\ :day)
+
+  def round(expression, unit) when is_expression(expression), do: Shift.round(expression, unit)
+  def round(other, _unit), do: not_an_expression(other)
 
   @doc """
   A value with its next finer unit written as the values that unit takes:
@@ -2413,7 +2530,10 @@ defmodule Tempo do
 
   """
   @spec extend(t(), unit() | nil) :: {:ok, t()} | {:error, error()}
-  def extend(expression, unit \\ nil), do: Shift.extend(expression, unit)
+  def extend(expression, unit \\ nil)
+
+  def extend(expression, unit) when is_expression(expression), do: Shift.extend(expression, unit)
+  def extend(other, _unit), do: not_an_expression(other)
 
   @doc """
   A value written at a unit: truncated to a coarser one as `trunc/2`
@@ -2443,7 +2563,10 @@ defmodule Tempo do
 
   """
   @spec at_resolution(t(), unit()) :: {:ok, t()} | {:error, error()}
-  def at_resolution(expression, unit), do: Shift.at_resolution(expression, unit)
+  def at_resolution(expression, unit) when is_expression(expression),
+    do: Shift.at_resolution(expression, unit)
+
+  def at_resolution(other, _unit), do: not_an_expression(other)
 
   @doc """
   A value split into its date and its time of day, each keeping the value's
@@ -2473,7 +2596,8 @@ defmodule Tempo do
 
   """
   @spec split(t()) :: {t() | nil, t() | nil} | {:error, error()}
-  def split(value), do: Shift.split(value)
+  def split(value) when is_expression(value), do: Shift.split(value)
+  def split(other), do: not_an_expression(other)
 
   # ── Lengths ───────────────────────────────────────────────────────────
 
@@ -2519,7 +2643,8 @@ defmodule Tempo do
 
   """
   @spec duration(t() | Duration.t()) :: Duration.t() | :infinity | {:error, error()}
-  def duration(expression), do: Measure.duration(expression)
+  def duration(expression) when is_expression(expression), do: Measure.duration(expression)
+  def duration(other), do: not_an_expression(other)
 
   @doc """
   The duration from the start of one value to the start of another, in
@@ -2635,8 +2760,10 @@ defmodule Tempo do
 
     """
     @spec unquote(name)(t(), Duration.t()) :: boolean() | {:error, error()}
-    def unquote(name)(expression, duration),
+    def unquote(name)(expression, duration) when is_expression(expression),
       do: Measure.holds?(unquote(comparison), expression, duration)
+
+    def unquote(name)(other, _duration), do: not_an_expression(other)
   end
 
   # ── Parts ─────────────────────────────────────────────────────────────
@@ -2676,7 +2803,10 @@ defmodule Tempo do
 
     """
     @spec unquote(name)(t()) :: integer() | nil
-    def unquote(name)(expression), do: Parts.part(expression, unquote(unit))
+    def unquote(name)(expression) when is_expression(expression),
+      do: Parts.part(expression, unquote(unit))
+
+    def unquote(name)(other), do: not_an_expression!(other)
   end
 
   @doc """
@@ -2709,8 +2839,12 @@ defmodule Tempo do
 
   """
   @spec day_of_week(t(), atom()) :: 1..7 | nil
-  def day_of_week(expression, starting_on \\ :default),
+  def day_of_week(expression, starting_on \\ :default)
+
+  def day_of_week(expression, starting_on) when is_expression(expression),
     do: Parts.weekday(Parts.part(expression, :day_of_week), starting_on)
+
+  def day_of_week(other, _starting_on), do: not_an_expression!(other)
 
   @doc """
   The day of the year an expression names, counted from the year's first
@@ -2726,7 +2860,10 @@ defmodule Tempo do
 
   """
   @spec day_of_year(t()) :: pos_integer() | nil
-  def day_of_year(expression), do: Parts.part(expression, :day_of_year)
+  def day_of_year(expression) when is_expression(expression),
+    do: Parts.part(expression, :day_of_year)
+
+  def day_of_year(other), do: not_an_expression!(other)
 
   @doc """
   The quarter of the year an expression lies in, 1 to 4.
@@ -2741,7 +2878,10 @@ defmodule Tempo do
 
   """
   @spec quarter_of_year(t()) :: 1..4 | nil
-  def quarter_of_year(expression), do: Parts.part(expression, :quarter)
+  def quarter_of_year(expression) when is_expression(expression),
+    do: Parts.part(expression, :quarter)
+
+  def quarter_of_year(other), do: not_an_expression!(other)
 
   @doc """
   Whether the year an expression names is a leap year of its calendar.
@@ -2763,7 +2903,8 @@ defmodule Tempo do
 
   """
   @spec leap_year?(t()) :: boolean() | {:error, error()}
-  def leap_year?(expression), do: Parts.leap_year?(expression)
+  def leap_year?(expression) when is_expression(expression), do: Parts.leap_year?(expression)
+  def leap_year?(other), do: not_an_expression(other)
 
   @doc """
   The number of days in the month an expression names, in its calendar.
@@ -2785,7 +2926,10 @@ defmodule Tempo do
 
   """
   @spec days_in_month(t()) :: {:ok, pos_integer()} | {:error, error()}
-  def days_in_month(expression), do: Parts.days_in_month(expression)
+  def days_in_month(expression) when is_expression(expression),
+    do: Parts.days_in_month(expression)
+
+  def days_in_month(other), do: not_an_expression(other)
 
   @doc """
   The unit an expression is written to: the finest unit of a value, of an
@@ -2817,7 +2961,8 @@ defmodule Tempo do
 
   """
   @spec resolution(t() | Duration.t()) :: unit() | nil
-  def resolution(expression), do: Parts.resolution(expression)
+  def resolution(expression) when is_expression(expression), do: Parts.resolution(expression)
+  def resolution(other), do: not_an_expression!(other)
 
   @doc """
   Whether an expression has a year, so a place on the time line. A value
@@ -2836,7 +2981,8 @@ defmodule Tempo do
 
   """
   @spec anchored?(t()) :: boolean()
-  def anchored?(expression), do: Parts.anchored?(expression)
+  def anchored?(expression) when is_expression(expression), do: Parts.anchored?(expression)
+  def anchored?(other), do: not_an_expression!(other)
 
   @doc """
   Whether an expression is floating: a reading of a clock with no zone and
@@ -2856,7 +3002,8 @@ defmodule Tempo do
 
   """
   @spec floating?(t()) :: boolean()
-  def floating?(expression), do: not Parts.zoned?(expression)
+  def floating?(expression) when is_expression(expression), do: not Parts.zoned?(expression)
+  def floating?(other), do: not_an_expression!(other)
 
   @doc """
   Whether an expression carries a zone or a time shift, so a place on the
@@ -2872,7 +3019,8 @@ defmodule Tempo do
 
   """
   @spec zoned?(t()) :: boolean()
-  def zoned?(expression), do: Parts.zoned?(expression)
+  def zoned?(expression) when is_expression(expression), do: Parts.zoned?(expression)
+  def zoned?(other), do: not_an_expression!(other)
 
   @doc """
   Whether every end an expression has is written: an interval with an open
@@ -2904,7 +3052,8 @@ defmodule Tempo do
 
   """
   @spec bounded?(t() | Duration.t()) :: boolean()
-  def bounded?(expression), do: Parts.bounded?(expression)
+  def bounded?(expression) when is_expression(expression), do: Parts.bounded?(expression)
+  def bounded?(other), do: not_an_expression!(other)
 
   @doc """
   Whether an expression covers no time: a set with no members.
@@ -2919,7 +3068,8 @@ defmodule Tempo do
 
   """
   @spec empty?(t()) :: boolean()
-  def empty?(expression), do: Parts.empty?(expression)
+  def empty?(expression) when is_expression(expression), do: Parts.empty?(expression)
+  def empty?(other), do: not_an_expression!(other)
 
   @doc """
   The qualifications of a value: which of its units are uncertain (`?`),
@@ -2951,12 +3101,15 @@ defmodule Tempo do
   """
   @spec qualification(t()) :: qualifications()
   def qualification(%__MODULE__{qualifications: qualifications}), do: qualifications
+  def qualification(other), do: not_an_expression!(other)
 
   @spec qualification(t(), unit()) :: :uncertain | :approximate | :both | nil
   def qualification(%__MODULE__{qualifications: nil}, _unit), do: nil
 
   def qualification(%__MODULE__{qualifications: qualifications}, unit),
     do: Map.get(qualifications, unit)
+
+  def qualification(other, _unit), do: not_an_expression!(other)
 
   @doc """
   The metadata an expression carries: a map, empty by default.
@@ -2972,6 +3125,7 @@ defmodule Tempo do
   """
   @spec metadata(t()) :: map()
   def metadata(%__MODULE__{metadata: metadata}), do: metadata
+  def metadata(other), do: not_an_expression!(other)
 
   @doc """
   An expression with metadata merged into what it carries.
@@ -2991,6 +3145,11 @@ defmodule Tempo do
   @spec put_metadata(t(), map()) :: t()
   def put_metadata(%__MODULE__{metadata: existing} = expression, metadata) when is_map(metadata),
     do: %{expression | metadata: Map.merge(existing, metadata)}
+
+  def put_metadata(%__MODULE__{}, metadata),
+    do: raise(ArgumentError, "metadata is a map, not #{inspect(metadata)}")
+
+  def put_metadata(other, _metadata), do: not_an_expression!(other)
 
   # ── Selection ─────────────────────────────────────────────────────────
 
@@ -3060,7 +3219,12 @@ defmodule Tempo do
 
   """
   @spec select(t(), term(), keyword()) :: {:ok, t()} | {:error, error()}
-  def select(%__MODULE__{} = base, selector, options \\ []) do
+  def select(base, selector, options \\ [])
+
+  def select(base, _selector, _options) when not is_struct(base, __MODULE__),
+    do: not_an_expression(base)
+
+  def select(base, selector, options) do
     with :ok <- Options.check(options, [:within, :locale], "Tempo.select/3"),
          {:ok, selector} <- selector(selector),
          {:ok, values} <- Select.select(base, selector, options) do
@@ -3198,10 +3362,14 @@ defmodule Tempo do
 
     """
     @spec unquote(name)(t(), term()) :: boolean() | {:error, error()}
-    def unquote(name)(value, territory \\ nil) do
+    def unquote(name)(value, territory \\ nil)
+
+    def unquote(name)(value, territory) when is_expression(value) do
       with {:ok, workdays} <- Workdays.new(territory),
            do: Workdays.unquote(name)(value, workdays)
     end
+
+    def unquote(name)(other, _territory), do: not_an_expression(other)
   end
 
   @doc """
@@ -3236,9 +3404,13 @@ defmodule Tempo do
   """
   @spec add_workdays(t(), integer(), term()) ::
           {:ok, t()} | {:error, error()}
-  def add_workdays(value, count, territory \\ nil) do
+  def add_workdays(value, count, territory \\ nil)
+
+  def add_workdays(value, count, territory) when is_expression(value) do
     with {:ok, workdays} <- Workdays.new(territory), do: Workdays.add(value, count, workdays)
   end
+
+  def add_workdays(other, _count, _territory), do: not_an_expression(other)
 
   @doc """
   The first workday after a value.
@@ -3265,9 +3437,13 @@ defmodule Tempo do
 
   """
   @spec next_workday(t(), term()) :: {:ok, t()} | {:error, error()}
-  def next_workday(value, territory \\ nil) do
+  def next_workday(value, territory \\ nil)
+
+  def next_workday(value, territory) when is_expression(value) do
     with {:ok, workdays} <- Workdays.new(territory), do: Workdays.step(value, 1, workdays)
   end
+
+  def next_workday(other, _territory), do: not_an_expression(other)
 
   @doc """
   The last workday before a value.
@@ -3294,9 +3470,13 @@ defmodule Tempo do
 
   """
   @spec previous_workday(t(), term()) :: {:ok, t()} | {:error, error()}
-  def previous_workday(value, territory \\ nil) do
+  def previous_workday(value, territory \\ nil)
+
+  def previous_workday(value, territory) when is_expression(value) do
     with {:ok, workdays} <- Workdays.new(territory), do: Workdays.step(value, -1, workdays)
   end
+
+  def previous_workday(other, _territory), do: not_an_expression(other)
 
   @doc """
   The nearest workday to a value: the value itself when it is one, else the
@@ -3327,9 +3507,13 @@ defmodule Tempo do
 
   """
   @spec nearest_workday(t(), term()) :: {:ok, t()} | {:error, error()}
-  def nearest_workday(value, territory \\ nil) do
+  def nearest_workday(value, territory \\ nil)
+
+  def nearest_workday(value, territory) when is_expression(value) do
     with {:ok, workdays} <- Workdays.new(territory), do: Workdays.nearest(value, workdays)
   end
+
+  def nearest_workday(other, _territory), do: not_an_expression(other)
 
   @doc """
   A value rolled to a workday by a business day convention: itself when it
@@ -3406,9 +3590,13 @@ defmodule Tempo do
   """
   @spec count_workdays(t(), term()) ::
           {:ok, non_neg_integer()} | {:error, error()}
-  def count_workdays(expression, territory \\ nil) do
+  def count_workdays(expression, territory \\ nil)
+
+  def count_workdays(expression, territory) when is_expression(expression) do
     with {:ok, workdays} <- Workdays.new(territory), do: Workdays.count(expression, workdays)
   end
+
+  def count_workdays(other, _territory), do: not_an_expression(other)
 
   # ── Elixir's dates and times ──────────────────────────────────────────
 
@@ -3498,6 +3686,9 @@ defmodule Tempo do
     """
     @spec unquote(name)(unquote(struct).t()) :: t()
     def unquote(name)(%unquote(struct){} = value), do: from_elixir!(value)
+
+    def unquote(name)(other),
+      do: raise(ConversionError.exception(value: other, reason: :not_an_elixir_value))
   end
 
   @doc """
@@ -3505,7 +3696,8 @@ defmodule Tempo do
   of day, a `NaiveDateTime` for a floating date and time, a `DateTime` for
   one with a zone or a shift, and an Elixir `Duration` for a duration. An
   interval of two dates is the `Date.Range` of them, which holds its last
-  day as the interval does.
+  day as the interval does; one with a duration for an end is the range of
+  the dates it runs between.
 
   ### Arguments
 
@@ -3537,10 +3729,19 @@ defmodule Tempo do
       iex> Tempo.to_elixir(~o"2026-06-15/2026-06-20")
       {:ok, Date.range(~D[2026-06-15], ~D[2026-06-20])}
 
+      iex> Tempo.to_elixir(~o"2026-06-15/P6D")
+      {:ok, Date.range(~D[2026-06-15], ~D[2026-06-20])}
+
       iex> {:error, %Tempo.ConversionError{}} = Tempo.to_elixir(~o"2026-06")
 
   """
   @spec to_elixir(t() | Duration.t()) :: {:ok, struct()} | {:error, error()}
+  # A span with a duration for an end is the span of its two ends first.
+  def to_elixir(%__MODULE__{form: {:span, from, to}} = span)
+      when is_struct(from, Duration) or is_struct(to, Duration) do
+    with {:ok, resolved} <- to_interval(span), do: Interop.to(resolved)
+  end
+
   def to_elixir(value), do: Interop.to(value)
 
   @doc """
@@ -3556,7 +3757,8 @@ defmodule Tempo do
 
   """
   @spec to_date(t()) :: {:ok, Date.t()} | {:error, error()}
-  def to_date(value), do: Interop.to_date(value)
+  def to_date(value) when is_expression(value), do: Interop.to_date(value)
+  def to_date(other), do: not_an_expression(other)
 
   @doc """
   The `Time` of a value with a time of day; units it does not write are zero.
@@ -3630,7 +3832,9 @@ defmodule Tempo do
 
   """
   @spec now(String.t()) :: {:ok, t()} | {:error, error()}
-  def now(zone \\ "Etc/UTC"), do: Interop.now(zone)
+  def now(zone \\ "Etc/UTC")
+  def now(zone) when is_binary(zone), do: Interop.now(zone)
+  def now(other), do: not_a_zone(other)
 
   @doc """
   The current second in UTC.

@@ -362,4 +362,33 @@ defmodule Tempo.RecurrenceSetTest do
       assert RecurrenceSet.members(conditionals) == [bridge]
     end
   end
+
+  describe "a set of rules with no start beside rules with a domain" do
+    # A territory's holidays: most every year, one in 2022 only. Asked of a
+    # day, the rules with no start take the frame of the day.
+    test "is asked of a day as one set" do
+      holidays =
+        RecurrenceSet.new!([
+          RecurrenceSet.new!([
+            Tempo.every!(~o"P1Y", select: [month: 1, day: 1]),
+            Tempo.every!(~o"P1Y", select: [month: 1, day: 2])
+          ]),
+          Tempo.every!(~o"P1Y",
+            from: IntervalSet.new!([Tempo.new!(year: 2022)]),
+            select: [month: 9, day: 22]
+          ),
+          Tempo.every!(~o"P1Y", select: [month: 4, day: 25])
+        ])
+
+      for {day, holiday?} <- [
+            {~o"2019-01-28", false},
+            {~o"2019-01-01", true},
+            {~o"2022-09-22", true},
+            {~o"2023-09-22", false},
+            {~o"2019-04-25", true}
+          ] do
+        assert Tempo.overlaps?(day, holidays, within: day) == holiday?, inspect(day)
+      end
+    end
+  end
 end

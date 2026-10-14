@@ -29,6 +29,10 @@ defmodule Tempo.IntervalSet do
 
   * `:metadata` is a map the caller keeps on the set. The default is `%{}`.
 
+  * `:except` is a list of `t:Tempo.t/0` the set leaves out of its members,
+    as `^` writes them: `{2017Y..,^2020Y}` is every year from 2017 but 2020.
+    The default is `[]`.
+
   ### Returns
 
   * `{:ok, set}`, a `t:Tempo.t/0` of the `:all` form. A set is one
@@ -44,6 +48,10 @@ defmodule Tempo.IntervalSet do
       iex> Tempo.IntervalSet.new([~o"2026-06", ~o"2026-08"])
       {:ok, ~o"{2026-06,2026-08}"}
 
+      iex> {:ok, from_2017} = Tempo.Interval.new(from: Tempo.new!(year: 2017), to: :open)
+      iex> Tempo.IntervalSet.new([from_2017], except: [Tempo.new!(year: 2020)])
+      {:ok, ~o"{2017Y..,^2020Y}"}
+
       iex> {:ok, set} = Tempo.IntervalSet.new([~o"2026-06-01/2026-06-15", ~o"2026-07"])
       iex> Tempo.IntervalSet.count(set)
       2
@@ -54,9 +62,27 @@ defmodule Tempo.IntervalSet do
   """
   @spec new([Tempo.t()], keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def new(members, options \\ []) when is_list(members) do
-    with :ok <- Options.check(options, [:metadata], "Tempo.IntervalSet.new/2"),
-         do: Algebra.gathered(members, metadata: Keyword.get(options, :metadata, %{}))
+    with :ok <- Options.check(options, [:metadata, :except], "Tempo.IntervalSet.new/2"),
+         {:ok, excluded} <- excluded(Keyword.get(options, :except, [])),
+         {:ok, set} <-
+           Algebra.gathered(members ++ excluded, metadata: Keyword.get(options, :metadata, %{})) do
+      {kept, out} = Enum.split(elem(set.form, 1), length(members))
+      {:ok, %{set | form: {:all, kept ++ Enum.map(out, &{:except, &1})}}}
+    end
   end
+
+  defp excluded(excluded) when is_list(excluded) do
+    if Enum.all?(excluded, &is_struct(&1, Tempo)),
+      do: {:ok, excluded},
+      else:
+        {:error,
+         ArgumentError.exception(":except is a list of Tempo values, not #{inspect(excluded)}")}
+  end
+
+  defp excluded(other),
+    do:
+      {:error,
+       ArgumentError.exception(":except is a list of Tempo values, not #{inspect(other)}")}
 
   @doc """
   Builds a set as `new/2` does, returning it or raising.

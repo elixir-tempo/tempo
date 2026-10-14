@@ -310,4 +310,88 @@ defmodule Tempo.DomainTest do
       end
     end
   end
+
+  describe "an occurrence that runs on past its year" do
+    # A holiday of forty days from 19 December, in 2026 only: its occurrence
+    # runs to 27 January 2027, so a window of 2027 holds it.
+    test "is in the window of the next year, from a domain or none" do
+      in_2026 =
+        Tempo.every!(~o"P1Y",
+          from: IntervalSet.new!([Tempo.new!(year: 2026)]),
+          select: [selection: [month: 12, day: 19], window: ~o"P40D"]
+        )
+
+      every_year =
+        Tempo.every!(~o"P1Y", select: [selection: [month: 12, day: 19], window: ~o"P40D"])
+
+      assert Tempo.to_interval(in_2026, within: ~o"2027") == {:ok, ~o"{2026-12-19/2027-01-27}"}
+      assert Tempo.to_interval(in_2026, within: ~o"2028") == {:ok, ~o"{}"}
+
+      assert Tempo.to_interval(every_year, within: ~o"2027") ==
+               {:ok, ~o"{2026-12-19/2027-01-27,2027-12-19/2028-01-27}"}
+    end
+  end
+
+  describe "a domain of several ranges" do
+    # England's Early May bank holiday, the first Monday of May, every year
+    # but 2020, when it moved to 8 May.
+    test "steps through each range by the cadence" do
+      until_2019 = Interval.new!(from: :open, to: Tempo.new!(year: 2019))
+      from_2021 = Interval.new!(from: Tempo.new!(year: 2021), to: :open)
+
+      early_may =
+        Tempo.every!(~o"P1Y",
+          from: IntervalSet.new!([until_2019, from_2021]),
+          select: [month: 5, day_of_week: 1, instance: 1]
+        )
+
+      for year <- 2018..2026 do
+        expected =
+          if year == 2020,
+            do: [],
+            else: [first_monday_of_may(year)]
+
+        {:ok, window} = Tempo.new(year: year)
+        {:ok, days} = Tempo.to_interval(early_may, within: window)
+
+        assert IntervalSet.map(days, &date_of/1) == expected, "#{year}"
+      end
+    end
+  end
+
+  defp date_of(span) do
+    {:ok, date} = Tempo.to_date(Interval.from(span))
+    date
+  end
+
+  defp first_monday_of_may(year) do
+    Date.range(Date.new!(year, 5, 1), Date.new!(year, 5, 7))
+    |> Enum.find(&(Date.day_of_week(&1) == 1))
+  end
+
+  describe "a window's carry-back" do
+    # The day after Orthodox Easter, from 2000: the period before a window is
+    # looked in for an occurrence that runs on into it, but never one before
+    # the domain's first.
+    test "stops at the domain's first year" do
+      from_2000 =
+        IntervalSet.new!([Interval.new!(from: Tempo.new!(year: 2000), to: :open)])
+
+      monday_after =
+        Tempo.every!(~o"P1Y",
+          from: from_2000,
+          select: [
+            selection: [event: "orthodox-easter"],
+            window: ~o"P2D",
+            day_of_week: 1,
+            instance: -1
+          ]
+        )
+
+      assert Tempo.to_interval(monday_after, within: ~o"1999") == {:ok, ~o"{}"}
+
+      assert Tempo.to_interval(monday_after, within: ~o"2000") ==
+               {:ok, ~o"{2000-05-01/2000-05-01}"}
+    end
+  end
 end

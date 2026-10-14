@@ -420,6 +420,29 @@ iex> Tempo.to_elixir(~o"2026-06-15/2026-06-20")
 
 **Why.** An interval written to two dates holds both of them, as a `Date.Range` does, so the two are the same six days and convert both ways. A month converted to a range of its days would read back as a span of days, a different expression from the month, so it stays an error.
 
+## Errors
+
+### An argument that is no expression (decision 39)
+
+**The question.** What does a function answer when it is given something that is not a Tempo expression at all: `nil`, a string, a `Date`?
+
+**The alternatives.**
+
+* Return a named error, `{:error, %Tempo.ConversionError{reason: :not_an_expression}}`, from every function.
+
+* Raise `FunctionClauseError`, as most Elixir functions do for an argument of the wrong type, and leave the type to Dialyzer.
+
+* Leave each function to answer as it happens to.
+
+**The choice.** A named error. A function that returns its errors returns it; a function that answers a bare value raises it, as it raises its other errors.
+
+```elixir
+iex> Tempo.trunc(~D[2026-06-15], :month)
+{:error, %Tempo.ConversionError{value: ~D[2026-06-15], reason: :not_an_expression}}
+```
+
+**Why.** Every function answers every shape of expression or returns an error that names what is wrong, and an argument of the wrong type is one more shape. A `FunctionClauseError` names the clauses that did not match, which says nothing to a caller who passed a `Date` where Tempo wanted its own value. A predicate raises rather than returns the error because `Enum.filter(values, &Tempo.overlaps?(&1, june))` would read an `{:error, _}` tuple as true.
+
 ## Decisions about the project
 
 Some decisions concern the project rather than the meaning of a date, and are recorded here briefly:

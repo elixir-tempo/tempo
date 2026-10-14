@@ -173,9 +173,20 @@ defmodule Tempo.Algebra do
     cond do
       placeless?(b_placed) and not placeless?(a_placed) -> frame_of(a_placed, a)
       placeless?(a_placed) and not placeless?(b_placed) -> frame_of(b_placed, b)
-      true -> frames_of(a, b, a_placed, b_placed)
+      true -> frames_of(a, b, framed(a_placed), framed(b_placed))
     end
   end
+
+  # A set's frame is that of its members with a place of their own: those
+  # with no start are placed by what they are beside.
+  defp framed(%Tempo{form: {:all, [_ | _] = members}} = set) do
+    case Enum.reject(members, &placeless_member?/1) do
+      [] -> set
+      placed -> %{set | form: {:all, placed}}
+    end
+  end
+
+  defp framed(expression), do: expression
 
   defp placeless?(%Tempo{form: {:every, %Tempo{form: {:span, :open, _}}, _bound, _rule}}),
     do: true
