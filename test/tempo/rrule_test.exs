@@ -300,6 +300,30 @@ defmodule Tempo.RRuleTest do
       assert IntervalSet.count(late) == 3
     end
 
+    test "an UNTIL is written in UTC where the rule is in a zone or at UTC" do
+      # RFC 5545 section 3.3.10: with a DTSTART at UTC or in a zone, UNTIL
+      # MUST be a date with UTC time.
+      paris_end = DateTime.new!(~D[2026-06-30], ~T[09:00:00], "Europe/Paris")
+      {:ok, utc_end} = DateTime.shift_zone(paris_end, "Etc/UTC")
+      written = "UNTIL=" <> Calendar.strftime(utc_end, "%Y%m%dT%H%M%SZ")
+
+      local_end = ~o"R/2026-06-01T09:00:00/P1D/2026-06-30T09:00:00[Europe/Paris]"
+      assert RRule.to_string(local_end) == {:ok, "FREQ=DAILY;" <> written}
+
+      for {text, from} <- [
+            {"FREQ=DAILY;UNTIL=20260630T090000Z", ~o"2026-06-01T09:00:00Z"},
+            {"FREQ=DAILY;UNTIL=20260630T070000Z", ~o"2026-06-01T09:00:00[Europe/Paris]"},
+            {"FREQ=DAILY;UNTIL=20260630T090000", ~o"2026-06-01T09:00:00"},
+            {"FREQ=DAILY;UNTIL=20260630", ~o"2026-06-01"}
+          ] do
+        rule = RRule.parse!(text, from: from)
+        [until] = Regex.run(~r/UNTIL=[0-9TZ]+/, text)
+
+        assert RRule.to_string!(rule) =~ until
+        assert RRule.parse!(RRule.to_string!(rule), from: from) == rule
+      end
+    end
+
     test "a part RFC 5545 forbids a frequency is not written" do
       for text <- [
             "R/2026-01-01/P1W/FL15DN",

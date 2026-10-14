@@ -749,9 +749,10 @@ defmodule Tempo.RRule do
          {:ok, scale} <- scale_part(counted_in(r.calendar, cadence, selected), skip, r),
          :ok <- in_every_period(from, cadence, parts, r),
          {:ok, frequency} <- frequency_part(cadence, r),
+         {:ok, bound} <- bound_part(bound, r),
          {:ok, by_parts} <- by_parts(selected, r) do
       parts =
-        [scale, frequency, bound_part(bound)] ++
+        [scale, frequency, bound] ++
           by_parts ++ [skip_part(skip), week_start_part(r.calendar)]
 
       {:ok, parts |> Enum.reject(&(&1 == "")) |> Enum.join(";")}
@@ -866,11 +867,28 @@ defmodule Tempo.RRule do
 
   defp frequency_part(cadence, r), do: {:error, no_rrule(r, {:cadence, cadence})}
 
-  defp bound_part(count) when is_integer(count), do: "COUNT=#{count}"
-  defp bound_part(:infinity), do: ""
-  defp bound_part(%Tempo{} = until), do: "UNTIL=#{until_text(until)}"
+  defp bound_part(count, _r) when is_integer(count), do: {:ok, "COUNT=#{count}"}
+  defp bound_part(:infinity, _r), do: {:ok, ""}
 
-  defp until_text(%Tempo{form: {:value, units}}), do: Enum.map_join(units, &until_unit/1)
+  defp bound_part(%Tempo{} = until, r) do
+    with {:ok, text} <- until_text(%{until | zone: until.zone || r.zone}),
+         do: {:ok, "UNTIL=" <> text}
+  end
+
+  # RFC 5545 section 3.3.10: an `UNTIL` of a rule in a zone or at UTC is a
+  # date with UTC time; one of a floating rule is a local time, and a date
+  # is a date.
+  defp until_text(%Tempo{form: {:value, units}, zone: nil, shift: nil}),
+    do: {:ok, Enum.map_join(units, &until_unit/1)}
+
+  defp until_text(%Tempo{form: {:value, units}} = until) do
+    if Keyword.has_key?(units, :hour) do
+      with {:ok, %Tempo{form: {:value, utc}}} <- Tempo.shift_zone(until, "Etc/UTC"),
+           do: {:ok, Enum.map_join(utc, &until_unit/1) <> "Z"}
+    else
+      {:ok, Enum.map_join(units, &until_unit/1)}
+    end
+  end
 
   defp until_unit({:year, y}), do: padded(y, 4)
   defp until_unit({unit, n}) when unit in [:month, :day, :minute, :second], do: padded(n, 2)

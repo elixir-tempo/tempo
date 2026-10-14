@@ -159,7 +159,10 @@ defmodule Tempo.CronTest do
     "0,30 9,10 * * mon#1",
     "0 9 * * 0#5",
     "0 9 L * 5L",
-    "0 9 15W * 3"
+    "0 9 15W * 3",
+    "0 9 15W * 5#3",
+    "0 9 LW * mon#1",
+    "0 9 1W * 5L"
   ]
 
   for expression <- @expressions do

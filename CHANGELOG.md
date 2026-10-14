@@ -198,6 +198,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * A named zone given where no time zone database is configured is a `Tempo.ZoneError` with reason `:no_database`, where it was accepted and reading a time in it raised a `MatchError`.
 
+* `Tempo.RRule.to_string/1` writes the `UNTIL` of a rule in a zone or at UTC as a UTC time with `Z`, as RFC 5545 requires; it wrote the local reading with no `Z`, which read back floating.
+
 ## [v1.6.4] — 2026-09-03
 
 ### Fixed
