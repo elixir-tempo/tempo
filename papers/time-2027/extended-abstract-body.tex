@@ -7,25 +7,29 @@
   representation at all. Yet the temporal values that humans, calendars,
   and business logic actually manipulate are spans on the timeline ---
   the year 2026, the afternoon of the 15th, an archaeological period,
-  a meeting. Tempo is an Elixir library that reverses the polarity:
-  every temporal value is a bounded half-open interval at a declared
-  resolution, set-theoretic combination is closed under that type, and
-  comparison is defined by Allen's thirteen relations rather than by
-  scalar ordering. The result eliminates an entire class of off-by-one
-  and ``end-of-day'' bugs by construction, gives partial ISO~8601
-  values (\texttt{2026}, \texttt{2026-06}, \texttt{2026-06-XX}) an
-  unambiguous denotational semantics, and lifts Allen's algebra from a
-  textbook abstraction to an everyday predicate vocabulary
-  (\texttt{overlaps?}, \texttt{within?}, \texttt{adjacent?}). This
-  extended abstract describes the conceptual model, the unification of
-  partial dates with explicit intervals, and the design of set
-  operations over intervals and interval sets.
+  a meeting. Tempo is an Elixir library that reverses the polarity.
+  Every expression --- a value, an interval, a recurrence, a set ---
+  denotes an ordered sequence of bounded half-open spans; a value
+  written to a resolution denotes one unit of it; set-theoretic
+  combination is closed over the one type; and comparison is defined by
+  Allen's thirteen relations rather than by scalar ordering. A written
+  interval is read as it is said aloud: an end written to a calendar
+  unit is included, an end written to a clock unit is a boundary. The
+  result eliminates a class of off-by-one and ``end-of-day'' bugs by
+  construction, gives partial ISO~8601 values (\texttt{2026},
+  \texttt{2026-06}, \texttt{2026-06-XX}) an unambiguous denotational
+  semantics, and lifts Allen's algebra from a textbook abstraction to an
+  everyday predicate vocabulary (\texttt{overlaps?}, \texttt{within?},
+  \texttt{adjacent?}). This extended abstract describes the model as
+  nine laws, the frames on which spans are placed, the reading of
+  written ends, and the design of set operations over spans and sets
+  of them, and reports on the implementation written to the laws.
 \end{abstract}
 
 \section{Motivation: the instant--span impedance mismatch}
 
 Every mainstream temporal library --- Python's \texttt{datetime}, Java's
-\texttt{java.time}, JavaScript's \texttt{Temporal} proposal, Elixir's
+\texttt{java.time}, JavaScript's \texttt{Temporal}, Elixir's
 own \texttt{Date}/\texttt{Time}/\texttt{DateTime} --- shares a design
 choice that goes largely unexamined: a temporal value is a
 \emph{scalar instant} on the timeline. A day is the midnight at its
@@ -84,70 +88,44 @@ catalogued by Tiwari et al., the design choices described in the
 remainder of this paper address every in-scope bug class: 43 (28\%)
 are \emph{avoided by construction} (the na\"ive / aware datetime
 split has no Tempo analogue), 56 (37\%) are \emph{directly addressed}
-by explicit machinery (zone propagation through set operations, DST
-gap rejection at parse time and IXDTF-offset fold disambiguation per
-RFC~9557~\S 4.5, calendar-aware arithmetic, half-open materialisation,
-microsecond-precision durations), 28 (19\%) are partial, and 24
-(16\%) are out of scope (Python deprecations and third-party-library
-logic such as holiday tables). \emph{Zero} bugs are classified as
-architectural gaps. The per-bug classification is provided as
-supplementary material at the repository.
+by explicit machinery (zone propagation through set operations,
+refusal of a reading the clock skips and IXDTF-offset fold
+disambiguation per RFC~9557~\S 4.5, calendar-aware arithmetic,
+half-open materialisation, microsecond-precision durations), 28 (19\%)
+are partial, and 24 (16\%) are out of scope (Python deprecations and
+third-party-library logic such as holiday tables). \emph{Zero} bugs
+are classified as architectural gaps. The classification was made
+against the library's first implementation; the rewrite described in
+Section~\ref{sec:implementation} kept every mechanism it relies on.
+The per-bug classification is provided as supplementary material at
+the repository.
 
-\section{Intervals as the primitive}
+\section{Expressions, spans and frames}
+\label{sec:model}
 
-Every Tempo value is a bounded half-open interval $[\mathit{first},
-\mathit{last})$ at a declared resolution. Internally an interval is
-a pair of endpoints, which is the standard finite model of
-$T_{bounded\_meeting}$ characterised by Gr\"uninger and
-Li~\cite{gruninger2017allenontology} (their Theorem~15): vertices of
-the directed graph $\mathfrak{M}^{bounded\_meeting}$ correspond to
-intervals, edges to the \textit{meets} relation, and structures up to
-isomorphism faithfully capture the ontology's models.
+Tempo's model is nine laws, and the implementation is written to them
+and to nothing else. The first is the one from which the rest follow:
+an \emph{expression} --- a value such as \texttt{2026-06}, an interval
+such as \texttt{2026-06-01/2026-06-20}, a recurrence such as
+\texttt{R5/2026-06-15/P1D}, a set of them --- \emph{denotes an ordered
+sequence of half-open spans}, $\mathit{spans}(E)$, possibly empty,
+possibly infinite, and every operation on an expression is defined on
+$\mathit{spans}(E)$. A duration denotes a length and is not an
+expression. One data structure holds every expression, with its form
+as a tagged sum (a value, a span, a recurrence, an all-of set, a one-of
+set, a conditional member), its calendar, its zone and the caller's
+metadata; there is no separate interval type and no separate set type.
 
-A note on terminology before proceeding: \emph{resolution} as used
-throughout this paper is a Tempo-side property of an input value
-(\texttt{2026} carries year-resolution, \texttt{2026-06-15} carries
-day-resolution) used for partial-date materialisation, default
-iteration, and display. It is \emph{not} the granularity of
-Bettini, Wang and Jajodia~\cite{bettini-granularities} (a lattice
-of partitions of the time line that participates in Allen
-comparisons), and it does \emph{not} appear in
-$T_{bounded\_meeting}$, where intervals are individuated solely by
-their position in the \textit{meets}-structure. Once an interval is
-materialised to its $[\mathit{first}, \mathit{last})$ form,
-resolution plays no further role in Allen comparisons or in
-set-theoretic operations. The word is also distinct from
-\emph{precision} and \emph{accuracy} in the measurement-science
-sense: Tempo makes no claim about the precision of a value's
-construction, only about the extent it denotes.
+A span is $[\mathit{first}, \mathit{last})$, a pair of positions.
+Internally this is the standard finite model of $T_{bounded\_meeting}$
+characterised by Gr\"uninger and Li~\cite{gruninger2017allenontology}
+(their Theorem~15): vertices of the directed graph
+$\mathfrak{M}^{bounded\_meeting}$ correspond to intervals, edges to the
+\textit{meets} relation, and structures up to isomorphism faithfully
+capture the ontology's models.
 
-A second Tempo-side distinction is between \emph{anchored} and
-\emph{non-anchored} values. An anchored value carries a year
-component (e.g.\ \texttt{2026-06-15} or \texttt{2026}); materialising
-it yields an interval that is an \emph{individual} in
-$T_{bounded\_meeting}$ in the standard model-theoretic sense ---
-a vertex of $\mathfrak{M}^{bounded\_meeting}$ (Theorem~15) with a
-definite position in the \textit{meets}-structure. A non-anchored
-value (a time-of-day template such as \texttt{T10:30}) is not an
-individual: it is an open expression with the date components as
-free variables, denoting the family of individuals that result when
-those variables are bound. Tempo's \texttt{anchor/2} and
-\texttt{align/3} \texttt{:bound} option supply that binding; the
-ontological move is \emph{instantiation}, and the result is the
-intervalised individual the ontology talks about. The two
-operations Tempo exposes for working with non-anchored values are
-\emph{projection} (resolving to a specific universal-timeline
-extent given an anchor) and \emph{selection} (filtering a set of
-candidate anchors). Neither has a counterpart inside
-$T_{bounded\_meeting}$ itself, which is silent on schemas; they
-sit, like resolution, in the engineering layer above.
-
-The library distinguishes two forms of interval that interconvert
-losslessly.
-
-\paragraph*{Implicit spans.} A single ISO~8601 datetime \emph{is} an
-interval whose span is determined by the next-higher resolution that
-is not stated:
+\paragraph*{Resolution is meaning.} A value written to a resolution
+denotes one unit of it, $[v, \mathit{next}_r(v))$:
 \begin{center}
 \begin{tabular}{lcl}
   \texttt{2026}              &$\equiv$& $[\texttt{2026-01-01},\, \texttt{2027-01-01})$ \\
@@ -164,22 +142,86 @@ upper bound of \texttt{2026-01} is
 \texttt{2026-02-01}, computed from the calendar arithmetic of the
 target calendar (Gregorian, Hebrew, Islamic Civil, \dots), and is
 correct by construction in leap years and across month-length
-variation.
+variation. The written units are kept as written; nothing drills into
+them, and a value and the interval of the same extent are different
+expressions that enumerate differently (a month enumerates its days;
+the interval \texttt{2026-01/2026-01} enumerates months, one of
+them).
 
-\paragraph*{Explicit spans.} A pair of datetimes written with a range
-operator --- \texttt{2026-01-01..2026-02-01} or, in IXDTF-extended
-form~\cite{ixdtf}, \texttt{2026-01-01/2026-02-01} --- carries its own
-boundaries. Its iteration unit is the resolution of its boundaries,
-not of a partial denotation.
+A note on terminology: \emph{resolution} as used
+throughout this paper is a property of an input value
+(\texttt{2026} carries year-resolution, \texttt{2026-06-15} carries
+day-resolution) used for materialisation, default
+iteration, and display. It is \emph{not} the granularity of
+Bettini, Wang and Jajodia~\cite{bettini-granularities} (a lattice
+of partitions of the time line that participates in Allen
+comparisons), and it does \emph{not} appear in
+$T_{bounded\_meeting}$, where intervals are individuated solely by
+their position in the \textit{meets}-structure. Once an interval is
+materialised to its $[\mathit{first}, \mathit{last})$ form,
+resolution plays no further role in Allen comparisons or in
+set-theoretic operations. The word is also distinct from
+\emph{precision} and \emph{accuracy} in the measurement-science
+sense: Tempo makes no claim about the precision of a value's
+construction, only about the extent it denotes.
+
+\paragraph*{Written ends are read as they are said.} An interval
+written with two ends, \texttt{a/b} in ISO~8601, runs from the start
+of \texttt{a}. Where it runs to depends on what \texttt{b} names. A
+date names a period of the calendar, and ``2026 to 2028'' and ``1 to
+3 June'' include their last day in speech, in EDTF (\texttt{1964/2008}
+is ``beginning sometime in 1964 and ending sometime in 2008'') and in
+ISO~8601-2 Annex~A. A time of day names a reading of the clock, and a
+reading is a boundary: ``nine to five'' ends when the clock shows five,
+not a minute later. So an end written to a \emph{calendar} unit (a
+year, a month, a week, a date) is read \emph{through}, and an end
+written to a \emph{clock} unit (an hour, a minute, a second) is read
+as a boundary:
+\begin{center}
+\begin{tabular}{lll}
+  \texttt{2026/2028}                     & $[\texttt{2026-01-01},\, \texttt{2029-01-01})$ & three years \\
+  \texttt{2026-06-01/2026-06-03}         & $[\texttt{06-01},\, \texttt{06-04})$            & three days \\
+  \texttt{T09/T17}                       & $[\texttt{09:00},\, \texttt{17:00})$            & eight hours \\
+  \texttt{2026-06-15/2026-06-15T17}      & $[\texttt{06-15T00:00},\, \texttt{06-15T17:00})$ & seventeen hours \\
+  \texttt{2026-06-15T10/2026-06-16}      & from 10:00 on the 15th through the 16th & thirty-eight hours \\
+\end{tabular}
+\end{center}
+The reader makes the half-open bound and the writer writes a span back
+as it was read, so text round-trips. The rule needs nothing of a
+calendar, only the class of the unit, and it lets the half-open model
+stand without a notation for an exclusive end, which ISO~8601 does not
+have. It is the one semantic choice in the library with no direct
+precedent in the formalisms it draws on, and Section~\ref{sec:discussion}
+puts it to the symposium.
+
+\paragraph*{Frames.} A span lies on one of three frames. A value with a
+year and a zone, or a written offset, lies on the \emph{UTC line}; a
+value with a year and neither lies on the \emph{floating line}; a value
+with no year (\texttt{T10:30}, \texttt{--06-15}, a Monday) lies on a
+\emph{cycle}, the day for a time of day, the week for a weekday, the
+year for a month and day. A position is an integer: a microsecond tick
+from a fixed origin on a line, a tick from the cycle's start on a
+cycle. Two spans relate, compare or combine only on one frame; a
+floating value beside a zoned one, or a time of day beside a date, is a
+named error and never a guess. A value on a cycle is, in the ontology's
+terms, not an individual but an open expression with the year free; the
+\texttt{:within} option, and the operations \texttt{at/2},
+\texttt{on/2} and \texttt{in\_zone/2}, bind it, placing it on each
+period of a window, and the result is the intervalised individual
+$T_{bounded\_meeting}$ talks about. Set operations on a cycle cut a
+span that runs through the cycle's end (\texttt{T22/T02}) for the
+sweep and join it after, so the algebra is the same on all three
+frames. The ontology is silent on schemas; frames, like resolution,
+sit in the engineering layer above it.
 
 \paragraph*{Half-open by design.} The half-open $[\mathit{first},
 \mathit{last})$ convention is not notational shorthand; it is enforced
 at every level of the API. Adjacent intervals concatenate cleanly:
 $[a, b) \cup [b, c) = [a, c)$ with neither overlap nor gap. Iteration
-yields a sequence whose union is exactly the parent interval.
-Conversion between implicit and explicit forms is a structural
-identity, not an arithmetic approximation. Library code that treats
-the upper bound as inclusive is, by the design contract, a defect.
+yields a sequence whose union is exactly the parent interval. No span
+has zero extent, in line with $T_{bounded\_meeting}$'s exclusion of
+degenerate intervals from the domain. Library code that treats the
+stored upper bound as inclusive is, by the design contract, a defect.
 Alternative timestamp representations have been explored at TIME ---
 notably Dyreson and Ahsan's log-segmented
 timestamps~\cite{dyreson2021logsegmented,dyreson2023logsegmented},
@@ -187,7 +229,7 @@ which decompose a period into power-of-two segments so that standard
 B$^+$-tree indexes can support sequenced and nonsequenced queries on
 an unmodified DBMS. The two designs occupy different points in the
 same space: log-segmented timestamps optimise query evaluation in a
-relational engine; Tempo's half-open intervals optimise expressiveness
+relational engine; Tempo's half-open spans optimise expressiveness
 and uniformity at the application layer.
 
 \section{Allen's algebra as the predicate vocabulary}
@@ -208,15 +250,21 @@ relations are returned directly from the relation primitive:
     :started_by | :during | :finishes | :overlapped_by |
     :met_by | :preceded_by
 \end{verbatim}
+The relation is read from four integer comparisons of the two spans'
+positions (start against start, end against end, and each start
+against the other's end); every pair of spans stands in exactly one
+relation.
 
 Beyond the relations themselves, the library ships Allen's
 \emph{composition} table --- the transitivity result of~\cite{allen1983}
-Fig.~4 --- as a first-class operation, \texttt{Tempo.compose/2}: given
-$A\;r_1\;B$ and $B\;r_2\;C$, it returns the set of relations that can
-hold between $A$ and $C$. Each of the 169 cells was derived
-independently, by a difference-bound consistency check over the six
-endpoints under the half-open convention, and then checked
-cell-for-cell against the published table.
+Fig.~4 --- as a first-class operation, \texttt{Tempo.Allen.compose/2}:
+given $A\;r_1\;B$ and $B\;r_2\;C$, it returns the set of relations that
+can hold between $A$ and $C$. The 169 cells are not transcribed: they
+are derived when the library compiles, by placing three intervals every
+way on eight points (six endpoints need at most six distinct values, so
+the enumeration is complete) and classifying each pair with the same
+four comparisons, and then held to the published table by test. The
+classifier and the composition table therefore cannot disagree.
 
 Composition drives a propagation algorithm. Lifting it from single
 relations to \emph{sets} of them gives the operations a qualitative
@@ -224,9 +272,9 @@ constraint network is built from --- the converse of a set, the
 narrowing of one set by another, and set composition --- and Allen's
 path-consistency step is then their composite,
 $R(i,k) \leftarrow R(i,k) \cap (R(i,j) \circ R(j,k))$, iterated to a
-fixpoint. This is what lets Tempo reason about intervals that are
-\emph{not} grounded: a period known only as ``before or after the
-rebuild, never during'' is the set
+fixpoint. This is what lets a companion package, \texttt{tempo\_network},
+reason about intervals that are \emph{not} grounded: a period known
+only as ``before or after the rebuild, never during'' is the set
 $\{\textit{precedes}, \textit{preceded\_by}\}$, and propagation derives
 what that implies elsewhere in the network. Pruning is sound --- every
 relation removed is genuinely impossible --- but path consistency does
@@ -244,7 +292,8 @@ matching on relation lists is verbose and obscures the intent, so the
 library promotes the common unions to first-class predicates ---
 \texttt{within?/2}, \texttt{overlaps?/2}, \texttt{adjacent?/2},
 \texttt{contains?/2} --- each defined as a specific subset of Allen's
-relations and each readable aloud as the English question it answers.
+relations, held in one table, and each readable aloud as the English
+question it answers.
 
 The predicate vocabulary is not decorative. It is a design discipline:
 when an example in the cookbook reaches for a relation list or a
@@ -279,144 +328,215 @@ Tempo's contribution is best read as a synthesis across this divide.
 \emph{Ontologically} it is interval-only: there are no instants,
 degenerate intervals are excluded, and the half-open seam realises
 Hayes' open-connected model rather than Allen's closed intervals.
-\emph{Computationally}, however, comparison projects every endpoint to
-a real number on a single UTC frame and orders intervals by their
-endpoints --- precisely the Vilain--Kautz reduction, used as an engine
-beneath an interval ontology. Two consequences follow. First, because
-Tempo's intervals are always \emph{fully grounded} (concrete
-endpoints, never disjunctive qualitative constraints), it never enters
-the NP-hard regime that motivated the point algebra: relation queries
-are constant-time endpoint comparisons rather than constraint
-propagation. Second, the ``instant'' is recovered not as a primitive
-point but as the interval of one unit at the value's \emph{finest
-declared resolution} --- a \emph{moment} in Allen and Hayes' sense,
-but relativised to representational precision: a second-resolution
-datetime is a one-second interval, a microsecond value a
-one-microsecond interval. This resolution-indexed atomicity, tying
-interval granularity to ISO~8601 syntax rather than to an absolute
-atom, is the element of the model without a direct precedent in the
-formalisms it draws on.
+\emph{Computationally}, however, every end is an integer position on
+one frame, and the engine orders spans by their ends --- precisely the
+Vilain--Kautz reduction, used as an engine beneath an interval
+ontology. Two consequences follow. First, because Tempo's spans are
+always \emph{fully grounded} (concrete ends, never disjunctive
+qualitative constraints), it never enters the NP-hard regime that
+motivated the point algebra: relation queries are four integer
+comparisons rather than constraint propagation, and every set
+operation is one sweep over sorted ends. Calendars and zones are
+consulted only to compute positions, once per end. Second, the
+``instant'' is recovered not as a primitive point but as the interval
+of one unit at the value's \emph{finest declared resolution} --- a
+\emph{moment} in Allen and Hayes' sense, but relativised to
+representational precision: a second-resolution datetime is a
+one-second interval, a microsecond value a one-microsecond interval.
+This resolution-indexed atomicity, tying interval granularity to
+ISO~8601 syntax rather than to an absolute atom, and the reading of
+written ends by the class of their unit, are the two elements of the
+model without a direct precedent in the formalisms it draws on.
 
-\section{Set operations on intervals and interval sets}
+\section{Set operations on spans and sets of them}
 
-The current implementation focus is closing the library under
-set-theoretic operations. The intuition is straightforward --- any
-two intervals can be combined into a (possibly disjoint, possibly
-zero-member) set of intervals --- but the engineering requires careful
-handling of the implicit/explicit-span distinction, of cross-calendar
-operands, and of cross-zone arithmetic. A single connected, non-empty
-result is returned as an \texttt{Interval}; every other shape ---
-disjoint, or zero-member --- is returned as an \texttt{IntervalSet}.
-An interval is never returned with zero extent, in line with
-$T_{bounded\_meeting}$'s exclusion of degenerate intervals from the
-domain.
+Closing the library under set-theoretic operations is where the model
+earns its keep. The intuition is straightforward --- any two
+expressions combine into a (possibly disjoint, possibly empty) set of
+spans --- but the engineering requires one answer to the questions of
+resolution, of frames, of calendars and of what a result \emph{is}
+when its operands were events with identities of their own.
 
-\paragraph*{Pairwise operations.} \texttt{union/2}, \texttt{intersection/2},
-and \texttt{difference/2} on a pair of operands $a, b$ return either an
-interval or an \texttt{IntervalSet}, depending on whether the result
-is connected. Operands may be supplied in either implicit or explicit
-form; the library normalises both to the explicit half-open
-representation, performs the geometric operation, and re-presents the
-result in the most compact form (a single interval when possible).
+\paragraph*{One sweep.} Every instant-level operation is the same
+sweep over the operands' sorted ends with a different question of how
+many members of each operand cover a point: \texttt{intersection/3}
+keeps a point covered by both, \texttt{difference/3} a point covered by
+the first and not the second, \texttt{symmetric\_difference/3} a point
+covered by exactly one, and the $n$-ary ``at least $k$ members'' query
+a point covered by $k$ or more. A result begins where the answer turns
+true and ends where it turns false, so a result's ends are always
+operands' ends, and are written back as those operands wrote them, at
+their resolution: the difference of a month and a day ends on a day.
+Every operation returns a set; a set that happens to have one member
+is still a set, which keeps the operations closed and composable
+without a case split at the call site.
 
-\paragraph*{$n$-ary operations and canonicalisation.} Extending the
-pairwise operations to lists of intervals raises the question of
-canonical form. Tempo defines the canonical form of an
-\texttt{IntervalSet} as the sorted, coalesced sequence in which no two
-intervals overlap or meet. Coalescing is the closure of the union
-operation under iteration: $\bigcup_i [a_i, b_i)$ expressed as a
-minimal disjoint sequence. This is the form returned by every
-set-producing operation in the public API. Coalescing also realises
-the Sum Axiom of $T_{bounded\_meeting}$ (axiom~15
-in~\cite{gruninger2017allenontology}): three chain-meeting intervals
+\paragraph*{Members and covered time.} The textbook operations answer
+about \emph{covered time}. Application code as often asks about
+\emph{members}: which meetings hit this window, which workdays are not
+holidays. Tempo keeps the two apart. \texttt{union/3} preserves
+members (two meetings that cover the same hour stay two meetings, each
+with its metadata) and the coalesced form is one explicit operation
+away; the other operations trim to covered time, and each result is
+credited to the operand members that cover it, so that a holiday's
+name survives the difference that removed the weekend from it. Each
+instant-level operation has a member-preserving companion
+(\texttt{members\_overlapping/3}, \texttt{members\_outside/3},
+\texttt{members\_in\_exactly\_one/3}), and the canonical form of a
+set --- sorted by start, coalesced where members touch --- is one
+operation, \texttt{coalesce/2}, which realises the Sum Axiom of
+$T_{bounded\_meeting}$ (axiom~15 in~\cite{gruninger2017allenontology}):
+three chain-meeting intervals
 $\textit{meets}(i,j) \land \textit{meets}(j,k) \land \textit{meets}(k,m)$
 are summed into the single interval that runs from $i$'s start to
 $m$'s end.
 
-\paragraph*{Cross-calendar and cross-zone semantics.} Because each
-operand carries its own calendar and zone, set operations are
-defined on the underlying UTC reference frame --- each endpoint is
-projected to gregorian seconds (the standard Erlang representation)
-so that endpoints from different calendars or zones can be ordered
-in a single linear sequence. The word ``instant'' is avoided here
-because Gr\"uninger and Li's ontology excludes points from its
-domain (intervals are the only entities); naming the projection a
-``UTC instant'' would suggest a commitment to a competing
-point-based ontology. The projection is purely a computational
-device --- a real number used to order endpoints in a single linear
-frame. The result's calendar and zone are taken from the first
-operand, preserving the caller's intent for downstream display.
-This first-operand-wins rule is itself a design choice that deserves
-community scrutiny --- alternatives include rejecting heterogeneous
-operands, or carrying the heterogeneity through into a sum-typed
-result --- and is one of the points the talk would invite feedback
-on.
+\paragraph*{One expression, one calendar, one zone.} The calendar and
+the zone are properties of a whole expression, written once after it
+(\texttt{2026-06-15T10:30/T12:00[Europe/Paris][u-ca=hebrew]}), never of
+one end or one member: an interval whose two ends are written in two
+calendars, or two named zones, is refused at construction. Across
+expressions the rule is explicit conversion. A set operation brings its
+second operand to the calendar of its first; two zoned operands meet on
+the UTC line and the result is written in the first operand's zone; a
+floating operand beside a zoned one is a named error unless the caller
+places it. The result's calendar and zone are therefore the first
+operand's, which preserves the caller's intent for display, and what
+cannot be written in one calendar and one zone is an error rather than
+another value. An earlier version of this design projected every
+operand to a common line and let the first operand win silently; the
+stricter rule adopted the alternative --- refuse heterogeneous frames,
+convert calendars explicitly --- that the authors had invited the
+symposium to weigh, and it is one of the points the talk would revisit.
 
-\paragraph*{Daylight-saving transitions.} The UTC projection
-interacts with daylight-saving transitions in two distinct ways,
-both handled at parse time so set operations on the projected values
-need no further disambiguation. A wall time that falls in a DST
-\emph{gap} (the non-existent hour at spring-forward) is rejected at
-construction with a \texttt{ZoneGapError} --- a stronger guarantee
-than addressing the bug, because the malformed value cannot be
-constructed. A wall time that falls in a DST \emph{fold} (the
+\paragraph*{Cross-calendar positions.} A date is placed on the day
+scale as a proleptic Gregorian day number, the fixed date of Reingold
+and Dershowitz, which every calendar converts to and from without a
+path through another calendar; a reading of the clock is placed as a
+microsecond tick on the UTC line through the zone. The word ``instant''
+is avoided because Gr\"uninger and Li's ontology excludes points from
+its domain; the projection is a computational device, an integer used
+to order ends on one frame.
+
+\paragraph*{Daylight-saving transitions.} Because every span is read
+through its zone to positions on the UTC line, transitions fall out of
+the walk rather than being handled by hand. A day in Paris on which the
+clock springs forward has twenty-three hours because its two ends are
+twenty-three hours apart; an hour the clock skips in part is as long as
+the clock shows it; a day a zone leaves out (Samoa's 30 December 2011)
+is no day of a walk through that December. Two cases are settled at
+construction, so that set operations on positions need no further
+disambiguation. A wall time that falls in a DST \emph{gap} (the
+non-existent hour at spring-forward) is refused as a value: a
+\texttt{Tempo.ZoneError} whose reason is \texttt{:gap}, which is a
+stronger guarantee than addressing the bug, because the malformed value
+cannot be constructed. A wall time that falls in a DST \emph{fold} (the
 doubled hour at fall-back) is disambiguated by an explicit offset in
 the IXDTF suffix, per RFC~9557~\S 4.5: the value
 \texttt{2024-11-03T01:30:00-04:00[America/New\_York]} unambiguously
-picks the pre-fall-back (EDT) period and
+picks the pre-fall-back (EDT) showing and
 \texttt{2024-11-03T01:30:00-05:00[America/New\_York]} picks the
-post-fall-back (EST) period. The disambiguator is part of the
-string representation and round-trips through serialisation --- a
-property that distinguishes this design from meta-attribute
-schemes (such as Python's \texttt{fold} parameter) in which the
-choice is carried out-of-band and lost on serialisation.
+post-fall-back (EST) showing. The disambiguator is part of the string
+representation and round-trips through serialisation --- a property
+that distinguishes this design from meta-attribute schemes (such as
+Python's \texttt{fold} parameter) in which the choice is carried
+out-of-band and lost on serialisation.
 
-\paragraph*{Beyond the primitives.} Once \texttt{union},
-\texttt{intersection}, and \texttt{difference} are closed, the natural
-extensions follow: symmetric difference, containment queries, the
-inverse of an interval set against a bounding context (``free time''
-given a calendar of meetings), and reductions across an
-\texttt{IntervalSet} (total duration, longest gap, densest hour).
+\paragraph*{Expressions with no end.} A recurrence with no end is a set
+with infinitely many members, and the operations answer it exactly or
+not at all: an intersection with a bounded operand lies within that
+operand and is taken there; a union of two endless operands is an
+endless set in time order, read lazily; an intersection of two endless
+operands, which may be searched for ever, is refused unless the caller
+gives a window.
+
+\section{Implementation}
+\label{sec:implementation}
+
+Tempo is a working library, and the model above is its second
+implementation. The first grew to 82,875 lines by accretion and carried
+the same handful of concepts in parallel forms: a review in October
+2026 counted ten walks, six sweeps, five copies of the Allen table,
+four selection engines and two arithmetics. The second was written to
+the nine laws in one pass and is 26,862 lines, of which 14,524 are
+code and 7,806 are the engine (positions and frames, the calendar and
+zone contracts, expansion, the walk, the sweep, the classifier,
+selection, arithmetic). Each concept is implemented once, and the
+calendar is reached through one contract of eighteen questions that
+never asks what kind of calendar it is talking to, so that the
+Gregorian, Hebrew, Islamic, Chinese, Julian and fiscal calendars join
+by the same door.
+
+The implementation is held to oracles written apart from it: an
+independent expander of 162 recurrence rules from three starts, itself
+held to RFC~5545's own examples; a check of every set operation on
+every pair of sets of up to two members between five points by integer
+arithmetic on the standard library's dates; Allen's composition table
+held to what three spans give; twelve zones over twenty-one days each
+held to the standard library's clock; and a totality check that every
+operation on every expression of a corpus is an answer or a named
+error. Against the first implementation, reading text is thirty times
+faster, relating two values two to three times slower, and expanding a
+recurrence rule two to six times slower, the price of one selection
+engine where the first had a fast path for weekdays; a positioned
+representation through the engine and a compiled matcher for plain
+rules in front of it are the next steps and change nothing of the
+model.
 
 \section{Discussion and open questions}
 \label{sec:discussion}
 
-Tempo is a working library; this submission's contribution is a
+This submission's contribution is a
 \emph{design} contribution rather than a \emph{result} contribution,
 and the talk would aim to make the design choices legible to an
-audience whose research is the theory the library implements. Three
+audience whose research is the theory the library implements. Four
 questions seem particularly worth the TIME audience's attention:
 
 \begin{enumerate}
+  \item \textbf{Written ends.} The rule of Section~\ref{sec:model},
+    that an end written to a calendar unit is included and an end
+    written to a clock unit is a boundary, reconciles the inclusive
+    reading of EDTF and ISO~8601-2 Annex~A with a half-open model by
+    appeal to how the two kinds of end are said aloud. It is exact
+    and it round-trips, but it makes \texttt{2026-06-15T10/2026-06-16}
+    thirty-eight hours where a reader used to boundaries expects
+    fourteen. Is a rule keyed to the class of the unit the right
+    reconciliation, or should the standard carry a notation for an
+    exclusive end?
+
   \item \textbf{Granularity and resolution.} Tempo's
-    next-higher-undefined-resolution rule for implicit spans is
+    one-unit-of-the-written-resolution rule for values is
     operationally simple but does not reference the more general
     treatment of temporal granularity in the database
     literature~\cite{bettini-granularities} nor the calendric type
     constraints in CaTTS~\cite{bry-spranger-multicalendar}. Is the
     simple rule a sufficient model in practice, or does it accumulate
     edge cases as the calendar set grows (lunar, sidereal, fiscal)?
+    The three frames, and the cycle in particular, are the places the
+    question is felt.
 
-  \item \textbf{Allen's algebra over interval sets.} The thirteen
+  \item \textbf{Allen's algebra over sets.} The thirteen
     relations, and the $T_{bounded\_meeting}$ ontology that
     underlies them, are defined on convex intervals
-    only~\cite{gruninger2017allenontology}. Their lifting to interval
-    sets admits several reasonable definitions
-    (existential, universal, set-of-relations). The library now offers
-    two of the three --- the existential lifting through the
-    predicates, and the set-of-relations lifting through
-    \texttt{relation\_matrix/2}, which returns the relation holding
-    between every pair of members --- but which should be the
+    only~\cite{gruninger2017allenontology}. Their lifting to sets
+    admits several reasonable definitions, and the library now offers
+    three: the covered-time lifting through the predicates
+    (\emph{within} is an empty difference, \emph{overlaps} a
+    non-empty intersection), the existential lifting through the
+    member-preserving companions, and the set-of-relations lifting
+    through \texttt{relation\_matrix/2}, which returns the relation
+    holding between every pair of members. Which should be the
     \emph{default} is not obvious, and a principled extension of the
-    ontology to non-convex interval sets would settle it.
+    ontology to non-convex sets would settle it.
 
   \item \textbf{Cross-calendar comparison.} Comparing a Hebrew date
-    with a Gregorian one resolves cleanly when both project to the
-    same proleptic UTC timeline, but the timeline is itself a
-    modelling choice (TAI? UT1? a calendar-specific civil time?).
-    Tempo's current choice is pragmatic; a principled framework would
-    be a worthwhile contribution from the symposium back to the
-    library.
+    with a Gregorian one resolves cleanly when both are placed on the
+    same day scale, but the scale is itself a modelling choice (TAI?
+    UT1? a calendar-specific civil time?). Tempo's choice --- the
+    proleptic Gregorian day number for dates and UTC for readings of
+    the clock, with calendars converted explicitly and frames never
+    mixed --- is pragmatic; a principled framework would be a
+    worthwhile contribution from the symposium back to the library.
 \end{enumerate}
 
 The wider goal is to demonstrate, by existence proof, that the
@@ -472,11 +592,11 @@ symposium to sharpen them.
   for information interchange --- Part 2: Extensions}, 2019.
 
 \bibitem{ixdtf}
-  U. Sharma and C. Bormann, editors.
-  \newblock \emph{Date and Time on the Internet: IXDTF Extensions}.
-  \newblock Internet-Draft draft-ietf-sedate-datetime-extended-09,
-  IETF, 2024.
-  \newblock \url{https://www.ietf.org/archive/id/draft-ietf-sedate-datetime-extended-09.html}
+  Ujjwal Sharma and Carsten Bormann.
+  \newblock \emph{Date and Time on the Internet: Timestamps with
+  Additional Information}.
+  \newblock RFC 9557, IETF, April 2024.
+  \newblock \doi{10.17487/RFC9557}
 
 \bibitem{edtf}
   Library of Congress.
@@ -561,4 +681,3 @@ symposium to sharpen them.
   \newblock \url{http://chrono.ulb.be}.
 
 \end{thebibliography}
-
