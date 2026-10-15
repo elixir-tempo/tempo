@@ -125,9 +125,9 @@ Elixir idioms stand in for the model in places a porter has to translate: a valu
 
 ### 4.1 What was measured
 
-`bench/against_1_6_bench.exs` on 2026-10-15 (Apple M1 Max, OTP 29.0.3, JIT). The 1.6.4 results file was not present, so the ratios are those recorded in `TODO.md` on the same day from the last run that had it.
+`bench/against_1_6_bench.exs` on 2026-10-15 (Apple M1 Max, OTP 29.0.3, JIT). The 1.6.4 results file was not present, so the ratios are those recorded in `TODO.md` on the same day from the last run that had it (in its git history since the file was cleared of done items).
 
-| Case | Median | Memory | Against 1.6.4 (TODO, 2026-10-15) |
+| Case | Median | Memory | Against 1.6.4 (TODO, 2026-10-15, now in its history) |
 |---|---:|---:|---|
 | relate a month and a day | 2.5 µs | 5 KB | 2.4 times |
 | compare a month and a day | 2.5 µs | 5 KB | 14 times |
