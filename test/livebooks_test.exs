@@ -1,8 +1,24 @@
 unless Code.ensure_loaded?(Kino.DataTable) do
   defmodule Kino.DataTable do
     @moduledoc false
-    # Livebook's own package is not a dependency: a table is given its rows.
-    def new(rows, _options \\ []), do: Enum.to_list(rows)
+    # Livebook's own package is not a dependency. Like Kino, a table takes
+    # columns, or rows that are maps or keyword lists, and refuses others.
+    def new(tabular, options \\ [])
+
+    def new(%{} = columns, _options) when not is_struct(columns), do: columns
+
+    def new(tabular, _options) do
+      rows = Enum.to_list(tabular)
+
+      if Enum.all?(rows, &row?/1) do
+        rows
+      else
+        raise ArgumentError, "expected valid tabular data, but got: #{inspect(tabular)}"
+      end
+    end
+
+    defp row?(row) when is_map(row), do: true
+    defp row?(row), do: row != [] and Keyword.keyword?(row)
   end
 end
 
@@ -10,21 +26,35 @@ defmodule Tempo.LivebooksRunner do
   @moduledoc false
   # Runs a livebook's Elixir cells in order, as Livebook runs them: bindings,
   # imports and aliases carry from cell to cell. The setup cell, which
-  # installs the packages, is not run; its imports and aliases are.
+  # installs the packages, is not run. A block marked `force_markdown` is
+  # shown by Livebook, not run, so it is not run here either.
 
   @doc "The cells of a livebook that raise, each with its first line and the error."
   @spec failures(Path.t()) :: [String.t()]
   def failures(path) do
-    cells = cells(path)
-    env = setup(Enum.find(cells, "", &setup?/1))
-
     {failures, _binding, _env} =
-      cells
+      path
+      |> cells()
       |> Enum.reject(&setup?/1)
       |> Enum.with_index(1)
-      |> Enum.reduce({[], [], env}, &run/2)
+      |> Enum.reduce({[], [], Code.env_for_eval([])}, &run/2)
 
     Enum.reverse(failures)
+  end
+
+  @doc """
+  The `import`, `alias` and `require` lines of a livebook's setup cell.
+
+  Livebook compiles a whole cell before running it, so a setup cell cannot
+  name a module that its own `Mix.install/2` has yet to fetch.
+  """
+  @spec setup_directives(Path.t()) :: [String.t()]
+  def setup_directives(path) do
+    setup = path |> cells() |> Enum.find("", &setup?/1)
+
+    ~r/^\s*(?:import|alias|require) [^\n]+/m
+    |> Regex.scan(setup)
+    |> Enum.map(&(&1 |> hd() |> String.trim()))
   end
 
   @doc "Whether a livebook is written for this version: its setup installs a Tempo this version satisfies."
@@ -40,28 +70,15 @@ defmodule Tempo.LivebooksRunner do
     do: :ex_tempo |> Application.spec(:vsn) |> to_string() |> String.replace("-dev", "")
 
   defp cells(path) do
-    ~r/```elixir\n(.*?)```/s
+    ~r/(<!-- livebook:\{"force_markdown":true\} -->\s*)?```elixir\n(.*?)```/s
     |> Regex.scan(File.read!(path), capture: :all_but_first)
-    |> Enum.map(&hd/1)
+    |> Enum.flat_map(&code_cell/1)
   end
+
+  defp code_cell(["", code]), do: [code]
+  defp code_cell([_force_markdown, _code]), do: []
 
   defp setup?(cell), do: String.contains?(cell, "Mix.install")
-
-  defp setup(cell) do
-    imports =
-      ~r/^\s*(import|alias) [^\n]+/m
-      |> Regex.scan(cell)
-      |> Enum.map_join("\n", &hd/1)
-
-    {_value, _binding, env} =
-      Code.eval_quoted_with_env(
-        Code.string_to_quoted!(imports <> "\n:ok"),
-        [],
-        Code.env_for_eval([])
-      )
-
-    env
-  end
 
   defp run({cell, index}, {failures, binding, env}) do
     {_value, binding, env} = Code.eval_quoted_with_env(Code.string_to_quoted!(cell), binding, env)
@@ -82,8 +99,7 @@ defmodule Tempo.LivebooksTest do
   @moduledoc """
   Runs the cells of every livebook written for this version, so that a
   livebook the README offers cannot rot. A livebook whose setup installs
-  an earlier Tempo (the September 2026 talk, on 1.6.3) is a record of that
-  version and is not run.
+  another version of Tempo is not run.
 
   Runs with the guides: `mix test --only guides`.
   """
@@ -95,6 +111,10 @@ defmodule Tempo.LivebooksTest do
 
   for livebook <- Path.wildcard("livebook/*.livemd"),
       LivebooksRunner.for_this_version?(livebook) do
+    test "the setup cell of #{livebook} names no module" do
+      assert LivebooksRunner.setup_directives(unquote(livebook)) == []
+    end
+
     test "the cells of #{livebook} run" do
       assert LivebooksRunner.failures(unquote(livebook)) == []
     end

@@ -2,12 +2,22 @@
 
 ```elixir
 Mix.install([
-  {:ex_tempo, "~> 1.6.3"},
+  {:ex_tempo, "~> 2.0"},
   {:ical, "~> 3.2"},
   {:tz, "~> 0.28"}
 ])
 
-Application.put_env(:elixir, :time_zone_database, Tz.TimeZoneDatabase)
+Calendar.put_time_zone_database(Tz.TimeZoneDatabase)
+```
+
+## Setup
+
+Run this cell next: every example below depends on it. It imports `Tempo.Sigils`, which provides the `~o` sigil the examples use to write a Tempo value as ISO 8601 text — `~o"2026-06-15"` is the whole day of 15 June 2026. The import brings in only `sigil_o/2`, no other functions.
+
+It needs a cell of its own because Livebook compiles a whole cell before running it, so the setup cell above can't import a module that its own `Mix.install/2` has yet to fetch.
+
+```elixir
+import Tempo.Sigils
 ```
 
 ## Tempo
@@ -57,8 +67,6 @@ The value is not a point that we later stretch into a range. Its bounds are real
 <!-- slide: code -->
 
 ```elixir
-import Tempo.Sigils
-
 case Tempo.to_interval(~o"2026-09-02") do
   {:ok, interval} ->
     Tempo.Interval.endpoints(interval)
@@ -102,7 +110,7 @@ Most of us know only a small part the standard. Tempo implements Parts 1 *and* 2
 ```elixir
 last_day = fn month ->
   {:ok, days} = Tempo.select(month, ~o"-1D")
-  days |> Tempo.IntervalSet.first() |> Tempo.Interval.from()
+  Tempo.IntervalSet.first(days)
 end
 
 {last_day.(~o"2024-02"), last_day.(~o"2026-02")}
@@ -511,8 +519,11 @@ The spring-forward night is where hand-rolled arithmetic quietly breaks: 02:00 d
 ## When the dates are not known
 
 * Sometimes you do not have a calendar, you have constraints — "K1 reigned before K2", "the stratum lasted twenty to a hundred years". A chronological network propagates those into the tightest bounds the evidence supports.
+* In Tempo 2.0 the constraint network is in the companion package `tempo_network`, which is not published yet, so the code on this slide and the next is shown rather than run.
 
 <!-- slide: code -->
+
+<!-- livebook:{"force_markdown":true} -->
 
 ```elixir
 alias Tempo.Network
@@ -535,6 +546,8 @@ review = solved.periods[:review]
 * No hidden assumptions. Every computed bound can name the inputs it rests on, in the order they apply — so a colleague who disputes the conclusion can point at exactly which input they reject.
 
 <!-- slide: code -->
+
+<!-- livebook:{"force_markdown":true} -->
 
 ```elixir
 {:ok, trace} = Network.Solver.trace(network, {:start, :conference}, bound: :earliest)
@@ -560,7 +573,7 @@ Being honest about the edges is more useful than a feature list.
 
 ## Thank you
 
-* [github.com/elixir-tempo/tempo](https://github.com/elixir-tempo/tempo) — `{:ex_tempo, "~> 1.6.3"}`
+* [github.com/elixir-tempo/tempo](https://github.com/elixir-tempo/tempo) — `{:ex_tempo, "~> 2.0"}`
 * [github.com/elixir-tempo/agenda](https://github.com/elixir-tempo/agenda) — scheduling, built on Tempo
 * Guides: ISO 8601 conformance, set operations, enumeration, chronological networks
 * Questions?
