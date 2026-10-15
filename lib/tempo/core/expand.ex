@@ -640,23 +640,26 @@ defmodule Tempo.Expand do
     end
   end
 
-  defp day_children({lo, hi}, _prefix, :day, calendar) do
-    {:ok,
-     for(day <- lo..(hi - 1)//1, do: {Calendar.date(calendar, day) |> elem(2), {day, day + 1}})}
-  end
+  # The days of the span, each with the day of the month it is: counted from
+  # the month's first day's label, the calendar asked once a month, where the
+  # month's labels count its days; asked of the calendar day by day where
+  # they do not (`Tempo.Calendar.month_of_day/2`).
+  defp day_children({lo, hi}, _prefix, :day, calendar), do: {:ok, days_labelled(lo, hi, calendar)}
 
   # Within a week a day of the week is the nth of the week's own days, whatever
-  # day the calendar's week begins on; elsewhere it is the calendar's label.
+  # day the calendar's week begins on; elsewhere it is the calendar's label,
+  # asked for the first day and counted round the week for the rest.
   defp day_children({lo, hi}, prefix, :day_of_week, calendar) do
     case List.last(prefix) do
       {:week, _} -> {:ok, for(day <- lo..(hi - 1)//1, do: {day - lo + 1, {day, day + 1}})}
-      _ -> {:ok, for(day <- lo..(hi - 1)//1, do: {weekday(calendar, day), {day, day + 1}})}
+      _ -> {:ok, weekdays(lo, hi, calendar)}
     end
   end
 
-  defp day_children({lo, hi}, _prefix, :day_of_year, calendar) do
-    {:ok, for(day <- lo..(hi - 1)//1, do: {ordinal(calendar, day), {day, day + 1}})}
-  end
+  # The day of the year is a count from the year's first day, the calendar
+  # asked once a year for the year's span.
+  defp day_children({lo, hi}, _prefix, :day_of_year, calendar),
+    do: {:ok, ordinals(lo, hi, calendar)}
 
   defp day_children(_span, _prefix, :season, _calendar), do: {:error, :season}
 
@@ -677,15 +680,40 @@ defmodule Tempo.Expand do
      end)}
   end
 
+  defp days_labelled(lo, hi, _calendar) when lo >= hi, do: []
+
+  defp days_labelled(lo, hi, calendar) do
+    month = Calendar.month_of_day(calendar, lo)
+    last = min(month.after_last, hi)
+    labelled = for day <- lo..(last - 1)//1, do: {day_label(day, month, calendar), {day, day + 1}}
+    labelled ++ days_labelled(last, hi, calendar)
+  end
+
+  defp day_label(day, %{counts?: true, first: first, label: label}, _calendar),
+    do: label + day - first
+
+  defp day_label(day, _month, calendar), do: Calendar.date(calendar, day) |> elem(2)
+
+  defp weekdays(lo, hi, _calendar) when lo >= hi, do: []
+
+  defp weekdays(lo, hi, calendar) do
+    days = Calendar.days_in_week(calendar)
+    first = weekday(calendar, lo)
+    for day <- lo..(hi - 1)//1, do: {Integer.mod(first - 1 + day - lo, days) + 1, {day, day + 1}}
+  end
+
+  defp ordinals(lo, hi, _calendar) when lo >= hi, do: []
+
+  defp ordinals(lo, hi, calendar) do
+    {first, after_last} = Calendar.year_of_day(calendar, lo)
+    last = min(after_last, hi)
+    counted = for day <- lo..(last - 1)//1, do: {day - first + 1, {day, day + 1}}
+    counted ++ ordinals(last, hi, calendar)
+  end
+
   defp weekday(calendar, day) do
     {y, m, d} = Calendar.date(calendar, day)
     Calendar.day_of_week(calendar, y, m, d)
-  end
-
-  defp ordinal(calendar, day) do
-    {y, _, _} = Calendar.date(calendar, day)
-    {first, _} = period!(calendar, :year, y, nil)
-    day - first + 1
   end
 
   defp period!(calendar, kind, year, part) do

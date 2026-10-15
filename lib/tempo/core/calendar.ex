@@ -462,6 +462,48 @@ defmodule Tempo.Calendar do
 
   def first_day(_calendar, _units), do: {:error, :no_date}
 
+  @doc """
+  The month a day number falls in: the span of its days, its year and month,
+  the label of its first day, and whether its labels count its days (the
+  last day's label is the first's plus the days between). A month that
+  leaves labels out as a calendar changes (England, September 1752) does
+  not count them, and each day's label is then asked of the calendar.
+  """
+  @spec month_of_day(module(), integer()) :: %{
+          first: integer(),
+          after_last: integer(),
+          year: Calendar.year(),
+          month: Calendar.month(),
+          label: Calendar.day(),
+          counts?: boolean()
+        }
+  def month_of_day(calendar, day) do
+    {year, month, label} = date(calendar, day)
+    {:ok, {first, after_last}} = period(calendar, :month, year, month)
+
+    {_year, _month, first_label} =
+      if day == first, do: {year, month, label}, else: date(calendar, first)
+
+    {_year, _month, last_label} = date(calendar, after_last - 1)
+
+    %{
+      first: first,
+      after_last: after_last,
+      year: year,
+      month: month,
+      label: first_label,
+      counts?: last_label == first_label + (after_last - first) - 1
+    }
+  end
+
+  @doc "The span of the year a day number falls in."
+  @spec year_of_day(module(), integer()) :: span()
+  def year_of_day(calendar, day) do
+    {year, _month, _day} = date(calendar, day)
+    {:ok, span} = period(calendar, :year, year, nil)
+    span
+  end
+
   @doc "The span of days a value's date units name, by the same reading as `first_day/2`; a date is one day."
   @spec span_of(module(), Tempo.Unit.units()) :: {:ok, span()} | {:error, term()}
   def span_of(calendar, year: year), do: period(calendar, :year, year, nil)

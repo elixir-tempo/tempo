@@ -214,8 +214,11 @@ expand(units, frame):
 
 children(prefix, unit):
   calendar unit or label under an anchored prefix:
-      walk the prefix's span of days period by period (as 5.2), reading each period's number,
-      or each day's label (day of the week, day of the year), from the calendar
+      walk the prefix's span of days period by period (as 5.2), reading each period's number
+      from the calendar; a day's label is counted within its period from one question
+      (a day of the year from the year's first day, a weekday round the week, a day of the
+      month from the month's first label where the month's labels count its days, and
+      asked day by day where a calendar leaves labels out as it changes)
   clock unit under an anchored prefix:
       the ticks of the prefix's extent stepped at the unit (as 5.2)
   any unit under a prefix with no year:

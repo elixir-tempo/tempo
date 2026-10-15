@@ -134,24 +134,61 @@ defmodule Tempo.Walk do
 
   # ── Steps ─────────────────────────────────────────────────────────────
 
+  # The days of the span, each dated: within a month whose labels count its
+  # days, by the count from the month's first day, the calendar asked once a
+  # month (`Tempo.Calendar.month_of_day/2`); else each day's date asked. A
+  # day the zone's clock leaves out is no day of a walk there.
+  defp day_steps(start, stop, :day, %{calendar: calendar} = frame) do
+    {first_day, last_day} = days_of(start, stop, frame)
+
+    {first_day, nil}
+    |> Stream.unfold(fn
+      {day, _month} when last_day != nil and day > last_day ->
+        nil
+
+      {day, month} ->
+        month = month_about(day, month, calendar)
+        {{day, dated(day, month, calendar)}, {day + 1, month}}
+    end)
+    |> Stream.reject(fn {day, _value} -> day_skipped?(day, frame) end)
+    |> Stream.map(fn {_day, value} -> value end)
+  end
+
   # The periods of a calendar unit that begin in the span's days.
   defp day_steps(start, stop, unit, %{calendar: calendar} = frame) do
-    first_day = Integer.floor_div(wall(start, frame), @day)
-    last_day = if stop, do: Integer.floor_div(wall(stop, frame) - 1, @day), else: nil
+    {first_day, last_day} = days_of(start, stop, frame)
 
     first_day
     |> Stream.unfold(fn
       day when last_day != nil and day > last_day -> nil
-      day -> {{day, at_day(day, unit, calendar)}, next_period(day, unit, calendar)}
+      day -> {at_day(day, unit, calendar), next_period(day, unit, calendar)}
     end)
-    |> Stream.reject(fn {day, _value} -> unit == :day and day_skipped?(day, frame) end)
-    |> Stream.map(fn {_day, value} -> value end)
   end
+
+  defp days_of(start, stop, frame) do
+    first_day = Integer.floor_div(wall(start, frame), @day)
+    last_day = if stop, do: Integer.floor_div(wall(stop, frame) - 1, @day), else: nil
+    {first_day, last_day}
+  end
+
+  # The month a day is in: the one the day before was in, where it still is.
+  defp month_about(day, %{first: first, after_last: after_last} = month, _calendar)
+       when day >= first and day < after_last,
+       do: month
+
+  defp month_about(day, _other, calendar), do: Calendar.month_of_day(calendar, day)
+
+  defp dated(
+         day,
+         %{counts?: true, year: year, month: month, first: first, label: label},
+         _calendar
+       ),
+       do: [year: year, month: month, day: label + day - first]
+
+  defp dated(day, _month, calendar), do: at_day(day, :day, calendar)
 
   # A day the zone's clock leaves out is no day of a walk there.
   defp day_skipped?(day, %{zone: zone, shift: shift}), do: Zone.day_skipped?(zone, shift, day)
-
-  defp next_period(day, :day, _calendar), do: day + 1
 
   defp next_period(day, unit, calendar) do
     {_first, after_last} = period_of(at_day(day, unit, calendar), calendar)

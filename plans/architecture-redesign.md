@@ -401,13 +401,13 @@ The budgets of 5.3 were estimates made before the code; the review of 2026-10-15
 
 | Layer | Module | First budget | Lines | Code | Budget | Why it exceeds its first budget |
 |---|---|---:|---:|---:|---:|---|
-| 0 | `Tempo.Calendar` (with `WeeksFrom`) | 300 | 534 | 338 | 550 | Calendars of weeks of other week starts, and every question answered or refused by name. |
+| 0 | `Tempo.Calendar` (with `WeeksFrom`) | 300 | 533 | 311 | 550 | Calendars of weeks of other week starts, every question answered or refused by name, and the month and year a day falls in (decision 75). |
 | 0 | `Tempo.Zone` (with `Table` and `Transitions`) | 300 | 870 | 477 | 900 | Gaps, folds and a written shift beside a zone; the readings shown twice (decision 59); the table of a zone's changes, listed by the database or sampled, and the one question asked beside `Calendar.TimeZoneDatabase` (decision 73), which replaced the sampling of decision 61. |
 | 0 | `Tempo.Unit` | 300 | 354 | 216 | 400 | The ordering and one-axis checks of building from parts, and the rank of a unit. |
 | 0 | `Tempo.Limit` | 50 | 50 | 17 | 50 | Within. |
 | 1 | `Tempo.Scale` | 400 | 355 | 226 | 400 | Within. |
-| 2 | `Tempo.Expand` | 600 | 1,045 | 714 | 1,050 | Masks, groups, counts from the end, labels, days a zone leaves out, readings found by arithmetic and the extents they carry (decision 56). |
-| 2 | `Tempo.Walk` | 300 | 243 | 163 | 250 | Within. |
+| 2 | `Tempo.Expand` | 600 | 1,099 | 742 | 1,100 | Masks, groups, counts from the end, labels counted within their period (decision 75), days a zone leaves out, readings found by arithmetic and the extents they carry (decision 56). |
+| 2 | `Tempo.Walk` | 300 | 281 | 183 | 300 | The days of a span dated from the month kept from the day before (decision 75). |
 | 2 | `Tempo.Validate` | 500 | 446 | 322 | 450 | Within. |
 | 3 | `Tempo.Spans` (with `Placed`) | 500 | 1,413 | 915 | 1,450 | Written spans with duration and open ends, plural ends, placing in a window, the merging of a set's members, the conditions' widened window; every span made with its place (decision 74). |
 | 3 | `Tempo.Recurrence` | (in `Spans`) | 851 | 568 | 900 | The rule walk: periods by number, looking ahead past quiet periods (decision 37), domains of years, counts and untils. |
