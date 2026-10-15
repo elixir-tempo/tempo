@@ -70,6 +70,10 @@ defmodule Tempo.InvalidDateError do
     do:
       "#{inspect(held)}, where an exponent, significant digits or a margin is written on a year alone"
 
+  defp describe(:after_a_century),
+    do:
+      "written after a century, where a decade is written alone or before the units a year holds"
+
   defp describe(:skipped_by_the_clock), do: "a reading the zone's clock skips"
   defp describe(:needs_a_year), do: "a value that cannot be told without a year"
   defp describe(reason) when is_binary(reason), do: reason

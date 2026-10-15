@@ -376,12 +376,9 @@ defmodule Tempo.Spans do
   end
 
   def spans(%Tempo{form: {:span, from, to}} = span, options) do
-    case {plural_end(from), plural_end(to)} do
-      {false, false} -> with {:ok, resolved} <- resolved(span, options), do: {:ok, [resolved]}
-      {true, true} -> paired_ends(span, options)
-      {true, false} -> each_end(span, :from, from, options)
-      {false, true} -> each_end(span, :to, to, options)
-    end
+    if options[:within] != nil and match?({:cycle, _}, frame(span)),
+      do: placed_span_spans(span, options[:within], Keyword.delete(options, :within)),
+      else: written_spans(span, from, to, options)
   end
 
   def spans(%Tempo{form: {:every, first, bound, rule}} = recurrence, options) do
@@ -431,6 +428,50 @@ defmodule Tempo.Spans do
       do: Conditions.resolve([member], [], options),
       else: {:error, conversion(member, :conditions)}
   end
+
+  # A span on the line, or written there: the spans its ends name.
+  defp written_spans(span, from, to, options) do
+    case {plural_end(from), plural_end(to)} do
+      {false, false} -> with {:ok, resolved} <- resolved(span, options), do: {:ok, [resolved]}
+      {true, true} -> paired_ends(span, options)
+      {true, false} -> each_end(span, :from, from, options)
+      {false, true} -> each_end(span, :to, to, options)
+    end
+  end
+
+  # A span with no year placed by a window on the line, as a value is
+  # (decision 72): from each start the window holds, to the next reading of
+  # its end. A window with no year places nothing.
+  defp placed_span_spans(%Tempo{form: {:span, from, to}} = span, window, options) do
+    if on_the_line?(window),
+      do: each_placed_span(span, window, options),
+      else: written_spans(span, from, to, options)
+  end
+
+  defp each_placed_span(%Tempo{form: {:span, %Tempo{} = from, to}} = span, window, options) do
+    with {:ok, starts} <- in_each_period(from, window, options) do
+      starts
+      |> Enum.map(&%{span | form: {:span, &1, end_after(to, &1, from)}})
+      |> each_spans_of([])
+    end
+  end
+
+  defp each_placed_span(%Tempo{form: {:span, from, to}} = span, _window, options),
+    do: written_spans(span, from, to, options)
+
+  # The end of a placed span is the first reading of its end at or after its
+  # start, within one turn of the cycle they differ on: the Tuesday after a
+  # Friday, the 02:00 after 22:00.
+  defp end_after(%Tempo{form: {:value, _}} = to, start, from) do
+    turn = %{start | form: {:span, start, cycle_of(differing(from, to))}}
+
+    case in_each_period(to, turn, []) do
+      {:ok, [first | _]} -> first
+      _none -> to
+    end
+  end
+
+  defp end_after(duration_or_open, _start, _from), do: duration_or_open
 
   defp read_in(%Tempo{form: {:span, from, to}} = span, calendar, metadata) do
     {:ok, {start, stop}} = extent(span)

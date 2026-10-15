@@ -52,6 +52,7 @@ defmodule Tempo.Validate do
 
   defp form({:value, units}, expression) do
     with :ok <- value(units, expression),
+         :ok <- years_named(units, expression),
          :ok <- shift(expression.shift, expression),
          :ok <- events(units, expression),
          :ok <- consistent(units, expression) do
@@ -256,6 +257,42 @@ defmodule Tempo.Validate do
     do: Enum.any?(annotations, &match?({key, _} when key in @annotations, &1))
 
   defp annotated?(_leap), do: false
+
+  # A century or a decade is written alone (ISO 8601-2 §4.3.5, §4.3.6), or
+  # before the units a year holds: a year written after one is a year it
+  # names, and a decade written after a century is refused (decision 71).
+  defp years_named(units, expression) do
+    case {Keyword.get(units, :century), Keyword.get(units, :decade)} do
+      {century, decade} when century != nil and decade != nil ->
+        invalid(expression, :decade, :after_a_century)
+
+      {century, nil} when is_integer(century) ->
+        year_named(:century, century, Keyword.get(units, :year), expression)
+
+      {nil, decade} when is_integer(decade) ->
+        year_named(:decade, decade, Keyword.get(units, :year), expression)
+
+      _none_or_masked ->
+        :ok
+    end
+  end
+
+  defp year_named(unit, n, years, expression) when is_list(years) do
+    Enum.reduce_while(years, :ok, fn year, :ok ->
+      case year_named(unit, n, year, expression) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp year_named(unit, n, year, expression) when is_integer(year) do
+    years = Expand.years_of(unit, n)
+    if year in years, do: :ok, else: invalid(expression, :year, {:out_of_range, year, years})
+  end
+
+  # No year, or a range or a mask of them, each placed where it is asked.
+  defp year_named(_unit, _n, _year, _expression), do: :ok
 
   defp invalid(expression, unit, reason),
     do: {:error, InvalidDateError.exception(value: expression, unit: unit, reason: reason)}

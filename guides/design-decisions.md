@@ -131,6 +131,23 @@ iex> Tempo.select(~o"2026-06/2026-07", [~o"20D", ~o"5D"])
 
 **Why.** The answer is a set, and every other set in Tempo is in time order with each member once. A list's order is how the caller happened to write it, not something the result should carry.
 
+### An interval with no year in a window (decision 72)
+
+**The question.** A `:within` window places a value with no year: `~o"6M"` within `2026/2027` is each June. What does it do with an interval that has no year, a night shift `T22/T06` or the run of Friday to Tuesday?
+
+**The alternatives.** Place it as a value is placed; refuse it with a named error; or leave it as written, which is what it did, though set operations placed one in their window.
+
+**The choice.** Place it as a value is: from each start the window holds, to the next reading of its end, running on through the cycle's end. A window with no year of its own places nothing.
+
+```elixir
+iex> Tempo.to_interval(~o"T22/T06", within: ~o"2026-06-01/2026-06-02")
+{:ok, ~o"{2026Y6M1DT22H/2DT6H,2026Y6M2DT22H/3DT6H}"}
+iex> Tempo.to_interval(~o"12M/2M", within: ~o"2026")
+{:ok, ~o"2026Y12M/2027Y2M"}
+```
+
+**Why.** A window is documented to place an expression with no year, and an interval is one. Its end is the next reading after its start, so a night shift ends the morning after and December to February the February after.
+
 ## Recurrence rules
 
 Tempo reads RFC 5545's `RRULE` (and RFC 7529's extensions to it, and JSCalendar's rules, and cron) into the same recurrence an ISO 8601-2 repeating interval reads to. ISO 8601-2 and RFC 5545 do not say all the same things, and these decisions are where they part.
@@ -505,6 +522,23 @@ iex> grouped(~o"2026", 2, month: 3)
 ```
 
 **Why.** Each step says a word a person says ("uncertain", "approximately", "the second three months", "some day"), and each makes the form the reader makes for the text that says it. A mark belongs to a value, so an interval's are given to its ends, as ISO 8601-2 writes them. The rarer shapes are left where their held form is already: a step for each would be a word nobody reaches for.
+
+### A decade or a century before other units (decision 71)
+
+**The question.** ISO 8601-2 writes a decade and a century alone (`196J`, `16C`). Tempo reads one before finer units, filling the years between. What is a year written after one, and a decade after a century?
+
+**The alternatives.** A year after a decade or a century is a year it names, checked when it is read; or it is a place within it (`202J6Y` the sixth year); or neither is read beside other units.
+
+**The choice.** A year after a decade or a century is a year it names, and one it does not name is an error where it is read or built; a decade after a century is an error.
+
+```elixir
+iex> Tempo.from_iso8601("202J2026Y")
+{:ok, ~o"202J2026Y"}
+iex> {:error, %Tempo.InvalidDateError{unit: :year}} = Tempo.from_iso8601("202J2035Y")
+iex> {:error, %Tempo.InvalidDateError{unit: :decade}} = Tempo.from_iso8601("20C3J")
+```
+
+**Why.** It keeps what the gap filling already gives (`202J6M` is each June of the 2020s) and reads a year as the year it says. A decade after a century named nothing a reader could say, and expanding one did not finish.
 
 ## Errors
 

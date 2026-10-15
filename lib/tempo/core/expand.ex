@@ -174,8 +174,8 @@ defmodule Tempo.Expand do
           {:ok, Calendar.span()} | {:error, ConversionError.reason()}
   def day_span(_calendar, []), do: {:error, :needs_a_year}
 
-  def day_span(calendar, century: c) when is_integer(c), do: years_span(calendar, c, 100)
-  def day_span(calendar, decade: d) when is_integer(d), do: years_span(calendar, d, 10)
+  def day_span(calendar, century: c) when is_integer(c), do: years_span(calendar, :century, c)
+  def day_span(calendar, decade: d) when is_integer(d), do: years_span(calendar, :decade, d)
 
   # A year with significant digits is the years its digits leave open; one with a margin is the years either side.
   def day_span(calendar, year: {y, [significant: n]}) when is_integer(y) do
@@ -272,6 +272,13 @@ defmodule Tempo.Expand do
     end
   end
 
+  # A year is named by its number, never counted from the end: `-12J-125Y`
+  # is the year -125 of the decade -129 to -120 (decision 71).
+  def candidates(prefix, :year, n, frame) when is_integer(n) do
+    with {:ok, children} <- children(prefix, :year, frame),
+         do: {:ok, Enum.filter(children, fn {year, _span} -> year == n end)}
+  end
+
   def candidates(prefix, unit, held, frame), do: walked(prefix, unit, held, frame)
 
   defp named_date([year: year], :month, n, calendar) when is_integer(year) do
@@ -353,11 +360,24 @@ defmodule Tempo.Expand do
   defp calendar_answer({:ok, span}), do: {:ok, span}
   defp calendar_answer({:error, reason}), do: {:error, {:no_such_value, reason}}
 
-  # `20C` is the years 2000 to 2099 and `-19C` the years -1999 to -1900 (ISO 8601-2 §4.4.1.8).
-  defp years_span(calendar, n, width) when n >= 0,
-    do: years(calendar, n * width, n * width + width - 1)
+  defp years_span(calendar, unit, n) do
+    first_year..last_year//1 = years_of(unit, n)
+    years(calendar, first_year, last_year)
+  end
 
-  defp years_span(calendar, n, width), do: years(calendar, n * width - width + 1, n * width)
+  @doc """
+  The years a century or a decade names: `20C` the years 2000 to 2099 and
+  `-19C` the years -1999 to -1900 (ISO 8601-2 §4.4.1.8), `-12J` the years
+  -129 to -120 (§4.4.1.7).
+  """
+  @spec years_of(:century | :decade, integer()) :: Range.t()
+  def years_of(unit, n) do
+    width = if unit == :century, do: 100, else: 10
+
+    if n >= 0,
+      do: (n * width)..(n * width + width - 1),
+      else: (n * width - width + 1)..(n * width)
+  end
 
   defp years(calendar, first_year, last_year) do
     with {:ok, {first, _}} <- Calendar.period(calendar, :year, first_year, nil),

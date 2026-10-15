@@ -165,6 +165,8 @@ yearB      = integer "YB"                     ; §4.4.1.6, 12YB is the twelfth y
 
 Leading zeros are allowed in every explicit value (§4.3.2): `01M` is January. A value is any `negint`, so the explicit form has no digit-count ambiguity; its unit is its designator.
 
+A decade or a century is written alone (§4.3.5, §4.3.6). Tempo also reads one before the units a year holds, filling the years between (`202J6M` is June of each year of the 2020s); a year written after one is a year it names (`202J2026Y`, `-12J-125Y`), one it does not name is an error, and so is a decade written after a century.
+
 ### 3.2 Exponents and significant digits (§4.4.2, §4.4.3)
 
 ```abnf

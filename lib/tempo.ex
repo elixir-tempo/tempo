@@ -884,7 +884,8 @@ defmodule Tempo do
 
   * `:within` is a singular expression whose extent bounds a sequence with no
     end of its own (a recurrence with no count) and places a value with no
-    year on each of its periods.
+    year on each of its periods, and an interval with no year from each
+    start it holds to the next reading of its end.
 
   * `:territory` is the territory a season of 21 to 24 has its months in, as
     `in_territory/2` takes it. With none, and no `:locale`, such a season
@@ -921,6 +922,10 @@ defmodule Tempo do
 
       iex> Tempo.to_interval(~o"6M15D", within: ~o"2026")
       {:ok, ~o"2026-06-15/2026-06-15"}
+
+      iex> night_shift = ~o"T22/T06"
+      iex> Tempo.to_interval(night_shift, within: ~o"2026-06-01/2026-06-02")
+      {:ok, ~o"{2026-06-01T22/2026-06-02T06,2026-06-02T22/2026-06-03T06}"}
 
       iex> {:error, %Tempo.ConversionError{reason: :bare_duration}} = Tempo.to_interval(~o"P1M")
 

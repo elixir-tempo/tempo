@@ -57,6 +57,34 @@ defmodule Tempo.PlacingTest do
     end
   end
 
+  describe "an interval with no year in a :within window" do
+    # Decision 72: from each start the window holds, to the next reading of
+    # its end.
+    test "is placed from each start the window holds, to the next reading of its end" do
+      assert Tempo.to_interval(~o"T22/T02", within: ~o"2026-06-01/2026-06-02") ==
+               {:ok, ~o"{2026-06-01T22/2026-06-02T02,2026-06-02T22/2026-06-03T02}"}
+
+      assert Tempo.to_interval(~o"5K/2K", within: ~o"2026-06-01/2026-06-14") ==
+               {:ok, ~o"{2026-06-05/2026-06-09,2026-06-12/2026-06-16}"}
+    end
+
+    test "runs on through the cycle's end into the next" do
+      assert Tempo.to_interval(~o"12M/2M", within: ~o"2026") == {:ok, ~o"2026-12/2027-02"}
+    end
+
+    test "is placed in a window that is one value" do
+      assert Tempo.to_interval(~o"6M1D/6M5D", within: ~o"2026") ==
+               {:ok, ~o"2026-06-01/2026-06-05"}
+
+      assert Tempo.members(~o"T22/T02", within: ~o"2026-06-01") ==
+               {:ok, [~o"2026-06-01T22/2026-06-02T02"]}
+    end
+
+    test "is not placed by a window with no year" do
+      assert Tempo.to_interval(~o"T22/T02", within: ~o"6M") == {:ok, ~o"T22/T02"}
+    end
+  end
+
   describe "what cannot be placed" do
     test "is an error, not a raise" do
       assert {:error, %Tempo.ConversionError{reason: :selection}} =

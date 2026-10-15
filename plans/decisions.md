@@ -758,3 +758,23 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Option 1.
 
 * **State.** Built: 31 `!` forms. In `Tempo`, from the table of raising forms, which takes a default for a last argument a function defaults (so `union!/3`, `intersection!/3` and `difference!/3` now take options): `to_date!`, `to_time!`, `to_naive_datetime!`, `to_datetime!`, `to_elixir!`, `to_week_start!`, `shift_zone!`, `in_zone!`, `walk!`, `members!`, `today!`, `now!`, `parse_duration!`, `symmetric_difference!`, `complement!`, `members_overlapping!`, `members_outside!` and `members_in_exactly_one!`. Beside their functions: `Tempo.Duration.to_unit!` and `to_microseconds!`, `Tempo.IntervalSet.slots!`, `coalesce!` and `covered!`, `Tempo.ICal.parse!`, `parse_file!`, `from_ical!` and `available!`, `Tempo.JSCalendar.parse!` and `from_jscalendar!`, `Tempo.RRule.from_rule!` and `Tempo.Workdays.new!`. Left without one, as queries and workday arithmetic: `days_in_month/1`, `Tempo.Event.date/3`, `Tempo.Interval.instants/1`, `Tempo.IntervalSet.relation_matrix/2`, `Tempo.LeapSeconds`, `Tempo.Territory.resolve/1`, the workday functions, and `try_map/2`, whose raising form is `map/2`. `test/tempo/not_an_expression_test.exs` found `Tempo.JSCalendar.parse/2` returning the `jscalendar` library's bare reason (`:invalid_json`), which its `!` form could not raise; it returns an `ArgumentError` naming it. The claim is reworded in the CHANGELOG, the migration guide, the README and `Tempo`'s moduledoc.
+
+## 71. A decade or a century followed by other units
+
+* **Question.** The reader read `202J2026Y`, `202J6Y`, `20C26Y` and `20C3J`, which ISO 8601-2 does not write (a decade and a century are written alone, §4.3.5, §4.3.6). A year after a decade was an absolute year, but one outside it (`202J2035Y`) failed only where it was used, and `Tempo.to_interval(~o"20C3J")` did not finish. What do these mean?
+
+* **Context.** Found raising coverage on `Tempo.Expand`. The options were (1) a year or the units a year holds after a decade or a century, a year checked to be one it names, a decade after a century refused; (2) a year after one read as a place within it; (3) a decade and a century read alone only.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: `Tempo.Validate` refuses a decade after a century (`:after_a_century`) and a year its decade or century does not name (`{:out_of_range, year, years}`), with `Expand.years_of/2` the years each names. A year under its decade is found by its number, not counted from the end, so `-12J-125Y` is the year -125. `test/tempo/decade_century_test.exs`; the grammar guide says so.
+
+## 72. An interval with no year in a :within window
+
+* **Question.** `:within` places a value with no year, and set operations placed an interval with no year in their window, but `Tempo.to_interval/2` and `Tempo.members/2` left one as written (`T22/T02` within `2026-06-01` stayed `T22/T02`). Should they place it?
+
+* **Context.** Found raising coverage on `Tempo.Spans`. The options were (1) place it as a value is, from each start the window holds; (2) a named error; (3) document that it is not placed.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: in a window on the line, each start the window holds (selected as a value with no year is) runs to the first reading of its end within one turn of the cycle the ends differ on, so `5K/2K` within two weeks is each Friday to the Tuesday after, and `12M/2M` within `2026` is December 2026 to February 2027. A window with no year places nothing. `test/tempo/placing_test.exs`, and an example on `Tempo.to_interval/2`.
