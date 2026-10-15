@@ -410,10 +410,11 @@ The budgets of 5.3 were estimates made before the code; the review of 2026-10-15
 | 2 | `Tempo.Walk` | 300 | 281 | 183 | 300 | The days of a span dated from the month kept from the day before (decision 75). |
 | 2 | `Tempo.Validate` | 500 | 446 | 322 | 450 | Within. |
 | 3 | `Tempo.Spans` (with `Placed`) | 500 | 1,413 | 915 | 1,450 | Written spans with duration and open ends, plural ends, placing in a window, the merging of a set's members, the conditions' widened window; every span made with its place (decision 74). |
-| 3 | `Tempo.Recurrence` | (in `Spans`) | 851 | 568 | 900 | The rule walk: periods by number, looking ahead past quiet periods (decision 37), domains of years, counts and untils. |
+| 3 | `Tempo.Recurrence` | (in `Spans`) | 940 | 624 | 950 | The rule walk: periods by number, looking ahead past quiet periods (decision 37), domains of years, counts and untils, the matcher taken where a rule is plain (decision 76). |
 | 3 | `Tempo.Exclusions` | (in `Spans`) | 148 | 100 | 150 | New, from `Spans`. |
 | 3 | `Tempo.Children` | (in `Spans`) | 363 | 258 | 400 | New, from `Spans`: law 6 and the readings of certainty. |
-| 3 | `Tempo.Select` | 400 | 1,045 | 700 | 1,050 | Rolls, skips, events, nested selections and sets of them, windows, readings shown twice, a day tested whole. |
+| 3 | `Tempo.Select` | 400 | 1058 | 706 | 1100 | Rolls, skips, events, nested selections and sets of them, windows, readings shown twice, a day tested whole. |
+| 3 | `Tempo.Matcher` | — | 284 | 178 | 300 | New (decision 76): a plain rule compiled to a test of a day number, in front of the engine. |
 | 3 | `Tempo.Algebra` | 300 | 938 | 616 | 950 | Results ended where their members end (decision 42), operands with no end streamed, frames brought to agree. |
 | 3 | `Tempo.Allen` (with `Classifier`) | 400 | 409 | 185 | 450 | Within its code. |
 | 3 | `Tempo.Shift` | 500 | 1,031 | 743 | 1,050 | Truncating, rounding and extending across axes, seasons, a value with no year shifted where the answer is one. |

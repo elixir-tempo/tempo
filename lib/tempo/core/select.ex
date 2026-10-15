@@ -759,6 +759,10 @@ defmodule Tempo.Select do
 
   # ── Positions ─────────────────────────────────────────────────────────
 
+  @doc "The candidates at the positions named, counting from the end when negative; all with none."
+  @spec positions([term()], integer() | [integer() | Range.t()] | nil) :: [term()]
+  def positions(candidates, instances), do: positioned(candidates, instances)
+
   # The nth of the candidates, counting from the end when negative.
   defp positioned(candidates, nil), do: candidates
 

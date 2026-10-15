@@ -253,7 +253,7 @@ in_period(period, parts):
       then Instance picks the nth of the candidates, negative from the end
 ```
 
-A selection on a period of one day asks of that day whether it is one the parts name, and expands nothing. A set of selections (`L{1K2I,3K2I}N`) picks what each picks, once each, in time order, and an instance after the set counts among all of them.
+A selection on a period of one day asks of that day whether it is one the parts name, and expands nothing. A rule whose parts are whole numbers and lists of months, days of the month and days of the week, with or without positions, is compiled once to a test of a day number and taken in front of the engine in each period of a day or coarser: the calendar is asked once a month and once a period, and each day that passes is given each reading the rule names. The engine remains the meaning of every rule, and the matcher is held to it by the conformance fixtures; it leaves to the engine any rule it cannot compile and any month whose labels do not count its days. A set of selections (`L{1K2I,3K2I}N`) picks what each picks, once each, in time order, and an instance after the set counts among all of them.
 
 ### 5.5 The recurrence walk and why it ends
 

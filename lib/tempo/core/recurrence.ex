@@ -15,6 +15,7 @@ defmodule Tempo.Recurrence do
   alias Tempo.Duration
   alias Tempo.Exclusions
   alias Tempo.Limit
+  alias Tempo.Matcher
   alias Tempo.Placed
   alias Tempo.Scale
   alias Tempo.Select
@@ -62,7 +63,16 @@ defmodule Tempo.Recurrence do
          {:ok, excluded} <- Exclusions.exclusions(from, options) do
       parts = with_inherited(rule, inherited_units(from, rule, first))
       stepped = stepped_first(first, range_start(from))
-      walk = %{first: stepped, parts: parts, begins: start_of_rule(from), options: options}
+
+      # A plain rule is compiled once to a matcher of day numbers, taken in
+      # each period in front of the engine (decision 76).
+      walk = %{
+        first: stepped,
+        parts: parts,
+        begins: start_of_rule(from),
+        options: options,
+        matcher: Matcher.compile(parts, period_unit(first), first.calendar)
+      }
 
       stream =
         periods
@@ -112,14 +122,14 @@ defmodule Tempo.Recurrence do
   # What a period selects, from where the rule begins: a period that begins
   # there or later selects only from there, and the first is filtered. Each
   # occurrence goes on with its extent, reckoned once as its span is made.
-  defp picked_in(period, {start, _stop} = extent, %{parts: parts, begins: begins} = walk)
+  defp picked_in(period, {start, _stop} = extent, %{begins: begins} = walk)
        when start >= begins,
-       do: in_rule_period(Placed.new(period, extent), parts, walk.options)
+       do: in_rule_period(Placed.new(period, extent), walk)
 
-  defp picked_in(period, extent, %{parts: parts, begins: begins, options: options}) do
+  defp picked_in(period, extent, %{begins: begins} = walk) do
     period
     |> placed_period(extent)
-    |> in_rule_period(parts, options)
+    |> in_rule_period(walk)
     |> Enum.filter(fn %Placed{start: start} -> start >= begins end)
   end
 
@@ -581,6 +591,10 @@ defmodule Tempo.Recurrence do
   defp finer_of(unit, cadence),
     do: if(Unit.compare(cadence, unit) == :gt, do: cadence, else: unit)
 
+  # The unit of a rule's periods: that of its cadence, written as one unit.
+  defp period_unit(%Tempo{form: {:span, _from, %Duration{units: [{unit, _}]}}}), do: unit
+  defp period_unit(_first), do: nil
+
   defp cadence_unit(%Tempo{form: {:span, _from, %Duration{units: [{unit, _}]}}})
        when unit in [:year, :month, :day, :hour, :minute, :second],
        do: unit
@@ -598,7 +612,16 @@ defmodule Tempo.Recurrence do
        else: inherited
   end
 
-  defp in_rule_period(period, parts, options) do
+  # The matcher picks in a placed period where the rule is plain and the
+  # period is one it can test; the engine picks everywhere else.
+  defp in_rule_period(%Placed{} = period, %{matcher: %Matcher{} = matcher} = walk) do
+    case Matcher.in_period(matcher, period) do
+      {:ok, picked} -> picked
+      :engine -> in_rule_period(period, %{walk | matcher: nil})
+    end
+  end
+
+  defp in_rule_period(period, %{parts: parts, options: options}) do
     case Select.in_period(period, parts, options) do
       {:ok, picked} -> Enum.flat_map(picked, &with_extent(&1, period))
       {:error, _} -> []
