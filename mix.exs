@@ -166,6 +166,7 @@ defmodule Tempo.MixProject do
         "guides/shared-ast-iso8601-and-rrule.md"
       ],
       Foundations: [
+        "guides/architecture.md",
         "guides/temporal-formalisms.md",
         "guides/custom-calendars.md",
         "guides/design-decisions.md"

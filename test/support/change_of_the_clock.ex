@@ -51,7 +51,12 @@ defmodule Tempo.ChangeOfTheClock do
     {"America/Caracas", ~D[2007-12-09], "03:00 back to 02:30"},
     {"Asia/Colombo", ~D[2006-04-15], "00:30 back to midnight"},
     {"Antarctica/Troll", ~D[2024-10-27], "03:00 back to 01:00"},
-    {"Pacific/Chatham", ~D[2026-04-05], "03:45 back to 02:45"}
+    {"Pacific/Chatham", ~D[2026-04-05], "03:45 back to 02:45"},
+    # As the tz library compiles it (its periods have an hour at -02:00 that
+    # zdump does not): the clock goes back an hour at 00:00Z and forward an
+    # hour at 01:00Z, two changes an hour apart, which a table of the
+    # database's changes follows and six-day samples did not (decision 73).
+    {"America/Scoresbysund", ~D[2024-03-30], "23:00 back to 22:00, then 23:00 to midnight"}
   ]
 
   @doc "The days on which a clock goes forward, as `{zone, date, change}`."

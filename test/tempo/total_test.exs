@@ -14,6 +14,7 @@ defmodule Tempo.TotalTest do
   #
   # The run takes minutes, so it is excluded by default: `mix test --only total`.
 
+  alias Tempo.Conformance
   alias Tempo.Matrix.Cells
 
   @moduletag :total
@@ -45,6 +46,40 @@ defmodule Tempo.TotalTest do
                Enum.join(Enum.take(unnamed, 40), "\n")
     end
   end
+
+  # The conformance fixture `expressions.json` lists what each cell of an
+  # expression written by hand refuses, every other cell answering; a cell
+  # that changes is a change in what Tempo refuses, and the fixture is
+  # written again (`scripts/conformance_fixtures.exs`) when it is meant.
+  test "every cell of an expression written by hand answers as the conformance fixture records" do
+    fixture = Conformance.fixture("expressions")
+
+    listed =
+      for %{"input" => input, "calendar" => calendar, "refusals" => refusals} <-
+            fixture["expressions"],
+          {kind, keys} <- refusals,
+          key <- keys,
+          into: %{},
+          do: {{input, calendar, key}, kind}
+
+    written = MapSet.new(fixture["expressions"], &{&1["input"], &1["calendar"]})
+
+    differing =
+      for group <- @groups,
+          cell <- Cells.cells(group),
+          MapSet.member?(written, {cell.input, cell.calendar}),
+          key = {cell.input, cell.calendar, key(cell)},
+          Map.get(listed, key, "answer") != Conformance.kind(cell.out),
+          do:
+            "#{inspect(key)}: #{Conformance.kind(cell.out)}, fixture #{Map.get(listed, key, "answer")}"
+
+    assert differing == [],
+           "#{length(differing)} cells differ from the fixture:\n" <>
+             Enum.join(Enum.take(differing, 40), "\n")
+  end
+
+  defp key(%{op: op, arg: nil}), do: op
+  defp key(%{op: op, arg: arg}), do: op <> " @ " <> arg
 
   defp calendar(%{calendar: nil}), do: ""
   defp calendar(%{calendar: calendar}), do: " [#{calendar}]"

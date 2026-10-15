@@ -296,6 +296,8 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 
 * [Temporal formalisms](https://hexdocs.pm/ex_tempo/temporal-formalisms.html) — how Tempo relates to Allen's algebra and the time-ontology literature.
 
+* [Architecture](https://hexdocs.pm/ex_tempo/architecture.html) — the model as types, each algorithm in pseudo-code, the calendar and zone contracts, the errors and the cost of each operation, written for a reader porting or assessing the design.
+
 ## Related links
 
 Tempo implements or interoperates with these standards:

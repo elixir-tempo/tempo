@@ -11,9 +11,34 @@ defmodule Tempo.AllenAxiomsTest do
   # the next begins.
 
   alias Tempo.Allen
-  alias Tempo.{Interval, IntervalSet}
+  alias Tempo.{Conformance, Interval, IntervalSet}
 
   @spans for from <- 0..5, to <- (from + 1)..6, do: {from, to}
+  @fixture Conformance.fixture("allen")
+
+  describe "the conformance fixture" do
+    test "has a pair of spans in each of the thirteen relations, in Allen's order" do
+      assert Enum.map(@fixture["relations"], & &1["relation"]) ==
+               Enum.map(Allen.relations(), &Atom.to_string/1)
+
+      for %{"relation" => relation, "a" => [a_from, a_to], "b" => [b_from, b_to]} <-
+            @fixture["relations"] do
+        assert Atom.to_string(Allen.relation({a_from, a_to}, {b_from, b_to})) == relation
+      end
+    end
+
+    test "has the 169 cells of the composition table, each as the library composes" do
+      assert Enum.count_until(@fixture["composition"], 170) == 169
+
+      for %{"first" => first, "second" => second, "composed" => composed} <-
+            @fixture["composition"] do
+        assert {first, second, composed} ==
+                 {first, second,
+                  Allen.compose(String.to_existing_atom(first), String.to_existing_atom(second))
+                  |> Enum.map(&Atom.to_string/1)}
+      end
+    end
+  end
 
   test "the composition table gives the relation of the first of three spans to the third" do
     for a <- @spans, b <- @spans, c <- @spans do

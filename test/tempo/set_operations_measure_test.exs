@@ -13,17 +13,17 @@ defmodule Tempo.SetOperationsMeasureTest do
   # the first does and none of the second, and in a symmetric difference
   # when the members of just one do.
   #
-  # Every pair of sets of up to two members between five points is run,
-  # which is every way two members of each side can precede, meet, overlap,
-  # nest and repeat.
+  # The cases and their answers are the conformance fixture
+  # `set_operations.json` (`scripts/conformance_fixtures.exs` writes it from
+  # the same arithmetic, and a test here holds the file to it): every pair of
+  # sets of up to two members between five points, which is every way two
+  # members of each side can precede, meet, overlap, nest and repeat.
 
-  alias Tempo.{Interval, IntervalSet}
+  alias Tempo.{Conformance, Interval, IntervalSet}
 
-  @points 0..4
-  @spans for from <- @points, to <- @points, from < to, do: {from, to}
-  @sets [[]] ++
-          for(span <- @spans, do: [span]) ++
-          for(first <- @spans, second <- @spans, first <= second, do: [first, second])
+  @fixture Conformance.fixture("set_operations")
+  @cases @fixture["cases"]
+  @cycle_cases @fixture["cycle_cases"]
 
   @operations [
     union: &Tempo.union/2,
@@ -35,7 +35,7 @@ defmodule Tempo.SetOperationsMeasureTest do
   ## The measure: the cells of a line
 
   defp cells(spans),
-    do: for({from, to} <- spans, cell <- from..(to - 1), into: MapSet.new(), do: cell)
+    do: for([from, to] <- spans, cell <- from..(to - 1), into: MapSet.new(), do: cell)
 
   defp expected(:union, a, b), do: MapSet.union(cells(a), cells(b))
   defp expected(:intersection, a, b), do: MapSet.intersection(cells(a), cells(b))
@@ -74,17 +74,17 @@ defmodule Tempo.SetOperationsMeasureTest do
     Tempo.new!(year: at.year, month: at.month, day: at.day, hour: at.hour, zone: "Europe/Paris")
   end
 
-  defp span(:days, {from, to}), do: Interval.new!(from: day(from), to: day(to - 1))
+  defp span(:days, [from, to]), do: Interval.new!(from: day(from), to: day(to - 1))
 
-  defp span(:hebrew_days, {from, to}),
+  defp span(:hebrew_days, [from, to]),
     do: Interval.new!(from: day(from, Calendrical.Hebrew), to: day(to - 1, Calendrical.Hebrew))
 
-  defp span(:hours, {from, to}), do: Interval.new!(from: hour(from), to: hour(to))
+  defp span(:hours, [from, to]), do: Interval.new!(from: hour(from), to: hour(to))
 
-  defp span(:utc_hours, {from, to}),
+  defp span(:utc_hours, [from, to]),
     do: Interval.new!(from: hour(from, shift: [hour: 0]), to: hour(to, shift: [hour: 0]))
 
-  defp span(:paris_hours, {from, to}),
+  defp span(:paris_hours, [from, to]),
     do: Interval.new!(from: paris_hour(from), to: paris_hour(to))
 
   defp set(line, spans), do: IntervalSet.new!(Enum.map(spans, &span(line, &1)))
@@ -118,12 +118,52 @@ defmodule Tempo.SetOperationsMeasureTest do
     set |> IntervalSet.members() |> Enum.flat_map(&member_cells(&1, reading)) |> MapSet.new()
   end
 
-  # An operation over every pair of sets of two lines, each answer read back.
+  # The texts of the spans on a line, as the fixture gives them to a port,
+  # are the texts of the spans built here.
+  defp line_texts(line) do
+    Map.new(@fixture["lines"][Atom.to_string(line)]["spans"], fn {key, _text} ->
+      [from, to] = key |> String.split("/") |> Enum.map(&String.to_integer/1)
+      {key, Tempo.to_iso8601!(span(line, [from, to]))}
+    end)
+  end
+
+  # An operation over every case of two lines, each answer read back.
   defp held(line_a, line_b, reading) do
-    for a <- @sets, b <- @sets, {name, operation} <- @operations do
+    for %{"a" => a, "b" => b} = case <- @cases, {name, operation} <- @operations do
       {:ok, answer} = operation.(set(line_a, a), set(line_b, b))
 
-      assert {name, a, b, covered(answer, reading)} == {name, a, b, expected(name, a, b)}
+      assert {name, a, b, covered(answer, reading)} ==
+               {name, a, b, cells(Map.fetch!(case, Atom.to_string(name)))}
+    end
+  end
+
+  describe "the fixture" do
+    test "holds every pair of sets of up to two members between five points" do
+      assert length(@cases) == 66 * 66
+    end
+
+    test "answers each operation as arithmetic on whole numbers does" do
+      for %{"a" => a, "b" => b} = case <- @cases, {name, _} <- @operations do
+        assert {name, a, b, cells(Map.fetch!(case, Atom.to_string(name)))} ==
+                 {name, a, b, expected(name, a, b)}
+      end
+    end
+
+    test "writes each span of each line as Tempo writes it" do
+      for line <- [:days, :hebrew_days, :hours, :utc_hours, :paris_hours] do
+        assert @fixture["lines"][Atom.to_string(line)]["spans"] == line_texts(line)
+      end
+    end
+
+    test "names the pairings of lines the cases are run on" do
+      assert @fixture["pairings"] == [
+               ["days", "days"],
+               ["hours", "hours"],
+               ["utc_hours", "paris_hours"],
+               ["paris_hours", "utc_hours"],
+               ["days", "hebrew_days"],
+               ["hebrew_days", "days"]
+             ]
     end
   end
 
@@ -150,28 +190,17 @@ defmodule Tempo.SetOperationsMeasureTest do
   describe "two sets with no year, on the day's cycle" do
     # Times of day: a span from a later hour to an earlier one runs through
     # midnight, and is one member. A cell is an hour of the day.
-    @cycle_points [0, 6, 12, 18]
-    @cycle_spans for from <- @cycle_points, to <- @cycle_points, from != to, do: {from, to}
-    @cycle_sets for(span <- @cycle_spans, do: [span]) ++
-                  for(
-                    first <- @cycle_spans,
-                    second <- @cycle_spans,
-                    first < second,
-                    do: [first, second]
-                  )
-
-    defp cycle_cells(spans) do
-      for {from, to} <- spans, cell <- hours_of(from, to), into: MapSet.new(), do: cell
-    end
-
     defp hours_of(from, to) when from < to, do: Enum.to_list(from..(to - 1))
     defp hours_of(from, to), do: Enum.to_list(from..23) ++ Enum.to_list(0..(to - 1)//1)
+
+    defp cycle_cells(spans),
+      do: for([from, to] <- spans, cell <- hours_of(from, to), into: MapSet.new(), do: cell)
 
     defp time_of_day(hour), do: Tempo.new!(hour: hour)
 
     defp cycle_set(spans) do
       IntervalSet.new!(
-        Enum.map(spans, fn {from, to} ->
+        Enum.map(spans, fn [from, to] ->
           Interval.new!(from: time_of_day(from), to: time_of_day(to))
         end)
       )
@@ -184,63 +213,24 @@ defmodule Tempo.SetOperationsMeasureTest do
           do: cell
     end
 
-    test "are held to the hours of the day each covers" do
-      for a <- @cycle_sets, b <- @cycle_sets do
+    test "are in the fixture as arithmetic on the hours gives them" do
+      assert length(@cycle_cases) == 78 * 78
+
+      for %{"a" => a, "b" => b} = case <- @cycle_cases do
         ca = cycle_cells(a)
         cb = cycle_cells(b)
-
-        for {name, wanted} <- [
-              intersection: MapSet.intersection(ca, cb),
-              difference: MapSet.difference(ca, cb)
-            ] do
-          {:ok, answer} = Keyword.fetch!(@operations, name).(cycle_set(a), cycle_set(b))
-
-          assert {name, a, b, cycle_covered(answer)} == {name, a, b, wanted}
-        end
-      end
-    end
-  end
-
-  describe "the members of an answer" do
-    # What an instant-level operation answers is spans that neither overlap
-    # nor meet out of order: each begins after the one before it ends.
-    test "of an intersection, a difference and a symmetric difference are apart and in order" do
-      for a <- @sets, b <- @sets, name <- [:intersection, :difference, :symmetric_difference] do
-        {:ok, answer} = Keyword.fetch!(@operations, name).(set(:hours, a), set(:hours, b))
-        spans = answer |> IntervalSet.members() |> Enum.map(&member_cells(&1, :hours))
-
-        for [earlier, later] <- Enum.chunk_every(spans, 2, 1, :discard) do
-          assert {name, a, b, List.last(earlier) < hd(later)} == {name, a, b, true}
-        end
+        assert {a, b, MapSet.new(case["intersection"])} == {a, b, MapSet.intersection(ca, cb)}
+        assert {a, b, MapSet.new(case["difference"])} == {a, b, MapSet.difference(ca, cb)}
       end
     end
 
-    # A union keeps its operands' members, each whole, in the order of
-    # their starts, a member both hold once (decision 38).
-    test "of a union are the members of both, in the order of their starts" do
-      for a <- @sets, b <- @sets do
-        {:ok, answer} = Tempo.union(set(:hours, a), set(:hours, b))
-        spans = answer |> IntervalSet.members() |> Enum.map(&member_cells(&1, :hours))
+    test "are held to the hours of the day each covers" do
+      for %{"a" => a, "b" => b} = case <- @cycle_cases,
+          name <- [:intersection, :difference] do
+        {:ok, answer} = Keyword.fetch!(@operations, name).(cycle_set(a), cycle_set(b))
 
-        assert {a, b, Enum.map(spans, &{hd(&1), List.last(&1) + 1})} ==
-                 {a, b, Enum.uniq(Enum.sort(a ++ b))}
-      end
-    end
-  end
-
-  describe "the predicates" do
-    test "are what the cells of two sets say" do
-      for a <- @sets, b <- @sets, a != [], b != [] do
-        sa = set(:hours, a)
-        sb = set(:hours, b)
-        ca = cells(a)
-        cb = cells(b)
-
-        assert {a, b, Tempo.overlaps?(sa, sb)} == {a, b, not MapSet.disjoint?(ca, cb)}
-        assert {a, b, Tempo.disjoint?(sa, sb)} == {a, b, MapSet.disjoint?(ca, cb)}
-        assert {a, b, Tempo.within?(sa, sb)} == {a, b, MapSet.subset?(ca, cb)}
-        assert {a, b, Tempo.contains?(sa, sb)} == {a, b, MapSet.subset?(cb, ca)}
-        assert {a, b, Tempo.equal?(sa, sb)} == {a, b, MapSet.equal?(ca, cb)}
+        assert {name, a, b, cycle_covered(answer)} ==
+                 {name, a, b, MapSet.new(Map.fetch!(case, Atom.to_string(name)))}
       end
     end
   end

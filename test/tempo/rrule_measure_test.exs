@@ -12,73 +12,15 @@ defmodule Tempo.RRuleMeasureTest do
   # and three of them, with each part alone and the parts together, from a
   # last day of January, a leap day and a Monday in June.
 
-  alias Tempo.{Interval, Rfc5545Examples, RRule, RRuleMeasure}
+  alias Tempo.{Conformance, Interval, Rfc5545Examples, RRule, RRuleMeasure}
 
-  @starts [~N[2025-01-31 09:00:00], ~N[2024-02-29 09:00:00], ~N[2026-06-15 10:30:00]]
-
-  # Parts a rule of any frequency takes.
-  @any [
-    [],
-    [bymonth: [1, 6]],
-    [byday: [{nil, 1}, {nil, 3}, {nil, 5}]],
-    [bymonthday: [1, 15, -1]],
-    [bymonth: [2], bymonthday: [29]],
-    [byhour: [9, 17]],
-    [byhour: [9], byminute: [0, 30]],
-    [byday: [{nil, 2}], byhour: [8, 12]],
-    [bymonth: [3, 9], byday: [{nil, 6}, {nil, 7}]]
-  ]
-
-  @parts [
-    day: @any,
-    week: [
-      [],
-      [byday: [{nil, 2}, {nil, 4}]],
-      [byday: [{nil, 7}, {nil, 1}]],
-      [bymonth: [1, 6]],
-      [byday: [{nil, 1}, {nil, 3}, {nil, 5}], byhour: [9, 17]],
-      [bymonth: [6], byday: [{nil, 5}]]
-    ],
-    month:
-      @any ++
-        [
-          [byday: [{1, 1}]],
-          [byday: [{-1, 5}]],
-          [byday: [{2, 2}, {4, 2}]],
-          [byday: [{nil, 1}, {nil, 2}, {nil, 3}, {nil, 4}, {nil, 5}], bysetpos: [1]],
-          [byday: [{nil, 1}, {nil, 2}, {nil, 3}, {nil, 4}, {nil, 5}], bysetpos: [-1]],
-          [bymonthday: [13], byday: [{nil, 5}]],
-          [bymonthday: [-1]],
-          [bymonthday: [31]],
-          [byday: [{nil, 6}], bymonthday: [7, 8, 9, 10, 11, 12, 13]],
-          [byday: [{nil, 2}, {nil, 3}, {nil, 4}], bysetpos: [3]],
-          [byday: [{2, 1}, {2, 3}]],
-          [byday: [{1, 1}, {-1, 5}]],
-          [byday: [{nil, 1}, {1, 2}]],
-          [byday: [{1, 1}, {3, 1}], bysetpos: [-1]],
-          [byday: [{2, 1}, {2, 3}], byhour: [9, 17], bysetpos: [1, -1]],
-          [byday: [{1, 2}, {-1, 4}], bymonth: [2, 8]]
-        ],
-    year:
-      @any ++
-        [
-          [byyearday: [1, 100, -1]],
-          [byweekno: [20], byday: [{nil, 1}]],
-          [byweekno: [20]],
-          [byday: [{20, 1}]],
-          [byday: [{-1, 7}], bymonth: [10]],
-          [bymonth: [3], byday: [{nil, 4}]],
-          [bymonth: [11], byday: [{nil, 2}], bymonthday: [2, 3, 4, 5, 6, 7, 8]],
-          [byday: [{nil, 1}]],
-          [bymonth: [1, 7], byday: [{1, 1}]],
-          [byday: [{1, 7}, {-1, 7}], bymonth: [4, 10]],
-          [bymonth: [6, 7], bymonthday: [1, -1], byhour: [8, 20]],
-          [byday: [{1, 7}, {-1, 1}]],
-          [byday: [{1, 1}, {1, 2}], bymonth: [6, 7]],
-          [byday: [{10, 1}, {-10, 5}]],
-          [byday: [{2, 1}, {-1, 6}], bymonth: [3], byhour: [9, 17]]
-        ]
-  ]
+  # The rules, their starts and the measure's occurrences are the conformance
+  # fixture `rrule.json` (`scripts/conformance_fixtures.exs` writes it from
+  # the measure, and a test here holds the file to the measure): each
+  # frequency of days or coarser, every one, two and three of them, with each
+  # part alone and the parts together, from a last day of January, a leap day
+  # and a Monday in June.
+  @cases Conformance.fixture("rrule")["cases"]
 
   @count 12
 
@@ -86,16 +28,8 @@ defmodule Tempo.RRuleMeasureTest do
   # has its first after the year 2200.
   @days_tried 366 * 200
 
-  # A rule as data, the map `Tempo.RRule.from_rule/2` takes and the measure
-  # takes alike.
-  defp rule(frequency, interval, parts) do
-    %{freq: frequency, count: @count}
-    |> Map.merge(if interval > 1, do: %{interval: interval}, else: %{})
-    |> Map.merge(Map.new(parts))
-  end
-
-  defp measured(rule, start),
-    do: RRuleMeasure.occurrences(rule, start, Date.add(NaiveDateTime.to_date(start), @days_tried))
+  defp measured(text, start),
+    do: RRuleMeasure.occurrences(text, start, Date.add(NaiveDateTime.to_date(start), @days_tried))
 
   defp given(rule, start) do
     {:ok, recurrence} = recurrence(rule, from: Tempo.from_elixir!(start))
@@ -110,10 +44,10 @@ defmodule Tempo.RRuleMeasureTest do
   # occurrence the rule counts, or none (a second month from February is
   # never March), Tempo gives the same; where it finds some, Tempo gives
   # those first.
-  defp held(rule, start, measured, given) when length(measured) in [0, @count],
+  defp held(rule, start, measured, true = _complete?, given),
     do: assert({rule, start, given} == {rule, start, measured})
 
-  defp held(rule, start, measured, given),
+  defp held(rule, start, measured, false = _complete?, given),
     do: assert({rule, start, Enum.take(given, length(measured))} == {rule, start, measured})
 
   describe "the measure" do
@@ -153,11 +87,32 @@ defmodule Tempo.RRuleMeasureTest do
   defp recurrence(text, options) when is_binary(text), do: RRule.parse(text, options)
   defp recurrence(%{} = rule, options), do: RRule.from_rule(rule, options)
 
-  for {frequency, parts} <- @parts, part <- parts, interval <- [1, 2, 3] do
-    test "every #{interval} #{frequency} with #{inspect(part)} has the occurrences the measure gives it" do
-      for start <- @starts do
-        rule = rule(unquote(frequency), unquote(interval), unquote(part))
-        held(rule, start, measured(rule, start), given(rule, start))
+  describe "the fixture" do
+    test "holds 192 rules from three starts" do
+      assert length(@cases) == 192 * 3
+      assert @cases |> Enum.map(& &1["start"]) |> Enum.uniq() |> length() == 3
+    end
+
+    test "has the occurrences the measure gives each rule" do
+      for %{"rule" => rule, "start" => start, "occurrences" => listed} = case <- @cases do
+        start = NaiveDateTime.from_iso8601!(start)
+        measured = measured(rule, start)
+
+        assert {rule, start, Enum.map(measured, &NaiveDateTime.to_iso8601/1)} ==
+                 {rule, start, listed}
+
+        assert {rule, start, case["complete"]} == {rule, start, length(measured) in [0, @count]}
+      end
+    end
+  end
+
+  for {rule, cases} <- Enum.group_by(@cases, & &1["rule"]) do
+    test "#{rule} has the occurrences the measure gives it" do
+      for %{"start" => start, "occurrences" => listed, "complete" => complete?} <-
+            unquote(Macro.escape(cases)) do
+        start = NaiveDateTime.from_iso8601!(start)
+        measured = Enum.map(listed, &NaiveDateTime.from_iso8601!/1)
+        held(unquote(rule), start, measured, complete?, given(unquote(rule), start))
       end
     end
   end

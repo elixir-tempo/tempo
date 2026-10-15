@@ -584,10 +584,16 @@ defmodule Tempo.Expand do
     end
   end
 
-  # A day the zone's clock leaves out is no child of its month, week or year.
-  defp shown(children, unit, %{zone: %Zone{name: name} = zone, shift: nil})
+  # A day the zone's clock leaves out is no child of its month, week or year:
+  # the days left out are asked for once, over the span of the children.
+  defp shown([{_, {first, _}} | _] = children, unit, %{zone: %Zone{name: name} = zone, shift: nil})
        when unit in [:day, :day_of_week, :day_of_year] and is_binary(name) do
-    Enum.reject(children, fn {_value, {day, _next}} -> Zone.day_skipped?(zone, nil, day) end)
+    {_, {_, after_last}} = List.last(children)
+
+    case Zone.days_skipped(zone, nil, first, after_last) do
+      [] -> children
+      skipped -> Enum.reject(children, fn {_value, {day, _next}} -> day in skipped end)
+    end
   end
 
   defp shown(children, _unit, _frame), do: children

@@ -402,7 +402,7 @@ The budgets of 5.3 were estimates made before the code; the review of 2026-10-15
 | Layer | Module | First budget | Lines | Code | Budget | Why it exceeds its first budget |
 |---|---|---:|---:|---:|---:|---|
 | 0 | `Tempo.Calendar` (with `WeeksFrom`) | 300 | 534 | 338 | 550 | Calendars of weeks of other week starts, and every question answered or refused by name. |
-| 0 | `Tempo.Zone` | 300 | 613 | 349 | 650 | A change of the clock found to the second; gaps, folds and a written shift beside a zone; the readings shown twice (decision 59); the stretches of one offset a walk comes to (decision 61). |
+| 0 | `Tempo.Zone` (with `Table` and `Transitions`) | 300 | 870 | 477 | 900 | Gaps, folds and a written shift beside a zone; the readings shown twice (decision 59); the table of a zone's changes, listed by the database or sampled, and the one question asked beside `Calendar.TimeZoneDatabase` (decision 73), which replaced the sampling of decision 61. |
 | 0 | `Tempo.Unit` | 300 | 354 | 216 | 400 | The ordering and one-axis checks of building from parts, and the rank of a unit. |
 | 0 | `Tempo.Limit` | 50 | 50 | 17 | 50 | Within. |
 | 1 | `Tempo.Scale` | 400 | 355 | 226 | 400 | Within. |

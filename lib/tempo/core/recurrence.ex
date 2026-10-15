@@ -34,9 +34,6 @@ defmodule Tempo.Recurrence do
 
   @day Scale.ticks_per_day()
 
-  # Where the start of a rule's next period is kept (`start_at/3`).
-  @next_start {__MODULE__, :next_start}
-
   # The periods of a day or finer a rule tries one by one, selecting
   # nothing, before it looks ahead for where its parts next name a value.
   @quiet_periods 2
@@ -96,10 +93,12 @@ defmodule Tempo.Recurrence do
   defp selected_in({:steps, period_at}, walk, first_step) do
     walk = Map.merge(walk, %{period_at: period_at, horizon: horizon(walk)})
 
-    {first_step, nil}
-    |> Stream.unfold(fn {k, quiet_since} ->
-      {period, extent} = eligible_at(period_at.({:with_extent, k}), walk.first)
-      step(picked_in(period, extent, walk), {period, extent}, k, quiet_since, walk)
+    # The walk carries the start of the next period from the period that
+    # reckoned it (`occurrence_at/4`), so that each period's start is placed once.
+    {first_step, nil, nil}
+    |> Stream.unfold(fn {k, quiet_since, carried} ->
+      {period, extent, carried} = eligible_at(period_at.({:with_extent, k, carried}), walk.first)
+      step(picked_in(period, extent, walk), {period, extent}, k, quiet_since, carried, walk)
     end)
     |> Stream.flat_map(& &1)
   end
@@ -126,27 +125,28 @@ defmodule Tempo.Recurrence do
     end
   end
 
-  defp step([_ | _] = picked, _period, k, _quiet_since, _walk), do: {picked, {k + 1, nil}}
+  defp step([_ | _] = picked, _period, k, _quiet_since, carried, _walk),
+    do: {picked, {k + 1, nil, carried}}
 
   # A day or a finer period that selects nothing is followed by the next,
   # for a few: a weekend in a daily rule of weekdays is passed over a day at
   # a time, each day's weekday asked of it. A longer quiet, and a quiet of
   # coarser periods, is passed over to where the parts next name a value.
-  defp step([], {period, extent}, k, quiet_since, walk) do
+  defp step([], {period, extent}, k, quiet_since, carried, walk) do
     {start, stop} = extent || {0, 0}
     {since, quiet_from} = quiet_since || {start, k}
 
     cond do
       start - since > walk.horizon -> nil
-      k - quiet_from < quiet_periods(walk.first) -> {[], {k + 1, {since, quiet_from}}}
-      true -> stepped_on(next_named(stop, period, walk), k, {since, quiet_from}, walk)
+      k - quiet_from < quiet_periods(walk.first) -> {[], {k + 1, {since, quiet_from}, carried}}
+      true -> stepped_on(next_named(stop, period, walk), k, {since, quiet_from}, carried, walk)
     end
   end
 
-  defp stepped_on(nil, _k, _quiet_since, _walk), do: nil
+  defp stepped_on(nil, _k, _quiet_since, _carried, _walk), do: nil
 
-  defp stepped_on(tick, k, quiet_since, walk),
-    do: {[], {index_at(tick, walk.period_at, k, k + 1), quiet_since}}
+  defp stepped_on(tick, k, quiet_since, carried, walk),
+    do: {[], {index_at(tick, walk.period_at, k, k + 1), quiet_since, carried}}
 
   defp quiet_periods(first),
     do: if(cadence_unit(first) in [:day, :hour, :minute, :second], do: @quiet_periods, else: 0)
@@ -299,11 +299,12 @@ defmodule Tempo.Recurrence do
   defp eligible(period, _first), do: period
 
   # A period whose extent its building gave keeps it, unless the rule
-  # selects in the first unit of a longer repeat.
-  defp eligible_at({period, extent}, first) do
+  # selects in the first unit of a longer repeat; the start of the next
+  # period, where its building reckoned it, goes on with it.
+  defp eligible_at({period, extent, carried}, first) do
     case eligible(period, first) do
-      ^period when extent != nil -> {period, extent}
-      narrowed -> {narrowed, period_extent(narrowed)}
+      ^period when extent != nil -> {period, extent, carried}
+      narrowed -> {narrowed, period_extent(narrowed), carried}
     end
   end
 
@@ -498,10 +499,10 @@ defmodule Tempo.Recurrence do
   defp steps(%Tempo{form: {:span, from, to}} = first, recurrence) do
     with {:ok, [base]} <- Spans.spans(first, []),
          {:ok, cadence} <- cadence(from, to, base, recurrence) do
-      # `{:with_extent, k}` gives the period with the extent it was built
-      # from, where that is known, so that a walk need not reckon it again;
-      # the start of the period after it, which that needs, is kept for it.
-      walk = make_ref()
+      # `{:with_extent, k, carried}` gives the period with the extent it was
+      # built from, where that is known, so that a walk need not reckon it
+      # again, and with the start of the period after it for the walk to
+      # hand back as `carried` when it asks for that period.
 
       # Every period is the first moved by whole cadences, so where the
       # first starts is placed once for the walk and not at every step.
@@ -510,12 +511,12 @@ defmodule Tempo.Recurrence do
       {:ok,
        {:steps,
         fn
-          {:with_extent, k} ->
+          {:with_extent, k, carried} ->
             occurrence_at(
               base,
               {from, to},
               cadences(cadence, k),
-              {recurrence, walk, k, first_start}
+              {recurrence, k, first_start, carried}
             )
 
           k ->
@@ -641,17 +642,22 @@ defmodule Tempo.Recurrence do
          {:ok, until} <- until_position(bound) do
       # Each occurrence is made with its extent, as a rule's periods are
       # (`occurrence_at/4`): where the first starts placed once, and where
-      # each next starts kept for it. The extents bound and order the
+      # each next starts carried to it. The extents bound and order the
       # occurrences, which are handed back without them.
-      walk = make_ref()
       first_start = start_extent(base)
 
       stream =
         indexes
-        |> Stream.map(fn n ->
-          base
-          |> occurrence_at({from, to}, cadences(cadence, n), {recurrence, walk, n, first_start})
-          |> placed()
+        |> Stream.transform(nil, fn n, carried ->
+          {occurrence, extent, carried} =
+            occurrence_at(
+              base,
+              {from, to},
+              cadences(cadence, n),
+              {recurrence, n, first_start, carried}
+            )
+
+          {[placed({occurrence, extent})], carried}
         end)
         |> Stream.dedup_by(&landing/1)
         |> Stream.map(fn {occurrence, extent} ->
@@ -762,46 +768,37 @@ defmodule Tempo.Recurrence do
   end
 
   # A span written with a length knows its extent as it is built: where it
-  # starts, and where the next starts.
+  # starts, and where the next starts. The next start is handed back with
+  # the occurrence, `{k + 1, value, start}`, for the walk to give when it
+  # asks for the period after.
   defp occurrence_at(
          %Tempo{form: {:span, from, to}} = base,
          {_, %Duration{} = duration},
          {%Duration{units: [_ | _]} = step, next, _previous},
-         {recurrence, walk, k, first_start}
+         {recurrence, k, first_start, carried}
        ) do
     {moved, start} =
-      start_at(walk, k, fn -> moved_from(first_start, from, step, :start, base, recurrence) end)
+      start_at(carried, k, fn -> moved_from(first_start, from, step, :start, base, recurrence) end)
 
-    stop =
-      next_start_at(walk, k + 1, fn ->
-        moved_from(first_start, from, next, :start, base, recurrence)
-      end)
+    {moved_next, next_start} =
+      reckoned(fn -> moved_from(first_start, from, next, :start, base, recurrence) end)
 
-    stop = later(stop, start, duration, base, recurrence)
-    {%{base | form: {:span, moved, Spans.value_at(stop, to, :end, base)}}, {start, stop}}
+    stop = later(next_start, start, duration, base, recurrence)
+
+    {%{base | form: {:span, moved, Spans.value_at(stop, to, :end, base)}}, {start, stop},
+     {k + 1, moved_next, next_start}}
   end
 
-  defp occurrence_at(base, ends, cadences, {recurrence, _walk, _k, _first_start}),
-    do: {occurrence(base, ends, cadences, recurrence), nil}
+  defp occurrence_at(base, ends, cadences, {recurrence, _k, _first_start, _carried}),
+    do: {occurrence(base, ends, cadences, recurrence), nil, nil}
 
   defp start_extent(%Tempo{form: {:span, %Tempo{} = from, _to}}), do: Spans.extent(from)
   defp start_extent(_base), do: nil
 
   # The start of the kth period and where it starts: the one the period
-  # before it reckoned, where it is the next of the same walk, or reckoned
-  # now. One is kept in the process, whichever walk last reckoned one.
-  defp start_at(walk, k, moved) do
-    case Process.get(@next_start) do
-      {^walk, ^k, value, start} -> {value, start}
-      _other -> reckoned(moved)
-    end
-  end
-
-  defp next_start_at(walk, k, moved) do
-    {value, start} = reckoned(moved)
-    Process.put(@next_start, {walk, k, value, start})
-    start
-  end
+  # before it reckoned and carried, where it is the kth, or reckoned now.
+  defp start_at({k, value, start}, k, _moved), do: {value, start}
+  defp start_at(_other_or_none, _k, moved), do: reckoned(moved)
 
   defp reckoned(moved) do
     value = moved.()

@@ -13,10 +13,45 @@ defmodule Tempo.ChangeOfTheClockTest do
   # leaves it: thirty minutes where the clock skips half of it, ninety where
   # the clock shows half of it twice.
 
-  alias Tempo.ChangeOfTheClock
-  alias Tempo.Interval
+  alias Tempo.{ChangeOfTheClock, Conformance, Interval}
 
   @minute 60
+  @fixture Conformance.fixture("clock_changes")
+
+  describe "the conformance fixture" do
+    test "lists the days of the measure, each with the hours DateTime says the clock showed" do
+      days = ChangeOfTheClock.gaps() ++ ChangeOfTheClock.folds()
+      assert length(@fixture["days"]) == length(days)
+
+      for {{zone, date, change}, listed} <- Enum.zip(days, @fixture["days"]) do
+        {from, to} = ChangeOfTheClock.day_shown(zone, date)
+
+        shown =
+          for {hour, from, to} <- ChangeOfTheClock.hours_shown(zone, date),
+              do: %{"hour" => hour, "from" => from, "to" => to}
+
+        assert listed == %{
+                 "zone" => zone,
+                 "date" => Date.to_iso8601(date),
+                 "change" => change,
+                 "day_shown" => [from, to],
+                 "hours" => shown
+               }
+      end
+    end
+
+    test "has the hours a walk of each day gives" do
+      for %{"zone" => zone, "date" => date, "hours" => hours, "day_shown" => [from, to]} <-
+            @fixture["days"] do
+        day = ChangeOfTheClock.day(zone, Date.from_iso8601!(date))
+
+        assert {zone, date, ChangeOfTheClock.hours_listed(zone, Date.from_iso8601!(date))} ==
+                 {zone, date, Enum.map(hours, &{&1["hour"], &1["from"], &1["to"]})}
+
+        assert ChangeOfTheClock.span(day) == {from, to}
+      end
+    end
+  end
 
   describe "the length of an hour the clock does not show whole" do
     import Tempo.Sigils

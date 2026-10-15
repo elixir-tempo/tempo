@@ -11,11 +11,16 @@ defmodule Tempo.Zone do
   # clock shows at a wall reading, the reading at an instant, and the gaps and
   # folds between them.
 
-  # A named time zone or a fixed offset, as an IXDTF suffix writes one, and
-  # the one place the core reads the zone database: the offsets a wall
-  # reading can have, the offset at a UTC tick. A tick is a microsecond
-  # since 0000-01-01T00:00:00, which is Elixir's ISO-day epoch and Erlang's
-  # Gregorian-seconds epoch alike.
+  # A named time zone or a fixed offset, as an IXDTF suffix writes one. A
+  # tick is a microsecond since 0000-01-01T00:00:00, which is Elixir's
+  # ISO-day epoch and Erlang's Gregorian-seconds epoch alike.
+  #
+  # Every question of a named zone is answered from the table of its
+  # changes (`Tempo.Zone.Table`), built once from the database and kept for
+  # every process: the offset at a tick, the stretches of one offset about a
+  # wall reading, the first change in a span. The database is read there and
+  # nowhere else. Each question takes the table once, and the helpers that
+  # answer it take the table from it.
   #
   # A wall reading has one offset; none, where the clock skips it going
   # forward; or two, where the clock shows it twice going back. A value is
@@ -25,6 +30,7 @@ defmodule Tempo.Zone do
   # the end is read on the clock before the change, as the hour it closes
   # was.
 
+  alias Tempo.Zone.Table
   alias Tempo.ZoneError
 
   @enforce_keys []
@@ -33,20 +39,8 @@ defmodule Tempo.Zone do
   @second 1_000_000
   @day 86_400 * @second
 
-  # The spacing of the points at which a zone's offset is asked of the
-  # database (`known_days/2`), within the week in which no zone's offset
-  # has changed twice since 1900, and how many answers a process keeps
-  # before it forgets them and begins again.
-  @sample_spacing 6 * 86_400 * 1_000_000
-  @stretches_kept 40_000
-
-  # The longest span `steady_offset/4` answers for: no zone's offset has
-  # changed twice within it since 1900.
-  @steady_span 2 * @day
-
-  # Gregorian seconds at 0001-01-01T00:00:00, the floor below which no IANA rule exists.
-  @year_one_seconds :calendar.datetime_to_gregorian_seconds({{1, 1, 1}, {0, 0, 0}})
-  @before_year_one %{utc_offset: 0, std_offset: 0, zone_abbr: "LMT"}
+  # Gregorian seconds at 2020-01-01, a tick at which every zone the database
+  # knows has a period: where a name is checked against the database.
   @probe_seconds :calendar.datetime_to_gregorian_seconds({{2020, 1, 1}, {0, 0, 0}})
 
   @typedoc "A zone: an IANA name, or a fixed offset in minutes from UTC (`[+05:30]`), never both."
@@ -156,36 +150,52 @@ defmodule Tempo.Zone do
     sign * magnitude * @second
   end
 
+  # ── Wall readings ─────────────────────────────────────────────────────
+
   @doc "The offsets, in ticks, a wall reading has in a zone: one, none in a gap, two in a fold."
   @spec offsets_at_wall(t(), tick()) ::
           [tick()] | {:gap, before_change :: tick(), after_change :: tick()}
   def offsets_at_wall(%__MODULE__{offset: minutes}, _wall) when is_integer(minutes),
     do: [minutes * 60 * @second]
 
-  # A wall reading is shown at the offsets in force a day either side of it
-  # (an offset is less than a day, and no zone's offset has changed twice in
-  # a week) at which the moment it gives has that offset: one, both of two
-  # where the clock goes back, or neither where it goes forward.
-  def offsets_at_wall(%__MODULE__{name: name}, wall) do
-    case known_steady(name, wall - @day, wall + @day) do
-      {:ok, offset} -> [offset]
-      :unknown -> asked_at_wall(name, wall)
+  def offsets_at_wall(%__MODULE__{name: name}, wall),
+    do: offsets_at_wall_in(table(name, wall + @day), wall)
+
+  # A wall reading is shown at the offset of each stretch of the clock
+  # within a day either side of it (an offset is less than a day) in which
+  # the moment it gives lies: one, both of two where the clock goes back,
+  # or neither where it goes forward.
+  defp offsets_at_wall_in(table, wall) do
+    stretches = Table.stretches(table, wall - @day, wall + @day)
+
+    case shown_in(stretches, wall) do
+      [] -> skipped_by(stretches, wall, table.name)
+      shown -> shown
     end
   end
 
-  defp asked_at_wall(name, wall) do
-    before = utc_offset(name, wall - @day)
-    later = utc_offset(name, wall + @day)
-
-    if before == later, do: [before], else: shown_at(name, wall, before, later)
+  # The offsets at which the reading is shown, in the order of the moments
+  # it is shown at.
+  defp shown_in(stretches, wall) do
+    for {start, stop, offset} <- stretches,
+        moment = wall - offset,
+        start == nil or moment >= start,
+        stop == nil or moment < stop,
+        do: offset
   end
 
-  defp shown_at(name, wall, before, later) do
-    case {utc_offset(name, wall - before) == before, utc_offset(name, wall - later) == later} do
-      {true, true} -> [before, later]
-      {true, false} -> [before]
-      {false, true} -> [later]
-      {false, false} -> {:gap, before, later}
+  # The change that skips the reading: the one whose clock goes forward
+  # over it.
+  defp skipped_by(stretches, wall, name) do
+    stretches
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.find_value(fn [{_, change, before}, {change, _, later}] ->
+      if before < later and change + before <= wall and wall < change + later,
+        do: {:gap, before, later}
+    end)
+    |> case do
+      nil -> raise ArgumentError, "the table of #{name} shows no reading at wall tick #{wall}"
+      {:gap, before, later} -> {:gap, whole(before), whole(later)}
     end
   end
 
@@ -194,165 +204,52 @@ defmodule Tempo.Zone do
   December 2011: a day no reading of which is ever shown.
   """
   @spec day_skipped?(t() | nil, shift() | nil, integer()) :: boolean()
-  def day_skipped?(%__MODULE__{name: name} = zone, nil, day) when is_binary(name) do
-    skipped?(zone, day * @day) and skipped?(zone, (day + 1) * @day - 1)
-  end
+  def day_skipped?(%__MODULE__{name: name}, nil, day) when is_binary(name),
+    do: days_skipped_in(table(name, (day + 2) * @day), day, day + 1) != []
 
   def day_skipped?(_zone, _shift, _day), do: false
+
+  @doc """
+  The days of a span of days, `[first, after_last)` on the day scale, that
+  a zone's clock skips whole: those over which a change of the clock goes
+  forward from before the day's first reading to after its last.
+  """
+  @spec days_skipped(t() | nil, shift() | nil, integer(), integer()) :: [integer()]
+  def days_skipped(%__MODULE__{name: name}, nil, first, after_last) when is_binary(name),
+    do: days_skipped_in(table(name, (after_last + 1) * @day), first, after_last)
+
+  def days_skipped(_zone, _shift, _first, _after_last), do: []
+
+  defp days_skipped_in(table, first, after_last) do
+    table
+    |> Table.stretches(first * @day - @day, after_last * @day + @day)
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.flat_map(fn
+      # The days whose every reading, from the first to the last, the
+      # change leaps over: from the day after the one the clock leaves to
+      # the day before the one it lands in.
+      [{_, change, before}, {change, _, later}] when before < later ->
+        from = max(Integer.floor_div(change + before - 1, @day) + 1, first)
+        to = min(Integer.floor_div(change + later, @day), after_last)
+        Enum.to_list(from..(to - 1)//1)
+
+      _back_or_none ->
+        []
+    end)
+  end
 
   @doc "Whether a zone's clock skips a wall reading."
   @spec skipped?(t(), tick()) :: boolean()
   def skipped?(%__MODULE__{} = zone, wall), do: match?({:gap, _, _}, offsets_at_wall(zone, wall))
+
+  # ── Offsets and moments ───────────────────────────────────────────────
 
   @doc "The offset, in ticks, a zone has at a UTC tick."
   @spec offset_at_utc(t(), tick()) :: tick()
   def offset_at_utc(%__MODULE__{offset: minutes}, _utc) when is_integer(minutes),
     do: minutes * 60 * @second
 
-  def offset_at_utc(%__MODULE__{name: name}, utc), do: utc_offset(name, utc)
-
-  defp utc_offset(name, utc) do
-    case known_steady(name, utc, utc) do
-      {:ok, offset} -> offset
-      :unknown -> sampled_offset(name, utc)
-    end
-  end
-
-  defp sampled_offset(name, utc) do
-    stretch = Integer.floor_div(utc, @sample_spacing)
-
-    case known_days(name, stretch) do
-      {_key, {:ok, offset}} -> steady_through(name, stretch, offset)
-      {key, {:change, _, _, _, _} = change} -> beside_the_change(key, change, name, utc)
-    end
-  end
-
-  # The stretches of a zone's clock known to keep one offset, as a walk comes
-  # to them: the sampled stretches (`known_days/2`) of one offset next to
-  # each other are one, since each keeps its offset throughout, so a walk
-  # forward or back grows one until the clock changes. The two last grown
-  # are kept, the clock's offset before a change and after it, since a walk
-  # near a change asks on both sides of it. A question within one, of a
-  # tick, of the days about a wall reading or of a span, is answered by
-  # comparing integers, where it would ask for a stretch's samples at each
-  # end of what it asks of.
-  defp known_steady(name, from, to) do
-    case Process.get({__MODULE__, name, :steady}, []) do
-      [{first, until, offset} | _] when first <= from and to < until -> {:ok, offset}
-      [_, {first, until, offset}] when first <= from and to < until -> {:ok, offset}
-      _not_known -> :unknown
-    end
-  end
-
-  defp steady_through(name, stretch, offset) do
-    start = stretch * @sample_spacing
-    key = {__MODULE__, name, :steady}
-    Process.put(key, grown(Process.get(key, []), {start, start + @sample_spacing, offset}))
-    offset
-  end
-
-  # A stretch next to a kept one of the same offset grows it; any other is
-  # kept with the last grown, before it.
-  defp grown([{first, start, offset} | older], {start, stop, offset}),
-    do: [{first, stop, offset} | older]
-
-  defp grown([{stop, until, offset} | older], {start, stop, offset}),
-    do: [{start, until, offset} | older]
-
-  defp grown([last, {first, start, offset}], {start, stop, offset}),
-    do: [{first, stop, offset}, last]
-
-  defp grown([last, {stop, until, offset}], {start, stop, offset}),
-    do: [{start, until, offset}, last]
-
-  defp grown([last | _older], stretch), do: [stretch, last]
-  defp grown([], stretch), do: [stretch]
-
-  # Where the change of the days is known to come after a tick, or before
-  # it, the tick's offset is known; else the database is asked, and what it
-  # answers narrows where the change is.
-  defp beside_the_change(_key, {:change, before, _, same_until, _}, _name, utc)
-       when utc <= same_until,
-       do: before
-
-  defp beside_the_change(_key, {:change, _, later, _, changed_from}, _name, utc)
-       when utc >= changed_from,
-       do: later
-
-  defp beside_the_change(key, {:change, before, later, same_until, changed_from}, name, utc) do
-    offset = asked_at_utc(name, utc)
-
-    narrowed =
-      if offset == before,
-        do: {:change, before, later, utc, changed_from},
-        else: {:change, before, later, same_until, utc}
-
-    Process.put(key, narrowed)
-    offset
-  end
-
-  # A zone is made only where the database knows it (`named/2`); one asked of
-  # a database configured since, which does not, is raised as the zone error
-  # it would have been.
-  defp asked_at_utc(name, utc) do
-    case period_at_utc(name, seconds(utc)) do
-      {:ok, period} -> offset(period)
-      {:error, reason} -> raise ZoneError.exception(zone: name, reason: unknown(reason))
-    end
-  end
-
-  # What is known of a zone's offset between two points six days apart on
-  # the UTC line. The database is asked at each point once, each answer
-  # serving the stretch before the point and the one after. Since 1900 no
-  # zone's offset has changed twice within a week, so the two being the
-  # same is the offset throughout, and their differing is one change between
-  # them: the offsets before and after it, the last tick known to be before
-  # it and the first known to be after, the database being asked only of a
-  # tick between the two. What is known is kept in the process, as many
-  # stretches as `@stretches_kept`, by the zone's name: a process that
-  # changes its time zone database keeps what the last one answered.
-  defp known_days(name, stretch) do
-    key = {__MODULE__, name, stretch}
-
-    case Process.get(key) do
-      nil -> {key, kept(key, across(name, stretch))}
-      known -> {key, known}
-    end
-  end
-
-  defp across(name, stretch) do
-    from = stretch * @sample_spacing
-    to = from + @sample_spacing
-    before = sampled(name, from)
-    later = sampled(name, to)
-
-    if later == before, do: {:ok, before}, else: {:change, before, later, from, to}
-  end
-
-  defp sampled(name, at) do
-    key = {__MODULE__, name, :at, at}
-
-    case Process.get(key) do
-      nil -> kept(key, asked_at_utc(name, at))
-      offset -> offset
-    end
-  end
-
-  defp kept(key, answer) do
-    count = Process.get({__MODULE__, :kept}, 0)
-    if count >= @stretches_kept, do: forget_days()
-    Process.put({__MODULE__, :kept}, rem(count, @stretches_kept) + 1)
-    Process.put(key, answer)
-    answer
-  end
-
-  defp forget_days do
-    for key <- Process.get_keys(), kept_key?(key), do: Process.delete(key)
-  end
-
-  defp kept_key?({__MODULE__, name, _stretch}), do: is_binary(name)
-  defp kept_key?({__MODULE__, name, :at, _tick}), do: is_binary(name)
-  defp kept_key?(_key), do: false
+  def offset_at_utc(%__MODULE__{name: name}, utc), do: Table.offset_at(table(name, utc), utc)
 
   @doc """
   The offset a wall reading is placed by: the written shift where there is
@@ -395,10 +292,11 @@ defmodule Tempo.Zone do
   """
   @spec at_showing(shown, t() | nil, tick()) :: shown
         when shown: %{required(:shift) => term(), optional(atom()) => term()}
-  def at_showing(%{shift: _} = term, %__MODULE__{name: name} = zone, utc) when is_binary(name) do
-    {wall, offset} = wall_of_utc(zone, nil, utc)
+  def at_showing(%{shift: _} = term, %__MODULE__{name: name}, utc) when is_binary(name) do
+    table = table(name, utc + 2 * @day)
+    offset = Table.offset_at(table, utc)
 
-    case offsets_at_wall(zone, wall) do
+    case offsets_at_wall_in(table, utc + offset) do
       [first, ^offset] when first != offset -> %{term | shift: shift_of(offset)}
       _first_or_only -> term
     end
@@ -427,17 +325,21 @@ defmodule Tempo.Zone do
   of it is shown at all.
   """
   @spec first_shown(t(), tick()) :: tick()
-  def first_shown(%__MODULE__{name: name} = zone, wall) when is_binary(name) do
-    case offsets_at_wall(zone, wall) do
-      {:gap, before, after_change} ->
-        first_change(zone, before, wall - after_change, wall - before)
+  def first_shown(%__MODULE__{name: name}, wall) when is_binary(name) and is_integer(wall) do
+    table = table(name, wall + @day)
 
+    case offsets_at_wall_in(table, wall) do
+      {:gap, before, after_change} ->
+        first_change_in(table, wall - after_change, wall - before)
+
+      # A whole number of ticks, said so for the analysis of the types,
+      # which does not carry a list's element type out of a comprehension.
       [offset | _] ->
-        wall - offset
+        wall - whole(offset)
     end
   end
 
-  def first_shown(zone, wall), do: utc_of_wall(zone, nil, wall)
+  def first_shown(zone, wall) when is_integer(wall), do: utc_of_wall(zone, nil, wall)
 
   @doc """
   The UTC tick at which a zone's clock first shows a unit of `step` ticks
@@ -451,17 +353,18 @@ defmodule Tempo.Zone do
   the zone's clock did not show so, and the unit begins at that moment.
   """
   @spec shown_from(t(), shift(), tick(), pos_integer()) :: tick()
-  def shown_from(%__MODULE__{name: name} = zone, shift, wall, step) when is_binary(name) do
+  def shown_from(%__MODULE__{name: name}, shift, wall, step) when is_binary(name) do
     offset = shift_ticks(shift)
     written = wall - offset
-    before = offset_at_utc(zone, written)
+    table = table(name, written + step)
+    before = Table.offset_at(table, written)
 
     cond do
       before == offset ->
         written
 
-      offset_at_utc(zone, written + step - 1) == offset ->
-        first_change(zone, before, written, written + step)
+      Table.offset_at(table, written + step - 1) == offset ->
+        first_change_in(table, written, written + step)
 
       true ->
         written
@@ -484,12 +387,13 @@ defmodule Tempo.Zone do
   offset has no changes.
   """
   @spec unit_end(t() | nil, shift() | nil, tick(), pos_integer()) :: tick()
-  def unit_end(%__MODULE__{name: name} = zone, shift, utc, step) when is_binary(name) do
-    offset = offset_at_utc(zone, utc)
+  def unit_end(%__MODULE__{name: name}, shift, utc, step) when is_binary(name) do
+    table = table(name, utc + 2 * step + @day)
+    offset = Table.offset_at(table, utc)
 
     if shift == nil or shift_ticks(shift) == offset,
-      do: shown_until(zone, offset, utc, step),
-      else: unit_end(nil, shift, utc, step)
+      do: shown_until(table, offset, utc, step),
+      else: utc + step
   end
 
   def unit_end(_zone, _shift, utc, step) when is_integer(utc) and is_integer(step),
@@ -497,87 +401,79 @@ defmodule Tempo.Zone do
 
   @doc """
   The offset a named zone's clock keeps through a span, where it keeps one:
-  `{:ok, offset}`, or `:changes`.
-
-  It is asked only of a span no longer than two days, and answered by the
-  offset at the span's first and last ticks: since 1900 no zone's offset
-  has changed twice within a week (the shortest gap in the database is 166
-  hours), so an offset the same at both ends of two days is the same
-  throughout. A shift that is not the zone's own says a moment the clock
-  did not show so, and is answered as a change, as `unit_end/4` takes it.
+  `{:ok, offset}`, or `:changes` where the clock changes within it. A shift
+  that is not the zone's own says a moment the clock did not show so, and
+  is answered as a change, as `unit_end/4` takes it.
   """
   @spec steady_offset(t(), shift() | nil, tick(), tick()) :: {:ok, tick()} | :changes
-  def steady_offset(%__MODULE__{name: name} = zone, shift, start, stop)
-      when is_binary(name) and stop - start <= @steady_span do
-    case known_steady(name, start, stop - 1) do
-      {:ok, offset} ->
-        if shift == nil or shift_ticks(shift) == offset, do: {:ok, offset}, else: :changes
-
-      :unknown ->
-        asked_steady(zone, shift, start, stop)
+  def steady_offset(%__MODULE__{name: name}, shift, start, stop) when is_binary(name) do
+    case Table.steady(table(name, stop), start, stop) do
+      {:ok, offset} when shift == nil -> {:ok, offset}
+      {:ok, offset} -> if shift_ticks(shift) == offset, do: {:ok, offset}, else: :changes
+      :changes -> :changes
     end
   end
 
   def steady_offset(_zone, _shift, _start, _stop), do: :changes
 
-  defp asked_steady(zone, shift, start, stop) do
-    offset = offset_at_utc(zone, start)
-
-    if offset_at_utc(zone, stop - 1) == offset and (shift == nil or shift_ticks(shift) == offset),
-      do: {:ok, offset},
-      else: :changes
-  end
-
   # A shift written beside a zone says which of two showings a reading is,
   # and is then the zone's offset there; one that is not the zone's gives a
   # moment the zone's clock did not show so, which is one unit long.
-  defp shown_until(zone, offset, utc, step) do
+  defp shown_until(table, offset, utc, step) do
     unit_start = Integer.floor_div(utc + offset, step) * step
     whole = unit_start + step - offset
 
-    if offset_at_utc(zone, whole) == offset,
+    if Table.offset_at(table, whole) == offset,
       do: whole,
-      else: ended_by_a_change(zone, first_change(zone, offset, utc, whole), unit_start, step)
+      else: ended_by_a_change(table, first_change_in(table, utc, whole), unit_start, step)
   end
 
   # The clock changes at a tick within the unit, or as it would have ended:
   # the unit runs on where the clock then shows a later part of it.
-  defp ended_by_a_change(zone, change, unit_start, step) do
-    shown = change + offset_at_utc(zone, change)
+  defp ended_by_a_change(table, change, unit_start, step) do
+    offset = Table.offset_at(table, change)
+    shown = change + offset
 
     if shown > unit_start and shown < unit_start + step,
-      do: unit_end(zone, nil, change, step),
+      do: shown_until(table, offset, change, step),
       else: change
   end
 
   # The first tick after `from`, and no later than `to`, at which the zone's
-  # offset is no longer what it was: found to the second by halving.
-  defp first_change(zone, offset, from, to) do
-    halve(zone, offset, seconds(from), Integer.floor_div(to + @second - 1, @second)) * @second
+  # offset changes; `to` where it does not change by then.
+  defp first_change_in(table, from, to) do
+    case Table.first_change(table, from, to) do
+      nil -> to
+      change -> change
+    end
   end
 
-  defp halve(_zone, _offset, same, changed) when changed - same <= 1, do: changed
-
-  defp halve(zone, offset, same, changed) do
-    middle = same + div(changed - same, 2)
-
-    if offset_at_utc(zone, middle * @second) == offset,
-      do: halve(zone, offset, middle, changed),
-      else: halve(zone, offset, same, middle)
-  end
+  defp table(name, until), do: Table.of(name, database(), until)
 
   # ── The zone database ─────────────────────────────────────────────────
   #
   # Tempo is time zone database agnostic: it asks the `Calendar.TimeZoneDatabase`
   # the application configures (`:ex_tempo, :time_zone_database`, else Elixir's
-  # own). Before 0001-01-01 no rule exists, and the database is not asked:
-  # the offset is zero. With Elixir's UTC-only default, a zone name other
-  # than UTC's is refused where it is given, as `:no_database`.
+  # own), through the table of each zone's changes. With Elixir's UTC-only
+  # default, a zone name other than UTC's is refused where it is given, as
+  # `:no_database`.
 
   @doc "The `Calendar.TimeZoneDatabase` Tempo asks."
   @spec database() :: Calendar.time_zone_database()
+  # Read as Erlang reads it, on every question of a zone: Tempo's own
+  # setting, else Elixir's (`Calendar.get_time_zone_database/0`).
   def database do
-    Application.get_env(:ex_tempo, :time_zone_database) || Calendar.get_time_zone_database()
+    case :application.get_env(:ex_tempo, :time_zone_database) do
+      {:ok, database} when database != nil -> database
+      _none -> elixirs_database()
+    end
+  end
+
+  defp elixirs_database do
+    case :application.get_env(:elixir, :time_zone_database) do
+      {:ok, database} -> database
+      :undefined -> Calendar.UTCOnlyTimeZoneDatabase
+    end
   end
 
   @doc "Whether the database knows a zone."
@@ -587,27 +483,12 @@ defmodule Tempo.Zone do
   defp known(name) do
     case database().time_zone_period_from_utc_iso_days(iso_days(@probe_seconds), name) do
       {:ok, _period} -> :ok
-      {:error, reason} -> {:error, unknown(reason)}
+      {:error, reason} -> {:error, Table.error_reason(reason)}
     end
-  end
-
-  defp unknown(:utc_only_time_zone_database), do: :no_database
-  defp unknown(_not_found), do: :unknown
-
-  defp period_at_utc(_name, utc_seconds) when utc_seconds < @year_one_seconds,
-    do: {:ok, @before_year_one}
-
-  defp period_at_utc(name, utc_seconds) do
-    database().time_zone_period_from_utc_iso_days(iso_days(utc_seconds), name)
   end
 
   defp iso_days(seconds),
     do: {div(seconds, 86_400), {rem(seconds, 86_400) * @second, 86_400 * @second}}
 
-  # The database answers an offset in whole seconds.
-  defp offset(%{utc_offset: utc_offset, std_offset: std_offset}),
-    do: whole(utc_offset + std_offset) * @second
-
   defp whole(value) when is_integer(value), do: value
-  defp seconds(tick), do: Integer.floor_div(tick, @second)
 end

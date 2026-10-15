@@ -183,14 +183,17 @@ defmodule Tempo.Interop do
     end
   end
 
-  def to_datetime(%Tempo{zone: %Zone{name: name}} = value) when is_binary(name) do
-    with {:ok, naive} <- to_naive(value) do
-      case DateTime.from_naive(naive, name) do
-        {:ok, datetime} -> {:ok, datetime}
-        {:ambiguous, first, _second} -> {:ok, first}
-        {:gap, _before, after_gap} -> {:ok, after_gap}
-        {:error, reason} -> {:error, ConversionError.exception(value: value, reason: reason)}
-      end
+  # The moment is where the value begins on the UTC line, as Tempo places
+  # every reading (`Tempo.Spans.extent/1`: a reading the clock shows twice
+  # at its first showing, one it skips where the clock comes out of the
+  # gap), shown on the zone's clock there. The database reads the wall
+  # clock once, in Tempo's table of its changes, and not a second time here.
+  def to_datetime(%Tempo{zone: %Zone{name: name}, calendar: calendar} = value)
+      when is_binary(name) do
+    with {:ok, naive} <- to_naive(value),
+         {:ok, {start, _stop}} when is_integer(start) <- Spans.extent(value),
+         {:ok, shown} <- at_tick(start, naive.microsecond, name) |> named(value) do
+      DateTime.convert(shown, calendar) |> named(value)
     end
   end
 
@@ -210,6 +213,13 @@ defmodule Tempo.Interop do
 
   def to_datetime(other),
     do: {:error, ConversionError.exception(value: other, reason: :not_an_elixir_value)}
+
+  # A UTC tick shown on a zone's clock, at the precision of a part of a second.
+  defp at_tick(tick, {_microseconds, precision}, zone) do
+    seconds = Integer.floor_div(tick, 1_000_000)
+    microsecond = {Integer.mod(tick, 1_000_000), precision}
+    seconds |> DateTime.from_gregorian_seconds(microsecond) |> DateTime.shift_zone(zone)
+  end
 
   # The seconds from the moment a value's reading and shift name to where
   # the value begins in its zone: none, but where the zone's clock comes to
