@@ -1,10 +1,18 @@
 # TODO
 
-Open work on Tempo 2.0. The design is [plans/architecture-redesign.md](plans/architecture-redesign.md): nine laws, the modules written to them, and a record of each phase as it was built (sections 12 to 20). This file tracks what is open against that design; what is done is recorded where it was decided, in `plans/decisions.md`, and in the git history. It was rewritten on 2026-10-13 and cleared of its completed items on 2026-10-15.
+Open work on Tempo 2.0. The design is [plans/architecture-redesign.md](plans/architecture-redesign.md): nine laws, the modules written to them, and a record of each phase as it was built (sections 12 to 20). This file tracks what is open against that design; what is done is recorded where it was decided, in `plans/decisions.md`, and in the git history. It was rewritten on 2026-10-13, cleared of its completed items on 2026-10-15, and put in the house format of five sections on 2026-10-16.
 
-An item is a defect to fix, a decision to take, or work of another kind. What an operation gives a shape of value is not listed cell by cell: `mix test --only total` holds every operation on every value of the corpus to an answer or a named error.
+An item is a defect to fix, a decision to take, or work of another kind. What an operation gives a shape of value is not listed cell by cell: `mix test --only total` holds every operation on every value of the corpus to an answer or a named error. Each decision is recorded in `plans/decisions.md` when it is made, with its question, its context and the answer; none is open.
 
-## Before the release
+## Open
+
+* [ ] **Answer fixtures for ports.** Export the guides' examples (each input, operation and printed answer) and the calendar census's walks and selections in each calendar as text fixtures under `test/fixtures/conformance/`, written by `scripts/conformance_fixtures.exs` and read by Tempo's own tests, so that a port is held to answers and not only to refusals. Decided 2026-10-16; analysis in [plans/translation-assessment.md](plans/translation-assessment.md), section 6.
+
+## Blocked
+
+* [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Blocked on the answer fixtures above.
+
+### Before the release
 
 * [ ] **Calendrical 1.4 and Localize on hex.** `mix.exs` takes both from GitHub `main`; a release needs published versions. Calendrical has one behaviour that every calendar answers, `Localize.Calendar.ISO` among them by shape (Calendrical's `localize_calendar_iso_test.exs` and its laws test hold it there); `leap_month/1`, `weeks_in_month/2` and `month_week/3` left the behaviour on 2026-10-14, as nothing called them and another callback answers each.
 
@@ -12,11 +20,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **Companions on 2.0.** `agenda`, `tempo_sql` and `tempo_holidays` take Tempo from GitHub `main` (2026-10-15), and move to `~> 2.0` once it is on hex; all three pass their gates against `2b04789`. `agenda` is ported (2026-10-15) under decisions 64 to 69. `tempo_holidays` is ported (2026-10-14) against a path dependency: its rules are built from parts, its conformance unchanged (168,186 matched, 0 mismatched), all 223 of its tests passing. `tempo_sql` is ported (2026-10-14) against a path dependency, under decisions 43 and 44: all 280 of its tests pass against Postgres, its version 1 and 2 composite rows read as 1.x meant them.
 
-## Decisions for the user
-
-Each decision is recorded in `plans/decisions.md` when it is made, with its question, its context and the answer; what it leaves to build moves to the defects and gaps below. None is open.
-
-## Defects and gaps
+### Upstream
 
 Every item here is upstream: Tempo follows each library as it is, and the item is closed by a release of that library.
 
@@ -30,7 +34,9 @@ Every item here is upstream: Tempo follows each library as it is, and the item i
 
 * [ ] **Three Localize defects**, rechecked against Localize `9ac3e95` on 2026-10-14 and recorded in its TODO.md. A day of the month a year turns in is read back a year early: `Localize.Date.parse("March 20, 1700", calendar: Calendrical.Julian.March25, format: :long)` is `1699-13-20`, where `Localize.Date.to_string/2` wrote it from `1700-13-20`; Tempo reaches it, `Tempo.parse("March 20, 1700", calendar: Calendrical.Julian.March25)` being `1699Y13M20D`. A month that begins after its first day is not written from its year and month: `Localize.Date.to_string(%{year: 1751, month: 3, calendar: Calendrical.Reform.England}, format: :yMMM)` is an `InvalidValueError`; Tempo no longer reaches it, writing a month by its days (`Mar 25 – 31, 1751`). A fiscal date is written with its fiscal year and its Gregorian month: `Localize.Date.to_string(Date.new!(2027, 2, 10, Calendrical.FiscalYear.AU))` is "Aug 10, 2027" for 10 August 2026, so `Tempo.to_string/2` of a fiscal value from July to December names the wrong year (found 2026-10-15).
 
-## Performance
+## Deferred
+
+### Performance
 
 Where 2.0 stands against 1.6.4 after the work of 2026-10-15 (decisions 56 to 63 and 73 to 76), and where it could still be faster. Nothing here is needed for the release (decision 37); each item is a measurement first, against `bench/against_1_6_bench.exs`, profiled by layer, and records what it bought in its decision (`plans/reference-architecture-review.md`, section 4, has the profiles the work was ordered by).
 
@@ -38,17 +44,17 @@ The position on 2026-10-15 (Apple M1 Max, OTP 29.0.3, JIT), 2.0 over 1.6.4: read
 
 The engine's cost is in the placing of values. A `%Tempo{}` holds its units as written, and every question of where a value lies (`Tempo.Spans.extent/1`) reads them again through the calendar, a few hundred nanoseconds a time; a span now carries its place (`Tempo.Placed`, decision 74), but a value does not, and a rule the engine expands places each candidate as it is built, tested and bounded. A second representation of a value through the engine was measured and declined (decisions 57 and 63): about a quarter of an occurrence, for two shapes through every module. What is left is below.
 
-* **A rule the matcher leaves to the engine.** `Tempo.Matcher` compiles a rule of months, days of the month, weekdays, positions and clock readings whose period is a day or coarser; a rule with a day of the year, a mask, a stepped range, a month counted from the end, a nested selection, a roll, or a period finer than a day is the engine's. Each of those the measures hold the engine to could be compiled the same way, the hourly and yearly rules of the benchmark first; what the matcher takes must stay exact by `rrule_measure_test.exs`, `rfc5545_examples_test.exs` and `cron_test.exs`.
+* [ ] **A rule the matcher leaves to the engine.** `Tempo.Matcher` compiles a rule of months, days of the month, weekdays, positions and clock readings whose period is a day or coarser; a rule with a day of the year, a mask, a stepped range, a month counted from the end, a nested selection, a roll, or a period finer than a day is the engine's. Each of those the measures hold the engine to could be compiled the same way, the hourly and yearly rules of the benchmark first; what the matcher takes must stay exact by `rrule_measure_test.exs`, `rfc5545_examples_test.exs` and `cron_test.exs`.
 
-* **The zone asked in the engine.** A question of `Tempo.Zone.Table` is about 250 ns, a binary search in a `:persistent_term`, where a sample kept in the process was 55 ns; the matcher asks it once a candidate reading and the engine about 45 times an occurrence. A table carried in the frame, or the stretch of one offset a walk is in handed on with the position (as decision 61 does for the walk), would take most of those out of the hourly rule.
+* [ ] **The zone asked in the engine.** A question of `Tempo.Zone.Table` is about 250 ns, a binary search in a `:persistent_term`, where a sample kept in the process was 55 ns; the matcher asks it once a candidate reading and the engine about 45 times an occurrence. A table carried in the frame, or the stretch of one offset a walk is in handed on with the position (as decision 61 does for the walk), would take most of those out of the hourly rule.
 
-* **Every calendar question goes through the adapter.** `Tempo.Calendar` dispatches each to the calendar's module (decisions 6 and 8); the default calendar's day numbers are answered by `Calendar.ISO` directly, and a month's labels are asked once a month (decision 75), so the calendar modules are 4 to 5% of a rule's profiled time. Gregorian day-number arithmetic held inline in the walk would remove most of what is left in a date's extent.
+* [ ] **Every calendar question goes through the adapter.** `Tempo.Calendar` dispatches each to the calendar's module (decisions 6 and 8); the default calendar's day numbers are answered by `Calendar.ISO` directly, and a month's labels are asked once a month (decision 75), so the calendar modules are 4 to 5% of a rule's profiled time. Gregorian day-number arithmetic held inline in the walk would remove most of what is left in a date's extent.
 
-* **Lazy streams of structs.** Occurrences are made one at a time by `Stream.unfold/2`, each a new struct with keyword lists, and memory is 2 to 8 times 1.6.4's on the rule cases. Most callers take a bounded list, which could be made by a loop.
+* [ ] **Lazy streams of structs.** Occurrences are made one at a time by `Stream.unfold/2`, each a new struct with keyword lists, and memory is 2 to 8 times 1.6.4's on the rule cases. Most callers take a bounded list, which could be made by a loop.
 
-* **Comparing two values** is 1.5 µs, 7 times 1.6.4, which compared their fields: each is placed on the line first. A comparison of two values of one calendar and frame written to the same units could compare the units.
+* [ ] **Comparing two values** is 1.5 µs, 7 times 1.6.4, which compared their fields: each is placed on the line first. A comparison of two values of one calendar and frame written to the same units could compare the units.
 
-## Ideas, not committed to
+### Ideas, not committed to
 
 * [ ] **Revisit the calendar adapter.** Every calendar question goes through `Tempo.Calendar`, and `test/tempo/calendar_surface_test.exs` holds the library to it; what the adapter itself still knows (the `Calendar.ISO` table, the Gregorian for a solar term, Easter and the registry lookup by name) is left as it is for now (2026-10-14).
 
