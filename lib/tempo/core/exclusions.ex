@@ -8,6 +8,7 @@ defmodule Tempo.Exclusions do
 
   alias Tempo.Calendar
   alias Tempo.Limit
+  alias Tempo.Placed
   alias Tempo.Spans
 
   @doc """
@@ -26,12 +27,12 @@ defmodule Tempo.Exclusions do
   def every_year?(%Tempo{form: {:span, :open, :open}}), do: true
   def every_year?(_domain), do: false
 
-  @doc "The occurrences, each with its extent, that no excluded extent covers."
+  @doc "The placed occurrences that no excluded extent covers."
   @spec left_out(Enumerable.t(), [{:ok, Spans.extent()}]) :: Enumerable.t()
   def left_out(stream, []), do: stream
 
   def left_out(stream, excluded),
-    do: Stream.reject(stream, fn {_occurrence, extent} -> excluded?({:ok, extent}, excluded) end)
+    do: Stream.reject(stream, &excluded?({:ok, Placed.extent(&1)}, excluded))
 
   @doc """
   The extents a domain of exclusions alone leaves out. One that cannot be
@@ -44,9 +45,9 @@ defmodule Tempo.Exclusions do
     if only_exclusions?(domain) do
       excluded = %{domain | form: {:all, Enum.map(members, &elem(&1, 1))}}
 
-      with {:ok, spans} <- Spans.spans(excluded, options),
+      with {:ok, spans} <- Spans.placed(excluded, options),
            {:ok, spans} <- Limit.take(spans, excluded),
-           do: {:ok, Enum.map(spans, &Spans.extent/1)}
+           do: {:ok, Enum.map(spans, &{:ok, Placed.extent(&1)})}
     else
       {:ok, []}
     end
@@ -63,32 +64,29 @@ defmodule Tempo.Exclusions do
   @spec excluded_spans(Tempo.t(), [Tempo.t()], [Tempo.t()], keyword()) ::
           {:ok, Enumerable.t()} | {:error, Exception.t()}
   def excluded_spans(set, members, excluded, options) do
-    with {:ok, kept} <- Spans.spans(%{set | form: {:all, members}}, options),
-         {:ok, out} <- Spans.spans(%{set | form: {:all, excluded}}, options),
+    with {:ok, kept} <- Spans.placed(%{set | form: {:all, members}}, options),
+         {:ok, out} <- Spans.placed(%{set | form: {:all, excluded}}, options),
          {:ok, out} <- Limit.take(out, set) do
       out = out |> Enum.flat_map(&bounded_extent/1) |> Enum.sort()
       {:ok, Stream.flat_map(kept, &cut_around(&1, out))}
     end
   end
 
-  defp bounded_extent(span) do
-    case Spans.extent(span) do
-      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) -> [{start, stop}]
-      _open -> []
-    end
-  end
+  defp bounded_extent(%Placed{start: start, stop: stop})
+       when is_integer(start) and is_integer(stop),
+       do: [{start, stop}]
 
-  defp cut_around(span, out) do
-    case Spans.extent(span) do
-      {:ok, {start, stop}} when is_integer(start) -> pieces(span, {start, stop}, out)
-      _ -> [span]
-    end
-  end
+  defp bounded_extent(_open), do: []
 
-  defp pieces(span, whole, out) do
+  defp cut_around(%Placed{start: start, stop: stop} = placed, out) when is_integer(start),
+    do: pieces(placed, {start, stop}, out)
+
+  defp cut_around(placed, _out), do: [placed]
+
+  defp pieces(%Placed{span: span} = placed, whole, out) do
     case left_after(whole, out) do
-      [^whole] -> [span]
-      left -> Enum.map(left, &piece(span, &1))
+      [^whole] -> [placed]
+      left -> Enum.map(left, &Placed.new(piece(span, &1), &1))
     end
   end
 

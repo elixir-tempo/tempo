@@ -22,6 +22,7 @@ defmodule Tempo.Select do
     Event,
     Expand,
     Limit,
+    Placed,
     Shift,
     Skip,
     Spans,
@@ -52,7 +53,15 @@ defmodule Tempo.Select do
   each a `%Tempo{}` of the `:value` form (or the `:span` form for a window),
   or an error when the period has no extent.
   """
-  @spec in_period(Tempo.t(), parts(), keyword()) :: {:ok, [Tempo.t()]} | {:error, Exception.t()}
+  @spec in_period(Tempo.t() | Placed.t(), parts(), keyword()) ::
+          {:ok, [Tempo.t()]} | {:error, Exception.t()}
+  # A placed period is selected in at the place it was given, not placed again.
+  def in_period(%Placed{start: start, stop: stop, span: period}, parts, options)
+      when is_integer(start) and is_integer(stop),
+      do: in_period(period, parts, Keyword.put(options, :extent, {start, stop}))
+
+  def in_period(%Placed{span: period}, parts, options), do: in_period(period, parts, options)
+
   def in_period(%Tempo{} = period, parts, options) do
     {before, nested, window, later} = around_nested(parts)
     {position, later} = counted_among_all(nested, later)
@@ -721,6 +730,9 @@ defmodule Tempo.Select do
     end
   end
 
+  defp within?(%Placed{start: s, stop: e}, {start, stop}),
+    do: is_integer(s) and is_integer(e) and s >= start and e <= stop
+
   defp within?(%Tempo{} = value, {start, stop}) do
     case Spans.extent(value) do
       {:ok, {s, e}} when is_integer(s) and is_integer(e) -> s >= start and e <= stop
@@ -846,7 +858,7 @@ defmodule Tempo.Select do
   end
 
   def select(%Tempo{} = base, selector, options) do
-    with {:ok, periods} <- Spans.spans(base, Keyword.take(options, [:within])),
+    with {:ok, periods} <- Spans.placed(base, Keyword.take(options, [:within])),
          {:ok, periods} <- bounded_periods(periods, base) do
       each_picked(periods, &apply_selector(selector, &1, options))
     end
@@ -906,6 +918,10 @@ defmodule Tempo.Select do
       do: {:error, not_a_selector(selector)},
       else: in_period(period, Unit.cyclic(units), options)
   end
+
+  # Any other selector takes the period as written.
+  defp apply_selector(selector, %Placed{span: period}, options),
+    do: apply_selector(selector, period, options)
 
   defp apply_selector(
          %Tempo{form: {:span, %Tempo{form: {:value, units}}, _}} = selector,
@@ -977,10 +993,10 @@ defmodule Tempo.Select do
   defp apply_selector(selector, _period, _options), do: {:error, not_a_selector(selector)}
 
   defp occurrences_in(recurrence, period, options) do
-    with {:ok, spans} <- Spans.spans(recurrence, Keyword.put(options, :within, period)),
+    with {:ok, spans} <- Spans.placed(recurrence, Keyword.put(options, :within, period)),
          {:ok, spans} <- Limit.take(spans, recurrence),
          {:ok, extent} <- bounded_extent(period) do
-      {:ok, Enum.filter(spans, &within?(&1, extent))}
+      {:ok, spans |> Enum.filter(&within?(&1, extent)) |> Placed.written()}
     end
   end
 
@@ -1000,9 +1016,9 @@ defmodule Tempo.Select do
   defp days_off(nil, _period, _options), do: {:ok, []}
 
   defp days_off(except, period, options) do
-    with {:ok, spans} <- Spans.spans(except, Keyword.put(options, :within, period)),
+    with {:ok, spans} <- Spans.placed(except, Keyword.put(options, :within, period)),
          {:ok, spans} <- Limit.take(spans, except),
-         do: {:ok, Enum.map(spans, &Spans.extent/1)}
+         do: {:ok, Enum.map(spans, &{:ok, Placed.extent(&1)})}
   end
 
   defp overlaps_any?(value, off) do

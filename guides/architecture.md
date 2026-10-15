@@ -440,7 +440,7 @@ Positions are computed once per end and compared as integers; calendars and zone
 | read or write text (5.9) | O(length of the text), plus one validation pass | per unit validated | once per zoned reading |
 | the relation of two uncertain expressions | O(readings of one × readings of the other) | | |
 
-The place a port will want to optimise is the number of times a span is placed: this implementation builds a span as values and places it again in the next step, and its own measurements put the remedy at carrying one positioned representation `(start, stop, written span)` through the engine, which changes nothing of the model.
+A span is placed once: the engine hands every span on as `(start, stop, written span)`, made where the span is made, and the written span alone crosses to the public layer. What a port will want to optimise next is the placing of *values* inside expansion and selection, where a candidate is built from its units and placed to be judged; this implementation hands a candidate's extent on where expansion found it and places the rest.
 
 ## 9. What is Tempo's and what is not
 

@@ -22,6 +22,7 @@ defmodule Tempo.Spans do
   alias Tempo.Exclusions
   alias Tempo.Expand
   alias Tempo.Limit
+  alias Tempo.Placed
   alias Tempo.Recurrence
   alias Tempo.Scale
   alias Tempo.Select
@@ -299,7 +300,7 @@ defmodule Tempo.Spans do
     wall = Walk.wall(tick, frame)
     day = Integer.floor_div(wall, @day)
     moved = day |> day_shifted(date_units, frame.calendar) |> shown_day(day, frame)
-    placed(moved * @day + Integer.mod(wall, @day), frame)
+    on_frame(moved * @day + Integer.mod(wall, @day), frame)
   end
 
   # A day the zone's clock leaves out is not landed on: the step goes on to
@@ -327,8 +328,8 @@ defmodule Tempo.Spans do
     end)
   end
 
-  defp placed(wall, %{zone: nil, shift: nil}), do: wall
-  defp placed(wall, %{zone: zone, shift: shift}), do: Zone.utc_of_wall(zone, shift, wall)
+  defp on_frame(wall, %{zone: nil, shift: nil}), do: wall
+  defp on_frame(wall, %{zone: zone, shift: shift}), do: Zone.utc_of_wall(zone, shift, wall)
 
   @doc "A duration in the reverse direction."
   @spec negated(Duration.t()) :: Duration.t()
@@ -352,36 +353,49 @@ defmodule Tempo.Spans do
   The spans an expression denotes, lazily and in order, each a `%Tempo{}` of
   the `:span` form with value ends and the expression's calendar, zone and
   metadata. A sequence with no end of its own is bounded by `:within`.
+  This is `placed/2` with the places left off: the public layer's reading.
   """
   @spec spans(Tempo.t() | Duration.t(), keyword()) ::
           {:ok, Enumerable.t()} | {:error, Exception.t()}
-  def spans(expression, options \\ [])
+  def spans(expression, options \\ []) do
+    with {:ok, placed} <- placed(expression, options), do: {:ok, Placed.written(placed)}
+  end
 
-  def spans(%Duration{} = duration, _options), do: {:error, conversion(duration, :bare_duration)}
+  @doc """
+  The spans an expression denotes, each with its place (`Tempo.Placed`):
+  the engine's reading, made as each span is made so that no span is placed
+  again by the step that takes it. A sequence with no end of its own is
+  bounded by `:within`.
+  """
+  @spec placed(Tempo.t() | Duration.t(), keyword()) ::
+          {:ok, Enumerable.t()} | {:error, Exception.t()}
+  def placed(expression, options \\ [])
 
-  def spans(%Tempo{form: {:value, units}} = value, options) do
+  def placed(%Duration{} = duration, _options), do: {:error, conversion(duration, :bare_duration)}
+
+  def placed(%Tempo{form: {:value, units}} = value, options) do
     cond do
       Keyword.has_key?(units, :selection) ->
         with {:ok, values} <- selected_values(value, options), do: each_spans_of(values, [])
 
       not Unit.anchored?(units) and options[:within] != nil ->
-        placed_spans(value, options[:within], Keyword.delete(options, :within))
+        placed_value_spans(value, options[:within], Keyword.delete(options, :within))
 
       Expand.one_span?(units) ->
-        with {:ok, span} <- as_span(value), do: {:ok, [span]}
+        with {:ok, span} <- as_placed(value), do: {:ok, [span]}
 
       true ->
         expanded_spans(value)
     end
   end
 
-  def spans(%Tempo{form: {:span, from, to}} = span, options) do
+  def placed(%Tempo{form: {:span, from, to}} = span, options) do
     if options[:within] != nil and match?({:cycle, _}, frame(span)),
       do: placed_span_spans(span, options[:within], Keyword.delete(options, :within)),
       else: written_spans(span, from, to, options)
   end
 
-  def spans(%Tempo{form: {:every, first, bound, rule}} = recurrence, options) do
+  def placed(%Tempo{form: {:every, first, bound, rule}} = recurrence, options) do
     options = windowed_for(options, recurrence)
 
     if rule == nil,
@@ -391,11 +405,11 @@ defmodule Tempo.Spans do
 
   # A set read from a stream gives its members' spans as they are asked for.
   # Its members are in order of start, so a window stops the reading.
-  def spans(%Tempo{form: {:all, members}}, options) when not is_list(members) do
+  def placed(%Tempo{form: {:all, members}}, options) when not is_list(members) do
     {:ok, members |> Stream.flat_map(&member_stream(&1, options)) |> windowed(options)}
   end
 
-  def spans(%Tempo{form: {:all, members}} = set, options) do
+  def placed(%Tempo{form: {:all, members}} = set, options) do
     case Enum.split_with(members, &match?({:except, _}, &1)) do
       {[], members} ->
         members |> member_spans(options) |> overlapping(set, options)
@@ -407,23 +421,24 @@ defmodule Tempo.Spans do
     end
   end
 
-  def spans(%Tempo{form: {:one, _}} = set, _options), do: {:error, conversion(set, :one_of)}
+  def placed(%Tempo{form: {:one, _}} = set, _options), do: {:error, conversion(set, :one_of)}
 
   # A domain filter: the members' spans in the years the filter names.
-  def spans(%Tempo{form: {:when, member, years: filter}} = expression, options) do
-    with {:ok, spans} <- spans(%{member | calendar: expression.calendar}, options),
-         do: {:ok, Stream.filter(spans, &Exclusions.in_years?(&1, filter, expression.calendar))}
+  def placed(%Tempo{form: {:when, member, years: filter}} = expression, options) do
+    with {:ok, spans} <- placed(%{member | calendar: expression.calendar}, options) do
+      {:ok, Stream.filter(spans, &Exclusions.in_years?(&1.span, filter, expression.calendar))}
+    end
   end
 
   # A rule converted to another calendar (`Tempo.to_calendar/2` of a rule
   # with no end): selected in its own calendar, each span read in this one.
-  def spans(%Tempo{form: {:when, member, read_in: calendar}} = converted, options) do
-    with {:ok, spans} <- spans(member, options) do
+  def placed(%Tempo{form: {:when, member, read_in: calendar}} = converted, options) do
+    with {:ok, spans} <- placed(member, options) do
       {:ok, Stream.map(spans, &read_in(&1, calendar, converted.metadata))}
     end
   end
 
-  def spans(%Tempo{form: {:when, _, _}} = member, options) do
+  def placed(%Tempo{form: {:when, _, _}} = member, options) do
     if Conditions.conditional?(member),
       do: Conditions.resolve([member], [], options),
       else: {:error, conversion(member, :conditions)}
@@ -432,10 +447,17 @@ defmodule Tempo.Spans do
   # A span on the line, or written there: the spans its ends name.
   defp written_spans(span, from, to, options) do
     case {plural_end(from), plural_end(to)} do
-      {false, false} -> with {:ok, resolved} <- resolved(span, options), do: {:ok, [resolved]}
-      {true, true} -> paired_ends(span, options)
-      {true, false} -> each_end(span, :from, from, options)
-      {false, true} -> each_end(span, :to, to, options)
+      {false, false} ->
+        with {:ok, resolved} <- resolved_placed(span, options), do: {:ok, [resolved]}
+
+      {true, true} ->
+        paired_ends(span, options)
+
+      {true, false} ->
+        each_end(span, :from, from, options)
+
+      {false, true} ->
+        each_end(span, :to, to, options)
     end
   end
 
@@ -473,10 +495,10 @@ defmodule Tempo.Spans do
 
   defp end_after(duration_or_open, _start, _from), do: duration_or_open
 
-  defp read_in(%Tempo{form: {:span, from, to}} = span, calendar, metadata) do
-    {:ok, {start, stop}} = extent(span)
+  defp read_in(%Placed{start: start, stop: stop, span: span}, calendar, metadata) do
+    %Tempo{form: {:span, from, to}} = span
 
-    %Tempo{
+    read = %Tempo{
       form:
         {:span, at_position(start, from, :start, calendar, span.zone),
          at_position(stop, to, :end, calendar, span.zone)},
@@ -484,10 +506,12 @@ defmodule Tempo.Spans do
       zone: span.zone,
       metadata: Map.merge(metadata, span.metadata)
     }
+
+    Placed.new(read, {start, stop})
   end
 
   defp member_stream(member, options) do
-    case spans(member, options) do
+    case placed(member, options) do
       {:ok, spans} -> spans
       {:error, exception} -> raise exception
     end
@@ -500,7 +524,7 @@ defmodule Tempo.Spans do
   defp overlapping({:ok, spans}, set, options) do
     case window_extent(window_in(options[:within], set)) do
       {:ok, {start, stop}} ->
-        {:ok, Stream.filter(spans, &overlaps_window?(extent(&1), {start, stop}))}
+        {:ok, Stream.filter(spans, &overlaps_window?(&1, {start, stop}))}
 
       _none ->
         {:ok, spans}
@@ -509,10 +533,10 @@ defmodule Tempo.Spans do
 
   defp overlapping(error, _set, _options), do: error
 
-  defp overlaps_window?({:ok, {s, e} = extent}, window) when is_integer(s) and is_integer(e),
-    do: Scale.overlap?(extent, window)
+  defp overlaps_window?(%Placed{start: s, stop: e}, window) when is_integer(s) and is_integer(e),
+    do: Scale.overlap?({s, e}, window)
 
-  defp overlaps_window?(_extent, _window), do: true
+  defp overlaps_window?(_open, _window), do: true
 
   defp member_spans(members, options) do
     case Enum.split_with(members, &Conditions.conditional?/1) do
@@ -529,7 +553,7 @@ defmodule Tempo.Spans do
         with {:ok, streams} <- each_spans(members, wide),
              {:ok, others} <- Limit.take(in_time_order(streams), hd(conditionals)),
              {:ok, conditional} <- Conditions.resolve(conditionals, others, wide) do
-          {:ok, Enum.sort_by(others ++ conditional, &start_position/1)}
+          {:ok, Enum.sort_by(others ++ conditional, &start_of/1)}
         end
     end
   end
@@ -556,14 +580,19 @@ defmodule Tempo.Spans do
     %{window | form: {:span, from, to}, metadata: %{}}
   end
 
-  @doc "Where a span starts, or 0 where it has no start on a line."
-  @spec start_position(Tempo.t()) :: Scale.position()
+  @doc "Where a span starts, or 0 where it has no start on a line; a placed span knows."
+  @spec start_position(Tempo.t() | Placed.t()) :: Scale.position()
+  def start_position(%Placed{start: start}) when is_integer(start), do: start
+  def start_position(%Placed{}), do: 0
+
   def start_position(span) do
     case extent(span) do
       {:ok, {start, _}} when is_integer(start) -> start
       _ -> 0
     end
   end
+
+  defp start_of(placed_or_span), do: start_position(placed_or_span)
 
   # ── Selections ────────────────────────────────────────────────────────
 
@@ -583,8 +612,8 @@ defmodule Tempo.Spans do
   defp selection_periods(value, [], options) do
     case options[:within] do
       %Tempo{} = window ->
-        with {:ok, spans} <- spans(window, []),
-             do: {:ok, Enum.map(spans, &%{&1 | metadata: value.metadata})}
+        with {:ok, spans} <- placed(window, []),
+             do: {:ok, Enum.map(spans, &with_metadata(&1, value.metadata))}
 
       _ ->
         {:error, conversion(value, :needs_a_year)}
@@ -602,10 +631,13 @@ defmodule Tempo.Spans do
     end
   end
 
+  defp with_metadata(%Placed{} = placed, metadata),
+    do: Placed.update_span(placed, &%{&1 | metadata: metadata})
+
   # A value with no year placed by a window: in it, where the window is one
   # value it fits under, and else on each of the window's periods, as
   # `Tempo.select/3` selects it there (`4M` in `2026/2027`, each April).
-  defp placed_spans(value, window, options) do
+  defp placed_value_spans(value, window, options) do
     placed = placed_in(value, window)
 
     if on_the_line?(window) and not Unit.anchored?(elem(placed.form, 1)),
@@ -614,14 +646,14 @@ defmodule Tempo.Spans do
           {:ok, values} <- in_each_period(value, window, options),
           do: each_spans_of(values, [])
         ),
-      else: spans(placed, options)
+      else: placed(placed, options)
   end
 
   defp on_the_line?(%Tempo{} = window), do: not match?({:cycle, _}, frame(window))
   defp on_the_line?(_none), do: false
 
   defp in_each_period(%Tempo{form: {:value, units}} = value, window, options) do
-    with {:ok, periods} <- spans(window, []),
+    with {:ok, periods} <- placed(window, []),
          {:ok, periods} <- Limit.take(periods, window),
          {:ok, picked} <- each_selected(periods, Unit.cyclic(units), options) do
       {:ok, Enum.map(picked, &%{&1 | metadata: value.metadata})}
@@ -681,7 +713,7 @@ defmodule Tempo.Spans do
   defp each_spans(members, options) do
     members
     |> Enum.reduce_while({:ok, []}, fn member, {:ok, acc} ->
-      case spans(member, options) do
+      case placed(member, options) do
         {:ok, stream} -> {:cont, {:ok, [beneath(stream, member) | acc]}}
         error -> {:halt, error}
       end
@@ -696,8 +728,14 @@ defmodule Tempo.Spans do
   # beneath the occurrence's own: a holiday's name, on the day it falls and
   # on the day it is observed.
   defp beneath(stream, %Tempo{form: {:all, _members}, metadata: metadata})
-       when map_size(metadata) > 0,
-       do: Stream.map(stream, &%{&1 | metadata: Map.merge(metadata, &1.metadata)})
+       when map_size(metadata) > 0 do
+    Stream.map(
+      stream,
+      &Placed.update_span(&1, fn span ->
+        %{span | metadata: Map.merge(metadata, span.metadata)}
+      end)
+    )
+  end
 
   defp beneath(stream, _member), do: stream
 
@@ -710,9 +748,16 @@ defmodule Tempo.Spans do
   # the earliest head and putting back that member's next is a logarithmic
   # step, where a list scanned for the earliest made merging a set of n
   # members n² steps.
-  defp in_time_order([stream]), do: stream
+  defp in_time_order(streams), do: merged(streams)
 
-  defp in_time_order(streams) do
+  @doc """
+  Several sequences of placed spans, each in the order of time, as one
+  sequence in that order, merged as they are asked for.
+  """
+  @spec merged([Enumerable.t()]) :: Enumerable.t()
+  def merged([stream]), do: stream
+
+  def merged(streams) do
     Stream.resource(
       fn -> streams |> Enum.with_index() |> Enum.reduce(:gb_sets.new(), &put_head/2) end,
       &earliest/1,
@@ -728,9 +773,14 @@ defmodule Tempo.Spans do
         heads
       )
 
+  # A sequence's next span, or its last, which a sequence that ends with it
+  # (one taken to a count) gives as it halts, with no continuation.
+  defp put_next(:done, _place, heads), do: heads
+
   defp put_next(continuation, place, heads) do
     case continuation.({:cont, nil}) do
-      {:suspended, span, next} -> :gb_sets.add({start_position(span), place, span, next}, heads)
+      {:suspended, placed, next} -> :gb_sets.add({start_of(placed), place, placed, next}, heads)
+      {:halted, %Placed{} = last} -> :gb_sets.add({start_of(last), place, last, :done}, heads)
       {_done_or_halted, _} -> heads
     end
   end
@@ -756,14 +806,14 @@ defmodule Tempo.Spans do
 
   defp end_span(%Tempo{form: {:span, from, to}} = span, side, value, options) do
     {from, to} = if side == :from, do: {value, to}, else: {from, value}
-    {:ok, [resolved]} = spans(%{span | form: {:span, from, to}}, options)
+    {:ok, [resolved]} = placed(%{span | form: {:span, from, to}}, options)
     resolved
   end
 
   defp expanded_spans(%Tempo{form: {:value, units}} = value) do
     case Expand.expand(units, frame_of(value)) do
       {:ok, stream} ->
-        {:ok, Stream.map(stream, fn units -> as_span!(%{value | form: {:value, units}}) end)}
+        {:ok, Stream.map(stream, fn units -> as_placed!(%{value | form: {:value, units}}) end)}
 
       {:error, reason} ->
         {:error, conversion(value, reason)}
@@ -882,7 +932,14 @@ defmodule Tempo.Spans do
   """
   @spec as_span(Tempo.t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def as_span(%Tempo{form: {:value, _units}} = value) do
-    with {:ok, {_start, stop}} <- extent(value), do: {:ok, span_of(value, stop)}
+    with {:ok, placed} <- as_placed(value), do: {:ok, placed.span}
+  end
+
+  @doc "The one span of a singular value with its place: what `as_span/1` gives, placed as it is made."
+  @spec as_placed(Tempo.t()) :: {:ok, Placed.t()} | {:error, Exception.t()}
+  def as_placed(%Tempo{form: {:value, _units}} = value) do
+    with {:ok, {start, stop}} <- extent(value),
+         do: {:ok, Placed.new(span_of(value, stop), {start, stop})}
   end
 
   # The span a value names carries its metadata; its ends are points, and
@@ -899,9 +956,9 @@ defmodule Tempo.Spans do
     }
   end
 
-  defp as_span!(value) do
-    case as_span(value) do
-      {:ok, span} -> span
+  defp as_placed!(value) do
+    case as_placed(value) do
+      {:ok, placed} -> placed
       {:error, exception} -> raise exception
     end
   end
@@ -977,34 +1034,49 @@ defmodule Tempo.Spans do
   placed only when it is asked where it lies.
   """
   @spec resolved(Tempo.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-  def resolved(%Tempo{form: {:span, %Tempo{}, %Tempo{}}} = span, _options), do: {:ok, span}
+  def resolved(%Tempo{} = span, options) do
+    with {:ok, placed} <- resolved_placed(span, options), do: {:ok, placed.span}
+  end
 
-  def resolved(%Tempo{form: {:span, from, to}} = span, options) do
+  # A written span resolved and placed: a span of two values is placed once
+  # here, and one with a duration or an open end at the positions resolving
+  # it reckoned, an open end placed by no window staying open.
+  defp resolved_placed(%Tempo{form: {:span, %Tempo{}, %Tempo{}}} = span, _options) do
+    with {:ok, extent} <- extent(span), do: {:ok, Placed.new(span, extent)}
+  end
+
+  defp resolved_placed(%Tempo{form: {:span, from, to}} = span, options) do
     with {:ok, {start, stop}} <- extent(span),
-         {:ok, from} <- resolved_end(from, start, stop, :from, span, options),
-         {:ok, to} <- resolved_end(to, start, stop, :to, span, options) do
-      {:ok, %{span | form: {:span, from, to}}}
+         {:ok, from, from_at} <- resolved_end(from, start, stop, :from, span, options),
+         {:ok, to, to_at} <- resolved_end(to, start, stop, :to, span, options) do
+      {:ok, Placed.new(%{span | form: {:span, from, to}}, {from_at, to_at})}
     end
   end
 
-  defp resolved_end(%Tempo{} = value, _start, _stop, _side, _span, _options), do: {:ok, value}
+  # Each end resolved, with the position it stands at: a value where it was,
+  # a duration end at the position the span's extent gave it, an open end at
+  # the window's edge where a window places it and at none otherwise.
+  defp resolved_end(%Tempo{} = value, start, _stop, :from, _span, _options),
+    do: {:ok, value, start}
+
+  defp resolved_end(%Tempo{} = value, _start, stop, :to, _span, _options), do: {:ok, value, stop}
 
   # A duration end is the period, at the other end's resolution, where the span begins or ends.
   defp resolved_end(%Duration{} = duration, _start, stop, :to, span, _options) do
     %Tempo{form: {:span, from, _}} = span
-    {:ok, value_at(stop, finer_model(from, duration), :end, span)}
+    {:ok, value_at(stop, finer_model(from, duration), :end, span), stop}
   end
 
   defp resolved_end(%Duration{} = duration, start, _stop, :from, span, _options) do
     %Tempo{form: {:span, _, to}} = span
-    {:ok, value_at(start, finer_model(to, duration), :start, span)}
+    {:ok, value_at(start, finer_model(to, duration), :start, span), start}
   end
 
   defp resolved_end(:open, _start, _stop, side, span, options),
     do: open_end(Keyword.get(options, :within), side, span)
 
   # An open end stays open, or is placed where the window begins or ends.
-  defp open_end(nil, _side, _span), do: {:ok, :open}
+  defp open_end(nil, _side, _span), do: {:ok, :open, nil}
 
   defp open_end(%Tempo{} = window, side, %Tempo{form: {:span, from, to}} = span) do
     with :ok <- placeable(span),
@@ -1014,14 +1086,14 @@ defmodule Tempo.Spans do
   end
 
   # A window open at the side it is asked for places nothing there.
-  defp placed_end(:from, {nil, _wstop}, _ends, _window, _span), do: {:ok, :open}
-  defp placed_end(:to, {_wstart, nil}, _ends, _window, _span), do: {:ok, :open}
+  defp placed_end(:from, {nil, _wstop}, _ends, _window, _span), do: {:ok, :open, nil}
+  defp placed_end(:to, {_wstart, nil}, _ends, _window, _span), do: {:ok, :open, nil}
 
   defp placed_end(:from, {wstart, _wstop}, {_from, to}, window, span),
-    do: {:ok, value_at(wstart, model_of(to, window), :start, span)}
+    do: {:ok, value_at(wstart, model_of(to, window), :start, span), wstart}
 
   defp placed_end(:to, {_wstart, wstop}, {from, _to}, window, span),
-    do: {:ok, value_at(wstop, model_of(from, window), :end, span)}
+    do: {:ok, value_at(wstop, model_of(from, window), :end, span), wstop}
 
   defp placeable(span) do
     case frame(span) do
@@ -1172,8 +1244,8 @@ defmodule Tempo.Spans do
   # ── Windows ───────────────────────────────────────────────────────────
 
   @doc """
-  A stream of spans, or of occurrences with their extents, with what ends
-  before the `:within` window and what starts after it left out.
+  A stream of spans, placed or not, with what ends before the `:within`
+  window and what starts after it left out.
   """
   @spec windowed(Enumerable.t(), keyword()) :: Enumerable.t()
   def windowed(stream, options) do
@@ -1194,10 +1266,10 @@ defmodule Tempo.Spans do
   defp taken_before(stream, nil), do: stream
   defp taken_before(stream, stop), do: Stream.take_while(stream, &starts_before?(&1, stop))
 
-  @doc "Whether a span, or an occurrence with its extent, ends at or before a position."
-  @spec ends_by?(Tempo.t() | {Tempo.t(), extent() | nil}, Scale.position()) :: boolean()
-  def ends_by?({%Tempo{}, {_, stop}}, start), do: stop <= start
-  def ends_by?({%Tempo{} = occurrence, nil}, start), do: ends_by?(occurrence, start)
+  @doc "Whether a span, placed or not, ends at or before a position; an open end does not."
+  @spec ends_by?(Tempo.t() | Placed.t(), Scale.position()) :: boolean()
+  def ends_by?(%Placed{stop: stop}, start) when is_integer(stop), do: stop <= start
+  def ends_by?(%Placed{}, _start), do: false
 
   def ends_by?(occurrence, start) do
     case extent(occurrence) do
@@ -1206,10 +1278,12 @@ defmodule Tempo.Spans do
     end
   end
 
-  @doc "Whether a span, or an occurrence with its extent, starts before a position."
-  @spec starts_before?(Tempo.t() | {Tempo.t(), extent() | nil}, Scale.position()) :: boolean()
-  def starts_before?({%Tempo{}, {start, _}}, stop), do: Scale.compare(start, stop) == :lt
-  def starts_before?({%Tempo{} = occurrence, nil}, stop), do: starts_before?(occurrence, stop)
+  @doc "Whether a span, placed or not, starts before a position; an open start does."
+  @spec starts_before?(Tempo.t() | Placed.t(), Scale.position()) :: boolean()
+  def starts_before?(%Placed{start: start}, stop) when is_integer(start),
+    do: Scale.compare(start, stop) == :lt
+
+  def starts_before?(%Placed{start: nil}, _stop), do: true
 
   def starts_before?(occurrence, stop) do
     case extent(occurrence) do

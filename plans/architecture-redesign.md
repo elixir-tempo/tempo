@@ -409,7 +409,7 @@ The budgets of 5.3 were estimates made before the code; the review of 2026-10-15
 | 2 | `Tempo.Expand` | 600 | 1,045 | 714 | 1,050 | Masks, groups, counts from the end, labels, days a zone leaves out, readings found by arithmetic and the extents they carry (decision 56). |
 | 2 | `Tempo.Walk` | 300 | 243 | 163 | 250 | Within. |
 | 2 | `Tempo.Validate` | 500 | 446 | 322 | 450 | Within. |
-| 3 | `Tempo.Spans` | 500 | 1,225 | 820 | 1,250 | Written spans with duration and open ends, plural ends, placing in a window, the merging of a set's members, the conditions' widened window. |
+| 3 | `Tempo.Spans` (with `Placed`) | 500 | 1,413 | 915 | 1,450 | Written spans with duration and open ends, plural ends, placing in a window, the merging of a set's members, the conditions' widened window; every span made with its place (decision 74). |
 | 3 | `Tempo.Recurrence` | (in `Spans`) | 851 | 568 | 900 | The rule walk: periods by number, looking ahead past quiet periods (decision 37), domains of years, counts and untils. |
 | 3 | `Tempo.Exclusions` | (in `Spans`) | 148 | 100 | 150 | New, from `Spans`. |
 | 3 | `Tempo.Children` | (in `Spans`) | 363 | 258 | 400 | New, from `Spans`: law 6 and the readings of certainty. |

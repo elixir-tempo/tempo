@@ -14,6 +14,8 @@ defmodule Tempo.Recurrence do
   alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Exclusions
+  alias Tempo.Limit
+  alias Tempo.Placed
   alias Tempo.Scale
   alias Tempo.Select
   alias Tempo.Shift
@@ -69,14 +71,18 @@ defmodule Tempo.Recurrence do
         |> to_range_end(from)
         |> in_range_years(from, first.calendar)
         |> Stream.dedup_by(&landing/1)
-        |> Stream.map(fn {occurrence, extent} ->
-          {%{occurrence | metadata: Map.merge(recurrence.metadata, occurrence.metadata)}, extent}
-        end)
+        |> Stream.map(&with_metadata(&1, recurrence.metadata))
         |> bounded(bound, until, options)
-        |> Stream.map(&elem(&1, 0))
 
       {:ok, stream}
     end
+  end
+
+  # An occurrence carries the recurrence's metadata beneath its own.
+  defp with_metadata(%Placed{} = placed, metadata) do
+    Placed.update_span(placed, fn occurrence ->
+      %{occurrence | metadata: Map.merge(metadata, occurrence.metadata)}
+    end)
   end
 
   # A domain's members are each selected in.
@@ -108,15 +114,18 @@ defmodule Tempo.Recurrence do
   # occurrence goes on with its extent, reckoned once as its span is made.
   defp picked_in(period, {start, _stop} = extent, %{parts: parts, begins: begins} = walk)
        when start >= begins,
-       do: in_rule_period(period, parts, [extent: extent] ++ walk.options)
+       do: in_rule_period(Placed.new(period, extent), parts, walk.options)
 
   defp picked_in(period, extent, %{parts: parts, begins: begins, options: options}) do
-    options = if extent, do: [extent: extent] ++ options, else: options
-
     period
+    |> placed_period(extent)
     |> in_rule_period(parts, options)
-    |> Enum.filter(fn {_occurrence, {start, _stop}} -> start >= begins end)
+    |> Enum.filter(fn %Placed{start: start} -> start >= begins end)
   end
+
+  # A period with the extent the walk reckoned for it, where it did.
+  defp placed_period(period, nil), do: period
+  defp placed_period(period, extent), do: Placed.new(period, extent)
 
   defp period_extent(period) do
     case Spans.extent(period) do
@@ -381,7 +390,7 @@ defmodule Tempo.Recurrence do
 
   defp in_range_years(stream, %Tempo{form: {:when, %Tempo{} = inner, [years: filter]}}, calendar) do
     if range_start(inner) != nil or Exclusions.every_year?(inner),
-      do: Stream.filter(stream, &Exclusions.in_years?(elem(&1, 0), filter, calendar)),
+      do: Stream.filter(stream, &Exclusions.in_years?(&1.span, filter, calendar)),
       else: stream
   end
 
@@ -393,7 +402,7 @@ defmodule Tempo.Recurrence do
        ) do
     case Spans.end_position(to) do
       {:ok, stop} when is_integer(stop) ->
-        Stream.take_while(stream, fn {_occurrence, {start, _}} -> start < stop end)
+        Stream.take_while(stream, fn %Placed{start: start} -> start < stop end)
 
       _ ->
         stream
@@ -497,7 +506,7 @@ defmodule Tempo.Recurrence do
   # own: the window gives the periods, and what the exclusions name is left out.
   # The cadence's periods by number: the first, and each a cadence on.
   defp steps(%Tempo{form: {:span, from, to}} = first, recurrence) do
-    with {:ok, [base]} <- Spans.spans(first, []),
+    with {:ok, [base]} <- one_base(first, recurrence),
          {:ok, cadence} <- cadence(from, to, base, recurrence) do
       # `{:with_extent, k, carried}` gives the period with the extent it was
       # built from, where that is known, so that a walk need not reckon it
@@ -522,6 +531,17 @@ defmodule Tempo.Recurrence do
           k ->
             occurrence(base, {from, to}, cadences(cadence, k), recurrence)
         end}}
+    end
+  end
+
+  # A rule's periods are stepped from one first span: a start that names
+  # several is refused by name.
+  defp one_base(first, recurrence) do
+    with {:ok, bases} <- Spans.spans(first, []) do
+      case Enum.take(bases, 2) do
+        [base] -> {:ok, [base]}
+        _none_or_several -> {:error, conversion(recurrence, :several)}
+      end
     end
   end
 
@@ -580,22 +600,25 @@ defmodule Tempo.Recurrence do
 
   defp in_rule_period(period, parts, options) do
     case Select.in_period(period, parts, options) do
-      {:ok, picked} -> Enum.flat_map(picked, &with_extent(&1, period, options[:extent]))
+      {:ok, picked} -> Enum.flat_map(picked, &with_extent(&1, period))
       {:error, _} -> []
     end
   end
 
   # A span of two values picked whole is where the walk placed it.
-  defp with_extent(%Tempo{form: {:span, %Tempo{}, %Tempo{}}} = period, period, {_, _} = extent),
-    do: [{period, extent}]
+  defp with_extent(
+         %Tempo{form: {:span, %Tempo{}, %Tempo{}}} = period,
+         %Placed{span: period} = placed
+       ),
+       do: [placed]
 
-  defp with_extent(picked, _period, _extent), do: with_extent(picked)
+  defp with_extent(picked, _period), do: with_extent(picked)
 
-  # An occurrence and its extent: a value picked is the span it covers.
+  # An occurrence with its place: a value picked is the span it covers.
   defp with_extent(%Tempo{form: {:value, _}} = value) do
     case Spans.extent(value) do
       {:ok, {start, stop} = extent} when is_integer(start) and is_integer(stop) ->
-        [{Spans.span_of(value, stop), extent}]
+        [Placed.new(Spans.span_of(value, stop), extent)]
 
       {:error, exception} ->
         raise exception
@@ -607,7 +630,7 @@ defmodule Tempo.Recurrence do
 
     case Spans.extent(occurrence) do
       {:ok, {start, stop} = extent} when is_integer(start) and is_integer(stop) ->
-        [{occurrence, extent}]
+        [Placed.new(occurrence, extent)]
 
       _open ->
         []
@@ -635,9 +658,36 @@ defmodule Tempo.Recurrence do
   @spec occurrences(Tempo.t(), term(), Tempo.t(), keyword()) ::
           {:ok, Enumerable.t()} | {:error, Exception.t()}
   def occurrences(%Tempo{form: {:span, from, to}} = first, bound, recurrence, options) do
-    with {:ok, [base]} <-
-           Spans.spans(%{first | form: {:span, from, to}}, Keyword.delete(options, :within)),
-         {:ok, cadence} <- cadence(from, to, base, recurrence),
+    with {:ok, bases} <-
+           Spans.placed(%{first | form: {:span, from, to}}, Keyword.delete(options, :within)),
+         {:ok, bases} <- Limit.take(bases, recurrence) do
+      each_base(bases, from, to, bound, recurrence, options)
+    end
+  end
+
+  # A first span that names one span is the series; one that names several
+  # (a set or a mask in an end, `R3/2026Y6M{1,15}D/P1M`) is each span's
+  # series, merged in the order of time.
+  defp each_base([%Placed{span: base}], from, to, bound, recurrence, options),
+    do: series(base, from, to, bound, recurrence, options)
+
+  defp each_base(bases, _from, to, bound, recurrence, options) do
+    bases
+    |> Enum.reduce_while({:ok, []}, fn %Placed{span: %Tempo{form: {:span, from, _}} = base},
+                                       {:ok, streams} ->
+      case series(base, from, to, bound, recurrence, options) do
+        {:ok, stream} -> {:cont, {:ok, [stream | streams]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, streams} -> {:ok, streams |> Enum.reverse() |> Spans.merged()}
+      error -> error
+    end
+  end
+
+  defp series(base, from, to, bound, recurrence, options) do
+    with {:ok, cadence} <- cadence(from, to, base, recurrence),
          {:ok, indexes} <- indexes(from, bound, recurrence),
          {:ok, until} <- until_position(bound) do
       # Each occurrence is made with its extent, as a rule's periods are
@@ -657,40 +707,35 @@ defmodule Tempo.Recurrence do
               {recurrence, n, first_start, carried}
             )
 
-          {[placed({occurrence, extent})], carried}
+          {[placed_occurrence(occurrence, extent)], carried}
         end)
         |> Stream.dedup_by(&landing/1)
-        |> Stream.map(fn {occurrence, extent} ->
-          {%{occurrence | metadata: Map.merge(recurrence.metadata, occurrence.metadata)}, extent}
-        end)
+        |> Stream.map(&with_metadata(&1, recurrence.metadata))
         |> bounded(bound, until, options)
-        |> Stream.map(fn {occurrence, _extent} -> occurrence end)
 
       {:ok, stream}
     end
   end
 
-  defp placed({occurrence, nil}), do: {occurrence, Spans.extent(occurrence) |> placed_extent()}
-  defp placed(placed), do: placed
+  # An occurrence at the extent its building gave, or placed once where it
+  # gave none: an extent on a line, and on a cycle; none where an end is open.
+  defp placed_occurrence(occurrence, {_, _} = extent), do: Placed.new(occurrence, extent)
 
-  # An extent on a line; on a cycle each occurrence is its own (`landing/1`).
-  defp placed_extent({:ok, {start, stop} = extent}) when is_integer(start) and is_integer(stop),
-    do: extent
-
-  defp placed_extent(_cycle_or_none), do: nil
-
-  # Where an occurrence starts on a line. Two steps that land on one start
-  # (the second having stepped over a day the clock left out) are one
-  # occurrence; on a cycle each is its own.
-  defp landing({%Tempo{}, {start, _stop}}), do: start
-  defp landing({%Tempo{} = occurrence, nil}), do: landing(occurrence)
-
-  defp landing(occurrence) do
+  defp placed_occurrence(occurrence, nil) do
     case Spans.extent(occurrence) do
-      {:ok, {start, _}} when is_integer(start) -> start
-      _ -> make_ref()
+      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) ->
+        Placed.new(occurrence, {start, stop})
+
+      _open_or_none ->
+        Placed.new(occurrence, {nil, nil})
     end
   end
+
+  # Where an occurrence starts. Two steps that land on one start (the second
+  # having stepped over a day the clock left out) are one occurrence; one
+  # with no start is its own.
+  defp landing(%Placed{start: start}) when is_integer(start), do: start
+  defp landing(%Placed{}), do: make_ref()
 
   # The position occurrences start before to be kept. An until value bounds a
   # recurrence in an inclusive manner (RFC 5545 section 3.3.10): written to a

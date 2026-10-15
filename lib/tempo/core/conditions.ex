@@ -11,7 +11,7 @@ defmodule Tempo.Conditions do
   # plain members' spans first, and the conditional members are judged
   # against those.
 
-  alias Tempo.{Duration, Limit, Scale, Select, Spans}
+  alias Tempo.{Duration, Limit, Placed, Scale, Select, Spans}
 
   @doc "Whether a set member is conditional on the others."
   @spec conditional?(term()) :: boolean()
@@ -20,9 +20,9 @@ defmodule Tempo.Conditions do
 
   def conditional?(_member), do: false
 
-  @doc "The spans of conditional members, judged against the other members' spans."
-  @spec resolve([Tempo.t()], [Tempo.t()], keyword()) ::
-          {:ok, [Tempo.t()]} | {:error, Exception.t()}
+  @doc "The placed spans of conditional members, judged against the other members' placed spans."
+  @spec resolve([Tempo.t()], [Placed.t()], keyword()) ::
+          {:ok, [Placed.t()]} | {:error, Exception.t()}
   def resolve(conditionals, others, options) do
     with {:ok, unmoved} <- unmoved(conditionals, options) do
       conditionals
@@ -52,22 +52,26 @@ defmodule Tempo.Conditions do
   end
 
   defp unmoved_spans(%Tempo{form: {:when, member, _}, metadata: metadata}, options) do
-    with {:ok, spans} <- Spans.spans(member, options),
+    with {:ok, spans} <- Spans.placed(member, options),
          {:ok, spans} <- Limit.take(spans, member),
-         do: {:ok, Enum.map(spans, &%{&1 | metadata: Map.merge(metadata, &1.metadata)})}
+         do: {:ok, Enum.map(spans, &beneath(&1, metadata))}
   end
+
+  # The conditional member's metadata beneath each of its spans' own.
+  defp beneath(%Placed{} = placed, metadata),
+    do: Placed.update_span(placed, &%{&1 | metadata: Map.merge(metadata, &1.metadata)})
 
   defp resolved(
          %Tempo{form: {:when, member, [{kind, conditions}]}, metadata: metadata},
          others,
          options
        ) do
-    with {:ok, spans} <- Spans.spans(member, options),
+    with {:ok, spans} <- Spans.placed(member, options),
          {:ok, spans} <- Limit.take(spans, member),
          {:ok, falls_on} <- falls_on(conditions[:falls_on], others, options) do
       spans
       |> Enum.flat_map(&judged(kind, &1, conditions, falls_on))
-      |> Enum.map(&%{&1 | metadata: Map.merge(metadata, &1.metadata)})
+      |> Enum.map(&beneath(&1, metadata))
       |> then(&{:ok, &1})
     end
   end
@@ -75,13 +79,13 @@ defmodule Tempo.Conditions do
   # The extents an occurrence may fall on: the other occurrences whose
   # metadata holds the map, or the spans of the expression given.
   defp falls_on(%Tempo{} = expression, _others, options) do
-    with {:ok, spans} <- Spans.spans(expression, options),
+    with {:ok, spans} <- Spans.placed(expression, options),
          {:ok, spans} <- Limit.take(spans, expression),
          do: {:ok, extents(spans)}
   end
 
   defp falls_on(%{} = wanted, others, _options) do
-    {:ok, others |> Enum.filter(&holds?(&1.metadata, wanted)) |> extents()}
+    {:ok, others |> Enum.filter(&holds?(&1.span.metadata, wanted)) |> extents()}
   end
 
   defp falls_on(_none, _others, _options), do: {:ok, []}
@@ -89,9 +93,8 @@ defmodule Tempo.Conditions do
   defp holds?(metadata, wanted),
     do: Enum.all?(wanted, fn {key, value} -> Map.get(metadata, key) == value end)
 
-  defp extents(spans) do
-    for span <- spans,
-        {:ok, {start, stop}} <- [Spans.extent(span)],
+  defp extents(placed) do
+    for %Placed{start: start, stop: stop} <- placed,
         is_integer(start),
         is_integer(stop),
         do: {start, stop}
@@ -105,31 +108,29 @@ defmodule Tempo.Conditions do
   end
 
   # Moved, when it falls on one, to the first span the selector gives after it.
-  defp judged(:move, span, conditions, falls_on) do
-    case Spans.extent(span) do
-      {:ok, {start, stop}} ->
-        if overlaps?({start, stop}, falls_on),
-          do: moved(span, stop, conditions[:to_next]),
-          else: [span]
-
-      _ ->
-        [span]
-    end
+  defp judged(:move, %Placed{start: start, stop: stop, span: span} = placed, conditions, falls_on)
+       when is_integer(start) and is_integer(stop) do
+    if overlaps?({start, stop}, falls_on),
+      do: moved(span, stop, conditions[:to_next]),
+      else: [placed]
   end
 
-  defp offset_falls_on?(span, %Duration{} = offset, falls_on) do
-    case Spans.extent(span) do
-      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) ->
-        moved_falls_on?(
-          Spans.shifted(start, offset, Spans.frame_of(span), span),
-          stop - start,
-          falls_on
-        )
+  defp judged(:move, placed, _conditions, _falls_on), do: [placed]
 
-      _ ->
-        false
-    end
+  defp offset_falls_on?(
+         %Placed{start: start, stop: stop, span: span},
+         %Duration{} = offset,
+         falls_on
+       )
+       when is_integer(start) and is_integer(stop) do
+    moved_falls_on?(
+      Spans.shifted(start, offset, Spans.frame_of(span), span),
+      stop - start,
+      falls_on
+    )
   end
+
+  defp offset_falls_on?(_open, _offset, _falls_on), do: false
 
   defp moved_falls_on?({:ok, start}, length, falls_on),
     do: overlaps?({start, start + length}, falls_on)
@@ -149,7 +150,7 @@ defmodule Tempo.Conditions do
   end
 
   defp spans_of(value, span) do
-    case Spans.spans(%{value | metadata: span.metadata}) do
+    case Spans.placed(%{value | metadata: span.metadata}) do
       {:ok, spans} -> Enum.take(spans, 1)
       _ -> []
     end

@@ -19,6 +19,7 @@ defmodule Tempo.Algebra do
   alias Tempo.ConversionError
   alias Tempo.FrameError
   alias Tempo.Limit
+  alias Tempo.Placed
   alias Tempo.Scale
   alias Tempo.Spans
 
@@ -101,29 +102,27 @@ defmodule Tempo.Algebra do
   defp spans_within(window, expression, side) do
     placed = if window, do: Spans.placed_in(expression, window), else: expression
 
-    with {:ok, spans} <- Spans.spans(placed, if(window, do: [within: window], else: [])),
+    with {:ok, spans} <- Spans.placed(placed, if(window, do: [within: window], else: [])),
          {:ok, spans} <- bounded(spans, expression),
          {:ok, positioned} <- placed_spans(spans, side) do
       {:ok, Enum.sort_by(positioned, &{&1.start, &1.stop})}
     end
   end
 
+  # The spans as the sweep takes them, at the places they came with; a
+  # span with an open end has no place in a sweep.
   defp placed_spans(spans, side) do
     spans
-    |> Enum.reduce_while({:ok, []}, fn span, {:ok, acc} ->
-      case Spans.extent(span) do
-        {:ok, {start, stop}} when is_integer(start) and is_integer(stop) ->
-          {:cont, {:ok, [%{start: start, stop: stop, span: span, side: side} | acc]}}
-
-        {:ok, _open} ->
-          {:halt, {:error, ConversionError.exception(value: span, reason: :open)}}
-
-        {:error, _} = error ->
-          {:halt, error}
-      end
+    |> Enum.reduce_while({:ok, []}, fn placed, {:ok, acc} ->
+      if Placed.bounded?(placed),
+        do: {:cont, {:ok, [positioned_at(placed, side) | acc]}},
+        else: {:halt, {:error, ConversionError.exception(value: placed.span, reason: :open)}}
     end)
     |> in_order()
   end
+
+  defp positioned_at(%Placed{start: start, stop: stop, span: span}, side),
+    do: %{start: start, stop: stop, span: span, side: side}
 
   defp in_order({:ok, reversed}), do: {:ok, Enum.reverse(reversed)}
   defp in_order(error), do: error
@@ -344,24 +343,17 @@ defmodule Tempo.Algebra do
   # list for one that has an end.
   defp spans_in_order(expression, side) do
     if endless?(expression) do
-      with {:ok, spans} <- Spans.spans(expression, []),
+      with {:ok, spans} <- Spans.placed(expression, []),
            do: {:ok, Stream.map(spans, &positioned!(&1, side))}
     else
       operand(expression, nil, side, [])
     end
   end
 
-  defp positioned!(span, side) do
-    case Spans.extent(span) do
-      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) ->
-        %{start: start, stop: stop, span: span, side: side}
-
-      {:ok, _open} ->
-        raise ConversionError.exception(value: span, reason: :open)
-
-      {:error, exception} ->
-        raise exception
-    end
+  defp positioned!(%Placed{span: span} = placed, side) do
+    if Placed.bounded?(placed),
+      do: positioned_at(placed, side),
+      else: raise(ConversionError.exception(value: span, reason: :open))
   end
 
   # ── One set ───────────────────────────────────────────────────────────
@@ -742,14 +734,19 @@ defmodule Tempo.Algebra do
     end
   end
 
-  # A stream held at its next member: the member and the rest, or nil at its end.
+  # A stream held at its next member: the member and the rest, or nil at
+  # its end. A stream that ends with a member (one taken to a count) gives
+  # it as it halts, with no rest.
   defp cursor(enumerable) do
     advance(&Enumerable.reduce(enumerable, &1, fn member, _ -> {:suspend, member} end))
   end
 
+  defp advance(:done), do: nil
+
   defp advance(continuation) do
     case continuation.({:cont, nil}) do
       {:suspended, member, continuation} -> {member, continuation}
+      {:halted, %{start: _} = last} -> {last, :done}
       {_done_or_halted, _} -> nil
     end
   end
@@ -760,7 +757,10 @@ defmodule Tempo.Algebra do
   end
 
   defp closed(state) do
-    for {_member, continuation} <- [state.a, state.b], do: continuation.({:halt, nil})
+    for {_member, continuation} <- [state.a, state.b],
+        is_function(continuation),
+        do: continuation.({:halt, nil})
+
     :ok
   end
 
@@ -917,7 +917,7 @@ defmodule Tempo.Algebra do
   defp begins_after(endless, ended, compare) do
     with {:ok, _frame} <- frames_agree(endless, ended, []),
          {:ok, positioned} <- operand(ended, nil, :a, []),
-         {:ok, spans} <- Spans.spans(endless, []) do
+         {:ok, spans} <- Spans.placed(endless, []) do
       {:ok, begins?(Enum.at(spans, 0), positioned, compare)}
     end
   end
@@ -925,7 +925,7 @@ defmodule Tempo.Algebra do
   defp begins?(nil, _positioned, _compare), do: false
   defp begins?(_first, [], _compare), do: false
 
-  defp begins?(%Tempo{} = first, positioned, compare),
+  defp begins?(%Placed{} = first, positioned, compare),
     do: compare.(positioned!(first, :b).start, last_stop(positioned))
 
   defp extents(results), do: Enum.map(results, &{&1.start, &1.stop})

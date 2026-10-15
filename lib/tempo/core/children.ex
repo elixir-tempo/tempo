@@ -13,6 +13,7 @@ defmodule Tempo.Children do
   alias Tempo.Duration
   alias Tempo.Expand
   alias Tempo.Limit
+  alias Tempo.Placed
   alias Tempo.Scale
   alias Tempo.Season
   alias Tempo.Spans
@@ -274,15 +275,22 @@ defmodule Tempo.Children do
     end)
   end
 
-  # The extent of each expression, every one closed at both ends.
-  defp closed_extents(expressions, source) do
-    each_readings(expressions, fn expression ->
-      case Spans.extent(expression) do
-        {:ok, {start, stop}} when is_integer(start) and is_integer(stop) -> {:ok, [{start, stop}]}
-        {:ok, _open} -> {:error, conversion(source, :open)}
-        error -> error
-      end
-    end)
+  # The extent of each expression, placed or not, every one closed at both ends.
+  defp closed_extents(expressions, source),
+    do: each_readings(expressions, &closed_extent(&1, source))
+
+  defp closed_extent(%Placed{start: start, stop: stop}, _source)
+       when is_integer(start) and is_integer(stop),
+       do: {:ok, [{start, stop}]}
+
+  defp closed_extent(%Placed{}, source), do: {:error, conversion(source, :open)}
+
+  defp closed_extent(expression, source) do
+    case Spans.extent(expression) do
+      {:ok, {start, stop}} when is_integer(start) and is_integer(stop) -> {:ok, [{start, stop}]}
+      {:ok, _open} -> {:error, conversion(source, :open)}
+      error -> error
+    end
   end
 
   defp margin?(%Tempo{form: {:value, units}}),
@@ -310,7 +318,7 @@ defmodule Tempo.Children do
 
   # Any other span is the spans it names, each an extent: a plural end gives one for each value.
   defp spans_readings(span) do
-    with {:ok, spans} <- Spans.spans(span),
+    with {:ok, spans} <- Spans.placed(span),
          {:ok, spans} <- Limit.take(spans, span),
          do: closed_extents(spans, span)
   end
