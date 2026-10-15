@@ -206,6 +206,28 @@ defmodule Tempo.RRuleTest do
     end
   end
 
+  describe "text that is no rule" do
+    test "is refused by the part that is not" do
+      assert {:error, %ArgumentError{message: message}} = RRule.parse("FREQ=DAILY;COUNT")
+      assert message =~ "is not a KEY=VALUE rule part"
+
+      assert {:error, %ArgumentError{}} = RRule.parse("FREQ=DAILY;UNTIL=tomorrow")
+      assert {:error, %ArgumentError{}} = RRule.parse("FREQ=WEEKLY;WKST=XX")
+      assert {:error, %ArgumentError{}} = RRule.parse("FREQ=DAILY;INTERVAL=0")
+      assert {:error, %ArgumentError{}} = RRule.parse("FREQ=DAILY;COUNT=-2")
+
+      assert {:error, %Tempo.InvalidDateError{unit: :month}} =
+               RRule.parse("FREQ=YEARLY;BYMONTH=13")
+    end
+
+    test "is read after an RRULE: name, and raised by parse!/2" do
+      assert RRule.parse("RRULE:FREQ=DAILY;COUNT=2", from: ~o"2026-06-01") ==
+               {:ok, ~o"R2/2026-06-01/P1D"}
+
+      assert_raise ArgumentError, fn -> RRule.parse!("FREQ=DAILY;COUNT") end
+    end
+  end
+
   describe "text" do
     test "a rule reads to the recurrence its ISO 8601-2 text reads to, and writes back" do
       {:ok, rule} = RRule.parse("FREQ=MONTHLY;BYDAY=2MO", from: ~o"2025-01-01")

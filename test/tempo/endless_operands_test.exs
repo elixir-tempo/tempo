@@ -43,6 +43,24 @@ defmodule Tempo.EndlessOperandsTest do
       assert Tempo.difference(@busy, fifteenths()) ==
                {:ok, ~o"{2026-06-10/2026-06-14,2026-06-16/2026-06-20}"}
     end
+
+    test "is empty where the bounded operand is: it has no stretch to search" do
+      assert Tempo.intersection(@weeks, ~o"{}") == {:ok, ~o"{}"}
+      assert Tempo.difference(~o"{}", @weeks) == {:ok, ~o"{}"}
+    end
+
+    test "is bounded by a rule whose years end" do
+      christmases = Tempo.from_iso8601!("R/{2020Y,2022Y}/P1Y/FL12M25DN")
+
+      assert Tempo.intersection(christmases, ~o"2020/2030") ==
+               {:ok, ~o"{2020-12-25/2020-12-25,2022-12-25/2022-12-25}"}
+    end
+  end
+
+  describe "two operands on different cycles" do
+    test "cannot be combined" do
+      assert {:error, %Tempo.FrameError{reason: :cycles}} = Tempo.union(~o"6M", ~o"T10")
+    end
   end
 
   describe "an answer that does not" do

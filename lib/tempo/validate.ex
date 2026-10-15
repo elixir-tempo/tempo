@@ -22,6 +22,9 @@ defmodule Tempo.Validate do
 
   @minutes_in_a_day 24 * 60
 
+  # The units a selection's parts are held to their bounds in.
+  @selected_units [:month, :week, :day, :day_of_week, :day_of_year, :hour, :minute]
+
   # The annotations a number takes after it, read on a year alone.
   @annotations [:exponent, :significant, :margin]
 
@@ -52,6 +55,7 @@ defmodule Tempo.Validate do
 
   defp form({:value, units}, expression) do
     with :ok <- value(units, expression),
+         :ok <- parts_within(Keyword.get(units, :selection, []), expression),
          :ok <- years_named(units, expression),
          :ok <- shift(expression.shift, expression),
          :ok <- events(units, expression),
@@ -70,7 +74,8 @@ defmodule Tempo.Validate do
 
   defp form({:every, first, bound, rule}, expression) do
     with :ok <- form(first.form, first),
-         :ok <- events(rule || [], expression) do
+         :ok <- events(rule || [], expression),
+         :ok <- parts_within(rule || [], expression) do
       end_of(bound, expression)
     end
   end
@@ -371,6 +376,52 @@ defmodule Tempo.Validate do
 
   defp bounds(:group, _held, _units, _calendar), do: nil
   defp bounds(:selection, _held, _units, _calendar), do: nil
+
+  # ── A selection's parts ───────────────────────────────────────────────
+
+  # A selection's parts are held to the bounds a unit has in any period of
+  # its calendar (law 7): no thirteenth Gregorian month, no thirty-second
+  # day, no eighth day of the week. A part some periods have and others lack
+  # (`L31DN`) is kept, as RFC 5545 keeps a BYMONTHDAY a month lacks, and a
+  # second runs to 60, as RFC 5545's BYSECOND does.
+  defp parts_within(parts, %Tempo{calendar: calendar} = expression) do
+    case parts_bounded(parts, calendar) do
+      :ok -> :ok
+      {:error, {unit, reason}} -> invalid(expression, unit, reason)
+    end
+  end
+
+  defp parts_bounded(parts, calendar) when is_list(parts) do
+    Enum.reduce_while(parts, :ok, fn part, :ok ->
+      case part_bounded(part, calendar) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp parts_bounded(_parts, _calendar), do: :ok
+
+  defp part_bounded({:selection, nested}, calendar), do: parts_bounded(nested, calendar)
+
+  defp part_bounded({:all, alternatives}, calendar) when is_list(alternatives),
+    do: parts_bounded(Enum.map(alternatives, &{:selection, &1}), calendar)
+
+  defp part_bounded({:second, held}, _calendar), do: part_within(:second, held, 0, 60)
+
+  defp part_bounded({unit, held}, calendar) when unit in @selected_units do
+    {low, high} = bounds(unit, held, [], calendar)
+    part_within(unit, held, low, high)
+  end
+
+  defp part_bounded(_part, _calendar), do: :ok
+
+  defp part_within(unit, held, low, high) do
+    case within(held, low, high) do
+      :ok -> :ok
+      {:error, reason} -> {:error, {unit, reason}}
+    end
+  end
 
   defp month_name?({month, :leap}) when is_integer(month), do: true
   defp month_name?(month), do: is_integer(month) and month > 0

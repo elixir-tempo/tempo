@@ -94,6 +94,39 @@ defmodule Tempo.SelectTest do
     end
   end
 
+  describe "a selection's bounds" do
+    # What no period of the calendar has is refused (law 7); what some
+    # periods have is kept, as RFC 5545 keeps a BYMONTHDAY a month lacks.
+    test "a unit no period has is refused, where it is read or built" do
+      assert {:error,
+              %Tempo.InvalidDateError{unit: :day, reason: {:out_of_range, 32, 1..31}} = error} =
+               Tempo.from_iso8601("L32DN")
+
+      assert Exception.message(error) =~ "its day is 32"
+      assert {:error, %Tempo.InvalidDateError{unit: :month}} = Tempo.from_iso8601("2026YL13MN")
+      assert {:error, %Tempo.InvalidDateError{unit: :hour}} = Tempo.from_iso8601("LT25HN")
+
+      assert {:error, %Tempo.InvalidDateError{unit: :day_of_week}} =
+               Tempo.from_iso8601("L{1K1I,9K-1I}N")
+
+      assert {:error, %Tempo.InvalidDateError{unit: :month}} =
+               Tempo.from_iso8601("LL13M25DN/P8D1K-1IN")
+
+      assert {:error, %Tempo.InvalidDateError{unit: :month}} =
+               Tempo.from_iso8601("R/../P1Y/FL13MN")
+
+      assert {:error, %Tempo.InvalidDateError{unit: :month}} = Tempo.selection(month: 13)
+    end
+
+    test "a unit some periods have is kept" do
+      assert {:ok, _} = Tempo.from_iso8601("L31DN")
+      assert {:ok, _} = Tempo.from_iso8601("L2M29DN")
+      assert {:ok, _} = Tempo.from_iso8601("L-1DN")
+      assert {:ok, _} = Tempo.from_iso8601("LT23H59M60SN")
+      assert {:ok, _} = Tempo.from_iso8601("R/../P1Y/FL13M1DN[u-ca=hebrew]")
+    end
+  end
+
   describe "a selection written in a value" do
     test "names the values it picks, with the units after it on each" do
       assert texts(Tempo.to_interval(~o"2026Y6ML1K1IN")) == ["2026Y6M1D/2026Y6M1D"]

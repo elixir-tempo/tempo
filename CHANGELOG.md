@@ -162,6 +162,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.JSCalendar.parse/2` returns an `ArgumentError` that names why a document cannot be decoded, where it returned the `jscalendar` library's bare reason.
 
+* A selection's units are held to the bounds a unit has in any period of its calendar: `L32DN`, `LT25HN` and an RRULE's `BYMONTH=13` are errors, where they selected nothing; `L31DN` and a `BYSECOND` of 60 stay.
+
+* An intersection of a recurrence with no end and an empty set is empty, where it was a `too_many_values` error.
+
 * A year written after a decade or a century (`202J2026Y`) is a year it names, and one it does not name is an error, as is a decade after a century, where `20C3J` did not finish expanding.
 
 * `Tempo.to_interval/2` and `Tempo.members/2` place an interval with no year in a `:within` window, from each start it holds to the next reading of its end (`T22/T06` in two days is two night shifts).

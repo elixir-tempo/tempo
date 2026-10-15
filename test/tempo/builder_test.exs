@@ -388,6 +388,37 @@ defmodule Tempo.BuilderTest do
       assert {:error, %ArgumentError{}} = grouped(~o"2026", 2, month: 3, day: 1)
       assert {:error, %ArgumentError{}} = some(~o"2026-06", :month)
       assert {:error, %ArgumentError{}} = some(every(:week), :day)
+      assert {:error, %ArgumentError{}} = uncertain(every(:week))
+      assert {:error, %ArgumentError{}} = grouped(~o"2026/2027", 2, month: 3)
+      assert {:error, %ArgumentError{}} = some(~o"2026-06/2026-07", :day)
+    end
+
+    test "a set's marks, groups and unspecified units are each member's" do
+      assert uncertain(~o"{2026-06-01,2026-06-03}") == {:ok, ~o"{2026-06-01?,2026-06-03?}"}
+      assert grouped(~o"{2026,2027}", 2, month: 3) == {:ok, ~o"{2026Y2G3MU,2027Y2G3MU}"}
+      assert some(~o"{2026-06,2026-07}", :day) == {:ok, ~o"{2026Y6MX*D,2026Y7MX*D}"}
+    end
+  end
+
+  describe "the steps of a stretch of days" do
+    test "a set of selections each last the length" do
+      christmas_and_new_year = Tempo.from_iso8601!("{2026YL12M25DN,2026YL1M1DN}")
+
+      assert lasting(christmas_and_new_year, day: 2) ==
+               {:ok, Tempo.from_iso8601!("{2026YLL12M25DN/P2DN,2026YLL1M1DN/P2DN}")}
+    end
+
+    test "what selects nothing has no stretch" do
+      assert {:error, %ArgumentError{message: message}} = every(:year) |> lasting(day: 2)
+      assert message =~ "selects nothing yet"
+      assert {:error, %ArgumentError{}} = lasting(~o"2026-06-01/2026-06-10", day: 2)
+    end
+  end
+
+  describe "the step of a zone" do
+    test "a set is placed in a zone, each member with it" do
+      assert ~o"{2026-06-15T10,2026-06-16T10}" |> in_zone("Europe/Paris") ==
+               {:ok, ~o"{2026-06-15T10,2026-06-16T10}[Europe/Paris]"}
     end
   end
 

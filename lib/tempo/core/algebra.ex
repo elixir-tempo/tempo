@@ -91,8 +91,14 @@ defmodule Tempo.Algebra do
   # The spans of an operand, each with its positions. A value with no year is
   # placed by the window; a recurrence with no end is bounded by the window or
   # by the other operand's whole stretch.
-  defp operand(expression, other, side, options) do
-    window = window_for(expression, other, options)
+  defp operand(expression, other, side, options),
+    do: expression |> window_for(other, options) |> spans_within(expression, side)
+
+  # An empty window, or the stretch of an operand with no spans, holds none:
+  # a recurrence with no end beside an empty set is cut to nothing.
+  defp spans_within(%Tempo{form: {:all, []}}, _expression, _side), do: {:ok, []}
+
+  defp spans_within(window, expression, side) do
     placed = if window, do: Spans.placed_in(expression, window), else: expression
 
     with {:ok, spans} <- Spans.spans(placed, if(window, do: [within: window], else: [])),
@@ -371,7 +377,7 @@ defmodule Tempo.Algebra do
   members are put in order once they are in one frame.
   """
   @spec gathered([Tempo.t()], keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-  def gathered(members, options \\ [])
+  def gathered(members, options)
 
   def gathered([], options) do
     {:ok,
@@ -476,10 +482,6 @@ defmodule Tempo.Algebra do
 
   defp reversed({:ok, members}), do: {:ok, Enum.reverse(members)}
   defp reversed(error), do: error
-
-  @doc "Every point in either operand."
-  @spec union([positioned()], [positioned()], frame()) :: [result()]
-  def union(a, b, frame), do: sweep(a, b, frame, fn da, db -> da > 0 or db > 0 end, :by_member)
 
   @doc "Every point in both operands."
   @spec intersection([positioned()], [positioned()], frame()) :: [result()]
