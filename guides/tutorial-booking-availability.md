@@ -5,12 +5,12 @@ This tutorial builds the availability core of a real service, one concept at a t
 No scaffolding is needed. Everything below runs in `iex` after:
 
 ```elixir
-Mix.install([{:ex_tempo, "~> 3.0"}, {:ical, "~> 3.0"}, {:tz, "~> 0.28"}])
+Mix.install([{:ex_tempo, "~> 2.0"}, {:ical, "~> 3.2"}])
 Calendar.put_time_zone_database(Tz.TimeZoneDatabase)
 import Tempo.Sigils
 ```
 
-In a Mix project, add the same three dependencies and put the `Calendar` line in `config/runtime.exs`.
+Tempo comes with `:tz`; the `Calendar` line is for `:ical`, which reads Elixir's own time zone setting. In a Mix project, add the same two dependencies and put the `Calendar` line in `config/runtime.exs`, or set `config :elixir, :time_zone_database, Tz.TimeZoneDatabase`.
 
 ## Step 1 — Opening hours are a value, not a pair of integers
 

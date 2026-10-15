@@ -10,7 +10,8 @@ import Config
 #     zones in iex sessions without the caller having to pass a
 #     database explicitly.
 #
-# Production consumers of `ex_tempo` install any
+# An application needs no such line for Tempo itself, which asks `tz`
+# where nothing is configured (decision 77); it may configure any
 # `Calendar.TimeZoneDatabase` implementation (`:tz`, `:tzdata`,
-# `:time_zone_info`, `:zoneinfo`) — see `Tempo.TimeZoneDatabase`.
+# `:time_zone_info`, `:zoneinfo`) here or under `:ex_tempo`.
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase

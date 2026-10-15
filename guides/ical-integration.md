@@ -34,7 +34,7 @@ end
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 ```
 
-Any implementation works — [`:tz`](https://hex.pm/packages/tz), [`:tzdata`](https://hex.pm/packages/tzdata), [`:time_zone_info`](https://hex.pm/packages/time_zone_info) or [`:zoneinfo`](https://hex.pm/packages/zoneinfo). Times in UTC (`20260401T090000Z`) and times with no zone need none.
+Tempo comes with `:tz` and asks it for a zone's rules where nothing else is configured, but `:ical` reads Elixir's own setting, so it must be set for a `TZID` to be read. Any implementation works — [`:tz`](https://hex.pm/packages/tz), [`:tzdata`](https://hex.pm/packages/tzdata), [`:time_zone_info`](https://hex.pm/packages/time_zone_info) or [`:zoneinfo`](https://hex.pm/packages/zoneinfo). Times in UTC (`20260401T090000Z`) and times with no zone need none.
 
 ## 1. A schedule, read and asked about
 

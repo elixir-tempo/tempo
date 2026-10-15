@@ -5,9 +5,8 @@ defmodule Tempo.ZoneError do
   * `:zone` is the zone name or offset as written.
 
   * `:reason` is `:unknown` for a name the database does not have,
-    `:no_database` for a name given where no time zone database is
-    configured but Elixir's UTC-only default, `:gap` for
-    a reading the zone's clock skips, `:mixed` for an expression whose parts
+    `:no_database` for a name given where the time zone database
+    configured knows only UTC, `:gap` for a reading the zone's clock skips, `:mixed` for an expression whose parts
     are in two zones, `:critical` for a critical suffix Tempo cannot act on, or
     `:inconsistent` for a time shift a critical zone does not have then.
 
@@ -29,9 +28,10 @@ defmodule Tempo.ZoneError do
     do: "The time zone #{inspect(zone)} is not known to the time zone database"
 
   def message(%__MODULE__{zone: zone, reason: :no_database}) do
-    "The time zone #{inspect(zone)} needs a time zone database; configure one with " <>
-      "`config :elixir, :time_zone_database, Tz.TimeZoneDatabase` (or Tzdata, or " <>
-      "`config :ex_tempo, :time_zone_database, ...`)"
+    "The time zone #{inspect(zone)} needs a time zone database that knows it, and the one " <>
+      "configured knows only UTC; configure one with " <>
+      "`config :elixir, :time_zone_database, Tz.TimeZoneDatabase` or " <>
+      "`config :ex_tempo, :time_zone_database, ...`, or configure none and Tempo asks tz"
   end
 
   def message(%__MODULE__{zone: zone, reason: :gap, value: value}),

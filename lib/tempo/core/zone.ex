@@ -452,16 +452,20 @@ defmodule Tempo.Zone do
 
   # ── The zone database ─────────────────────────────────────────────────
   #
-  # Tempo is time zone database agnostic: it asks the `Calendar.TimeZoneDatabase`
-  # the application configures (`:ex_tempo, :time_zone_database`, else Elixir's
-  # own), through the table of each zone's changes. With Elixir's UTC-only
-  # default, a zone name other than UTC's is refused where it is given, as
-  # `:no_database`.
+  # Tempo asks the `Calendar.TimeZoneDatabase` the application configures
+  # (`:ex_tempo, :time_zone_database`, else Elixir's own), through the table
+  # of each zone's changes, and where neither names one it asks `tz`, which
+  # comes with it (decision 77). A database configured that knows only UTC
+  # refuses a zone name other than UTC's where it is given, as `:no_database`.
 
-  @doc "The `Calendar.TimeZoneDatabase` Tempo asks."
+  @doc "The `Calendar.TimeZoneDatabase` Tempo asks: the one configured, else the `tz` package's."
   @spec database() :: Calendar.time_zone_database()
   # Read as Erlang reads it, on every question of a zone: Tempo's own
-  # setting, else Elixir's (`Calendar.get_time_zone_database/0`).
+  # setting, else Elixir's where it is other than Elixir's own default
+  # (`Calendar.put_time_zone_database/1`), else `tz`. Elixir sets its
+  # UTC-only default in its application env, so that default is not read
+  # as a choice; a UTC-only database chosen on purpose is set under
+  # `:ex_tempo`.
   def database do
     case :application.get_env(:ex_tempo, :time_zone_database) do
       {:ok, database} when database != nil -> database
@@ -471,8 +475,8 @@ defmodule Tempo.Zone do
 
   defp elixirs_database do
     case :application.get_env(:elixir, :time_zone_database) do
-      {:ok, database} -> database
-      :undefined -> Calendar.UTCOnlyTimeZoneDatabase
+      {:ok, database} when database != Calendar.UTCOnlyTimeZoneDatabase -> database
+      _default -> Tz.TimeZoneDatabase
     end
   end
 

@@ -223,19 +223,16 @@ Tempo is published on hex as `ex_tempo` because the `tempo` name on hex was alre
 
 ### Time-zone database
 
-Tempo is **time zone database agnostic**: it works against Elixir's standard `Calendar.TimeZoneDatabase` behaviour and does not bundle an implementation. Add one to your application and configure it once:
+Tempo asks Elixir's standard `Calendar.TimeZoneDatabase` behaviour for a zone's rules, and comes with [`:tz`](https://hex.pm/packages/tz), which compiles the IANA data in and downloads nothing at run time. A named zone works with no configuration:
 
 ```elixir
-# mix.exs
-{:tz, "~> 0.28"}
-
-# config/config.exs
-config :elixir, :time_zone_database, Tz.TimeZoneDatabase
+iex> Tempo.from_iso8601!("2026-06-15T09:00:00[Europe/Paris]")
+~o"2026Y6M15DT9H0M0S[Europe/Paris]"
 ```
 
-Any implementation works — [`:tz`](https://hex.pm/packages/tz) (compile-time IANA data, no runtime downloads), [`:tzdata`](https://hex.pm/packages/tzdata), [`:time_zone_info`](https://hex.pm/packages/time_zone_info), or [`:zoneinfo`](https://hex.pm/packages/zoneinfo) (reads the OS zone files). Tempo can also be pointed at a database independently of the global Elixir setting with `config :ex_tempo, :time_zone_database, ...`. Tempo's own dev and test environments use `:tz`.
+Tempo asks the database the application configures where it configures one: `config :ex_tempo, :time_zone_database, ...` for Tempo alone, else Elixir's own `config :elixir, :time_zone_database, ...` (or `Calendar.put_time_zone_database/1`), which `DateTime` reads too. Any implementation works there — `:tz`, [`:tzdata`](https://hex.pm/packages/tzdata), [`:time_zone_info`](https://hex.pm/packages/time_zone_info) or [`:zoneinfo`](https://hex.pm/packages/zoneinfo) (reads the OS zone files) — and where neither names one, or Elixir's is its own UTC-only default, Tempo asks `tz`. A zone update reaches Tempo by updating the database package; Tempo keeps no zone data of its own.
 
-Without a configured database, a named zone has no rules to read a time by, so one is refused where it is given — by the reader (`[Europe/Paris]`), `Tempo.in_zone/2`, `Tempo.shift_zone/2` and `Tempo.now/1` — with a `Tempo.ZoneError` whose reason is `:no_database`. UTC, a fixed offset (`[+02:00]`) and a time shift (`+02:00`) need no database. iCalendar import also needs the database: the upstream `:ical` library only populates an event's `dtstart`/`dtend` fields when a default `Calendar.TimeZoneDatabase` is installed, so `DTSTART;TZID=...` events silently come through empty without one.
+A database configured under `:ex_tempo` that knows only UTC (`Calendar.UTCOnlyTimeZoneDatabase`) refuses a named zone where it is given — by the reader (`[Europe/Paris]`), `Tempo.in_zone/2`, `Tempo.shift_zone/2` and `Tempo.now/1` — with a `Tempo.ZoneError` whose reason is `:no_database`. UTC, a fixed offset (`[+02:00]`) and a time shift (`+02:00`) need no database. iCalendar import reads Elixir's setting rather than Tempo's: the upstream `:ical` library only populates an event's `dtstart`/`dtend` fields when a default `Calendar.TimeZoneDatabase` is installed, so set `config :elixir, :time_zone_database, Tz.TimeZoneDatabase` (or call `Calendar.put_time_zone_database/1`) before importing `DTSTART;TZID=...` events.
 
 ### The most values at once
 

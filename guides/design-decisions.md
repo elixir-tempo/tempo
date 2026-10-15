@@ -617,6 +617,8 @@ Some decisions concern the project rather than the meaning of a date, and are re
 
 * The companion package `tempo_network` may call Tempo's hidden calendar module, as work of the same project.
 
+* `tz` is a dependency, and Tempo asks it for a zone's rules where the application configures no time zone database (decision 77). A database configured under `:ex_tempo` or `:elixir` is asked instead, Elixir's own UTC-only default aside, so an application that prefers another keeps it; Tempo sets no global database of its own.
+
 ## Related reading
 
 * [ISO 8601 conformance](iso8601-conformance.md) says what Tempo reads of ISO 8601-1, ISO 8601-2 and RFC 9557, and lists Tempo's own extensions.
