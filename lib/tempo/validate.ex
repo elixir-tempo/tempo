@@ -1,5 +1,4 @@
 defmodule Tempo.Validate do
-  @minutes_in_a_day 24 * 60
   @moduledoc false
 
   # What the reader builds, checked once against the calendar (law 7: what
@@ -20,6 +19,11 @@ defmodule Tempo.Validate do
   alias Tempo.Unit
   alias Tempo.Zone
   alias Tempo.ZoneError
+
+  @minutes_in_a_day 24 * 60
+
+  # The annotations a number takes after it, read on a year alone.
+  @annotations [:exponent, :significant, :margin]
 
   @doc "Checks an expression; a duration has nothing to check."
   @spec run(Tempo.t() | Duration.t()) ::
@@ -222,20 +226,36 @@ defmodule Tempo.Validate do
   # (`hour: "09"`, `month: :march`) is a program's mistake, named here
   # rather than met by the writer. The expression it would make cannot be
   # written, so the error carries the units.
+  #
+  # An exponent, significant digits or a margin (`2018±2Y`) is read on a year
+  # alone, so a value built with one on another unit would be written as text
+  # that is not read back.
   defp shaped(units) do
-    case Enum.find(units, fn {_unit, held} -> unshaped?(held) end) do
+    case Enum.find_value(units, &unshaped/1) do
       nil ->
         :ok
 
-      {unit, held} ->
-        {:error,
-         InvalidDateError.exception(value: units, unit: unit, reason: {:not_a_unit_value, held})}
+      {unit, reason} ->
+        {:error, InvalidDateError.exception(value: units, unit: unit, reason: reason)}
     end
   end
 
-  defp unshaped?(held) when is_binary(held) or is_float(held), do: true
-  defp unshaped?(held) when is_atom(held), do: held != :any
-  defp unshaped?(_held), do: false
+  defp unshaped({unit, held}) when is_binary(held) or is_float(held),
+    do: {unit, {:not_a_unit_value, held}}
+
+  defp unshaped({unit, held}) when is_atom(held) and held != :any,
+    do: {unit, {:not_a_unit_value, held}}
+
+  defp unshaped({unit, {n, annotations} = held}) when unit != :year and is_integer(n) do
+    if annotated?(annotations), do: {unit, {:annotated, held}}
+  end
+
+  defp unshaped(_unit_and_held), do: nil
+
+  defp annotated?(annotations) when is_list(annotations),
+    do: Enum.any?(annotations, &match?({key, _} when key in @annotations, &1))
+
+  defp annotated?(_leap), do: false
 
   defp invalid(expression, unit, reason),
     do: {:error, InvalidDateError.exception(value: expression, unit: unit, reason: reason)}

@@ -9,7 +9,8 @@ defmodule Tempo.InvalidDateError do
   * `:unit` is the unit at fault, where one is.
 
   * `:reason` says why: `:out_of_range`, `:no_such_date`, `:skipped_by_the_clock`,
-    `:needs_a_year`, `{:not_a_unit_value, held}`, or a short description.
+    `:needs_a_year`, `{:not_a_unit_value, held}`, `{:annotated, held}`, or a
+    short description.
 
   """
 
@@ -64,6 +65,10 @@ defmodule Tempo.InvalidDateError do
 
   defp describe({:not_a_unit_value, held}),
     do: "#{inspect(held)}, where a unit holds an integer, a list or a range of them"
+
+  defp describe({:annotated, held}),
+    do:
+      "#{inspect(held)}, where an exponent, significant digits or a margin is written on a year alone"
 
   defp describe(:skipped_by_the_clock), do: "a reading the zone's clock skips"
   defp describe(:needs_a_year), do: "a value that cannot be told without a year"

@@ -80,6 +80,16 @@ defmodule Tempo.IntervalTest do
       assert Interval.endpoints(june) == {~o"2026-06-01", ~o"2026-06-30"}
       assert Interval.endpoints(~o"2026-06-01/..") == {~o"2026-06-01", :open}
     end
+
+    test "an end given by a duration finer than the other end is written to the duration's part" do
+      # Written in tenths, the end would be 0.7 and the interval a fifth of a
+      # second where a quarter was asked for.
+      assert Tempo.to_interval(~o"2026-06-15T10:00:00.5/PT0.25S") ==
+               {:ok, ~o"2026-06-15T10:00:00.5/2026-06-15T10:00:00.75"}
+
+      assert Tempo.to_interval(~o"PT0.25S/2026-06-15T10:00:00.5") ==
+               {:ok, ~o"2026-06-15T10:00:00.25/2026-06-15T10:00:00.5"}
+    end
   end
 
   describe "instants/1" do

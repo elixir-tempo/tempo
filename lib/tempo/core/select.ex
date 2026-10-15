@@ -53,7 +53,7 @@ defmodule Tempo.Select do
   or an error when the period has no extent.
   """
   @spec in_period(Tempo.t(), parts(), keyword()) :: {:ok, [Tempo.t()]} | {:error, Exception.t()}
-  def in_period(%Tempo{} = period, parts, options \\ []) do
+  def in_period(%Tempo{} = period, parts, options) do
     {before, nested, window, later} = around_nested(parts)
     {position, later} = counted_among_all(nested, later)
     {given, options} = Keyword.pop(options, :extent)

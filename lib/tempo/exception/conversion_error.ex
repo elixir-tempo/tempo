@@ -30,6 +30,8 @@ defmodule Tempo.ConversionError do
           | :not_an_expression
           | :not_an_elixir_value
           | :not_a_duration
+          | :nothing_finer
+          | {:no_walk, atom()}
           | :not_an_interval
           | {:not_written_in, :season | :traditional_month}
           | term()
@@ -125,6 +127,13 @@ defmodule Tempo.ConversionError do
 
   defp describe(:not_a_duration),
     do: "is not a duration, its ISO 8601 text or a keyword list of units"
+
+  defp describe({:no_walk, unit}),
+    do:
+      "cannot be walked by the #{unit}, which is not a unit a span steps through: walk it by a calendar or a clock unit"
+
+  defp describe(:nothing_finer),
+    do: "is written to the microsecond, and has nothing finer to walk or enumerate"
 
   defp describe(reason) when is_binary(reason), do: reason
   defp describe(reason), do: inspect(reason)

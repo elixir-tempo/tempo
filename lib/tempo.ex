@@ -1048,6 +1048,7 @@ defmodule Tempo do
 
   def members(expression, options) when is_expression(expression) do
     with :ok <- Options.check(options, [:within, :locale], "Tempo.members/2"),
+         :ok <- locale_with_territory(options),
          {:ok, members} <- Spans.members(expression, options),
          do: bounded(members, expression)
   end
@@ -3587,9 +3588,19 @@ defmodule Tempo do
 
   def select(base, selector, options) do
     with :ok <- Options.check(options, [:within, :locale], "Tempo.select/3"),
+         :ok <- locale_with_territory(options),
          {:ok, selector} <- selector(selector),
          {:ok, values} <- Select.select(base, selector, options) do
       {:ok, set_of(values, base)}
+    end
+  end
+
+  # A `:locale` names the territory whose weekdays a roll keeps to: one that
+  # names none is the answer, not a raise part way through the selection.
+  defp locale_with_territory(options) do
+    case Keyword.fetch(options, :locale) do
+      {:ok, locale} -> with {:ok, _territory} <- Tempo.Territory.resolve(locale), do: :ok
+      :error -> :ok
     end
   end
 

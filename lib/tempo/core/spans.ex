@@ -999,7 +999,7 @@ defmodule Tempo.Spans do
 
     if Unit.compare(Unit.resolution(units), finest) == :lt and Unit.clock?(finest),
       do: %{model | form: {:value, Unit.date_units(units) ++ clock_minima(finest)}},
-      else: model
+      else: %{model | form: {:value, Shift.finer_fraction(units, duration_units)}}
   end
 
   defp clock_minima(finest) do
@@ -1194,7 +1194,7 @@ defmodule Tempo.Spans do
         selected_values(value, options)
 
       not Unit.anchored?(units) and options[:within] != nil ->
-        members(placed_in(value, options[:within]), Keyword.delete(options, :within))
+        placed_members(value, options[:within], Keyword.delete(options, :within))
 
       Expand.one_span?(units) ->
         {:ok, [value]}
@@ -1225,6 +1225,16 @@ defmodule Tempo.Spans do
 
   def members(%Duration{} = duration, _options),
     do: {:error, conversion(duration, :bare_duration)}
+
+  # A value with no year placed by a window, as `placed_spans/3` places it:
+  # in the window's one value, or on each of the window's periods.
+  defp placed_members(value, window, options) do
+    placed = placed_in(value, window)
+
+    if on_the_line?(window) and not Unit.anchored?(elem(placed.form, 1)),
+      do: in_each_period(value, window, options),
+      else: members(placed, options)
+  end
 
   defp expanded_values(%Tempo{form: {:value, units}} = value) do
     case Expand.expand(units, frame_of(value)) do

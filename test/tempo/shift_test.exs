@@ -21,6 +21,11 @@ defmodule Tempo.ShiftTest do
       assert shifted(~o"2026-06-15T10:30", hour: 1) == ~o"2026-06-15T11:30"
     end
 
+    test "a part of a second is extended to the duration's finer part" do
+      assert Tempo.shift(~o"2026-06-15T10:00:00.5", ~o"PT0.25S") ==
+               {:ok, ~o"2026-06-15T10:00:00.75"}
+    end
+
     test "counts years and months through the calendar, with the day clamped" do
       assert shifted(~o"2026-01-31", month: 1) == ~o"2026-02-28"
       assert shifted(~o"2024-02-29", year: 1) == ~o"2025-02-28"

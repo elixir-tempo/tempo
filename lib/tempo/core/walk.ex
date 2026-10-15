@@ -26,7 +26,8 @@ defmodule Tempo.Walk do
 
   @doc """
   The values of a unit a span holds, lazily and in order, half-open: for a
-  calendar unit the periods that begin in the span's days, for a clock unit
+  calendar unit the periods its days fall in (`2026-02-15/2026-03-15` is
+  February and March), for a clock unit
   the readings one unit apart from its start to its end.
   """
   @spec steps({Scale.position(), Scale.position() | nil}, Unit.t(), frame()) ::

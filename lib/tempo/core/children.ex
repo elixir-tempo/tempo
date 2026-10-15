@@ -25,8 +25,7 @@ defmodule Tempo.Children do
   for a written span), each a value in the expression's frame; a plural
   expression's members.
   """
-  @spec children(Tempo.t() | Duration.t(), keyword()) ::
-          {:ok, Enumerable.t()} | {:error, Exception.t()}
+  @spec children(Tempo.t(), keyword()) :: {:ok, Enumerable.t()} | {:error, Exception.t()}
   def children(expression, options \\ [])
 
   def children(%Tempo{} = expression, options) do
@@ -35,10 +34,7 @@ defmodule Tempo.Children do
       else: Spans.members(expression, options)
   end
 
-  def children(%Duration{} = duration, _options),
-    do: {:error, conversion(duration, :bare_duration)}
-
-  @doc "The unit one below an expression's resolution: what its walk yields when none is named."
+  @doc "The unit one below a singular expression's resolution: what its walk yields when none is named."
   @spec child_unit(Tempo.t()) :: Unit.t() | {:microsecond, 1..6} | nil
   def child_unit(%Tempo{form: {:value, units}}) do
     case List.last(units) do
@@ -58,8 +54,6 @@ defmodule Tempo.Children do
       {unit, units} -> own(unit, units)
     end)
   end
-
-  def child_unit(_plural), do: nil
 
   defp end_resolution(%Tempo{form: {:value, units}}), do: [{Unit.resolution(units), units}]
   defp end_resolution(%Duration{units: units}), do: [{units |> List.last() |> elem(0), units}]
@@ -101,7 +95,7 @@ defmodule Tempo.Children do
   """
   @spec walk(Tempo.t(), Unit.t() | {:microsecond, 1..6} | nil, keyword()) ::
           {:ok, Enumerable.t()} | {:error, Exception.t()}
-  def walk(expression, unit, options \\ [])
+  def walk(expression, unit, options)
 
   def walk(%Tempo{} = expression, nil, _options),
     do: {:error, conversion(expression, :nothing_finer)}
@@ -114,8 +108,11 @@ defmodule Tempo.Children do
         {:ok, Stream.map(steps, &stepped(expression, &1))}
       end
     else
-      with {:ok, members} <- Spans.members(expression, options) do
-        {:ok, Stream.flat_map(members, fn member -> walk!(member, unit, options) end)}
+      # Each member is walked before any is stepped, so a member that cannot
+      # be walked is the error, not a raise part way through the stream.
+      with {:ok, members} <- Spans.members(expression, options),
+           {:ok, walks} <- walks(members, unit, options) do
+        {:ok, Stream.concat(walks)}
       end
     end
   end
@@ -194,12 +191,19 @@ defmodule Tempo.Children do
   defp walk_error({:ok, steps}, _expression), do: {:ok, steps}
   defp walk_error({:error, reason}, expression), do: {:error, conversion(expression, reason)}
 
-  defp walk!(member, unit, options) do
-    case walk(member, unit, options) do
-      {:ok, stream} -> stream
-      {:error, exception} -> raise exception
-    end
+  defp walks(members, unit, options) do
+    members
+    |> Enum.reduce_while({:ok, []}, fn member, {:ok, walks} ->
+      case walk(member, unit, options) do
+        {:ok, walk} -> {:cont, {:ok, [walk | walks]}}
+        error -> {:halt, error}
+      end
+    end)
+    |> in_order()
   end
+
+  defp in_order({:ok, walks}), do: {:ok, Enum.reverse(walks)}
+  defp in_order(error), do: error
 
   # A step as a value of the expression's frame, keeping the marks on the units it shares with its source.
   defp stepped(source, {:shifted, units, shift}), do: %{stepped(source, units) | shift: shift}
@@ -217,14 +221,6 @@ defmodule Tempo.Children do
       metadata: source.metadata
     }
   end
-
-  defp stepped(%Tempo{} = source, units),
-    do: %Tempo{
-      form: {:value, units},
-      calendar: source.calendar,
-      zone: source.zone,
-      metadata: source.metadata
-    }
 
   defp shared_marks(nil, _own, _units), do: nil
 
@@ -294,14 +290,14 @@ defmodule Tempo.Children do
 
   defp margin?(_other), do: false
 
-  # A span with a margin at an end is each pairing of its ends' readings in order, on through a cycle's end.
+  # A span with a margin at an end (a year's, so on the line) is each pairing
+  # of its ends' readings in order.
   defp paired_readings(%Tempo{form: {:span, from, to}} = span) do
     with {:ok, starts} <- readings(from),
          {:ok, ends} <- readings(to) do
       pairs =
         for {start, _} <- starts,
             stop <- Enum.map(ends, &end_of_reading(&1, to)),
-            stop = wrapped_stop(start, stop, span),
             start < stop,
             do: {start, stop}
 
@@ -311,21 +307,6 @@ defmodule Tempo.Children do
 
   defp end_of_reading({stop_start, stop_end}, to),
     do: if(Spans.clock_resolution?(to), do: stop_start, else: stop_end)
-
-  defp wrapped_stop(start, stop, span) when stop <= start do
-    case Spans.frame(span) do
-      {:cycle, coarsest} ->
-        case Scale.cycle_length(coarsest, span.calendar) do
-          {:ok, length} -> stop + length
-          {:error, _} -> stop
-        end
-
-      _line ->
-        stop
-    end
-  end
-
-  defp wrapped_stop(_start, stop, _span), do: stop
 
   # Any other span is the spans it names, each an extent: a plural end gives one for each value.
   defp spans_readings(span) do

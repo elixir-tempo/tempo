@@ -114,6 +114,20 @@ defmodule Tempo.RollTest do
       assert Tempo.select(~o"2026-02", Tempo.selection!(day: 15, roll: :nearest), locale: "ar-SA") ==
                {:ok, ~o"{2026-02-15}"}
     end
+
+    test "of a locale that names no territory are an error, not a raise" do
+      fifteenths = monthly(day: 15, roll: :nearest)
+
+      assert {:error, %ArgumentError{message: message}} =
+               Tempo.members(fifteenths, within: ~o"2026-02", locale: "zz-ZZ")
+
+      assert message =~ "names no territory"
+
+      assert {:error, %ArgumentError{}} =
+               Tempo.select(~o"2026-02", Tempo.selection!(day: 15, roll: :nearest),
+                 locale: "zz-ZZ"
+               )
+    end
   end
 
   describe "Tempo.roll_to_workday/3" do

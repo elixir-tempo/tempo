@@ -162,6 +162,10 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.JSCalendar.parse/2` returns an `ArgumentError` that names why a document cannot be decoded, where it returned the `jscalendar` library's bare reason.
 
+* `Tempo.new/1` refuses a margin, an exponent or significant digits on a unit other than a year, as the reader reads them on a year alone.
+
+* A shift, or an interval's end, given by a duration with a finer part of a second than the value's is written to that part, where it was truncated (`…00.5/PT0.25S` ended at `.7`).
+
 * `Tempo.new/1` returns a `Tempo.InvalidDateError` for a unit given text, a float or a name (`hour: "09"`), where it built a value the writer could not write.
 
 * A yearly RRULE that counts a weekday in named months (`FREQ=YEARLY;BYMONTH=11;BYDAY=4TH`) is written back as it was read, where it became a monthly rule.

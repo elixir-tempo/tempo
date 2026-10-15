@@ -174,7 +174,21 @@ defmodule Tempo.Shift do
         if Keyword.has_key?(units, :week), do: units, else: extended_to(units, :day, calendar)
 
       finest ->
-        extended_to(units, finest, calendar)
+        units |> extended_to(finest, calendar) |> finer_fraction(by)
+    end
+  end
+
+  @doc false
+  # A part of a second written to the finer of the value's precision and the
+  # duration's: a tenth of a second on by `PT0.25S` is in hundredths.
+  @spec finer_fraction(Unit.units(), Unit.units()) :: Unit.units()
+  def finer_fraction(units, by) do
+    case {Keyword.get(units, :microsecond), Keyword.get(by, :microsecond)} do
+      {{microseconds, precision}, {_, finer}} when finer > precision ->
+        Keyword.replace!(units, :microsecond, {microseconds, finer})
+
+      _same_or_none ->
+        units
     end
   end
 

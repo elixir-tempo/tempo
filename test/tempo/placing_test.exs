@@ -44,6 +44,19 @@ defmodule Tempo.PlacingTest do
     end
   end
 
+  describe "a value with no year in a :within window" do
+    test "is placed in a window that is one value" do
+      assert Tempo.members(~o"6M", within: ~o"2026") == {:ok, [~o"2026-06"]}
+    end
+
+    test "is placed on each period of a window that is a span" do
+      assert Tempo.members(~o"6M", within: ~o"2026/2027") == {:ok, [~o"2026-06", ~o"2027-06"]}
+
+      assert Tempo.members(~o"5K", within: ~o"2026-06-01/2026-06-14") ==
+               {:ok, [~o"2026-06-05", ~o"2026-06-12"]}
+    end
+  end
+
   describe "what cannot be placed" do
     test "is an error, not a raise" do
       assert {:error, %Tempo.ConversionError{reason: :selection}} =
