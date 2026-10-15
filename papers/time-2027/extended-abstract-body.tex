@@ -476,12 +476,19 @@ held to what three spans give; twelve zones over twenty-one days each
 held to the standard library's clock; and a totality check that every
 operation on every expression of a corpus is an answer or a named
 error. Against the first implementation, reading text is thirty times
-faster, relating two values two to three times slower, and expanding a
-recurrence rule two to six times slower, the price of one selection
-engine where the first had a fast path for weekdays; a positioned
-representation through the engine and a compiled matcher for plain
-rules in front of it are the next steps and change nothing of the
-model.
+faster, writing and walking a fifth faster, relating two values about
+the same (1.4~$\mu$s), a set operation of two sets of a hundred
+members twice as slow, and comparing two values, which the first did by
+their fields, seven times slower at 1.5~$\mu$s. Recurrence rules,
+which the first implementation expanded through a fast path for weekdays
+beside its resolver, are four to six times faster for the weekly and
+monthly rules of the benchmark and within a fifth of it for daily rules,
+once a plain rule is compiled to a test of a day number and taken in
+front of the one engine, which remains the meaning of every rule and
+holds the compiled form to itself by the same measures. What remains,
+by the implementation's own profile, is the placing of values, which
+the engine holds as their written units; the model is unchanged by any
+of it.
 
 \section{Discussion and open questions}
 \label{sec:discussion}
