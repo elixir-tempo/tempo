@@ -42,7 +42,7 @@ Every example below uses the `~o` sigil to construct Tempo values at compile tim
 import Tempo.Sigils
 ```
 
-The import adds only `sigil_o/2` and `sigil_TEMPO/2` to the caller's namespace; no helper functions leak in. Treat this line as a prerequisite for every code block that follows in this README.
+The import adds only `sigil_o/2` to the caller's namespace; no helper functions leak in. Treat this line as a prerequisite for every code block that follows in this README.
 
 ```elixir
 # A date is an interval: a day is a day long, and holds its hours
