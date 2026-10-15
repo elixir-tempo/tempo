@@ -539,13 +539,22 @@ defmodule Tempo.JSCalendarTest do
   end
 
   describe "bad input" do
-    test "a malformed document is an error, not a crash" do
-      assert {:error, :invalid_json} = Tempo.JSCalendar.parse("{{{")
+    test "a malformed document is an error that names it, not a crash" do
+      assert {:error, %ArgumentError{} = error} = Tempo.JSCalendar.parse("{{{")
+      assert Exception.message(error) =~ ":invalid_json"
     end
 
     test "an unrecognised object type is reported" do
-      assert {:error, {:unknown_type, "Sandwich"}} =
+      assert {:error, %ArgumentError{} = error} =
                Tempo.JSCalendar.parse(~s({"@type":"Sandwich"}))
+
+      assert Exception.message(error) =~ ~s({:unknown_type, "Sandwich"})
+    end
+
+    test "the raising form raises what parse/2 returns" do
+      assert_raise ArgumentError, ~r/no JSCalendar document/, fn ->
+        Tempo.JSCalendar.parse!("{{{")
+      end
     end
   end
 

@@ -206,6 +206,32 @@ defmodule Tempo.IntervalSet do
     end
   end
 
+  @doc """
+  `slots/3`, returning its answer or raising the error.
+
+  ### Arguments
+
+  * The arguments are those of `slots/3`.
+
+  ### Returns
+
+  * What `slots/3` returns as `{:ok, answer}`, the answer alone.
+    The error it returns as `{:error, exception}` is raised.
+
+  ### Examples
+
+      iex> ~o"2026-06-15T09:00/2026-06-15T12:00" |> Tempo.IntervalSet.slots!(~o"PT1H") |> Tempo.IntervalSet.count()
+      3
+
+  """
+  @spec slots!(Tempo.t(), Duration.t(), keyword()) :: Tempo.t()
+  def slots!(expression, duration, options \\ []) do
+    case slots(expression, duration, options) do
+      {:ok, answer} -> answer
+      {:error, exception} -> raise exception
+    end
+  end
+
   # Every slot of what has no end cannot be listed.
   defp ended(expression) do
     if Tempo.bounded?(expression),
@@ -293,6 +319,32 @@ defmodule Tempo.IntervalSet do
     do: {:error, ArgumentError.exception("options are a keyword list, not #{inspect(options)}")}
 
   @doc """
+  `coalesce/2`, returning its answer or raising the error.
+
+  ### Arguments
+
+  * The arguments are those of `coalesce/2`.
+
+  ### Returns
+
+  * What `coalesce/2` returns as `{:ok, answer}`, the answer alone.
+    The error it returns as `{:error, exception}` is raised.
+
+  ### Examples
+
+      iex> Tempo.union!(~o"2026-01", ~o"2026-02") |> Tempo.IntervalSet.coalesce!()
+      ~o"{2026-01/2026-02}"
+
+  """
+  @spec coalesce!(Tempo.t(), keyword()) :: Tempo.t()
+  def coalesce!(set, options \\ []) do
+    case coalesce(set, options) do
+      {:ok, answer} -> answer
+      {:error, exception} -> raise exception
+    end
+  end
+
+  @doc """
   The time covered by at least so many members of a set at once, as spans.
 
   ### Arguments
@@ -337,6 +389,33 @@ defmodule Tempo.IntervalSet do
          zone: frame.zone,
          metadata: set.metadata
        }}
+    end
+  end
+
+  @doc """
+  `covered/2`, returning its answer or raising the error.
+
+  ### Arguments
+
+  * The arguments are those of `covered/2`.
+
+  ### Returns
+
+  * What `covered/2` returns as `{:ok, answer}`, the answer alone.
+    The error it returns as `{:error, exception}` is raised.
+
+  ### Examples
+
+      iex> busy = Tempo.IntervalSet.new!([~o"T09/T12", ~o"T11/T14", ~o"T13/T17"])
+      iex> Tempo.IntervalSet.covered!(busy, at_least: 2)
+      ~o"{T11/T12,T13/T14}"
+
+  """
+  @spec covered!(Tempo.t(), keyword()) :: Tempo.t()
+  def covered!(set, options \\ []) do
+    case covered(set, options) do
+      {:ok, answer} -> answer
+      {:error, exception} -> raise exception
     end
   end
 

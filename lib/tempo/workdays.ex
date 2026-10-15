@@ -97,6 +97,32 @@ defmodule Tempo.Workdays do
     end
   end
 
+  @doc """
+  `new/2`, returning its answer or raising the error.
+
+  ### Arguments
+
+  * The arguments are those of `new/2`.
+
+  ### Returns
+
+  * What `new/2` returns as `{:ok, answer}`, the answer alone.
+    The error it returns as `{:error, exception}` is raised.
+
+  ### Examples
+
+      iex> ~o"2026-06-14/2026-06-20" |> Tempo.select!(Tempo.Workdays.new!(:SA)) |> Tempo.IntervalSet.count()
+      5
+
+  """
+  @spec new!(term(), keyword()) :: t()
+  def new!(territory, options \\ []) do
+    case new(territory, options) do
+      {:ok, answer} -> answer
+      {:error, exception} -> raise exception
+    end
+  end
+
   # The days off are an expression with spans, or none.
   defp days_off(nil), do: {:ok, nil}
   defp days_off(%Tempo{} = except), do: {:ok, except}

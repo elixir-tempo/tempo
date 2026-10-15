@@ -382,6 +382,32 @@ defmodule Tempo.RRule do
 
   def from_rule(_rule, _options), do: {:error, argument("a rule needs a frequency")}
 
+  @doc """
+  `from_rule/2`, returning its answer or raising the error.
+
+  ### Arguments
+
+  * The arguments are those of `from_rule/2`.
+
+  ### Returns
+
+  * What `from_rule/2` returns as `{:ok, answer}`, the answer alone.
+    The error it returns as `{:error, exception}` is raised.
+
+  ### Examples
+
+      iex> Tempo.RRule.from_rule!(%{freq: :week, count: 3}, from: ~o"2026-06-01")
+      ~o"R3/2026-06-01/P1W/FL1KN"
+
+  """
+  @spec from_rule!(rule(), keyword()) :: Tempo.t()
+  def from_rule!(rule, options) do
+    case from_rule(rule, options) do
+      {:ok, answer} -> answer
+      {:error, exception} -> raise exception
+    end
+  end
+
   # The start a rule counts from, in the calendar its `RSCALE` names: its
   # months, its years and their days are that calendar's, and so are its
   # occurrences. `GREGORIAN` is the calendar a rule is in with none.

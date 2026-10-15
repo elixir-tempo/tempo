@@ -108,6 +108,41 @@ if Code.ensure_loaded?(ICal) do
     def parse(other, _options), do: {:error, not_text(other)}
 
     @doc """
+    `parse/2`, returning its answer or raising the error.
+
+    ### Arguments
+
+    * The arguments are those of `parse/2`.
+
+    ### Returns
+
+    * What `parse/2` returns as `{:ok, answer}`, the answer alone.
+      The error it returns as `{:error, exception}` is raised.
+
+    ### Examples
+
+        iex> ics = \"\"\"
+        ...> BEGIN:VCALENDAR
+        ...> VERSION:2.0
+        ...> BEGIN:VEVENT
+        ...> UID:offsite
+        ...> DTSTART;VALUE=DATE:20260615
+        ...> END:VEVENT
+        ...> END:VCALENDAR
+        ...> \"\"\"
+        iex> ics |> Tempo.ICal.parse!() |> Tempo.IntervalSet.count()
+        1
+
+    """
+    @spec parse!(binary(), keyword()) :: Tempo.t()
+    def parse!(ics, options \\ []) do
+      case parse(ics, options) do
+        {:ok, answer} -> answer
+        {:error, exception} -> raise exception
+      end
+    end
+
+    @doc """
     Reads an iCalendar file as `parse/2` reads text.
 
     ### Arguments
@@ -143,6 +178,32 @@ if Code.ensure_loaded?(ICal) do
 
         {:error, reason} ->
           {:error, File.Error.exception(reason: reason, action: "read file", path: path)}
+      end
+    end
+
+    @doc """
+    `parse_file/2`, returning its answer or raising the error.
+
+    ### Arguments
+
+    * The arguments are those of `parse_file/2`.
+
+    ### Returns
+
+    * What `parse_file/2` returns as `{:ok, answer}`, the answer alone.
+      The error it returns as `{:error, exception}` is raised.
+
+    ### Examples
+
+        iex> Tempo.ICal.parse_file!("no-such-calendar.ics")
+        ** (File.Error) could not read file "no-such-calendar.ics": no such file or directory
+
+    """
+    @spec parse_file!(Path.t(), keyword()) :: Tempo.t()
+    def parse_file!(path, options \\ []) do
+      case parse_file(path, options) do
+        {:ok, answer} -> answer
+        {:error, exception} -> raise exception
       end
     end
 
@@ -197,6 +258,41 @@ if Code.ensure_loaded?(ICal) do
     end
 
     def from_ical(other, _options), do: {:error, not_text(other)}
+
+    @doc """
+    `from_ical/2`, returning its answer or raising the error.
+
+    ### Arguments
+
+    * The arguments are those of `from_ical/2`.
+
+    ### Returns
+
+    * What `from_ical/2` returns as `{:ok, answer}`, the answer alone.
+      The error it returns as `{:error, exception}` is raised.
+
+    ### Examples
+
+        iex> ics = \"\"\"
+        ...> BEGIN:VCALENDAR
+        ...> VERSION:2.0
+        ...> BEGIN:VEVENT
+        ...> UID:offsite
+        ...> DTSTART;VALUE=DATE:20260615
+        ...> END:VEVENT
+        ...> END:VCALENDAR
+        ...> \"\"\"
+        iex> ics |> ICal.from_ics() |> Tempo.ICal.from_ical!() |> Tempo.IntervalSet.count()
+        1
+
+    """
+    @spec from_ical!(ICal.t(), keyword()) :: Tempo.t()
+    def from_ical!(calendar, options \\ []) do
+      case from_ical(calendar, options) do
+        {:ok, answer} -> answer
+        {:error, exception} -> raise exception
+      end
+    end
 
     @doc """
     The time an iCalendar's `VAVAILABILITY` components offer (RFC 7953).
@@ -258,6 +354,50 @@ if Code.ensure_loaded?(ICal) do
     end
 
     def available(other, _options), do: {:error, not_text(other)}
+
+    @doc """
+    `available/2`, returning its answer or raising the error.
+
+    ### Arguments
+
+    * The arguments are those of `available/2`.
+
+    ### Returns
+
+    * What `available/2` returns as `{:ok, answer}`, the answer alone.
+      The error it returns as `{:error, exception}` is raised.
+
+    ### Examples
+
+        iex> ics = \"\"\"
+        ...> BEGIN:VCALENDAR
+        ...> VERSION:2.0
+        ...> BEGIN:VAVAILABILITY
+        ...> UID:office-hours
+        ...> DTSTAMP:20260601T000000Z
+        ...> DTSTART:20260601T000000Z
+        ...> DTEND:20260608T000000Z
+        ...> BEGIN:AVAILABLE
+        ...> UID:weekday-mornings
+        ...> DTSTAMP:20260601T000000Z
+        ...> DTSTART:20260601T090000Z
+        ...> DTEND:20260601T120000Z
+        ...> RRULE:FREQ=DAILY;COUNT=5
+        ...> END:AVAILABLE
+        ...> END:VAVAILABILITY
+        ...> END:VCALENDAR
+        ...> \"\"\"
+        iex> ics |> Tempo.ICal.available!(within: ~o"2026-06-01T00Z/2026-06-08T00Z") |> Tempo.IntervalSet.count()
+        5
+
+    """
+    @spec available!(binary() | ICal.t(), keyword()) :: Tempo.t()
+    def available!(ics, options \\ []) do
+      case available(ics, options) do
+        {:ok, answer} -> answer
+        {:error, exception} -> raise exception
+      end
+    end
 
     defp not_text(other),
       do:

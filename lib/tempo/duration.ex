@@ -207,6 +207,32 @@ defmodule Tempo.Duration do
 
   def to_microseconds(other), do: {:error, not_a_duration(other)}
 
+  @doc """
+  `to_microseconds/1`, returning its answer or raising the error.
+
+  ### Arguments
+
+  * The arguments are those of `to_microseconds/1`.
+
+  ### Returns
+
+  * What `to_microseconds/1` returns as `{:ok, answer}`, the answer alone.
+    The error it returns as `{:error, exception}` is raised.
+
+  ### Examples
+
+      iex> Tempo.Duration.to_microseconds!(~o"PT1H30M")
+      5_400_000_000
+
+  """
+  @spec to_microseconds!(t()) :: integer()
+  def to_microseconds!(duration) do
+    case to_microseconds(duration) do
+      {:ok, answer} -> answer
+      {:error, exception} -> raise exception
+    end
+  end
+
   defp ticks(:week, weeks), do: weeks * 7 * @day
   defp ticks(:day, days), do: days * @day
   defp ticks(:hour, hours), do: hours * 3_600_000_000
@@ -492,6 +518,33 @@ defmodule Tempo.Duration do
     do: {:error, argument("#{inspect(unit)} has no fixed length to count a duration in")}
 
   def to_unit(other, _unit, _options), do: {:error, not_a_duration(other)}
+
+  @doc """
+  `to_unit/3`, returning its answer or raising the error.
+
+  ### Arguments
+
+  * The arguments are those of `to_unit/3`.
+
+  ### Returns
+
+  * What `to_unit/3` returns as `{:ok, answer}`, the answer alone.
+    The error it returns as `{:error, exception}` is raised.
+
+  ### Examples
+
+      iex> Tempo.Duration.to_unit!(~o"PT90M", :hour)
+      1.5
+
+  """
+  @spec to_unit!(t(), :week | :day | :hour | :minute | :second | :microsecond, keyword()) ::
+          float()
+  def to_unit!(duration, unit, options \\ []) do
+    case to_unit(duration, unit, options) do
+      {:ok, answer} -> answer
+      {:error, exception} -> raise exception
+    end
+  end
 
   # A duration's length in microseconds: its own when exact, else from a date.
   defp laid(%__MODULE__{} = duration, options) do

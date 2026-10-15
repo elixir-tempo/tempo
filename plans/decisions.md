@@ -728,3 +728,33 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-15).** Option 1.
 
 * **State.** Built: the list is taken one operand after another with the same options, the `:metadata` function applying at each step; an empty list leaves the first operand as it is; an operand that is no expression stops the operation with its error. `test/tempo/set_operation_operands_test.exs`. The migration guide maps 1.6's `metadata: :left` and `{:merge, fun}` to `:first` and the function itself.
+
+## 68. A floating window beside zoned availability, in agenda
+
+* **Question.** Agenda's `busy:` claims, `Agenda.only_during/2` and a session's `window:` are combined with a resource's free time by Tempo's set operations. Availability imported from a VAVAILABILITY in UTC (`Z`) is zoned, and a floating window or claim beside it is a `Tempo.FrameError` (`:floating_and_zoned`), where `Agenda.free(resource, within: window)` takes a floating window because Tempo's `:within` reads it on the expression's clock. Should agenda read its window-like arguments as `:within` does?
+
+* **Context.** Found porting `agenda` onto 2.0: three VAvailability tests wrote floating windows against UTC hours. The options were (1) law 4: a caller states the frame, and the tests write `Z`; (2) a session's window and `only_during/2` read on the resource's clock as `:within` is, `busy:` held strict, which needs a public Tempo function to place a floating window on another expression's frame.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built in agenda: the three tests write their windows and claims in UTC beside hours imported in UTC, and `Agenda.from_ical/1`'s doc says a claim, a refinement or a session's window combined with imported hours is on their line, and a `within:` window alone may be floating.
+
+## 69. A sentence about a span in a calendar ISO 8601 cannot name, in agenda
+
+* **Question.** Agenda writes spans into sentences (`Agenda.Reconciliation.explain/1`, `Agenda.Arrangement.explain/1`, a ledger entry's default name) with `Tempo.to_iso8601!/1`. A span of a calendar with no IXDTF name, a fiscal calendar's, cannot be written (`Tempo.Iso8601EncodeError`), where 1.6 wrote it without its calendar. How is such a span written in a sentence?
+
+* **Context.** Found porting `agenda`'s timesheets livebook: open hours selected from a fiscal quarter made `explain/1` raise. The options were (1) write such a span in the Gregorian calendar, so a sentence names its times in one calendar; (2) `explain/1` returns `{:error, exception}`. `Tempo.to_string/2` was no option: Localize writes a fiscal date of July to December with its fiscal year and its Gregorian month (recorded in Localize's TODO.md).
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built in agenda: `Agenda.Written.span/1` (internal) writes a span as `Tempo.to_iso8601/1` does, and one of a calendar ISO 8601 cannot name in `Calendar.ISO`; `Agenda.Reconciliation.explain/1`, `Agenda.Arrangement.explain/1`, a hold's default name and a refusal's message use it. Tested by hours of a fiscal quarter explained as `2026Y8M10DT9H/T17H`.
+
+## 70. Which functions have a `!` form
+
+* **Question.** The CHANGELOG and the migration guide say every function that can fail has a `!` form. 51 public functions return `{:ok, value}` or `{:error, exception}` with none: `to_date/1`, `shift_zone/2`, `members/2`, `complement/2`, `Tempo.IntervalSet.coalesce/2` among them. Which have one?
+
+* **Context.** Found porting `agenda`. The options were (1) a `!` form for every constructor, conversion, parser and set operation, and the claim reworded to say so; (2) a `!` form for all 51; (3) the claim reworded only.
+
+* **Decision (2026-10-15).** Option 1.
+
+* **State.** Built: 31 `!` forms. In `Tempo`, from the table of raising forms, which takes a default for a last argument a function defaults (so `union!/3`, `intersection!/3` and `difference!/3` now take options): `to_date!`, `to_time!`, `to_naive_datetime!`, `to_datetime!`, `to_elixir!`, `to_week_start!`, `shift_zone!`, `in_zone!`, `walk!`, `members!`, `today!`, `now!`, `parse_duration!`, `symmetric_difference!`, `complement!`, `members_overlapping!`, `members_outside!` and `members_in_exactly_one!`. Beside their functions: `Tempo.Duration.to_unit!` and `to_microseconds!`, `Tempo.IntervalSet.slots!`, `coalesce!` and `covered!`, `Tempo.ICal.parse!`, `parse_file!`, `from_ical!` and `available!`, `Tempo.JSCalendar.parse!` and `from_jscalendar!`, `Tempo.RRule.from_rule!` and `Tempo.Workdays.new!`. Left without one, as queries and workday arithmetic: `days_in_month/1`, `Tempo.Event.date/3`, `Tempo.Interval.instants/1`, `Tempo.IntervalSet.relation_matrix/2`, `Tempo.LeapSeconds`, `Tempo.Territory.resolve/1`, the workday functions, and `try_map/2`, whose raising form is `map/2`. `test/tempo/not_an_expression_test.exs` found `Tempo.JSCalendar.parse/2` returning the `jscalendar` library's bare reason (`:invalid_json`), which its `!` form could not raise; it returns an `ArgumentError` naming it. The claim is reworded in the CHANGELOG, the migration guide, the README and `Tempo`'s moduledoc.

@@ -129,7 +129,7 @@ iex> Tempo.union(~o"2026-06-15T09/2026-06-15T11", ~o"2026-06-16T09/2026-06-16T11
 
 ## A function that can fail returns a tuple
 
-In 1.6 some functions that could fail returned a bare value and raised, and others returned a tuple. In 2.0 every function that can fail returns `{:ok, value}` or `{:error, exception}`, and has a `!` form that returns the value or raises.
+In 1.6 some functions that could fail returned a bare value and raised, and others returned a tuple. In 2.0 every function that can fail returns `{:ok, value}` or `{:error, exception}`, and every constructor, conversion, parser and set operation has a `!` form that returns the value or raises.
 
 <!-- guides:skip -->
 

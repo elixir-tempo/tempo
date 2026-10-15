@@ -55,7 +55,8 @@ if Code.ensure_loaded?(JSCalendar) do
       metadata its event's (`:uid`, `:title`, `:description`, `:status`,
       `:free_busy_status`, `:privacy`, `:time_zone`, `:sequence`).
 
-    * `{:error, reason}` when the document cannot be decoded, and
+    * `{:error, %ArgumentError{}}` when the document cannot be decoded,
+      naming the reason the `jscalendar` library gives, and
       `{:error, exception}` when a zone is unknown, a rule is not supported
       or a recurrence has no end and no window is given.
 
@@ -75,17 +76,54 @@ if Code.ensure_loaded?(JSCalendar) do
         {"2026Y6M2DT9H0M0S/T10H0M0S", "Quarterly review"}
 
     """
-    @spec parse(binary(), keyword()) :: {:ok, Tempo.t()} | {:error, term()}
+    @spec parse(binary(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
     def parse(json, options \\ [])
 
     def parse(json, options) when is_binary(json) do
-      with {:ok, object} <- JSCalendar.decode(json), do: from_jscalendar(object, options)
+      with {:ok, object} <- decoded(JSCalendar.decode(json)), do: from_jscalendar(object, options)
     end
 
     def parse(other, _options),
       do:
         {:error,
          ArgumentError.exception("a JSCalendar document is JSON text, not #{inspect(other)}")}
+
+    @doc """
+    `parse/2`, returning its answer or raising the error.
+
+    ### Arguments
+
+    * The arguments are those of `parse/2`.
+
+    ### Returns
+
+    * What `parse/2` returns as `{:ok, answer}`, the answer alone.
+      The error it returns as `{:error, exception}` is raised.
+
+    ### Examples
+
+        iex> json = ~s({"@type":"Event","uid":"e","updated":"2026-06-01T09:00:00Z","start":"2026-06-02T09:00:00","duration":"PT1H"})
+        iex> json |> Tempo.JSCalendar.parse!() |> Tempo.IntervalSet.count()
+        1
+
+    """
+    @spec parse!(binary(), keyword()) :: Tempo.t()
+    def parse!(json, options \\ []) do
+      case parse(json, options) do
+        {:ok, answer} -> answer
+        {:error, exception} -> raise exception
+      end
+    end
+
+    # The `jscalendar` library answers a document it cannot read with a
+    # reason (`:invalid_json`, `{:unknown_type, type}`); Tempo answers with
+    # an exception that names it.
+    defp decoded({:ok, object}), do: {:ok, object}
+
+    defp decoded({:error, reason}),
+      do:
+        {:error,
+         ArgumentError.exception("the text is no JSCalendar document: #{inspect(reason)}")}
 
     @doc """
     The events of a JSCalendar object already decoded, as `parse/2` gives
@@ -117,12 +155,40 @@ if Code.ensure_loaded?(JSCalendar) do
         ["2026Y6M2DT9H0M0S/T10H0M0S"]
 
     """
-    @spec from_jscalendar(struct(), keyword()) :: {:ok, Tempo.t()} | {:error, term()}
+    @spec from_jscalendar(struct(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
     def from_jscalendar(object, options \\ []) do
       with :ok <- Options.check(options, [:within], "Tempo.JSCalendar.parse/2"),
            {:ok, spans} <- object_occurrences(object, options),
            {:ok, kept} <- Occurrences.within(spans, options[:within]) do
         Algebra.gathered(kept, floating: :place, sorted: true)
+      end
+    end
+
+    @doc """
+    `from_jscalendar/2`, returning its answer or raising the error.
+
+    ### Arguments
+
+    * The arguments are those of `from_jscalendar/2`.
+
+    ### Returns
+
+    * What `from_jscalendar/2` returns as `{:ok, answer}`, the answer alone.
+      The error it returns as `{:error, exception}` is raised.
+
+    ### Examples
+
+        iex> json = ~s({"@type":"Event","uid":"e","updated":"2026-06-01T09:00:00Z","start":"2026-06-02T09:00:00","duration":"PT1H"})
+        iex> {:ok, object} = JSCalendar.decode(json)
+        iex> object |> Tempo.JSCalendar.from_jscalendar!() |> Tempo.IntervalSet.count()
+        1
+
+    """
+    @spec from_jscalendar!(struct(), keyword()) :: Tempo.t()
+    def from_jscalendar!(object, options \\ []) do
+      case from_jscalendar(object, options) do
+        {:ok, answer} -> answer
+        {:error, exception} -> raise exception
       end
     end
 

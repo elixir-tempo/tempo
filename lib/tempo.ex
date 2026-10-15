@@ -15,7 +15,8 @@ defmodule Tempo do
   ## Errors
 
   A function that can fail returns `{:ok, value}` or `{:error, exception}`,
-  and has a `!` form that raises. A predicate, an accessor and `compare/3`
+  and a constructor, a conversion, a parser and a set operation each have a
+  `!` form that raises. A predicate, an accessor and `compare/3`
   answer a bare value (a boolean, a part, `:lt`), and raise their errors, so
   that an error is never read as an answer.
 
@@ -4703,7 +4704,7 @@ defmodule Tempo do
 
   # ── Raising forms ─────────────────────────────────────────────────────
 
-  for {name, argument_types, answer_type, example, answer} <- [
+  for row <- [
         {:at, [quote(do: t()), quote(do: t())], quote(do: t()),
          ~s|Tempo.at!(~o"2026-01-04", ~o"T10:30")|, ~s|~o"2026-01-04T10:30"|},
         {:on, [quote(do: t()), quote(do: t())], quote(do: t()),
@@ -4725,13 +4726,63 @@ defmodule Tempo do
          ~s|Tempo.duration!(~o"2026-09-28", ~o"2026-11-03")|, ~s|~o"P36D"|},
         {:to_relative_string, [quote(do: t()), quote(do: keyword())], quote(do: String.t()),
          ~s|Tempo.to_relative_string!(~o"2027", from: ~o"2026-07-01")|, ~s|"next year"|},
-        {:union, [quote(do: t()), quote(do: t())], quote(do: t()),
-         ~s|Tempo.union!(~o"2026-01", ~o"2026-03") \|> Tempo.IntervalSet.count()|, "2"},
-        {:intersection, [quote(do: t()), quote(do: t())], quote(do: t()),
+        {:union, [quote(do: t()), quote(do: t() | [t()]), quote(do: keyword())], quote(do: t()),
+         ~s|Tempo.union!(~o"2026-01", ~o"2026-03") \|> Tempo.IntervalSet.count()|, "2", []},
+        {:intersection, [quote(do: t()), quote(do: t() | [t()]), quote(do: keyword())],
+         quote(do: t()),
          ~s|Tempo.intersection!(~o"2026-01/2026-03", ~o"2026-03/2026-05") \|> Tempo.IntervalSet.count()|,
-         "1"},
-        {:difference, [quote(do: t()), quote(do: t())], quote(do: t()),
-         ~s|Tempo.difference!(~o"2026", ~o"2026-06") \|> Tempo.IntervalSet.count()|, "2"},
+         "1", []},
+        {:difference, [quote(do: t()), quote(do: t() | [t()]), quote(do: keyword())],
+         quote(do: t()),
+         ~s|Tempo.difference!(~o"2026", ~o"2026-06") \|> Tempo.IntervalSet.count()|, "2", []},
+        {:symmetric_difference, [quote(do: t()), quote(do: t()), quote(do: keyword())],
+         quote(do: t()),
+         ~s|Tempo.symmetric_difference!(~o"2026-06-15/2026-06-17", ~o"2026-06-16/2026-06-18")|,
+         ~s|~o"{2026-06-15/2026-06-15,2026-06-18/2026-06-18}"|, []},
+        {:complement, [quote(do: t()), quote(do: keyword())], quote(do: t()),
+         ~s|Tempo.complement!(~o"2026-06", within: ~o"2026")|,
+         ~s|~o"{2026/2026-05,2026-07/2026}"|},
+        {:members_overlapping, [quote(do: t()), quote(do: t()), quote(do: keyword())],
+         quote(do: t()),
+         ~s|Tempo.members_overlapping!(~o"{2026-06-15,2026-06-17}", ~o"2026-06-17T10")|,
+         ~s|~o"{2026-06-17/2026-06-17}"|, []},
+        {:members_outside, [quote(do: t()), quote(do: t()), quote(do: keyword())], quote(do: t()),
+         ~s|Tempo.members_outside!(~o"{2026-06-15,2026-06-17}", ~o"2026-06-17T10")|,
+         ~s|~o"{2026-06-15/2026-06-15}"|, []},
+        {:members_in_exactly_one, [quote(do: t()), quote(do: t()), quote(do: keyword())],
+         quote(do: t()),
+         ~s|Tempo.members_in_exactly_one!(~o"{2026-06-15,2026-06-17}", ~o"{2026-06-17,2026-06-19}")|,
+         ~s|~o"{2026-06-15/2026-06-15,2026-06-19/2026-06-19}"|, []},
+        {:members, [quote(do: t() | Duration.t()), quote(do: keyword())], quote(do: [t()]),
+         ~s|Tempo.members!(~o"{2026-06-15,2026-06-17}")|, ~s|[~o"2026-06-15", ~o"2026-06-17"]|,
+         []},
+        {:walk, [quote(do: t()), quote(do: unit() | {:microsecond, 1..6}), quote(do: keyword())],
+         quote(do: Enumerable.t()), ~s|Tempo.walk!(~o"2026-06-15", :hour) \|> Enum.count()|, "24",
+         []},
+        {:to_week_start, [quote(do: t()), quote(do: 1..7)], quote(do: t()),
+         ~s|Tempo.to_week_start!(~o"2026-06-21", 7)|, ~s|~o"2026-06-21[u-fw=sun]"|},
+        {:shift_zone, [quote(do: t()), quote(do: String.t())], quote(do: t()),
+         ~s|Tempo.shift_zone!(~o"2026-06-15T10:00[Europe/Paris]", "Asia/Tokyo")|,
+         ~s|~o"2026-06-15T17:00[Asia/Tokyo]"|},
+        {:in_zone, [quote(do: t()), quote(do: String.t())], quote(do: t()),
+         ~s|Tempo.in_zone!(~o"2026-06-15T10:00", "Europe/Paris")|,
+         ~s|~o"2026-06-15T10:00[Europe/Paris]"|},
+        {:to_date, [quote(do: t())], quote(do: Date.t()), ~s|Tempo.to_date!(~o"2026-06-15")|,
+         "~D[2026-06-15]"},
+        {:to_time, [quote(do: t())], quote(do: Time.t()), ~s|Tempo.to_time!(~o"T10:30")|,
+         "~T[10:30:00]"},
+        {:to_naive_datetime, [quote(do: t())], quote(do: NaiveDateTime.t()),
+         ~s|Tempo.to_naive_datetime!(~o"2026-06-15T10:30")|, "~N[2026-06-15 10:30:00]"},
+        {:to_datetime, [quote(do: t())], quote(do: DateTime.t()),
+         ~s|Tempo.to_datetime!(~o"2026-06-15T10:30Z")|, "~U[2026-06-15 10:30:00Z]"},
+        {:to_elixir, [quote(do: t() | Duration.t())], quote(do: struct()),
+         ~s|Tempo.to_elixir!(~o"2026-06-15")|, "~D[2026-06-15]"},
+        {:parse_duration, [quote(do: String.t())], quote(do: Duration.t()),
+         ~s|Tempo.parse_duration!("P1DT2H")|, ~s|~o"P1DT2H"|},
+        {:now, [quote(do: String.t())], quote(do: t()),
+         ~s|Tempo.now!("Europe/London") \|> Tempo.resolution()|, ":second", "Etc/UTC"},
+        {:today, [quote(do: String.t())], quote(do: t()),
+         ~s|Tempo.today!("Australia/Sydney") \|> Tempo.resolution()|, ":day", "Etc/UTC"},
         {:weekends, [quote(do: term())], quote(do: t()), ~s|Tempo.weekends!(:US)|,
          ~s|~o"{6,7}K"|},
         {:selection, [quote(do: keyword())], quote(do: t()),
@@ -4741,9 +4792,25 @@ defmodule Tempo do
         {:one_of, [quote(do: [t()])], quote(do: t()), ~s|Tempo.one_of!([~o"1984", ~o"1986"])|,
          ~s|~o"[1984,1986]"|}
       ] do
+    # A row with a sixth element gives the default of the last argument, as
+    # the function it raises for has one.
+    {name, argument_types, answer_type, example, answer, default} =
+      case row do
+        {name, argument_types, answer_type, example, answer} ->
+          {name, argument_types, answer_type, example, answer, :none}
+
+        {_name, _argument_types, _answer_type, _example, _answer, _default} ->
+          row
+      end
+
     bang = String.to_atom("#{name}!")
     arity = length(argument_types)
     arguments = Macro.generate_arguments(arity, __MODULE__)
+
+    head =
+      if default == :none,
+        do: arguments,
+        else: List.update_at(arguments, -1, &quote(do: unquote(&1) \\ unquote(default)))
 
     @doc """
     `#{name}/#{arity}`, returning its answer or raising the error.
@@ -4764,7 +4831,7 @@ defmodule Tempo do
 
     """
     @spec unquote(bang)(unquote_splicing(argument_types)) :: unquote(answer_type)
-    def unquote(bang)(unquote_splicing(arguments)) do
+    def unquote(bang)(unquote_splicing(head)) do
       case unquote(name)(unquote_splicing(arguments)) do
         {:ok, answer} -> answer
         {:error, exception} -> raise exception

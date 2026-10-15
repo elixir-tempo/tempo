@@ -14,7 +14,7 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * Every expression is a `%Tempo{}` with a `:form`. `%Tempo.Interval{}`, `%Tempo.IntervalSet{}`, `%Tempo.Set{}` and `%Tempo.Range{}` are no longer structs; their modules keep their functions.
 
-* Every function that can fail returns `{:ok, value}` or `{:error, exception}` and has a `!` form. `shift/3`, `trunc/2`, `round/2`, `to_iso8601/1`, `to_string/2`, `from_elixir/2`, `today/1` and `now/1` returned a bare value.
+* Every function that can fail returns `{:ok, value}` or `{:error, exception}`, and every constructor, conversion, parser and set operation has a `!` form. `shift/3`, `trunc/2`, `round/2`, `to_iso8601/1`, `to_string/2`, `from_elixir/2`, `today/1` and `now/1` returned a bare value.
 
 * A value that names no calendar is in `Calendar.ISO`, where it was in `Calendrical.Gregorian`.
 
@@ -122,6 +122,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.Event.Resolver`: an application's own computed events, registered under `config :ex_tempo, :event_resolvers`.
 
+* A `!` form for each constructor, conversion, parser and set operation that had none: `to_date!/1`, `shift_zone!/2`, `members!/2`, `complement!/2`, `Tempo.IntervalSet.coalesce!/2`, `Tempo.ICal.parse!/2` and the rest.
+
 * `Tempo.compare/3` with `by: :start` compares where two expressions begin alone, as 1.6's `Tempo.Compare.compare_endpoints/2` did.
 
 * A quarter written `2026Y2q` and a half written `2026Y1h`, Tempo's lower-case shorthand for 1.6's `2Q` and `1H`, read as ISO 8601-2's `34M` and `40M`.
@@ -157,6 +159,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * ISO 8601-1's alternative duration format (`P0002-01-10T22:33:55`) is read.
 
 ### Fixed
+
+* `Tempo.JSCalendar.parse/2` returns an `ArgumentError` that names why a document cannot be decoded, where it returned the `jscalendar` library's bare reason.
 
 * `Tempo.new/1` returns a `Tempo.InvalidDateError` for a unit given text, a float or a name (`hour: "09"`), where it built a value the writer could not write.
 

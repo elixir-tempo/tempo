@@ -99,7 +99,7 @@ iex> every(:week) |> on(:monday) |> at(hour: 9) |> starting(~o"2026-06-01") |> t
 
 > *"Every week, on Monday, at nine, starting the 1st of June, ten times."*
 
-`Tempo.new/1` validates its units against the calendar (a Gregorian February has 28 days in a common year, a Hebrew leap year a thirteenth month), returns `{:ok, value}` or `{:error, exception}`, and has a `new!/1` that raises. `Tempo.Interval.new/1` and `Tempo.Duration.new/1` follow the same contract, as does every function that can fail.
+`Tempo.new/1` validates its units against the calendar (a Gregorian February has 28 days in a common year, a Hebrew leap year a thirteenth month), returns `{:ok, value}` or `{:error, exception}`, and has a `new!/1` that raises. `Tempo.Interval.new/1` and `Tempo.Duration.new/1` follow the same contract, as does every constructor, conversion, parser and set operation.
 
 Now the playful side — what you actually get to write:
 
