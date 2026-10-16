@@ -459,4 +459,6 @@ The library is held to oracles written apart from it, and those oracles are expo
 * `clock_changes.json`: the hours a zone's clock shows on each of twenty-two days on which it changes, as the platform's own date and time say.
 * `expressions.json`: every expression of a corpus written by hand against every operation, with every cell that refuses and the name and reason of its error; every other cell answers with a value.
 
+* `census.json`: a value in each full form, each value with no year and each shape in 27 calendars, with the positions each covers and its walk yields, worked out from the calendar alone.
+
 Tempo's own tests read the same files, and a script regenerates them from the oracles, so the two cannot drift.

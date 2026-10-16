@@ -21,6 +21,7 @@ defmodule Tempo.ConformanceFixtures do
     write("clock_changes.json", clock_changes())
     write("rrule.json", rrule())
     write("expressions.json", expressions())
+    write("census.json", census())
   end
 
   defp write(name, iodata) do
@@ -526,6 +527,26 @@ defmodule Tempo.ConformanceFixtures do
         end),
       partners: Enum.map(Corpus.partners(), &elem(&1, 0)),
       expressions: {:lines, expressions}
+    )
+  end
+
+  # ── The calendar census ───────────────────────────────────────────────
+
+  # Each calendar's full forms, values with no year and shapes, with what
+  # the calendar alone says each covers and yields
+  # (`Tempo.Matrix.CalendarCensus`, through `Tempo.Conformance.census/0`).
+  defp census do
+    census = Tempo.Conformance.census()
+
+    object(
+      positions:
+        "a position is an integer count of microseconds from 0000-01-01T00:00:00 of the proleptic Gregorian calendar, on the UTC line for a value in a zone and on the floating line otherwise, and from the start of the cycle for a value with no year (the year's cycle for a month and day, the week's for a weekday); a span is [from, to], half-open; positions exceed 2^53 and are read as 64-bit integers",
+      parts:
+        "a value is {value: units}, an interval of two values {span: [units, units]}, a recurrence {every: {count, from: units, cadence: units}}; units are [unit, held] pairs in the order written, coarsest first, built in the entry's calendar; held is a whole number (negative counts from the end), {set: [number or {range: [first, last]}]}, {mask: digits and X}, any, {fraction: [microseconds, places written]}, or for the unit zone a zone's name; text is what Tempo writes for the parts, for a port's reader, null where the parts are no value or the value has no text",
+      calendars: {:lines, census["calendars"]},
+      forms: {:lines, census["forms"]},
+      no_year: {:lines, census["no_year"]},
+      shapes: {:lines, census["shapes"]}
     )
   end
 

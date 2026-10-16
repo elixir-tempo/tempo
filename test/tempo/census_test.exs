@@ -8,33 +8,26 @@ defmodule Tempo.CensusTest do
   # members are the spans `Tempo.to_interval/1` gives. The census works each
   # answer out with the calendar's own functions and `Date`, never with Tempo.
   #
-  # The observational Islamic calendars are left out, as the census leaves
-  # them apart; selections wait for phase 6. Each value is built from the
-  # parts the census gives (decision 48), never read from text.
+  # The answers are read from the conformance fixture `census.json`, which
+  # `scripts/conformance_fixtures.exs` writes from the census and the first
+  # test holds to it, so that a port runs what this runs. The observational
+  # Islamic calendars are left out, as the census leaves them apart. Each
+  # value is built from the parts the census gives (decision 48), never read
+  # from text.
 
-  alias Tempo.Interval
+  alias Tempo.Conformance
   alias Tempo.IntervalSet
   alias Tempo.Matrix.CalendarCensus
   alias Tempo.Spans
 
   @walk_limit 400
 
-  # A census entry's parts, built in the calendar it asks.
-  defp built({:value, units}, calendar), do: Tempo.new(units ++ [calendar: calendar])
-
-  defp built({:span, from, to}, calendar) do
-    with {:ok, from} <- built({:value, from}, calendar),
-         {:ok, to} <- built({:value, to}, calendar),
-         do: Interval.new(from: from, to: to)
-  end
-
-  defp built({:every, count, start, cadence}, calendar) do
-    with {:ok, start} <- built({:value, start}, calendar),
-         do: Tempo.every(cadence, from: start, count: count)
+  setup_all do
+    %{fixture: Conformance.fixture("census")}
   end
 
   defp built!(parts, calendar) do
-    {:ok, value} = built(parts, calendar)
+    {:ok, value} = Conformance.built(parts, calendar)
     value
   end
 
@@ -44,11 +37,15 @@ defmodule Tempo.CensusTest do
   end
 
   defp walked(value) do
-    value |> Enum.take(@walk_limit) |> Enum.map(&extent!/1)
+    value
+    |> Enum.take(@walk_limit)
+    |> Enum.map(&extent!/1)
   end
 
   defp starts(value) do
-    value |> Enum.take(@walk_limit) |> Enum.map(fn yielded -> yielded |> extent!() |> elem(0) end)
+    value
+    |> Enum.take(@walk_limit)
+    |> Enum.map(fn yielded -> yielded |> extent!() |> elem(0) end)
   end
 
   defp members(value) do
@@ -59,71 +56,107 @@ defmodule Tempo.CensusTest do
     |> Enum.map(fn member -> [extent!(member)] end)
   end
 
+  # The fixture's entries of one kind for a calendar.
+  defp entries(fixture, kind, calendar) do
+    name = Conformance.calendar_name(calendar)
+    Enum.filter(fixture[kind], &(&1["calendar"] == name))
+  end
+
+  defp spans(listed) do
+    Enum.map(listed, &List.to_tuple/1)
+  end
+
+  describe "the conformance fixture" do
+    test "lists what the census works out from each calendar alone", %{fixture: fixture} do
+      census = Conformance.census()
+
+      for kind <- ["calendars", "forms", "no_year", "shapes"] do
+        assert {kind, length(fixture[kind])} == {kind, length(census[kind])}
+
+        for {listed, worked_out} <- Enum.zip(fixture[kind], census[kind]) do
+          assert listed == worked_out
+        end
+      end
+    end
+  end
+
   for calendar <- CalendarCensus.calendars() -- CalendarCensus.observed() do
     describe "in #{inspect(calendar)}" do
-      test "a value in each full form covers what the calendar says, and is walked by its parts" do
+      test "a value in each full form covers what the calendar says, and is walked by its parts",
+           %{fixture: fixture} do
         calendar = unquote(calendar)
 
-        for %{form: form, parts: parts, expect: expect} <- CalendarCensus.forms(calendar) do
-          {span, walk} = CalendarCensus.expected(expect, calendar)
+        for %{"form" => form, "parts" => written, "extent" => extent, "walk" => walk} <-
+              entries(fixture, "forms", calendar) do
+          parts = Conformance.parts(written)
           value = built!(parts, calendar)
 
-          assert {form, parts, extent!(value)} == {form, parts, span}
+          assert {form, parts, extent!(value)} == {form, parts, List.to_tuple(extent)}
 
-          if walk != :unchecked do
-            assert {form, parts, walked(value)} == {form, parts, Enum.take(walk, @walk_limit)}
+          if walk != nil do
+            expected =
+              walk
+              |> Enum.take(@walk_limit)
+              |> spans()
+
+            assert {form, parts, walked(value)} == {form, parts, expected}
           end
         end
       end
 
-      test "a value with no year covers what the calendar counts in any year, or needs a year" do
+      test "a value with no year covers what the calendar counts in any year, or needs a year",
+           %{fixture: fixture} do
         calendar = unquote(calendar)
 
-        for %{parts: parts, covers: covers, walk: walk} <- CalendarCensus.no_year(calendar) do
+        for %{"parts" => written, "covers" => covers, "walk" => walk} <-
+              entries(fixture, "no_year", calendar) do
+          parts = Conformance.parts(written)
+
           case covers do
-            {:ok, span} ->
-              assert {parts, Spans.extent(built!(parts, calendar))} == {parts, {:ok, span}}
+            [from, to] ->
+              assert {parts, Spans.extent(built!(parts, calendar))} == {parts, {:ok, {from, to}}}
 
-            :no_such_value ->
-              assert {parts, match?({:error, _}, built(parts, calendar))} == {parts, true}
+            "no_such_value" ->
+              assert {parts, match?({:error, _}, Conformance.built(parts, calendar))} ==
+                       {parts, true}
 
-            :needs_a_year ->
+            "needs_a_year" ->
               :ok
           end
 
           case walk do
-            {:ok, expected} ->
+            %{"starts" => expected} ->
               assert {parts, starts(built!(parts, calendar))} == {parts, expected}
 
-            {:count, count} ->
+            %{"count" => count} ->
               assert {parts, Enum.count(Enum.take(built!(parts, calendar), @walk_limit))} ==
                        {parts, count}
 
-            :needs_a_year ->
+            "needs_a_year" ->
               assert_raise Tempo.ConversionError, fn ->
                 Enum.take(built!(parts, calendar), @walk_limit)
               end
 
-            :unchecked ->
+            nil ->
               :ok
           end
         end
       end
 
-      test "a value in each shape converts to the spans the calendar says, and is walked by its parts" do
+      test "a value in each shape converts to the spans the calendar says, and is walked by its parts",
+           %{fixture: fixture} do
         calendar = unquote(calendar)
 
-        for %{shape: shape, parts: parts, members: expected, walk: walk} <-
-              CalendarCensus.shapes(calendar) do
+        for %{"shape" => shape, "parts" => written, "members" => listed, "walk" => walk} <-
+              entries(fixture, "shapes", calendar) do
+          parts = Conformance.parts(written)
           value = built!(parts, calendar)
+          expected = Enum.map(listed, &spans/1)
+
           assert {shape, parts, members(value)} == {shape, parts, expected}
 
-          case walk do
-            {:ok, expected_starts} ->
-              assert {shape, parts, starts(value)} == {shape, parts, expected_starts}
-
-            :unchecked ->
-              :ok
+          if walk != nil do
+            assert {shape, parts, starts(value)} == {shape, parts, walk}
           end
         end
       end

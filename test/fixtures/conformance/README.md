@@ -37,3 +37,15 @@ Every file is JSON. A file that lists many cases writes each case on one line, s
 * `partners`: the texts of the partners.
 
 * `expressions`: every expression of the corpus written by hand (the levels core, extended and open), as ISO 8601 text with the calendar it is read in where one is given, and what it refuses, by answer: each refusal is the operation's name followed, for an operation of two expressions, by an at sign and the argument (`relation/2 @ 2026-06-15`). An answer is `error Name reason` for a named error, `raised Name` for a raise, `unread Name` for text the grammar refuses. Every cell not listed answers with a value. The corpus's generated expressions are Tempo's own and are not here. An implementation of the same laws refuses what this refuses; Tempo's own check against it runs with `mix test --only total`.
+
+## census.json
+
+* `positions` and `parts`: how a position and a value's parts are written. A position here is a count of microseconds from 0000-01-01, as `guides/architecture.md` section 3 has it, and exceeds 2^53, so it is read as a 64-bit integer.
+
+* `calendars`: the census's 27 calendars, each by its module's name and its IXDTF identifier, null for the one with none (the Australian fiscal year). The observational Islamic calendars are not here.
+
+* `forms`: a value in each full form on each of the census's dates in each calendar (a year, a month, a date, a date with a time to the hour, the minute, the second and the tenth, an ordinal date, a time in Europe/Paris, and in a calendar of weeks a week, a week date and its times), with the span it covers and the spans its walk yields, worked out from the calendar's own functions and `Date` and never from Tempo.
+
+* `no_year`: every month with no year, every day of each and one past the last, and every day of the week, with the span each covers on its cycle (or `needs_a_year`, or `no_such_value` for a value no year has) and where each value its walk yields starts, or how many it yields.
+
+* `shapes`: a set, a range, a count from the end, a mask and an unspecified unit, two intervals and three recurrences on the census's first date, with the spans of each member the value converts to and, where the census works it out, where each value its walk yields starts.

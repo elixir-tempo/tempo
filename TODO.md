@@ -6,7 +6,13 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **Answer fixtures for ports.** Export the guides' examples (each input, operation and printed answer) and the calendar census's walks and selections in each calendar as text fixtures under `test/fixtures/conformance/`, written by `scripts/conformance_fixtures.exs` and read by Tempo's own tests, so that a port is held to answers and not only to refusals. Decided 2026-10-16; analysis in [plans/translation-assessment.md](plans/translation-assessment.md), section 6.
+* [ ] **A range of positions that reaches the end selects nothing**: `Tempo.to_interval(~o"2026Y6ML1K{2..-1}IN")` has no members where June 2026's second to last Mondays are four, in every calendar of the census; `{2..5}I`, `{2,-1}I`, `-1I` and a range of units to the end (`L{2..-1}DN`) select as they should. Found 2026-10-16 by the census's selections (27 cells).
+
+* [ ] **A day of the week in a selection is the nth day of the calendar's week** (decision 80): `2026Y20WL3KN[u-ca=nrf]` selects the Wednesday where `2026Y20W3K[u-ca=nrf]` is the Tuesday, NRF's week beginning on Sunday; the selection engine reads `K` from Monday. RFC 5545's named weekdays are then numbered for the calendar in `Tempo.RRule`'s lowering. 15 census cells.
+
+## In progress
+
+* [ ] **Answer fixtures for ports.** Export the guides' examples (each input, operation and printed answer) and the calendar census's walks and selections in each calendar as text fixtures under `test/fixtures/conformance/`, written by `scripts/conformance_fixtures.exs` and read by Tempo's own tests, so that a port is held to answers and not only to refusals. Decided 2026-10-16; analysis in [plans/translation-assessment.md](plans/translation-assessment.md), section 6. Landed: `census.json`, the census's full forms, values with no year and shapes in 27 calendars, which `census_test.exs` now reads; the census's selections wait on the two items above, and expect a refusal by name for a value no period has (decision 79, 143 cells); the guides' examples are to come.
 
 ## Blocked
 

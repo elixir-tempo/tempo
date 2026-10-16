@@ -838,3 +838,23 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-16).** Rust first; Zig reassessed after its 1.0 and Roc after its 0.1. Beside the Rust port, a calendar crate that implements the contract over ICU4X and answers what ICU4X does not, with the eight calendars ICU lacks that are arithmetic on the Gregorian or Julian calendar, and an astronomy crate for equinoxes, solstices, new moons and solar longitude, with a hemisphere table; the lunisolar and observational calendars wait for a consumer. `parse/2` reads ISO 8601 only until ICU4X reads a locale's words. `#![forbid(unsafe_code)]` in the port's own three crates; a dependency's `unsafe` reviewed when it is added. Words for intervals, relative times and durations behind a feature marked unstable. Years −9,999 to 9,999 placed (ICU4X's `Date::try_new`), the rest read and written but refused by name when placed, so `Y12026` and `Y-61000/-2000` are expected differences. `jiff` for zones. Predicates return `Result<bool, Error>`. The Elixir suite run against the Rust core through Rustler while the engine is ported, then retired. The guides' examples and the census's walks and selections exported as text fixtures before the port begins.
 
 * **State.** To build: the answer fixtures first (`TODO.md`, Open), then the port (`TODO.md`, Blocked on them).
+
+## 79. A selection of a value no period has
+
+* **Question.** A selection that names a value no period has (`L40DN`, `LT25HN`, `L60WN`, `L6M40DN`): does it select nothing, or is it refused?
+
+* **Context.** Found on 2026-10-16 when the calendar census's selections (`Tempo.Matrix.CalendarCensus.selections/1`, worked out apart from the library and held by no test since the redesign) were measured against Tempo for the conformance fixtures: 985 selections, 800 agreeing, 143 of the differences this one. The census, written before the redesign, passes such a value over and selects nothing; Tempo's validator refuses it as it refuses `2026Y6M40D`, an `InvalidDateError` out of range. A value some periods lack (`L31DN`) passes over the periods without it either way.
+
+* **Decision (2026-10-16).** Refuse by name: a selection is checked as a value is, as RFC 5545 bounds `BYMONTHDAY` to 1–31. The census changes to expect the refusal.
+
+* **State.** To build: the census's selections expect `InvalidDateError` for an absent value (`TODO.md`, under the answer fixtures).
+
+## 80. A day of the week in a selection, in a calendar whose week does not begin on Monday
+
+* **Question.** In a calendar whose week begins on another day (`Calendrical.NRF`, Sunday), does `K` in a selection name the nth day of the calendar's week, as it does in a week date, or the day of the week counted from Monday?
+
+* **Context.** Found with decision 79: 15 NRF selections differ. `2026Y20W3K[u-ca=nrf]` is the week's third day, a Tuesday, as decided on 2026-10-05 and held by the census, but `2026Y20WL3KN[u-ca=nrf]` selects the Wednesday, the selection engine reading `K` as the day of the week from Monday. In a calendar whose week begins on Monday the two readings are one.
+
+* **Decision (2026-10-16).** The nth day of the calendar's own week, in a selection as in a value, so that a written unit has one meaning; RFC 5545's named weekdays (`WE`) are numbered for the calendar in `Tempo.RRule`'s lowering.
+
+* **State.** To build (`TODO.md`, Open).
