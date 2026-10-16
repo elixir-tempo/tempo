@@ -49,6 +49,9 @@ defmodule Tempo.Calendar do
   # calendar numbers them from the day its weeks begin on.
   @iso_weekdays 7
 
+  # The days of the week by name, in ISO 8601's order.
+  @weekday_names [:monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday]
+
   # A day on which to ask a calendar both numberings of its day of the week
   # (2000-01-01, a day number, not a calendar's answer).
   @any_day 730_485
@@ -304,6 +307,19 @@ defmodule Tempo.Calendar do
   @spec day_of_week_from_iso(module(), 1..7) :: 1..7
   def day_of_week_from_iso(calendar, iso_weekday) do
     Integer.mod(iso_weekday - first_weekday(calendar), @iso_weekdays) + 1
+  end
+
+  @doc """
+  The calendar's number for a day of the week by its name, `:monday` to
+  `:sunday`: `:friday` is 5 where weeks begin on Monday and 6 where they
+  begin on Sunday.
+  """
+  @spec day_of_week_named(module(), atom()) :: {:ok, 1..7} | :error
+  def day_of_week_named(calendar, name) do
+    case Enum.find_index(@weekday_names, &(&1 == name)) do
+      nil -> :error
+      index -> {:ok, day_of_week_from_iso(calendar, index + 1)}
+    end
   end
 
   @doc "The ISO 8601 day of the week of the calendar's numbered day: day 6 is Friday where weeks begin on Sunday."

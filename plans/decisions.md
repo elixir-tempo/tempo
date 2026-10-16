@@ -849,7 +849,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-16).** Refuse by name: a selection is checked as a value is, as RFC 5545 bounds `BYMONTHDAY` to 1–31. The census changes to expect the refusal.
 
-* **State.** To build: the census's selections expect `InvalidDateError` for an absent value (`TODO.md`, under the answer fixtures).
+* **State.** Built: the census's selections expect the refusal for a month, a day, a day of the week, a week or an hour past every calendar's last, and `census.json` holds it as `no_such_value`; a position or a day of the year past the period's still selects nothing.
 
 ## 80. A day of the week, in a calendar whose week does not begin on Monday
 
@@ -862,3 +862,15 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision revisited (2026-10-16).** Put again with its full reach: nine calendars of the census begin their weeks on another day (Sunday: Hebrew, the three Islamic, Coptic, the two Ethiopic, NRF; Saturday: Persian), as does any expression written `[u-fw=…]`, and decision 14 had a day of the week on its own numbered from Monday (`Tempo.day_of_week(~o"2026-06-21[u-fw=sun]")` was 7). The user chose the nth day of the expression's week everywhere: a week date, a day of the week on its own, a selection, a rule, in every calendar and week start. It supersedes that part of decision 14. A day named from outside Tempo (RFC 5545's `BYDAY`, cron's field, CLDR's weekend, the builder's `:monday`) is numbered in the expression's calendar; a selector of one calendar applied in another names the same days.
 
 * **State.** Built: `Tempo.Calendar.day_of_week/4` asks the calendar's own numbering (`day_of_week(…, :default)`), beside `iso_weekday/4`, `first_weekday/1` and the two conversions; `Tempo.day_of_week/2`, `Tempo.Workdays`, `Tempo.RRule`, `Tempo.Select.weekdays_in/3`, `Tempo.Builder`, `Tempo.Explain`; the census's oracle numbers a day as the calendar does. `tempo_holidays` numbers its weekdays from Monday and is to follow.
+
+* **Followed through (2026-10-16).** A day of the week of one calendar placed on a value of another is the same day there in `on/2` and `at/2` too, as in `select/3` and `to_calendar/2` (the user: "Same day everywhere"); a month and a day are the other's units, as written. `Tempo.selection/2` builds a selection in a calendar (`[u-ca=hebrew]`), and the builders take a day by its name, numbered in the expression's calendar.
+
+## 81. The weeks of a rule in another calendar
+
+* **Question.** A rule with `RSCALE` (RFC 7529) and `BYWEEKNO`: are its weeks the calendar's own, or RFC 5545's (weeks from `WKST`, Monday by default, week 1 the first with four days) counted over that calendar's year?
+
+* **Context.** `FREQ=YEARLY;RSCALE=HEBREW;BYWEEKNO=10;BYDAY=MO` is 9 November 2026 in Tempo, the Monday of the Hebrew calendar's own week 10 of 5787; RFC 5545's rule over the Hebrew year would give 16 November. Calendrical's `date_from_week_date/3` answers the second, and its documentation calls that the weeks RFC 7529 counts.
+
+* **Decision (2026-10-16).** Follow RFC 7529 consistently: a rule's weeks are its calendar's weeks, as its day of the week is its calendar's day of the week (decision 80). Tempo's reading stands.
+
+* **State.** Built: nothing changes in Tempo.

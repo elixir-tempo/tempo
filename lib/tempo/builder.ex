@@ -241,8 +241,8 @@ defmodule Tempo.Builder do
     end
   end
 
-  defp day_parts([{_unit, _held} | _] = parts, _calendar) do
-    {:ok, parts}
+  defp day_parts([{_unit, _held} | _] = parts, calendar) do
+    {:ok, Select.weekdays_named(parts, calendar)}
   end
 
   defp day_parts(%Tempo{calendar: own} = selection, calendar) do

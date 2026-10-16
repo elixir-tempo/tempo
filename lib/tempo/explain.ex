@@ -170,10 +170,13 @@ defmodule Tempo.Explain do
   defp weekday(day), do: counted(day)
 
   # A day the calendar numbers in its week, by its name.
-  defp weekday_named(day, calendar) when day in 1..7,
-    do: weekday(Tempo.Calendar.iso_weekday_from_day_of_week(calendar, day))
+  defp weekday_named(day, calendar) when day in 1..7 do
+    weekday(Tempo.Calendar.iso_weekday_from_day_of_week(calendar, day))
+  end
 
-  defp weekday_named(day, _calendar), do: counted(day)
+  defp weekday_named(day, _calendar) do
+    counted(day)
+  end
 
   # A count from the end is said from the end.
   defp counted(-1), do: "the last"

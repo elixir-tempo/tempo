@@ -1044,6 +1044,104 @@ defmodule Tempo.Select do
   # ── A selector of another calendar ────────────────────────────────────
 
   @doc """
+  Parts, or a value's units, with each day of the week given by its name
+  (`day_of_week: :friday`, or a list of names and numbers) numbered as the
+  calendar numbers it, in a selection nested in them too (decision 80). A
+  name that is no day's is left for the parts' check to refuse.
+  """
+  @spec weekdays_named(keyword(), module()) :: keyword()
+  def weekdays_named(parts, calendar) when is_list(parts) do
+    Enum.map(parts, &weekday_part_named(&1, calendar))
+  end
+
+  def weekdays_named(other, _calendar) do
+    other
+  end
+
+  defp weekday_part_named({:day_of_week, held}, calendar) do
+    {:day_of_week, weekday_held_named(held, calendar)}
+  end
+
+  defp weekday_part_named({:selection, parts}, calendar) when is_list(parts) do
+    {:selection, weekdays_named(parts, calendar)}
+  end
+
+  defp weekday_part_named({:all, selections}, calendar) when is_list(selections) do
+    {:all, Enum.map(selections, &weekdays_named(&1, calendar))}
+  end
+
+  defp weekday_part_named(part, _calendar) do
+    part
+  end
+
+  # A list with a name in it is a set of days: numbered, it is written in
+  # order, each run of days one after another as a range (`[:monday,
+  # :tuesday, :wednesday]` is `1..3`). A list of numbers is kept as given.
+  defp weekday_held_named(held, calendar) when is_list(held) do
+    if Enum.any?(held, &is_atom/1) do
+      held
+      |> Enum.flat_map(&weekday_days_named(&1, calendar))
+      |> Enum.uniq()
+      |> Enum.sort()
+      |> Enum.chunk_while([], &weekday_run/2, &weekday_run_after/1)
+      |> Enum.map(&weekday_run_written/1)
+    else
+      held
+    end
+  end
+
+  defp weekday_held_named(name, calendar) when is_atom(name) do
+    case Tempo.Calendar.day_of_week_named(calendar, name) do
+      {:ok, day} -> day
+      :error -> name
+    end
+  end
+
+  defp weekday_held_named(held, _calendar) do
+    held
+  end
+
+  defp weekday_days_named(%Range{} = days, _calendar) do
+    Enum.to_list(days)
+  end
+
+  defp weekday_days_named(day, calendar) do
+    [weekday_held_named(day, calendar)]
+  end
+
+  defp weekday_run(day, [last | _] = run) when is_integer(day) and day == last + 1 do
+    {:cont, [day | run]}
+  end
+
+  defp weekday_run(day, []) do
+    {:cont, [day]}
+  end
+
+  defp weekday_run(day, run) do
+    {:cont, Enum.reverse(run), [day]}
+  end
+
+  defp weekday_run_after([]) do
+    {:cont, []}
+  end
+
+  defp weekday_run_after(run) do
+    {:cont, Enum.reverse(run), []}
+  end
+
+  defp weekday_run_written([day]) do
+    day
+  end
+
+  defp weekday_run_written([first | _] = run) when is_integer(first) do
+    first..List.last(run)//1
+  end
+
+  defp weekday_run_written(run) do
+    run
+  end
+
+  @doc """
   Parts with each day of the week they name, in a selection nested in them
   too, numbered as another calendar numbers it (decision 80): the same day
   of the week, counted from the day the other calendar's weeks begin on.

@@ -517,7 +517,9 @@ defmodule Tempo do
     `:hour`, `:minute`, `:second`, `:microsecond`), in any order, each holding
     what a written unit holds (`t:held/0`); a `:microsecond` holds
     `{microseconds, digits}` as Elixir's `Time` does, or an integer, which
-    is six digits. These keys go beside them:
+    is six digits. A `:day_of_week` is numbered from the day the value's
+    weeks begin on, or is a day's name (`:friday`), numbered so in the
+    value's calendar. These keys go beside them:
 
     * `:calendar` is the calendar the value is in. The default is
       `Calendar.ISO`.
@@ -553,6 +555,9 @@ defmodule Tempo do
 
       iex> Tempo.new(year: 2026, week: 24, day_of_week: 3)
       {:ok, ~o"2026-W24-3"}
+
+      iex> Tempo.new(day_of_week: :friday, calendar: Calendrical.Hebrew)
+      {:ok, ~o"6K[u-ca=hebrew]"}
 
       iex> Tempo.new(year: 2026, month: 6, day: 15, zone: "Europe/Paris")
       {:ok, ~o"2026-06-15[Europe/Paris]"}
@@ -590,6 +595,7 @@ defmodule Tempo do
 
     with {:ok, units} <- units |> Enum.map(&held_as_written/1) |> Unit.ordered(),
          {:ok, calendar} <- calendar_of(Keyword.get(frame, :calendar, Tempo.Calendar.default())),
+         units = Select.weekdays_named(units, calendar),
          {:ok, zone} <- zone_of(Keyword.get(frame, :zone)),
          {:ok, qualifications} <- qualifications_of(Keyword.get(frame, :qualifications), units) do
       Validate.run(%__MODULE__{
@@ -682,14 +688,27 @@ defmodule Tempo do
 
   ### Arguments
 
-  * `parts` is a keyword list of the parts, in any order.
+  * `parts` is a keyword list of the parts, in any order, each described
+    under Parts.
+
+  * `options` is a keyword list of options.
 
   ### Options
+
+  * `:calendar` is the calendar the selection is in, whose weeks number its
+    days of the week and count a part from their end: `day_of_week: -1` is
+    the last day of a week of that calendar. The default is `Calendar.ISO`.
+
+  ### Parts
 
   * `:month`, `:week`, `:day_of_year`, `:day`, `:day_of_week`, `:hour`,
     `:minute` and `:second` are each a whole number, a range, or a list of
     numbers and ranges. A negative number counts from the end of the period:
-    `day: -1` is its last day. `:day_of_week` is 1, Monday, to 7.
+    `day: -1` is its last day. `:day_of_week` is numbered from the day the
+    week begins on, Monday 1 in the Gregorian calendar, or is a day's name
+    (`:monday` to `:sunday`), or a list of them, numbered in the selection's
+    calendar; a selection given to a recurrence or a value of another
+    calendar names the same days there.
 
   * `:instance` picks among everything the other parts select, by position:
     `2` the second, `-1` the last.
@@ -739,6 +758,9 @@ defmodule Tempo do
       iex> Tempo.selection(day_of_week: 1, instance: 2)
       {:ok, ~o"L1K2IN"}
 
+      iex> Tempo.selection(day_of_week: :friday, instance: -1)
+      {:ok, ~o"L5K-1IN"}
+
       iex> {:ok, christmas} = Tempo.selection(month: 12, day: 25)
       iex> Tempo.select(~o"2026/2027", christmas)
       {:ok, ~o"{2026-12-25,2027-12-25}"}
@@ -752,11 +774,16 @@ defmodule Tempo do
       iex> Tempo.select(~o"2026-06", first_monday_and_last_friday)
       {:ok, ~o"{2026-06-01,2026-06-26}"}
 
+      iex> Tempo.selection([day_of_week: -1], calendar: Calendrical.Hebrew)
+      {:ok, ~o"L-1KN[u-ca=hebrew]"}
+
       iex> {:error, %ArgumentError{}} = Tempo.selection(fortnight: 1)
 
   """
-  @spec selection(keyword()) :: {:ok, t()} | {:error, error()}
-  def selection(parts), do: Build.selection(parts)
+  @spec selection(keyword(), keyword()) :: {:ok, t()} | {:error, error()}
+  def selection(parts, options \\ []) do
+    Build.selection(parts, options)
+  end
 
   @doc """
   Builds a recurrence from its cadence and what it is given: where it
@@ -789,6 +816,9 @@ defmodule Tempo do
 
   * `:select` is what it selects in each repeat: the parts of a selection,
     or what `selection/1` returns. With none each repeat is an occurrence.
+    A day of the week given by its name is numbered in the recurrence's
+    calendar: `day_of_week: :friday` is `6K` in the Hebrew calendar, whose
+    weeks begin on Sunday.
 
   * `:calendar` is the calendar of a recurrence with no `:from`
     (`R/../P1Y/FL7M1DN[u-ca=hebrew]`). One with a `:from` is in its start's.
@@ -811,6 +841,9 @@ defmodule Tempo do
 
       iex> Tempo.every(~o"P1M", from: ~o"2026-01-01", select: [day_of_week: 1, instance: 2])
       {:ok, ~o"R/2026-01-01/P1M/FL1K2IN"}
+
+      iex> Tempo.every(~o"P1Y", select: [month: 7, day: 1, day_of_week: :friday], calendar: Calendrical.Hebrew)
+      {:ok, ~o"R/../P1Y/FL7M1D6KN[u-ca=hebrew]"}
 
       iex> {:ok, paydays} = Tempo.every([month: 1], from: ~o"2026-01-01", count: 3, select: [day: -1])
       iex> Enum.map(paydays, &Tempo.Interval.from/1)
@@ -2028,36 +2061,62 @@ defmodule Tempo do
   @calendar_free [:day_of_week, :hour, :minute, :second, :microsecond]
   @free_parts [:instance, :window, :roll | @calendar_free]
 
-  defp no_date?(%__MODULE__{form: {:value, units}}), do: Enum.all?(units, &free_unit?/1)
+  defp no_date?(%__MODULE__{form: {:value, units}}) do
+    Enum.all?(units, &free_unit?/1)
+  end
 
-  defp no_date?(%__MODULE__{form: {:span, from, to}}),
-    do: Enum.all?([from, to], &free_end?/1)
+  defp no_date?(%__MODULE__{form: {:span, from, to}}) do
+    Enum.all?([from, to], &free_end?/1)
+  end
 
   defp no_date?(%__MODULE__{form: {kind, members}})
-       when kind in [:all, :one] and is_list(members),
-       do: Enum.all?(members, &no_date?/1)
+       when kind in [:all, :one] and is_list(members) do
+    Enum.all?(members, &no_date?/1)
+  end
 
-  defp no_date?(%__MODULE__{form: {:every, first, bound, rule}}),
-    do: no_date?(first) and free_end?(bound) and (is_nil(rule) or Enum.all?(rule, &free_part?/1))
+  defp no_date?(%__MODULE__{form: {:every, first, bound, rule}}) do
+    no_date?(first) and free_end?(bound) and (is_nil(rule) or Enum.all?(rule, &free_part?/1))
+  end
 
-  defp no_date?(_conditional_or_lazy), do: false
+  defp no_date?(_conditional_or_lazy) do
+    false
+  end
 
-  defp free_end?(%__MODULE__{} = value), do: no_date?(value)
-  defp free_end?(_duration_open_or_count), do: true
+  defp free_end?(%__MODULE__{} = value) do
+    no_date?(value)
+  end
 
-  defp free_unit?({:year, :any}), do: true
-  defp free_unit?({:selection, parts}), do: Enum.all?(parts, &free_part?/1)
-  defp free_unit?({unit, _held}), do: unit in @calendar_free
+  defp free_end?(_duration_open_or_count) do
+    true
+  end
 
-  defp free_part?({:selection, parts}), do: Enum.all?(parts, &free_part?/1)
+  defp free_unit?({:year, :any}) do
+    true
+  end
 
-  defp free_part?({:all, each}),
-    do: Enum.all?(each, fn parts -> Enum.all?(parts, &free_part?/1) end)
+  defp free_unit?({:selection, parts}) do
+    Enum.all?(parts, &free_part?/1)
+  end
 
-  defp free_part?({part, _held}), do: part in @free_parts
+  defp free_unit?({unit, _held}) do
+    unit in @calendar_free
+  end
 
-  defp weekdays_numbered(%__MODULE__{form: {:value, units}} = value, from, to),
-    do: %{value | form: {:value, Select.weekdays_in(units, from, to)}, calendar: to}
+  defp free_part?({:selection, parts}) do
+    Enum.all?(parts, &free_part?/1)
+  end
+
+  defp free_part?({:all, each}) do
+    Enum.all?(each, fn parts -> Enum.all?(parts, &free_part?/1) end)
+  end
+
+  defp free_part?({part, _held}) do
+    part in @free_parts
+  end
+
+  defp weekdays_numbered(%__MODULE__{form: {:value, units}} = value, from, to) do
+    %{value | form: {:value, Select.weekdays_in(units, from, to)}, calendar: to}
+  end
 
   defp weekdays_numbered(%__MODULE__{form: {:span, start, stop}} = span, from, to) do
     ends = {:span, end_numbered(start, from, to), end_numbered(stop, from, to)}
@@ -2065,12 +2124,13 @@ defmodule Tempo do
   end
 
   defp weekdays_numbered(%__MODULE__{form: {kind, members}} = set, from, to)
-       when kind in [:all, :one],
-       do: %{
-         set
-         | form: {kind, Enum.map(members, &weekdays_numbered(&1, from, to))},
-           calendar: to
-       }
+       when kind in [:all, :one] do
+    %{
+      set
+      | form: {kind, Enum.map(members, &weekdays_numbered(&1, from, to))},
+        calendar: to
+    }
+  end
 
   defp weekdays_numbered(%__MODULE__{form: {:every, first, bound, rule}} = recurrence, from, to) do
     first = weekdays_numbered(first, from, to)
@@ -2078,8 +2138,13 @@ defmodule Tempo do
     %{recurrence | form: {:every, first, end_numbered(bound, from, to), rule}, calendar: to}
   end
 
-  defp end_numbered(%__MODULE__{} = value, from, to), do: weekdays_numbered(value, from, to)
-  defp end_numbered(other, _from, _to), do: other
+  defp end_numbered(%__MODULE__{} = value, from, to) do
+    weekdays_numbered(value, from, to)
+  end
+
+  defp end_numbered(other, _from, _to) do
+    other
+  end
 
   defp converted(expression, calendar) do
     with {:ok, _frame, positioned} <- Algebra.positioned(expression, []) do
@@ -2519,6 +2584,7 @@ defmodule Tempo do
   def at(%__MODULE__{form: {:every, first, bound, rule}} = recurrence, %__MODULE__{} = other) do
     with {:ok, first} <- at(first, other),
          {:ok, bound} <- placed_end(bound, other) do
+      rule = rule && Select.weekdays_in(rule, recurrence.calendar, other.calendar)
       Validate.run(%{recurrence | form: {:every, first, bound, rule}, calendar: other.calendar})
     end
   end
@@ -2564,11 +2630,21 @@ defmodule Tempo do
   # of any year alone (`X*Y`) adds nothing to the other. A selection selects
   # within the units before it, so nothing is filled beside one: a selection
   # follows the coarser value's units, and finer units follow a selection.
+  # A day of the week the other names is the same day in the value's
+  # calendar, numbered as that calendar numbers it (decision 80), as in
+  # `select/3` and `to_calendar/2`; its other units are the value's
+  # calendar's units, as written.
   defp composed(
          %__MODULE__{form: {:value, coarse}} = value,
          %__MODULE__{form: {:value, b}} = other
-       ),
-       do: composed(value, other, coarse, Unit.cyclic(b))
+       ) do
+    fine =
+      b
+      |> Unit.cyclic()
+      |> Select.weekdays_in(other.calendar, value.calendar)
+
+    composed(value, other, coarse, fine)
+  end
 
   defp composed(value, _other, _coarse, []), do: {:ok, value}
 
@@ -4911,8 +4987,8 @@ defmodule Tempo do
          ~s|Tempo.today!("Australia/Sydney") \|> Tempo.resolution()|, ":day", "Etc/UTC"},
         {:weekends, [quote(do: term())], quote(do: t()), ~s|Tempo.weekends!(:US)|,
          ~s|~o"{6,7}K"|},
-        {:selection, [quote(do: keyword())], quote(do: t()),
-         ~s|Tempo.selection!(month: 12, day: 25)|, ~s|~o"L12M25DN"|},
+        {:selection, [quote(do: keyword()), quote(do: keyword())], quote(do: t()),
+         ~s|Tempo.selection!(month: 12, day: 25)|, ~s|~o"L12M25DN"|, []},
         {:every, [quote(do: Duration.t() | keyword()), quote(do: keyword())], quote(do: t()),
          ~s|Tempo.every!(~o"P1W", from: ~o"2026-06-01", count: 3)|, ~s|~o"R3/2026-06-01/P1W"|},
         {:one_of, [quote(do: [t()])], quote(do: t()), ~s|Tempo.one_of!([~o"1984", ~o"1986"])|,

@@ -90,6 +90,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Added
 
+* `Tempo.new/1`, `Tempo.selection/2` and `Tempo.every/2`'s `:select` take a day of the week by its name (`day_of_week: :friday`), numbered in the expression's calendar: `6K` in the Hebrew calendar. `Tempo.selection/2` takes a `:calendar`.
+
 * `tz` is a dependency: a named zone (`[Europe/Paris]`) is read with no configuration, Tempo asking `tz` where neither `:ex_tempo` nor `:elixir` names a time zone database other than Elixir's UTC-only default. A database configured is asked as before.
 
 * A guide to selection: every part of a selection, written and built with `Tempo.selection/1`, with positions, nesting, sets, events, rolls, skips and zones.

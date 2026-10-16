@@ -26,6 +26,16 @@ defmodule Tempo.BuildTest do
      quote(do: Tempo.every(~o"P1Y", select: [month: 12, day: 25], years: :even))},
     {"R/../P1Y/FL7M1DN[u-ca=hebrew]",
      quote(do: Tempo.every(~o"P1Y", select: [month: 7, day: 1], calendar: Calendrical.Hebrew))},
+    {"L-1KN[u-ca=hebrew]",
+     quote(do: Tempo.selection([day_of_week: -1], calendar: Calendrical.Hebrew))},
+    {"R/../P1Y/FL7M1D6KN[u-ca=hebrew]",
+     quote(
+       do:
+         Tempo.every(~o"P1Y",
+           select: [month: 7, day: 1, day_of_week: :friday],
+           calendar: Calendrical.Hebrew
+         )
+     )},
     {"R/{2017Y..}l/P1Y/FL2M29DN",
      quote(
        do:
@@ -158,6 +168,48 @@ defmodule Tempo.BuildTest do
 
       assert RRule.to_string(Tempo.every!(~o"P1M", select: [day_of_week: 1, instance: 2])) ==
                {:ok, "FREQ=MONTHLY;BYDAY=2MO"}
+    end
+  end
+
+  # A day of the week is numbered from the day the calendar's weeks begin on
+  # (decision 80), so a program that knows a day by its name gives the name
+  # and the builders number it: Friday is 5 in the Gregorian calendar and 6
+  # in the Hebrew, whose weeks begin on Sunday.
+  describe "a day of the week by its name" do
+    test "is numbered in the calendar of what is built" do
+      assert Tempo.new(day_of_week: :friday) == {:ok, ~o"5K"}
+
+      assert Tempo.new(day_of_week: :friday, calendar: Calendrical.Hebrew) ==
+               {:ok, ~o"6K[u-ca=hebrew]"}
+
+      assert Tempo.selection(day_of_week: [:monday, :friday]) == {:ok, ~o"L{1,5}KN"}
+
+      assert Tempo.every(~o"P1Y",
+               select: [month: 7, day: 1, day_of_week: :friday],
+               calendar: Calendrical.Hebrew
+             ) == {:ok, ~o"R/../P1Y/FL7M1D6KN[u-ca=hebrew]"}
+
+      assert Tempo.every(~o"P1Y",
+               select: [
+                 all: [
+                   [day_of_week: :monday, instance: 2],
+                   [day_of_week: :wednesday, instance: 2]
+                 ]
+               ],
+               calendar: Calendrical.Hebrew
+             ) == {:ok, ~o"R/../P1Y/FL{2K2I,4K2I}N[u-ca=hebrew]"}
+    end
+
+    test "is the same day in a selection given to a recurrence of another calendar" do
+      {:ok, friday} = Tempo.selection(day_of_week: :friday)
+
+      assert Tempo.every(~o"P1Y", select: friday, calendar: Calendrical.Hebrew) ==
+               {:ok, ~o"R/../P1Y/FL6KN[u-ca=hebrew]"}
+    end
+
+    test "that is no day's is refused" do
+      assert {:error, %ArgumentError{}} = Tempo.selection(day_of_week: :funday)
+      assert {:error, %ArgumentError{}} = Tempo.every(~o"P1W", select: [day_of_week: :funday])
     end
   end
 end

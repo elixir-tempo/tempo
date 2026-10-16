@@ -10,7 +10,7 @@ defmodule Tempo.Build do
   # and `Tempo.IntervalSet.new/2` build are the parts these take.
 
   alias Tempo.{ConversionError, Duration, FrameError, InvalidCalendarError, Options, Spans}
-  alias Tempo.{Unit, Validate, Workdays}
+  alias Tempo.{Select, Unit, Validate, Workdays}
 
   # The units a selection names, coarsest first, as a rule's parts are held.
   @units [
@@ -35,25 +35,44 @@ defmodule Tempo.Build do
 
   # ── A selection ───────────────────────────────────────────────────────
 
-  @doc "A selection (`L…N`) from its parts, as a value with no year."
-  @spec selection(keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-  def selection(parts) do
-    with {:ok, parts} <- parts(parts),
-         do: Validate.run(%Tempo{form: {:value, [selection: parts]}})
+  @doc "A selection (`L…N`) from its parts, as a value with no year, in a calendar."
+  @spec selection(keyword(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
+  def selection(parts, options \\ []) do
+    with :ok <- Options.check(options, [:calendar], "Tempo.selection/2"),
+         {:ok, calendar} <- a_calendar(Keyword.get(options, :calendar, Tempo.Calendar.default())),
+         {:ok, parts} <- parts(parts, calendar) do
+      Validate.run(%Tempo{form: {:value, [selection: parts]}, calendar: calendar})
+    end
   end
 
-  @doc "A selection's parts in the form a rule holds them: the units coarsest first, a position last."
-  @spec parts(term()) :: {:ok, Tempo.selection()} | {:error, Exception.t()}
-  def parts(%Tempo{form: {:value, [selection: parts]}}), do: {:ok, parts}
+  defp a_calendar(calendar) do
+    if Tempo.Calendar.calendar?(calendar) do
+      {:ok, calendar}
+    else
+      {:error, InvalidCalendarError.exception(calendar: calendar)}
+    end
+  end
 
-  def parts(parts) when is_list(parts) do
+  @doc """
+  A selection's parts in the form a rule holds them, the units coarsest
+  first and a position last, with a day of the week given by its name
+  numbered in the calendar (decision 80), and a selection of another
+  calendar's days of the week numbered in this one.
+  """
+  @spec parts(term(), module()) :: {:ok, Tempo.selection()} | {:error, Exception.t()}
+  def parts(parts, calendar \\ Tempo.Calendar.default())
+
+  def parts(%Tempo{form: {:value, [selection: parts]}, calendar: own}, calendar),
+    do: {:ok, Select.weekdays_in(parts, own, calendar)}
+
+  def parts(parts, calendar) when is_list(parts) do
     with :ok <- known(parts),
-         {:ok, held} <- each_part(parts) do
+         {:ok, held} <- each_part(Select.weekdays_named(parts, calendar), calendar) do
       {:ok, ordered(held)}
     end
   end
 
-  def parts(other),
+  def parts(other, _calendar),
     do: {:error, argument("a selection is a keyword list of parts, not #{inspect(other)}")}
 
   defp known(parts) do
@@ -74,30 +93,33 @@ defmodule Tempo.Build do
 
   defp listed, do: Enum.map_join(@parts, ", ", &inspect/1)
 
-  defp each_part(parts) do
+  defp each_part(parts, calendar) do
     Enum.reduce_while(parts, {:ok, []}, fn part, {:ok, held} ->
-      case part(part) do
+      case part(part, calendar) do
         {:ok, part} -> {:cont, {:ok, held ++ [part]}}
         {:error, _} = error -> {:halt, error}
       end
     end)
   end
 
-  defp part({:event, name}) when is_binary(name), do: {:ok, {:event, {name, nil}}}
-  defp part({:event, {name, _} = event}) when is_binary(name), do: {:ok, {:event, event}}
-  defp part({:window, %Duration{} = length}), do: {:ok, {:window, length}}
+  defp part({:event, name}, _calendar) when is_binary(name), do: {:ok, {:event, {name, nil}}}
 
-  defp part({:skip, direction}) when direction in [:forward, :backward],
+  defp part({:event, {name, _} = event}, _calendar) when is_binary(name),
+    do: {:ok, {:event, event}}
+
+  defp part({:window, %Duration{} = length}, _calendar), do: {:ok, {:window, length}}
+
+  defp part({:skip, direction}, _calendar) when direction in [:forward, :backward],
     do: {:ok, {:skip, direction}}
 
-  defp part({:skip, other}),
+  defp part({:skip, other}, _calendar),
     do: {:error, argument(":skip of a selection is :forward or :backward, not #{inspect(other)}")}
 
   # A lunisolar calendar's month as it is named: its number, or its leap month.
-  defp part({:traditional_month, {month, :leap}}) when is_integer(month),
+  defp part({:traditional_month, {month, :leap}}, _calendar) when is_integer(month),
     do: {:ok, {:traditional_month, {month, :leap}}}
 
-  defp part({:roll, convention}) do
+  defp part({:roll, convention}, _calendar) do
     if convention in Workdays.conventions(),
       do: {:ok, {:roll, convention}},
       else:
@@ -107,27 +129,29 @@ defmodule Tempo.Build do
          )}
   end
 
-  defp part({:selection, nested}) do
-    with {:ok, parts} <- parts(nested), do: {:ok, {:selection, parts}}
+  defp part({:selection, nested}, calendar) do
+    with {:ok, parts} <- parts(nested, calendar), do: {:ok, {:selection, parts}}
   end
 
   # Several selections whose values are taken together: the second Monday
   # and the second Wednesday, `[all: [[day_of_week: 1, instance: 2],
   # [day_of_week: 3, instance: 2]]]`.
-  defp part({:all, [_ | _] = each}) do
-    with {:ok, each} <- each_selection(each), do: {:ok, {:all, each}}
+  defp part({:all, [_ | _] = each}, calendar) do
+    with {:ok, each} <- each_selection(each, calendar), do: {:ok, {:all, each}}
   end
 
-  defp part({:all, other}),
+  defp part({:all, other}, _calendar),
     do: {:error, argument(":all of a selection is a list of selections, not #{inspect(other)}")}
 
-  defp part({unit, %Range{} = range}) when unit in @units or unit == :instance,
+  defp part({unit, %Range{} = range}, _calendar) when unit in @units or unit == :instance,
     do: {:ok, {unit, [range]}}
 
-  defp part({unit, held}) when (unit in @units or unit == :instance) and is_integer(held),
-    do: {:ok, {unit, held}}
+  defp part({unit, held}, _calendar)
+       when (unit in @units or unit == :instance) and is_integer(held),
+       do: {:ok, {unit, held}}
 
-  defp part({unit, held}) when (unit in @units or unit == :instance) and is_list(held) do
+  defp part({unit, held}, _calendar)
+       when (unit in @units or unit == :instance) and is_list(held) do
     if Enum.all?(held, &(is_integer(&1) or is_struct(&1, Range))),
       do: {:ok, {unit, held}},
       else:
@@ -135,12 +159,12 @@ defmodule Tempo.Build do
          argument("#{inspect(unit)} takes whole numbers and ranges, not #{inspect(held)}")}
   end
 
-  defp part({key, held}),
+  defp part({key, held}, _calendar),
     do: {:error, argument("#{inspect(key)} of a selection does not take #{inspect(held)}")}
 
-  defp each_selection(each) do
+  defp each_selection(each, calendar) do
     Enum.reduce_while(each, {:ok, []}, fn selection, {:ok, held} ->
-      case parts(selection) do
+      case parts(selection, calendar) do
         {:ok, parts} -> {:cont, {:ok, held ++ [parts]}}
         {:error, _} = error -> {:halt, error}
       end
@@ -182,7 +206,7 @@ defmodule Tempo.Build do
          {:ok, first} <- in_years(first, Keyword.get(options, :years)),
          {:ok, bound} <- bound(Keyword.get(options, :count), Keyword.get(options, :until)),
          {:ok, bound} <- bound_in_frame(bound, first),
-         {:ok, rule} <- rule(Keyword.get(options, :select)) do
+         {:ok, rule} <- rule(Keyword.get(options, :select), first.calendar) do
       Validate.run(%Tempo{
         form: {:every, first, bound, rule},
         calendar: first.calendar,
@@ -308,8 +332,14 @@ defmodule Tempo.Build do
 
   defp until_zoned(until, _zone), do: Validate.run(until)
 
-  defp rule(nil), do: {:ok, nil}
-  defp rule(select), do: parts(select)
+  # A day of the week a rule names is numbered in the recurrence's calendar.
+  defp rule(nil, _calendar) do
+    {:ok, nil}
+  end
+
+  defp rule(select, calendar) do
+    parts(select, calendar)
+  end
 
   # ── A step of a pipeline ──────────────────────────────────────────────
 
@@ -329,14 +359,14 @@ defmodule Tempo.Build do
   """
   @spec selecting(Tempo.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def selecting(%Tempo{form: {:every, first, bound, rule}} = recurrence, parts) do
-    with {:ok, rule} <- merged(rule || [], parts),
+    with {:ok, rule} <- merged(rule || [], parts, recurrence.calendar),
          do: Validate.run(%{recurrence | form: {:every, first, bound, rule}})
   end
 
   def selecting(%Tempo{form: {:value, units}} = value, parts) do
     {held, coarser} = Keyword.pop(units, :selection, [])
 
-    with {:ok, selection} <- merged(held, parts),
+    with {:ok, selection} <- merged(held, parts, value.calendar),
          do: Validate.run(%{value | form: {:value, coarser ++ [selection: selection]}})
   end
 
@@ -401,16 +431,16 @@ defmodule Tempo.Build do
   # A time of day given to a selection with a position is a time on each day
   # it selects: the selection is closed (`LL{1..5}K-1INT9HN`, nine o'clock of
   # the last weekday), where merged the position would count among the times.
-  defp merged(held, parts) do
+  defp merged(held, parts, calendar) do
     if Keyword.has_key?(held, :instance) and Enum.all?(Keyword.keys(parts), &(&1 in @clock)),
-      do: merged_parts([selection: held], parts),
-      else: merged_parts(held, parts)
+      do: merged_parts([selection: held], parts, calendar),
+      else: merged_parts(held, parts, calendar)
   end
 
-  defp merged_parts(held, parts) do
+  defp merged_parts(held, parts, calendar) do
     case Enum.find(Keyword.keys(parts), &Keyword.has_key?(held, &1)) do
       nil ->
-        parts(held ++ parts)
+        parts(held ++ parts, calendar)
 
       unit ->
         {:error,
