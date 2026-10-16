@@ -6,8 +6,10 @@ defmodule Tempo.Conformance do
   # own test suite and Tempo's own tests read here, so that the two cannot
   # drift. `scripts/conformance_fixtures.exs` writes them.
 
+  alias Tempo.GuidesRunner
   alias Tempo.Interval
   alias Tempo.Matrix.CalendarCensus
+  alias Tempo.Matrix.Selections
 
   @dir Path.expand("../fixtures/conformance", __DIR__)
 
@@ -38,6 +40,157 @@ defmodule Tempo.Conformance do
   def kind(%{"raised" => module}), do: "raised #{module}"
   def kind(%{"unread" => module}), do: "unread #{module}"
 
+  # ── The guides' examples ──────────────────────────────────────────────
+
+  @doc "The pages whose examples the guides fixture records: the README and every guide."
+  @spec guide_pages() :: [Path.t()]
+  def guide_pages do
+    ["README.md" | Enum.sort(Path.wildcard("guides/*.md"))]
+  end
+
+  @doc """
+  The calls the guides' examples make into Tempo, `Enum` and `Stream`, as
+  the guides fixture holds them: each with its page, its example, the
+  example's code, the call by name and arity, its arguments and its answer,
+  in terms JSON decodes to. The clock is pinned while they run.
+
+  ### Returns
+
+  * A list of maps, one a call, in the order the pages make them.
+
+  """
+  @spec guides() :: [map()]
+  def guides do
+    for page <- guide_pages(), call <- GuidesRunner.calls(page) do
+      %{
+        "page" => page,
+        "example" => call.example,
+        "code" => call.code,
+        "call" => "#{inspect(call.module)}.#{call.function}/#{length(call.arguments)}",
+        "arguments" => Enum.map(call.arguments, &data/1),
+        "answer" => data(call.answer)
+      }
+    end
+  end
+
+  @doc """
+  A term in the terms JSON decodes to: an expression or a duration by its
+  ISO 8601 text, Elixir's dates and times by theirs, an error by its name
+  and reason, and every other term tagged by its kind.
+  """
+  @spec data(term()) :: term()
+  def data({:ok, value}) do
+    %{"ok" => data(value)}
+  end
+
+  def data({:error, error}) do
+    %{"error" => data(error)}
+  end
+
+  def data(%Tempo{} = expression) do
+    case Tempo.to_iso8601(expression) do
+      {:ok, text} -> %{"tempo" => text}
+      {:error, _no_text} -> %{"tempo" => nil, "inspect" => inspect(expression, limit: :infinity)}
+    end
+  end
+
+  def data(%Tempo.Duration{} = duration) do
+    %{"duration" => Tempo.to_iso8601!(duration)}
+  end
+
+  def data(%Date{} = date) do
+    %{"date" => Date.to_iso8601(date), "calendar" => inspect(date.calendar)}
+  end
+
+  def data(%Time{} = time) do
+    %{"time" => Time.to_iso8601(time)}
+  end
+
+  def data(%NaiveDateTime{} = naive) do
+    %{"naive_datetime" => NaiveDateTime.to_iso8601(naive)}
+  end
+
+  def data(%DateTime{} = datetime) do
+    %{"datetime" => DateTime.to_iso8601(datetime), "zone" => datetime.time_zone}
+  end
+
+  def data(%Date.Range{first: first, last: last, step: step}) do
+    %{"date_range" => [data(first), data(last), step]}
+  end
+
+  def data(%Range{first: first, last: last, step: step}) do
+    %{"range" => [first, last, step]}
+  end
+
+  def data(%{__exception__: true, __struct__: module} = error) do
+    %{"exception" => inspect(module), "reason" => data(Map.get(error, :reason))}
+  end
+
+  def data(%{__struct__: module} = struct) do
+    %{"struct" => inspect(module), "fields" => data(Map.from_struct(struct))}
+  end
+
+  def data(map) when is_map(map) do
+    pairs =
+      map
+      |> Enum.map(fn {key, value} -> [data(key), data(value)] end)
+      |> Enum.sort_by(&inspect/1)
+
+    %{"map" => pairs}
+  end
+
+  def data(tuple) when is_tuple(tuple) do
+    %{"tuple" => Enum.map(Tuple.to_list(tuple), &data/1)}
+  end
+
+  def data([{key, _} | _] = list) when is_atom(key) do
+    if Keyword.keyword?(list) do
+      %{"keyword" => Enum.map(list, fn {key, value} -> [Atom.to_string(key), data(value)] end)}
+    else
+      Enum.map(list, &data/1)
+    end
+  end
+
+  def data(list) when is_list(list) do
+    Enum.map(list, &data/1)
+  end
+
+  def data(value) when is_boolean(value) or is_nil(value) do
+    value
+  end
+
+  def data(atom) when is_atom(atom) do
+    atom_data(Atom.to_string(atom), atom)
+  end
+
+  def data(value) when is_integer(value) or is_float(value) do
+    value
+  end
+
+  def data(binary) when is_binary(binary) do
+    if String.printable?(binary) do
+      binary
+    else
+      %{"bytes" => Base.encode64(binary)}
+    end
+  end
+
+  def data(function) when is_function(function) do
+    %{"opaque" => "function"}
+  end
+
+  def data(_pid_reference_or_port) do
+    %{"opaque" => "process"}
+  end
+
+  defp atom_data("Elixir." <> _name, module) do
+    %{"module" => inspect(module)}
+  end
+
+  defp atom_data(name, _atom) do
+    %{"atom" => name}
+  end
+
   # ── The calendar census ───────────────────────────────────────────────
 
   @doc """
@@ -49,8 +202,8 @@ defmodule Tempo.Conformance do
 
   ### Returns
 
-  * A map of `"calendars"`, `"forms"`, `"no_year"` and `"shapes"` to lists
-    of entries.
+  * A map of `"calendars"`, `"forms"`, `"no_year"`, `"shapes"` and
+    `"selections"` to lists of entries.
 
   """
   @spec census() :: %{String.t() => [map()]}
@@ -72,11 +225,17 @@ defmodule Tempo.Conformance do
         shape_entry(shape, calendar)
       end
 
+    selections =
+      for calendar <- calendars, selection <- CalendarCensus.selections(calendar) do
+        selection_entry(selection, calendar)
+      end
+
     %{
       "calendars" => Enum.map(calendars, &calendar_entry/1),
       "forms" => forms,
       "no_year" => no_year,
-      "shapes" => shapes
+      "shapes" => shapes,
+      "selections" => selections
     }
   end
 
@@ -139,6 +298,38 @@ defmodule Tempo.Conformance do
     end
   end
 
+  @doc """
+  A census selection built as the census builds it: its period, its parts
+  selected in it with `Tempo.selection/2`, the one placed on the other.
+
+  ### Arguments
+
+  * `period` and `parts` are keyword lists, as `units_of/1` reads them.
+
+  * `calendar` is a calendar module.
+
+  ### Returns
+
+  * `{:ok, value}` or `{:error, exception}`.
+
+  """
+  @spec selection_built(keyword(), keyword(), module()) ::
+          {:ok, Tempo.t()} | {:error, Exception.t()}
+  def selection_built(period, parts, calendar) do
+    options = Selections.in_calendar(calendar)
+
+    with {:ok, period} <- Tempo.new(period ++ options),
+         {:ok, selection} <- Tempo.selection(parts, options) do
+      Tempo.on(selection, period)
+    end
+  end
+
+  @doc "Units or parts as the fixture writes them, read back into a keyword list."
+  @spec units_of([[term()]]) :: keyword()
+  def units_of(pairs) do
+    units(pairs)
+  end
+
   @doc "A calendar's name in the fixtures: the module, as Elixir writes it."
   @spec calendar_name(module()) :: String.t()
   def calendar_name(calendar) do
@@ -189,6 +380,36 @@ defmodule Tempo.Conformance do
       "members" => Enum.map(members, &spans_data/1),
       "walk" => starts_data(walk)
     }
+  end
+
+  defp selection_entry(%{scenario: scenario, datum: datum, selected: selected}, calendar) do
+    parts = Selections.parts(datum)
+
+    %{
+      "calendar" => calendar_name(calendar),
+      "scenario" => scenario,
+      "period" => encoded_units(datum.period),
+      "selection" => encoded_units(parts),
+      "text" => selection_text(datum.period, parts, calendar),
+      "selected" => selected_data(selected)
+    }
+  end
+
+  defp selection_text(period, parts, calendar) do
+    with {:ok, value} <- selection_built(period, parts, calendar),
+         {:ok, text} <- Tempo.to_iso8601(value) do
+      text
+    else
+      {:error, _no_text} -> nil
+    end
+  end
+
+  defp selected_data(:no_such_value) do
+    "no_such_value"
+  end
+
+  defp selected_data(occurrences) do
+    Enum.map(occurrences, &spans_data/1)
   end
 
   # The text Tempo writes for the parts, for a port's reader; nil where the

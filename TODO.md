@@ -6,15 +6,9 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **`tempo_holidays` numbers its weekdays from Monday** (decision 80): its compiler maps a day's name to Monday 1 … Sunday 7 for every rule, so a rule of a calendar whose weeks begin on another day (11 Hebrew rules with weekday clauses in the date-holidays data, "27 Nisan if Friday then previous Thursday") names the day before. It should number a named day in the rule's calendar, as `Tempo.Builder.on/3` now does. Tempo is not to be pushed until it follows.
-
-## In progress
-
-* [ ] **Answer fixtures for ports.** Export the guides' examples (each input, operation and printed answer) and the calendar census's walks and selections in each calendar as text fixtures under `test/fixtures/conformance/`, written by `scripts/conformance_fixtures.exs` and read by Tempo's own tests, so that a port is held to answers and not only to refusals. Decided 2026-10-16; analysis in [plans/translation-assessment.md](plans/translation-assessment.md), section 6. Landed: `census.json`, the census's full forms, values with no year and shapes in 27 calendars, which `census_test.exs` now reads; the census's selections wait on the item above, and expect a refusal by name for a value no period has (decision 79, 143 cells); the guides' examples are to come.
+* [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
 ## Blocked
-
-* [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Blocked on the answer fixtures above.
 
 ### Before the release
 
@@ -68,7 +62,11 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 
 ## Done
 
+* [x] **Answer fixtures for ports**: `census.json` (the census's full forms, values with no year, shapes and 985 selections in 27 calendars) and `guides.json` (1,646 calls the guides' examples make, with their answers), each read by Tempo's own tests. 2026-10-16.
+
 * [x] **A value with no year converted to another calendar was placed in year 0**: one that names no date now keeps its form, a day of the week renumbered for the other calendar (decision 80), and one that names a month, a day or a week is `:needs_a_year`. 2026-10-16.
+
+* [x] **A day of the week by its name in the parts of what is built** (`Tempo.new/1`, `Tempo.selection/1`, `Tempo.every/2`'s `:select`), numbered in the expression's calendar; `tempo_holidays` hands its weekdays to Tempo by name, its conformance unchanged (168,186 matched, 0 mismatched). 2026-10-16.
 
 * [x] **A day of the week is the nth day of the expression's week, everywhere** (decision 80): every calendar and `[u-fw=…]` week start, in values, selections, rules, workdays, the builder and `explain/1`. 2026-10-16.
 

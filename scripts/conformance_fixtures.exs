@@ -22,6 +22,7 @@ defmodule Tempo.ConformanceFixtures do
     write("rrule.json", rrule())
     write("expressions.json", expressions())
     write("census.json", census())
+    write("guides.json", guides())
   end
 
   defp write(name, iodata) do
@@ -546,7 +547,20 @@ defmodule Tempo.ConformanceFixtures do
       calendars: {:lines, census["calendars"]},
       forms: {:lines, census["forms"]},
       no_year: {:lines, census["no_year"]},
-      shapes: {:lines, census["shapes"]}
+      shapes: {:lines, census["shapes"]},
+      selections: {:lines, census["selections"]}
+    )
+  end
+
+  # ── The guides' examples ──────────────────────────────────────────────
+
+  # Every call the README's and the guides' examples make into Tempo, Enum
+  # and Stream, with its arguments and its answer (`Tempo.Conformance.guides/0`).
+  defp guides do
+    object(
+      calls_are:
+        "each call a page's examples write to a Tempo module, to Enum or to Stream, or to a function of Tempo.Builder the page imports, in the order the examples run, with the example's number within its page and its Elixir code; arguments and answers are data: an expression {tempo: ISO 8601 text}, a duration {duration: text}, {ok: answer}, {error: {exception: name, reason}}, a keyword list {keyword: [[key, value]]}, a map {map: [[key, value]]}, a tuple {tuple: [...]}, an atom {atom: name}, a module {module: name}, a function {opaque: function}; the clock is pinned at 2026-06-15T12:00:00Z; a call that raises is not listed",
+      calls: {:lines, Tempo.Conformance.guides()}
     )
   end
 

@@ -2,8 +2,8 @@ defmodule Tempo.CensusTest do
   use ExUnit.Case, async: true
 
   # The calendar census (`Tempo.Matrix.CalendarCensus`): a value in each full
-  # form, each value with no year and each shape, in every calendar module
-  # Calendrical ships, held to what the calendar alone says. A value's extent
+  # form, each value with no year, each shape and each selection, in every
+  # calendar module Calendrical ships, held to what the calendar alone says. A value's extent
   # is the span it covers and its walk the values `Enum` yields; a shape's
   # members are the spans `Tempo.to_interval/1` gives. The census works each
   # answer out with the calendar's own functions and `Date`, never with Tempo.
@@ -70,7 +70,7 @@ defmodule Tempo.CensusTest do
     test "lists what the census works out from each calendar alone", %{fixture: fixture} do
       census = Conformance.census()
 
-      for kind <- ["calendars", "forms", "no_year", "shapes"] do
+      for kind <- ["calendars", "forms", "no_year", "shapes", "selections"] do
         assert {kind, length(fixture[kind])} == {kind, length(census[kind])}
 
         for {listed, worked_out} <- Enum.zip(fixture[kind], census[kind]) do
@@ -139,6 +139,34 @@ defmodule Tempo.CensusTest do
 
             nil ->
               :ok
+          end
+        end
+      end
+
+      # A selection of a value no period has is refused, as the value is
+      # (decision 79); a day of the week is the calendar's (decision 80).
+      test "a selection selects what the calendar says, or is refused for a value no period has",
+           %{fixture: fixture} do
+        calendar = unquote(calendar)
+
+        for %{"scenario" => scenario, "period" => period, "selection" => parts} = entry <-
+              entries(fixture, "selections", calendar) do
+          built =
+            Conformance.selection_built(
+              Conformance.units_of(period),
+              Conformance.units_of(parts),
+              calendar
+            )
+
+          case entry["selected"] do
+            "no_such_value" ->
+              assert {scenario, match?({:error, %Tempo.InvalidDateError{}}, built)} ==
+                       {scenario, true}
+
+            occurrences ->
+              {:ok, value} = built
+              expected = Enum.map(occurrences, &spans/1)
+              assert {scenario, members(value)} == {scenario, expected}
           end
         end
       end

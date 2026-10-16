@@ -805,8 +805,9 @@ defmodule Tempo.Matrix.CalendarCensus do
   * A list of `%{scenario: name, datum: datum, selected: spans}`, where
     `datum` is a `t:Tempo.Matrix.Selections.datum/0`, built with
     `Tempo.Matrix.Selections.value/1`, and `spans` is a list with the spans
-    of each occurrence, in the order of time. The list is empty for a
-    calendar whose year starts within its months.
+    of each occurrence, in the order of time, or `:no_such_value` for a
+    selection of a value no period has, which is refused (decision 79). The
+    list is empty for a calendar whose year starts within its months.
 
   """
   @spec selections(module()) :: [map()]
@@ -847,8 +848,34 @@ defmodule Tempo.Matrix.CalendarCensus do
     end
   end
 
+  # A selection of a value no period has (a month, a day, a day of the
+  # week or a week past every calendar's last, the hour 25) is refused by
+  # name, as the value is (decision 79). A position or a day of the year
+  # past the period's last selects nothing.
+  @refused_when_absent [
+    "year: month",
+    "year: month, day",
+    "month: day",
+    "month: weekday",
+    "day: hour",
+    "year: week",
+    "year: week, weekday",
+    "year: weekday",
+    "week: weekday"
+  ]
+
   defp selection(scenario, datum, selected) do
-    %{scenario: scenario, datum: datum, selected: selected}
+    %{scenario: scenario, datum: datum, selected: refused_or(scenario, selected)}
+  end
+
+  defp refused_or(scenario, selected) do
+    {kind, way} = String.split_at(scenario, -String.length(" absent"))
+
+    if way == " absent" and kind in @refused_when_absent do
+      :no_such_value
+    else
+      selected
+    end
   end
 
   defp day([value], plain) when value > 0 and value < 40 and value != plain do

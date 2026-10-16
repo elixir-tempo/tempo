@@ -38,6 +38,10 @@ Every file is JSON. A file that lists many cases writes each case on one line, s
 
 * `expressions`: every expression of the corpus written by hand (the levels core, extended and open), as ISO 8601 text with the calendar it is read in where one is given, and what it refuses, by answer: each refusal is the operation's name followed, for an operation of two expressions, by an at sign and the argument (`relation/2 @ 2026-06-15`). An answer is `error Name reason` for a named error, `raised Name` for a raise, `unread Name` for text the grammar refuses. Every cell not listed answers with a value. The corpus's generated expressions are Tempo's own and are not here. An implementation of the same laws refuses what this refuses; Tempo's own check against it runs with `mix test --only total`.
 
+## guides.json
+
+* `calls`: every call the README's and the guides' examples make to a Tempo module, to `Enum` or `Stream`, or to a function of `Tempo.Builder` the page imports, in the order the examples run, each with its page, the example's number within the page and its Elixir code, the call by module, name and arity, its arguments and its answer. An expression is written as its ISO 8601 text (`{"tempo": "2026Y6M"}`), a duration as its text, and the rest as data tagged by kind (`ok`, `error` with an `exception` and its `reason`, `keyword`, `map`, `tuple`, `atom`, `module`, and `opaque` for a function). A port writes the same examples in its own language and is held to the same answers. The clock is pinned at 2026-06-15T12:00:00Z; a call that raises is not listed.
+
 ## census.json
 
 * `positions` and `parts`: how a position and a value's parts are written. A position here is a count of microseconds from 0000-01-01, as `guides/architecture.md` section 3 has it, and exceeds 2^53, so it is read as a 64-bit integer.
@@ -49,3 +53,5 @@ Every file is JSON. A file that lists many cases writes each case on one line, s
 * `no_year`: every month with no year, every day of each and one past the last, and every day of the week, with the span each covers on its cycle (or `needs_a_year`, or `no_such_value` for a value no year has) and where each value its walk yields starts, or how many it yields.
 
 * `shapes`: a set, a range, a count from the end, a mask and an unspecified unit, two intervals and three recurrences on the census's first date, with the spans of each member the value converts to and, where the census works it out, where each value its walk yields starts.
+
+* `selections`: a selection of each kind in each calendar (a month, a month and a day, a day of the year, a day, a day of the week, a position and an hour, and in a calendar of weeks a week, a week and a day of the week, a year's days of the week and a week's), each written as a number, a count from the end, a range that reaches the end, the first and the last, and a value no period has. Each has its period's units and its parts, built in the entry's calendar (a selection placed on its period with `Tempo.on/2`), and the spans of each value it selects in the order of time, or `no_such_value` for a value no period has, which is refused (Tempo's decision 79). A day of the week is numbered from the day the calendar's weeks begin on (decision 80).

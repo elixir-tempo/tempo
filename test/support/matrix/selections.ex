@@ -242,8 +242,9 @@ defmodule Tempo.Matrix.Selections do
 
   @doc """
   A selection's value, built from its parts: its period with
-  `Tempo.new/1`, its parts with `Tempo.selection/1`, the one placed on the
-  other with `Tempo.on/2`.
+  `Tempo.new/1`, its parts with `Tempo.selection/2` in the period's
+  calendar, so that a day of the week is that calendar's (decision 80), the
+  one placed on the other with `Tempo.on/2`.
 
   ### Arguments
 
@@ -256,16 +257,52 @@ defmodule Tempo.Matrix.Selections do
 
   """
   @spec value(datum()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-  def value(%{calendar: calendar, period: period, parts: parts}) do
+  def value(%{calendar: calendar, period: period} = datum) do
     with {:ok, period} <- Tempo.new(period ++ in_calendar(calendar)),
-         {:ok, selection} <- Tempo.selection(Enum.map(parts, &held/1)) do
+         {:ok, selection} <- Tempo.selection(parts(datum), in_calendar(calendar)) do
       Tempo.on(selection, period)
     end
   end
 
-  # A Gregorian selection is in the default calendar, as the corpus's others.
-  defp in_calendar(Gregorian), do: []
-  defp in_calendar(calendar), do: [calendar: calendar]
+  @doc """
+  A selection's parts as `Tempo.selection/2` takes them.
+
+  ### Arguments
+
+  * `datum` is a `t:datum/0`.
+
+  ### Returns
+
+  * A keyword list of parts.
+
+  """
+  @spec parts(datum()) :: keyword()
+  def parts(%{parts: parts}) do
+    Enum.map(parts, &held/1)
+  end
+
+  @doc """
+  The calendar option a selection's period and parts are built with: none
+  for the Gregorian calendar, whose selections are in the default calendar
+  as the corpus's others are, else the calendar.
+
+  ### Arguments
+
+  * `calendar` is a calendar module.
+
+  ### Returns
+
+  * A keyword list, `[]` or `[calendar: calendar]`.
+
+  """
+  @spec in_calendar(module()) :: keyword()
+  def in_calendar(Gregorian) do
+    []
+  end
+
+  def in_calendar(calendar) do
+    [calendar: calendar]
+  end
 
   # A week of a month is a week selected in a month; a part of one value
   # holds it, and one of several holds them, a range as one.
