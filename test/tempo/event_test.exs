@@ -86,6 +86,12 @@ defmodule Tempo.EventTest do
       assert Event.date("dongzhi", 2026) == {:ok, ~D[2026-12-22]}
     end
 
+    test "a term of a year before 0 is the day its moment is in" do
+      # Qingming -3000's moment is iso day -1095631.11: the day it is in is
+      # 6 April, where a moment rounded towards the epoch gave the 7th.
+      assert Event.date("qingming", -3000, Calendrical.Chinese) == {:ok, ~D[-3000-04-06]}
+    end
+
     test "a module that is no calendar reckons none" do
       assert {:error, %InvalidDateError{reason: {:no_solar_terms, String}}} =
                Event.date("qingming", 2026, String)

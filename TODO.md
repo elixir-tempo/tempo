@@ -26,8 +26,6 @@ Every item here is upstream: Tempo follows each library as it is, and the item i
 
 * [ ] **`tz` has no public list of a zone's periods.** `Tempo.Zone.Transitions.Tz` reads `Tz.PeriodsProvider.periods/1`, which `tz` generates and marks `@moduledoc false`, guarded so that a `tz` without it falls back to sampling. A public function in `tz` (and one in `tzdata`, whose `Tzdata.periods/1` is public and could be adapted next) would make the table exact by contract. The same gap in Elixir's `Calendar.TimeZoneDatabase`, which answers at a point and gives no period's bounds, is the reason the table exists at all.
 
-* [ ] **A solar term of a year before 0 is a day late**: `Tempo.Event.date("qingming", -3000, Calendrical.Chinese)` is 7 April and the moment is on the 6th. `Calendrical.Lunisolar.solar_term/3` takes `trunc(moment)`, which rounds a negative day number up, where it wants `floor/1`. Rechecked against Calendrical `ae58f5b` on 2026-10-16.
-
 * [ ] **Text that is no calendar is read as a calendar of no events**: `Tempo.ICal.parse("hello, world")` is `{:ok, ~o"{}"}`. The `ical` library returns no error for text it cannot read. Rechecked against `ical` 3.2.0 on 2026-10-14.
 
 ## Deferred
@@ -60,6 +58,7 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 
 ## Done
 
+* [x] **A solar term of a year before 0 fixed**, rechecked through Tempo on Calendrical `fb4a2fe` on 2026-10-16. `Calendrical.Lunisolar.solar_term/3` takes the day of the term's moment with `floor/1` where it took `trunc/1`: `Tempo.Event.date("qingming", -3000, Calendrical.Chinese)` is 6 April -3000, the day its moment (iso day -1095631.11) is in, where it was 7 April; 2026's is unchanged, 5 April.
 * [x] **The Localize month-naming defect fixed**, rechecked through Tempo on Localize `ffe8fda9` and Calendrical `ae58f5b` on 2026-10-16. A month that begins after its first day is named from its year and month: `Localize.Date.to_string(%{year: 1751, month: 3, calendar: Calendrical.Reform.England}, format: :yMMM)` is "Mar 1751", where it was an `InvalidValueError`; the fix is Calendrical's (`ae58f5b`). Tempo did not reach it, writing a month by its days (`Mar 25 – 31, 1751`).
 * [x] **Two Localize defects fixed**, rechecked through Tempo on Localize `ffe8fda9` and Calendrical `dc9beed` on 2026-10-16. A fiscal date is written as the Gregorian date it is: `Localize.Date.to_string(Date.new!(2027, 2, 10, Calendrical.FiscalYear.AU))` is "Aug 10, 2026", where it was "Aug 10, 2027", so `Tempo.to_string/2` of a fiscal value from July to December names the right year; the fiscal year and its ranges are unchanged. A day of the month a year turns in is read back in the year it was written with: `Tempo.parse("March 20, 1700", calendar: Calendrical.Julian.March25)` is `1700Y13M20D`, where it was `1699Y13M20D`. 2026-10-16.
 
