@@ -65,6 +65,51 @@ defmodule Tempo.ReadInCalendarTest do
     end
   end
 
+  # An expression with no year is on a cycle, which is a cycle of another
+  # calendar only where it names no date (law 4). The Hebrew calendar's
+  # weeks begin on Sunday, so its Wednesday is day 4 (decision 80).
+  describe "to_calendar/2 of an expression with no year" do
+    test "keeps a time of day and its form" do
+      for text <- ["T10H", "T09/T17", "T22H/T2H", "{T09,T17}", "R3/T22H/PT1H", "LT10HN"] do
+        value = Tempo.from_iso8601!(text)
+        {:ok, converted} = Tempo.to_calendar(value, Calendrical.Hebrew)
+
+        assert Tempo.to_iso8601!(converted) == Tempo.to_iso8601!(value) <> "[u-ca=hebrew]"
+      end
+    end
+
+    test "numbers a day of the week as the other calendar numbers it" do
+      assert Tempo.to_calendar(~o"3K", Calendrical.Hebrew) == {:ok, ~o"4K[u-ca=hebrew]"}
+      assert Tempo.to_calendar(~o"1K/5K", Calendrical.Hebrew) == {:ok, ~o"2K/6K[u-ca=hebrew]"}
+      assert Tempo.to_calendar(~o"{1K,3K}", Calendrical.Hebrew) == {:ok, ~o"{2K,4K}[u-ca=hebrew]"}
+
+      assert Tempo.to_calendar(~o"R3/3K/P1W", Calendrical.Hebrew) ==
+               {:ok, ~o"R3/4K/P1W[u-ca=hebrew]"}
+
+      assert Tempo.to_calendar(~o"L1K2IN", Calendrical.Hebrew) == {:ok, ~o"L2K2IN[u-ca=hebrew]"}
+      assert Tempo.to_week_start(~o"1K", 7) == {:ok, ~o"2K[u-fw=sun]"}
+      assert Tempo.to_calendar(~o"4K[u-ca=hebrew]", Calendar.ISO) == {:ok, ~o"3K"}
+    end
+
+    test "that names a date needs a year" do
+      for text <- [
+            "6M15D",
+            "15D",
+            "6M",
+            "25W",
+            "200O",
+            "6M15DT10H",
+            "X*Y6M",
+            "L6M15DN",
+            "L(easter)eN"
+          ] do
+        assert {:error, %Tempo.ConversionError{reason: :needs_a_year}} =
+                 Tempo.to_calendar(Tempo.from_iso8601!(text), Calendrical.Hebrew),
+               text
+      end
+    end
+  end
+
   describe "to_calendar/2 of a rule with no end" do
     test "converts it as a rule, and back to its own calendar is the rule" do
       {:ok, in_gregorian} = Tempo.to_calendar(eid(), Calendar.ISO)

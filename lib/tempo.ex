@@ -1925,6 +1925,13 @@ defmodule Tempo do
   beside National Day, both in the Gregorian. Such a rule has no ISO 8601
   text, its own calendar having no place inside another's.
 
+  An expression with no year is converted where it names no date, and
+  keeps its form: a time of day is the same in every calendar, and a day
+  of the week is the same day, numbered as `calendar` numbers it (`3K`,
+  Wednesday, is `4K` in the Hebrew calendar, whose weeks begin on Sunday).
+  A month, a day or a week with no year has no place in another calendar's
+  year, and is a `Tempo.ConversionError` with the reason `:needs_a_year`.
+
   ### Arguments
 
   * `expression` is a `t:t/0` that has spans.
@@ -1935,8 +1942,10 @@ defmodule Tempo do
 
   * `{:ok, converted}`, a `t:t/0` in `calendar`.
 
-  * `{:error, %Tempo.InvalidCalendarError{}}` when `calendar` is not one, or
-    the error `to_interval/2` gives for an expression with no spans.
+  * `{:error, %Tempo.InvalidCalendarError{}}` when `calendar` is not one,
+    `{:error, %Tempo.ConversionError{reason: :needs_a_year}}` for an
+    expression with no year that names a date, or the error `to_interval/2`
+    gives for an expression with no spans.
 
   ### Examples
 
@@ -1948,6 +1957,12 @@ defmodule Tempo do
 
       iex> Tempo.to_calendar(~o"5786-09[u-ca=hebrew]", Calendar.ISO)
       {:ok, ~o"2026-05-17/2026-06-15"}
+
+      iex> Tempo.to_calendar(~o"3KT10H", Calendrical.Hebrew)
+      {:ok, ~o"4KT10H[u-ca=hebrew]"}
+
+      iex> {:error, %Tempo.ConversionError{reason: :needs_a_year}} =
+      ...>   Tempo.to_calendar(~o"6M15D", Calendrical.Hebrew)
 
       iex> eid = Tempo.every!(~o"P1Y", select: [month: 10, day: 1], calendar: Calendrical.Islamic.UmmAlQura)
       iex> {:ok, in_gregorian} = Tempo.to_calendar(eid, Calendar.ISO)
@@ -1963,9 +1978,11 @@ defmodule Tempo do
 
   def to_calendar(%__MODULE__{} = expression, calendar) do
     with {:ok, calendar} <- calendar_of(calendar) do
-      if Algebra.endless?(expression),
-        do: {:ok, read_in(expression, calendar)},
-        else: converted(expression, calendar)
+      cond do
+        Algebra.endless?(expression) -> {:ok, read_in(expression, calendar)}
+        on_a_cycle?(expression) -> cycle_in(expression, calendar)
+        true -> converted(expression, calendar)
+      end
     end
   end
 
@@ -1984,6 +2001,85 @@ defmodule Tempo do
       metadata: rule.metadata
     }
   end
+
+  defp on_a_cycle?(expression) do
+    case Spans.frame_of(expression) do
+      %{frame: {:cycle, _unit}} -> true
+      _on_a_line -> false
+    end
+  end
+
+  # An expression with no year is on a cycle, and a cycle of one calendar
+  # is a cycle of another only where it names no date (law 4): a time of
+  # day is the same in every calendar, and a day of the week is the same
+  # day, numbered as the other calendar numbers it (decision 80). A month,
+  # a day or a week with no year has no place in another calendar's year.
+  # The expression keeps its form.
+  defp cycle_in(expression, calendar) do
+    if no_date?(expression) do
+      expression
+      |> weekdays_numbered(expression.calendar, calendar)
+      |> Validate.run()
+    else
+      {:error, ConversionError.exception(value: expression, reason: :needs_a_year)}
+    end
+  end
+
+  @calendar_free [:day_of_week, :hour, :minute, :second, :microsecond]
+  @free_parts [:instance, :window, :roll | @calendar_free]
+
+  defp no_date?(%__MODULE__{form: {:value, units}}), do: Enum.all?(units, &free_unit?/1)
+
+  defp no_date?(%__MODULE__{form: {:span, from, to}}),
+    do: Enum.all?([from, to], &free_end?/1)
+
+  defp no_date?(%__MODULE__{form: {kind, members}})
+       when kind in [:all, :one] and is_list(members),
+       do: Enum.all?(members, &no_date?/1)
+
+  defp no_date?(%__MODULE__{form: {:every, first, bound, rule}}),
+    do: no_date?(first) and free_end?(bound) and (is_nil(rule) or Enum.all?(rule, &free_part?/1))
+
+  defp no_date?(_conditional_or_lazy), do: false
+
+  defp free_end?(%__MODULE__{} = value), do: no_date?(value)
+  defp free_end?(_duration_open_or_count), do: true
+
+  defp free_unit?({:year, :any}), do: true
+  defp free_unit?({:selection, parts}), do: Enum.all?(parts, &free_part?/1)
+  defp free_unit?({unit, _held}), do: unit in @calendar_free
+
+  defp free_part?({:selection, parts}), do: Enum.all?(parts, &free_part?/1)
+
+  defp free_part?({:all, each}),
+    do: Enum.all?(each, fn parts -> Enum.all?(parts, &free_part?/1) end)
+
+  defp free_part?({part, _held}), do: part in @free_parts
+
+  defp weekdays_numbered(%__MODULE__{form: {:value, units}} = value, from, to),
+    do: %{value | form: {:value, Select.weekdays_in(units, from, to)}, calendar: to}
+
+  defp weekdays_numbered(%__MODULE__{form: {:span, start, stop}} = span, from, to) do
+    ends = {:span, end_numbered(start, from, to), end_numbered(stop, from, to)}
+    %{span | form: ends, calendar: to}
+  end
+
+  defp weekdays_numbered(%__MODULE__{form: {kind, members}} = set, from, to)
+       when kind in [:all, :one],
+       do: %{
+         set
+         | form: {kind, Enum.map(members, &weekdays_numbered(&1, from, to))},
+           calendar: to
+       }
+
+  defp weekdays_numbered(%__MODULE__{form: {:every, first, bound, rule}} = recurrence, from, to) do
+    first = weekdays_numbered(first, from, to)
+    rule = rule && Select.weekdays_in(rule, from, to)
+    %{recurrence | form: {:every, first, end_numbered(bound, from, to), rule}, calendar: to}
+  end
+
+  defp end_numbered(%__MODULE__{} = value, from, to), do: weekdays_numbered(value, from, to)
+  defp end_numbered(other, _from, _to), do: other
 
   defp converted(expression, calendar) do
     with {:ok, _frame, positioned} <- Algebra.positioned(expression, []) do

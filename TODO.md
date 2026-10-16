@@ -8,8 +8,6 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **`tempo_holidays` numbers its weekdays from Monday** (decision 80): its compiler maps a day's name to Monday 1 … Sunday 7 for every rule, so a rule of a calendar whose weeks begin on another day (11 Hebrew rules with weekday clauses in the date-holidays data, "27 Nisan if Friday then previous Thursday") names the day before. It should number a named day in the rule's calendar, as `Tempo.Builder.on/3` now does. Tempo is not to be pushed until it follows.
 
-* [ ] **A value with no year converted to another calendar is placed in year 0**: `Tempo.to_calendar(~o"6M15D", Calendrical.Hebrew)` is `3760Y10M26D[u-ca=hebrew]` and `Tempo.to_week_start(~o"1K", 7)` is `0Y1M1D[u-fw=sun]`, the cycle's first year converted. A month and day with no year has no answer in another calendar (`:needs_a_year`, law 8); a day of the week on its own is the same day renumbered (`2K[u-fw=sun]`, decision 80). On `main` before decision 80 as after; found 2026-10-16.
-
 ## In progress
 
 * [ ] **Answer fixtures for ports.** Export the guides' examples (each input, operation and printed answer) and the calendar census's walks and selections in each calendar as text fixtures under `test/fixtures/conformance/`, written by `scripts/conformance_fixtures.exs` and read by Tempo's own tests, so that a port is held to answers and not only to refusals. Decided 2026-10-16; analysis in [plans/translation-assessment.md](plans/translation-assessment.md), section 6. Landed: `census.json`, the census's full forms, values with no year and shapes in 27 calendars, which `census_test.exs` now reads; the census's selections wait on the item above, and expect a refusal by name for a value no period has (decision 79, 143 cells); the guides' examples are to come.
@@ -69,6 +67,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **A value with no year converted to another calendar was placed in year 0**: one that names no date now keeps its form, a day of the week renumbered for the other calendar (decision 80), and one that names a month, a day or a week is `:needs_a_year`. 2026-10-16.
 
 * [x] **A day of the week is the nth day of the expression's week, everywhere** (decision 80): every calendar and `[u-fw=…]` week start, in values, selections, rules, workdays, the builder and `explain/1`. 2026-10-16.
 
