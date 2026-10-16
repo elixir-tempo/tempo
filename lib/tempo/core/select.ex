@@ -771,15 +771,30 @@ defmodule Tempo.Select do
 
     instances
     |> List.wrap()
-    |> Enum.flat_map(fn
-      %Range{} = range -> Enum.to_list(range)
-      n -> [n]
-    end)
-    |> Enum.map(fn n -> if n > 0, do: n - 1, else: count + n end)
+    |> Enum.flat_map(&indices(&1, count))
     |> Enum.filter(&(&1 >= 0 and &1 < count))
     |> Enum.sort()
     |> Enum.uniq()
     |> Enum.map(&Enum.at(candidates, &1))
+  end
+
+  # The indices a position names among `count` candidates. Each end of a
+  # range is counted first, from the end where it is negative, so that
+  # `{2..-1}` is the second to the last, as a range of a unit's values is.
+  defp indices(%Range{first: first, last: last, step: step}, count) do
+    Enum.to_list(index(first, count)..index(last, count)//abs(step))
+  end
+
+  defp indices(n, count) do
+    [index(n, count)]
+  end
+
+  defp index(n, _count) when n > 0 do
+    n - 1
+  end
+
+  defp index(n, count) do
+    count + n
   end
 
   # ── Events ────────────────────────────────────────────────────────────

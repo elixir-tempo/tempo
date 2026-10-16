@@ -146,6 +146,24 @@ defmodule Tempo.SelectTest do
       assert texts(Tempo.to_interval(~o"2026Y6ML-1K1IN")) == ["2026Y6M7D/2026Y6M7D"]
     end
 
+    # June 2026 has five Mondays: the 1st, 8th, 15th, 22nd and 29th. Each end
+    # of a range of positions is counted first, from the end where it is
+    # negative, as each end of a range of a unit's values is.
+    test "counts each end of a range of positions, from the end where it is negative" do
+      assert days(Tempo.to_interval(~o"2026Y6ML1K{2..-1}IN")) == [8, 15, 22, 29]
+      assert days(Tempo.to_interval(~o"2026Y6ML1K{-3..-1}IN")) == [15, 22, 29]
+      assert days(Tempo.to_interval(~o"2026Y6ML1K{-2..5}IN")) == [22, 29]
+      assert days(Tempo.to_interval(~o"2026Y6ML1K{2..9}IN")) == [8, 15, 22, 29]
+      assert days(Tempo.to_interval(~o"2026Y6ML1K{1..-1//2}IN")) == [1, 15, 29]
+      assert days(Tempo.to_interval(~o"2026Y6ML1K{4..-3}IN")) == []
+
+      {:ok, from_the_second} = Tempo.selection(day_of_week: 1, instance: [2..-1//1])
+      assert days(Tempo.select(~o"2026-06", from_the_second)) == [8, 15, 22, 29]
+
+      assert texts(Tempo.to_interval(~o"R/2026-01-01/P1M/FL1K{2..-1}IN", within: ~o"2026-01")) ==
+               ["2026Y1M12D/2026Y1M12D", "2026Y1M19D/2026Y1M19D", "2026Y1M26D/2026Y1M26D"]
+    end
+
     test "with no year is placed by the window" do
       assert texts(Tempo.to_interval(~o"L12M25DN", within: ~o"2026/2027")) == [
                "2026Y12M25D/2026Y12M25D",
