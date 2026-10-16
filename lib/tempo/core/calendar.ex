@@ -45,6 +45,14 @@ defmodule Tempo.Calendar do
   }
   @week_starts Map.new(@weeks_from, fn {day, calendar} -> {calendar, day} end)
 
+  # ISO 8601 numbers the seven days of the week, Monday 1 to Sunday 7; a
+  # calendar numbers them from the day its weeks begin on.
+  @iso_weekdays 7
+
+  # A day on which to ask a calendar both numberings of its day of the week
+  # (2000-01-01, a day number, not a calendar's answer).
+  @any_day 730_485
+
   @typedoc "A half-open span of days: the first day and the day after the last, as ISO day numbers."
   @type span :: {first :: integer(), after_last :: integer()}
 
@@ -250,11 +258,58 @@ defmodule Tempo.Calendar do
 
   # ── Labels of a date ──────────────────────────────────────────────────
 
-  @doc "The day of the week, 1 (Monday) to 7 (Sunday)."
+  @doc """
+  The day of the week as the calendar numbers it: 1 is the day its weeks
+  begin on (decision 80), Monday for the Gregorian calendar, Sunday for the
+  Hebrew, the day named for a week start written `[u-fw=…]`.
+  """
   @spec day_of_week(module(), Calendar.year(), Calendar.month(), Calendar.day()) :: 1..7
   def day_of_week(calendar, year, month, day) do
-    {day_of_week, _first, _last} = impl(calendar).day_of_week(year, month, day, :monday)
+    {day_of_week, _first, _last} = impl(calendar).day_of_week(year, month, day, :default)
     day_of_week
+  end
+
+  @doc "The day of the week as ISO 8601 numbers it, 1 (Monday) to 7 (Sunday), whatever the calendar's weeks."
+  @spec iso_weekday(module(), Calendar.year(), Calendar.month(), Calendar.day()) :: 1..7
+  def iso_weekday(calendar, year, month, day) do
+    {weekday, _first, _last} = impl(calendar).day_of_week(year, month, day, :monday)
+    weekday
+  end
+
+  @doc "The ISO 8601 day of the week, 1 (Monday) to 7, a calendar's weeks begin on."
+  @spec first_weekday(module()) :: 1..7
+  def first_weekday(calendar) do
+    key = {__MODULE__, :first_weekday, calendar}
+    known = :persistent_term.get(key, nil)
+
+    if is_nil(known) do
+      first = first_weekday_asked(calendar)
+      :persistent_term.put(key, first)
+      first
+    else
+      known
+    end
+  end
+
+  # The two numberings of one day differ by the same count on every day, a
+  # week being a cycle of the days, so any day will do.
+  defp first_weekday_asked(calendar) do
+    {year, month, day} = date(calendar, @any_day)
+    own = day_of_week(calendar, year, month, day)
+    iso = iso_weekday(calendar, year, month, day)
+    Integer.mod(iso - own, @iso_weekdays) + 1
+  end
+
+  @doc "The calendar's number for an ISO 8601 day of the week: Friday is 6 where weeks begin on Sunday."
+  @spec day_of_week_from_iso(module(), 1..7) :: 1..7
+  def day_of_week_from_iso(calendar, iso_weekday) do
+    Integer.mod(iso_weekday - first_weekday(calendar), @iso_weekdays) + 1
+  end
+
+  @doc "The ISO 8601 day of the week of the calendar's numbered day: day 6 is Friday where weeks begin on Sunday."
+  @spec iso_weekday_from_day_of_week(module(), 1..7) :: 1..7
+  def iso_weekday_from_day_of_week(calendar, day_of_week) do
+    Integer.mod(day_of_week + first_weekday(calendar) - 2, @iso_weekdays) + 1
   end
 
   @doc "The week-year and week of a date in the calendar's own weeks."

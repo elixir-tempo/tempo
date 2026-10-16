@@ -484,7 +484,7 @@ defmodule Tempo.RRule do
   defp in_calendar(parts, calendar, rule) do
     parts
     |> months_named(Calendars.gregorian?(calendar))
-    |> days_of_week(calendar, &counted_from/2)
+    |> days_of_week(calendar, &Calendars.day_of_week_from_iso/2)
     |> with_skip(Map.get(rule, :skip))
   end
 
@@ -509,30 +509,39 @@ defmodule Tempo.RRule do
 
   defp with_skip(parts, _omit_or_none), do: parts
 
-  # Under a numbered week a day of the week is the day of that week it is,
-  # counted from the day the week begins on: `BYWEEKNO=20;BYDAY=MO` is the
-  # first day of week 20 where weeks begin on Monday, and its second where
-  # they begin on Sunday. A weekday with no week is the weekday itself.
-  defp days_of_week(parts, calendar, counted) do
-    case {Calendars.week_start(calendar), Keyword.has_key?(parts || [], :week)} do
-      {start, true} when is_integer(start) ->
-        Enum.map(parts, fn
-          {:day_of_week, held} -> {:day_of_week, each_day(held, &counted.(&1, start))}
-          part -> part
-        end)
-
-      _a_week_from_monday_or_no_week ->
-        parts
-    end
+  # RFC 5545 names a weekday as ISO 8601 numbers it, Monday 1; the rule's
+  # calendar numbers the days of its week from the day its weeks begin on
+  # (decision 80), so `BYDAY=MO` is day 2 where weeks begin on Sunday, with
+  # a numbered week (`BYWEEKNO=20;BYDAY=MO`) or without. A rule's parts are
+  # numbered so when it is read, and named back when it is written, in a
+  # selection nested in them as at their top.
+  defp days_of_week(nil, _calendar, _numbered) do
+    nil
   end
 
-  defp each_day(held, counted) when is_list(held), do: Enum.map(held, counted)
-  defp each_day(held, counted) when is_integer(held), do: counted.(held)
-  defp each_day(held, _counted), do: held
+  defp days_of_week(parts, calendar, numbered) do
+    Enum.map(parts, &day_of_week_part(&1, calendar, numbered))
+  end
 
-  # A weekday as the day of a week that begins on `start`, and back.
-  defp counted_from(weekday, start), do: Integer.mod(weekday - start, 7) + 1
-  defp weekday_of_count(count, start), do: Integer.mod(count + start - 2, 7) + 1
+  defp day_of_week_part({:day_of_week, held}, calendar, numbered) do
+    {:day_of_week, each_day(held, &numbered.(calendar, &1))}
+  end
+
+  defp day_of_week_part({:selection, parts}, calendar, numbered) do
+    {:selection, days_of_week(parts, calendar, numbered)}
+  end
+
+  defp day_of_week_part({:all, selections}, calendar, numbered) do
+    {:all, Enum.map(selections, &days_of_week(&1, calendar, numbered))}
+  end
+
+  defp day_of_week_part(part, _calendar, _numbered) do
+    part
+  end
+
+  defp each_day(held, numbered) when is_list(held), do: Enum.map(held, numbered)
+  defp each_day(held, numbered) when is_integer(held), do: numbered.(held)
+  defp each_day(held, _numbered), do: held
 
   defp first_span(nil, cadence),
     do: {:ok, %Tempo{form: {:span, :open, cadence}}}
@@ -618,7 +627,7 @@ defmodule Tempo.RRule do
     do: Enum.any?([:bymonthday, :byday, :byyearday], &Map.has_key?(rule, &1))
 
   defp weekday_of(units, calendar) do
-    Tempo.day_of_week(%Tempo{form: {:value, units}, calendar: calendar})
+    Tempo.day_of_week(%Tempo{form: {:value, units}, calendar: calendar}, :monday)
   end
 
   # The selection's parts, and the cadence: a yearly rule with a numbered
@@ -945,7 +954,12 @@ defmodule Tempo.RRule do
 
   defp by_parts(parts, r) do
     frequency = frequency_of(r)
-    parts = parts |> months_numbered() |> days_of_week(r.calendar, &weekday_of_count/2)
+
+    parts =
+      parts
+      |> months_numbered()
+      |> days_of_week(r.calendar, &Calendars.iso_weekday_from_day_of_week/2)
+
     {weekday, instance, parts} = weekday_and_position(parts)
 
     with :ok <- expressible(parts, r),

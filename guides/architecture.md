@@ -369,7 +369,7 @@ Tempo asks a calendar eighteen questions and no other. It never asks what kind o
 | Periods | `week(year, week)` | the range of a week of the calendar's own week-year, or an error |
 | Periods | `quarter(year, quarter)` | the range of a quarter, or an error |
 | Periods | `weeks_of_month(year, month)` | the ranges of the weeks a month has |
-| Labels | `day_of_week(year, month, day)` | 1 (Monday) to 7 |
+| Labels | `day_of_week(year, month, day)` | 1 to 7, from the day the calendar's weeks begin on |
 | Labels | `week_of_year(year, month, day)` | `(week_year, week)` in the calendar's own weeks |
 | Arithmetic | `shift_date(year, month, day, duration)` | the date moved: years, then months with the day clamped, then days |
 | No year | `months_in_year_bounds()` | the fewest and the most months any year has |

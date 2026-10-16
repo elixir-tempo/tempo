@@ -108,37 +108,48 @@ defmodule Tempo.Explain do
   # What a rule selects in each repeat, part by part as it is written.
   defp rule_words(nil, _first), do: ""
 
-  defp rule_words(rule, first),
-    do: ". In each repeat#{cadence_words(first)} it selects #{parts_words(rule)}"
+  defp rule_words(rule, %Tempo{calendar: calendar} = first),
+    do: ". In each repeat#{cadence_words(first)} it selects #{parts_words(rule, calendar)}"
 
   defp cadence_words(%Tempo{form: {:span, _, %Duration{} = cadence}}), do: " of #{words(cadence)}"
   defp cadence_words(%Tempo{form: {:span, %Duration{} = cadence, _}}), do: " of #{words(cadence)}"
   defp cadence_words(_first), do: ""
 
-  defp parts_words(parts), do: Enum.map_join(parts, ", ", &part_words/1)
+  defp parts_words(parts, calendar), do: Enum.map_join(parts, ", ", &part_words(&1, calendar))
 
-  defp part_words({:day_of_week, held}), do: held_words(held, &weekday/1)
-  defp part_words({:instance, held}), do: "the #{held_words(held, &nth/1)} of them"
-  defp part_words({:event, {name, _}}), do: "the day of #{name}"
+  # A day of the week is numbered from the day the calendar's weeks begin on
+  # (decision 80), and named as the day it is.
+  defp part_words({:day_of_week, held}, calendar),
+    do: held_words(held, &weekday_named(&1, calendar))
 
-  defp part_words({:skip, :forward}),
+  defp part_words({:instance, held}, _calendar), do: "the #{held_words(held, &nth/1)} of them"
+  defp part_words({:event, {name, _}}, _calendar), do: "the day of #{name}"
+
+  defp part_words({:skip, :forward}, _calendar),
     do: "a day or a month the year lacks taken as the next there is"
 
-  defp part_words({:skip, :backward}),
+  defp part_words({:skip, :backward}, _calendar),
     do: "a day or a month the year lacks taken as the last before it"
 
-  defp part_words({:roll, convention}),
+  defp part_words({:roll, convention}, _calendar),
     do: "each rolled to a weekday (#{String.replace(Atom.to_string(convention), "_", " ")})"
 
-  defp part_words({:selection, parts}), do: "(#{parts_words(parts)})"
+  defp part_words({:selection, parts}, calendar), do: "(#{parts_words(parts, calendar)})"
 
-  defp part_words({:all, each}),
-    do: "all of " <> Enum.map_join(each, " and ", &"(#{parts_words(&1)})")
+  defp part_words({:all, each}, calendar),
+    do: "all of " <> Enum.map_join(each, " and ", &"(#{parts_words(&1, calendar)})")
 
-  defp part_words({:window, %Duration{} = length}), do: "a window of #{Tempo.to_iso8601!(length)}"
-  defp part_words({:day_of_year, held}), do: "day #{held_words(held, &counted/1)} of the year"
-  defp part_words({unit, n}) when is_integer(n) and n < 0, do: "#{counted(n)} #{unit_name(unit)}"
-  defp part_words({unit, held}), do: "#{unit_name(unit)} #{held_words(held, &counted/1)}"
+  defp part_words({:window, %Duration{} = length}, _calendar),
+    do: "a window of #{Tempo.to_iso8601!(length)}"
+
+  defp part_words({:day_of_year, held}, _calendar),
+    do: "day #{held_words(held, &counted/1)} of the year"
+
+  defp part_words({unit, n}, _calendar) when is_integer(n) and n < 0,
+    do: "#{counted(n)} #{unit_name(unit)}"
+
+  defp part_words({unit, held}, _calendar),
+    do: "#{unit_name(unit)} #{held_words(held, &counted/1)}"
 
   # What a part holds, in words: one value, or a list of values and ranges.
   defp held_words(held, word) when is_list(held),
@@ -154,8 +165,15 @@ defmodule Tempo.Explain do
   defp listed(several),
     do: Enum.join(Enum.drop(several, -1), ", ") <> " and " <> List.last(several)
 
+  # A day of the week ISO 8601 numbers, Monday 1, by its name.
   defp weekday(day) when day in 1..7, do: Enum.at(@weekdays, day - 1)
   defp weekday(day), do: counted(day)
+
+  # A day the calendar numbers in its week, by its name.
+  defp weekday_named(day, calendar) when day in 1..7,
+    do: weekday(Tempo.Calendar.iso_weekday_from_day_of_week(calendar, day))
+
+  defp weekday_named(day, _calendar), do: counted(day)
 
   # A count from the end is said from the end.
   defp counted(-1), do: "the last"

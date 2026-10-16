@@ -50,11 +50,12 @@ defmodule Tempo.HolidayRulesTest do
 
     test "of another calendar lands in the Gregorian year after" do
       # 10 Dhu al-Hijjah 1427 is a Sunday, 31 December 2006; the Monday
-      # after is 1 January 2007.
+      # after is 1 January 2007. The calendar's weeks begin on Sunday, so
+      # Sunday is its day 1 and Monday its day 2 (decision 80).
       eid = Date.convert!(Date.new!(1427, 12, 10, Calendrical.Islamic.UmmAlQura), Calendar.ISO)
       assert eid == ~D[2006-12-31] and Date.day_of_week(eid) == 7
 
-      rule = "R/../P1Y/FLLL12M10D7KN/P8DN1K-1IN[u-ca=islamic-umalqura]"
+      rule = "R/../P1Y/FLLL12M10D1KN/P8DN2K-1IN[u-ca=islamic-umalqura]"
       assert dates(rule, ~o"2006Y") == []
       assert dates(rule, ~o"2007Y") == [monday_after(eid)]
     end

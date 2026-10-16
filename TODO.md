@@ -6,7 +6,9 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **A day of the week in a selection is the nth day of the calendar's week** (decision 80): `2026Y20WL3KN[u-ca=nrf]` selects the Wednesday where `2026Y20W3K[u-ca=nrf]` is the Tuesday, NRF's week beginning on Sunday; the selection engine reads `K` from Monday. RFC 5545's named weekdays are then numbered for the calendar in `Tempo.RRule`'s lowering. 16 census cells.
+* [ ] **`tempo_holidays` numbers its weekdays from Monday** (decision 80): its compiler maps a day's name to Monday 1 … Sunday 7 for every rule, so a rule of a calendar whose weeks begin on another day (11 Hebrew rules with weekday clauses in the date-holidays data, "27 Nisan if Friday then previous Thursday") names the day before. It should number a named day in the rule's calendar, as `Tempo.Builder.on/3` now does. Tempo is not to be pushed until it follows.
+
+* [ ] **A value with no year converted to another calendar is placed in year 0**: `Tempo.to_calendar(~o"6M15D", Calendrical.Hebrew)` is `3760Y10M26D[u-ca=hebrew]` and `Tempo.to_week_start(~o"1K", 7)` is `0Y1M1D[u-fw=sun]`, the cycle's first year converted. A month and day with no year has no answer in another calendar (`:needs_a_year`, law 8); a day of the week on its own is the same day renumbered (`2K[u-fw=sun]`, decision 80). On `main` before decision 80 as after; found 2026-10-16.
 
 ## In progress
 
@@ -67,5 +69,7 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **A day of the week is the nth day of the expression's week, everywhere** (decision 80): every calendar and `[u-fw=…]` week start, in values, selections, rules, workdays, the builder and `explain/1`. 2026-10-16.
 
 * [x] **A range of positions that reaches the end selected nothing** (`2026Y6ML1K{2..-1}IN`): each end is now counted, from the end where it is negative, before the range is walked, as a range of a unit's values is. 2026-10-16.

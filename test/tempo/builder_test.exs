@@ -181,7 +181,7 @@ defmodule Tempo.BuilderTest do
          every(:week) |> on([:tuesday, :thursday]) |> starting(new_york(1997, 9, 2)) |> times(10)
      )},
     {"FREQ=WEEKLY;INTERVAL=2;UNTIL=19971224T000000Z;WKST=SU;BYDAY=MO,WE,FR",
-     "R/1997Y9M1DT9H0M0S/P2W/1997Y12M24DT0H0M0SZ/FL{1,3,5}KN[America/New_York][u-fw=sun]",
+     "R/1997Y9M1DT9H0M0S/P2W/1997Y12M24DT0H0M0SZ/FL{2,4,6}KN[America/New_York][u-fw=sun]",
      quote(
        do:
          every(week: 2)
@@ -263,7 +263,7 @@ defmodule Tempo.BuilderTest do
           {"FREQ=DAILY;UNTIL=19971224T000000Z", {1997, 9, 2},
            "R/1997Y9M2DT9H0M0S/P1D/1997Y12M24DT0H0M0SZ/FLT9HN[America/New_York]"},
           {"FREQ=WEEKLY;INTERVAL=2;UNTIL=19971224T000000Z;WKST=SU;BYDAY=MO,WE,FR", {1997, 9, 1},
-           "R/1997Y9M1DT9H0M0S/P2W/1997Y12M24DT0H0M0SZ/FL{1,3,5}KN[America/New_York][u-fw=sun]"},
+           "R/1997Y9M1DT9H0M0S/P2W/1997Y12M24DT0H0M0SZ/FL{2,4,6}KN[America/New_York][u-fw=sun]"},
           {"FREQ=MONTHLY;BYDAY=FR;BYMONTHDAY=13", {1997, 9, 2},
            "R/1997Y9M2DT9H0M0S/P1M/FL13D5KN[America/New_York]"},
           {"FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO", {1997, 5, 12},

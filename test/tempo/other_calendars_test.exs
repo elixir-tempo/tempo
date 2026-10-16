@@ -89,7 +89,9 @@ defmodule Tempo.OtherCalendarsTest do
       %Date{year: year, month: month, day: day} = date(tuesday)
 
       assert {Tempo.year(tuesday), Tempo.week(tuesday)} == NRF.week_of_year(year, month, day)
-      assert Tempo.day_of_week(tuesday) == Date.day_of_week(~D[2026-06-16])
+      # NRF's weeks begin on Sunday, so a Tuesday is its day 3 (decision 80).
+      assert Tempo.day_of_week(tuesday) == 3
+      assert Tempo.day_of_week(tuesday, :monday) == Date.day_of_week(~D[2026-06-16])
     end
 
     test "is stepped as its calendar steps it", %{tuesday: tuesday} do

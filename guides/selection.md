@@ -37,7 +37,7 @@ A selection counts in the period it is given. In a year, the second Monday is th
 |---|---|---|
 | `month: 12` | `12M` | a month of the year |
 | `day: 25`, `day: -1` | `25D`, `-1D` | a day of the month, counted from its end where negative |
-| `day_of_week: 1` | `1K` | a weekday, Monday 1 to Sunday 7 |
+| `day_of_week: 1` | `1K` | a day of the week, from the day the weeks begin on: Monday 1 to Sunday 7 in the Gregorian calendar, Sunday 1 in the Hebrew |
 | `day_of_year: 100` | `100O` | a day of the year |
 | `week: 20` | `20W` | a week of the year |
 | `hour: 9`, `minute: 30`, `second: 0` | `T9H30M0S` | a time of day |

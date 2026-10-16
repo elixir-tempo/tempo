@@ -532,16 +532,16 @@ defmodule Tempo.Matrix.Selections do
     true
   end
 
-  # The number a day has in its week, as its calendar counts the days of a
-  # week date: ISO 8601's weekday where its weeks begin on Monday, and its
-  # own where they begin on another day.
+  # The number a day has in its week, as its calendar numbers the days of
+  # its week, from the day its weeks begin on (decision 80): ISO 8601's
+  # weekday where they begin on Monday, Sunday 1 where they begin on Sunday.
   defp day_of_week(%Date{} = day, Gregorian) do
     Date.day_of_week(day)
   end
 
   defp day_of_week(%Date{} = day, calendar) do
     %Date{year: year, month: month, day: day_of_month} = Date.convert!(day, calendar)
-    {_week_year, _week, day_of_week} = calendar.week_date_from_date(year, month, day_of_month)
+    {day_of_week, _first, _last} = calendar.day_of_week(year, month, day_of_month, :default)
     day_of_week
   end
 

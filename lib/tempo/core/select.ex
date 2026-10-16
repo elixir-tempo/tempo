@@ -933,9 +933,12 @@ defmodule Tempo.Select do
   defp bounded_periods(periods, base), do: Limit.take(periods, base)
 
   defp apply_selector(%Tempo{form: {:value, units}} = selector, period, options) do
-    if Unit.anchored?(units),
-      do: {:error, not_a_selector(selector)},
-      else: in_period(period, Unit.cyclic(units), options)
+    if Unit.anchored?(units) do
+      {:error, not_a_selector(selector)}
+    else
+      parts = weekdays_in(Unit.cyclic(units), selector.calendar, calendar_of(period))
+      in_period(period, parts, options)
+    end
   end
 
   # Any other selector takes the period as written.
@@ -952,6 +955,8 @@ defmodule Tempo.Select do
     else
       with {:ok, extent} <- bounded_extent(period) do
         unit = units |> Unit.cyclic() |> coarsest() |> container_of()
+
+        selector = span_in(selector, period.calendar)
 
         placed =
           period
@@ -979,8 +984,12 @@ defmodule Tempo.Select do
   defp apply_selector(%Tempo{form: {kind, members}}, period, options) when kind in [:all, :one],
     do: apply_selector(members, period, options)
 
+  # CLDR numbers a territory's weekdays from Monday; the period's calendar
+  # numbers its days of the week from the day its weeks begin on.
   defp apply_selector(%Tempo.Workdays{weekdays: weekdays, except: except}, period, options) do
-    with {:ok, days} <- in_period(period, [day_of_week: weekdays], options),
+    numbered = Enum.map(weekdays, &Tempo.Calendar.day_of_week_from_iso(period.calendar, &1))
+
+    with {:ok, days} <- in_period(period, [day_of_week: numbered], options),
          {:ok, off} <- days_off(except, period, options) do
       {:ok, Enum.reject(days, &overlaps_any?(&1, off))}
     end
@@ -1030,6 +1039,120 @@ defmodule Tempo.Select do
       {:selection, parts} -> parts
       part -> [part]
     end)
+  end
+
+  # ── A selector of another calendar ────────────────────────────────────
+
+  @doc """
+  Parts with each day of the week they name, in a selection nested in them
+  too, numbered as another calendar numbers it (decision 80): the same day
+  of the week, counted from the day the other calendar's weeks begin on.
+  `Tempo.weekends(:US)`, Saturday and Sunday counted from Monday, selects
+  the same two days where weeks begin on Sunday. A day counted from the end
+  is a last day of the first calendar's week.
+  """
+  @spec weekdays_in(parts(), module(), module()) :: parts()
+  def weekdays_in(parts, calendar, calendar) do
+    parts
+  end
+
+  def weekdays_in(parts, from, to) do
+    Enum.map(parts, &weekday_part_in(&1, from, to))
+  end
+
+  defp weekday_part_in({:day_of_week, held}, from, to) do
+    {:day_of_week, weekdays_held_in(held, from, to)}
+  end
+
+  defp weekday_part_in({:selection, parts}, from, to) do
+    {:selection, weekdays_in(parts, from, to)}
+  end
+
+  defp weekday_part_in({:all, selections}, from, to) when is_list(selections) do
+    {:all, Enum.map(selections, &weekdays_in(&1, from, to))}
+  end
+
+  defp weekday_part_in(part, _from, _to) do
+    part
+  end
+
+  defp weekdays_held_in(day, from, to) when is_integer(day) do
+    weekday_in(day, from, to)
+  end
+
+  defp weekdays_held_in(held, from, to) when is_list(held) do
+    Enum.flat_map(held, &weekdays_member_in(&1, from, to))
+  end
+
+  defp weekdays_held_in(held, _from, _to) do
+    held
+  end
+
+  # A range stays a range where its days are still in order in the other
+  # calendar's numbering (`1..5`, Monday to Friday, is `2..6` where weeks
+  # begin on Sunday), and is its days where they come round (`5..7`, Friday
+  # to Sunday, is `6, 7, 1`).
+  defp weekdays_member_in(%Range{first: first, last: last, step: step}, from, to) do
+    days = Tempo.Calendar.days_in_week(from)
+    from_first = own_weekday(first, days)
+    from_last = own_weekday(last, days)
+    numbered = Enum.map(from_first..from_last//abs(step), &weekday_in(&1, from, to))
+    to_first = weekday_in(from_first, from, to)
+    to_last = weekday_in(from_last, from, to)
+
+    if numbered == Enum.to_list(to_first..to_last//abs(step)) do
+      [to_first..to_last//abs(step)]
+    else
+      numbered
+    end
+  end
+
+  defp weekdays_member_in(day, from, to) do
+    [weekday_in(day, from, to)]
+  end
+
+  defp weekday_in(day, from, to) do
+    own = own_weekday(day, Tempo.Calendar.days_in_week(from))
+    iso_weekday = Tempo.Calendar.iso_weekday_from_day_of_week(from, own)
+    Tempo.Calendar.day_of_week_from_iso(to, iso_weekday)
+  end
+
+  defp own_weekday(day, days) when day < 0 do
+    days + day + 1
+  end
+
+  defp own_weekday(day, _days) do
+    day
+  end
+
+  # A span selector's two ends, their days of the week numbered in the
+  # period's calendar.
+  defp span_in(%Tempo{calendar: calendar} = selector, calendar) do
+    selector
+  end
+
+  defp span_in(%Tempo{form: {:span, from, to}, calendar: own} = selector, calendar) do
+    %{
+      selector
+      | form: {:span, end_in(from, own, calendar), end_in(to, own, calendar)},
+        calendar: calendar
+    }
+  end
+
+  defp end_in(%Tempo{form: {:value, units}} = value, own, calendar) do
+    %{value | form: {:value, weekdays_in(units, own, calendar)}, calendar: calendar}
+  end
+
+  defp end_in(other, _own, _calendar) do
+    other
+  end
+
+  defp calendar_of(%Placed{span: %Tempo{calendar: calendar}}) do
+    calendar
+  end
+
+  defp calendar_of(%Tempo{calendar: calendar}) do
+    calendar
   end
 
   defp days_off(nil, _period, _options), do: {:ok, []}

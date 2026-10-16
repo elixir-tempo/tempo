@@ -51,7 +51,7 @@ defmodule Tempo.Builder do
 
   """
 
-  alias Tempo.{Build, Duration, Interval, IntervalSet, InvalidCalendarError, Options}
+  alias Tempo.{Build, Duration, Interval, IntervalSet, InvalidCalendarError, Options, Select}
 
   @weekdays [monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 7]
   @weekday_names Keyword.keys(@weekdays)
@@ -172,7 +172,7 @@ defmodule Tempo.Builder do
   def on(step, days, options \\ []) do
     with {:ok, expression} <- Build.expression(step),
          :ok <- Options.check(options, [:nth, :within], "Tempo.Builder.on/3"),
-         {:ok, parts} <- day_parts(days),
+         {:ok, parts} <- day_parts(days, expression.calendar),
          {:ok, parts} <- nth(parts, Keyword.get(options, :nth)),
          {:ok, expression} <- within(expression, Keyword.get(options, :within)) do
       Build.selecting(expression, parts)
@@ -225,18 +225,39 @@ defmodule Tempo.Builder do
          do: Build.nesting(expression, length)
   end
 
-  defp day_parts(day) when day in @weekday_names,
-    do: {:ok, [day_of_week: Keyword.fetch!(@weekdays, day)]}
-
-  defp day_parts([day | _] = days) when is_atom(day) do
-    if Enum.all?(days, &(&1 in @weekday_names)),
-      do: {:ok, [day_of_week: Enum.map(days, &Keyword.fetch!(@weekdays, &1))]},
-      else: no_days(days)
+  # A day named is the day of the week it is, numbered as the expression's
+  # calendar numbers it, from the day its weeks begin on (decision 80);
+  # parts given are as written, and a selection's days are brought from its
+  # calendar to the expression's.
+  defp day_parts(day, calendar) when day in @weekday_names do
+    {:ok, [day_of_week: named_day(day, calendar)]}
   end
 
-  defp day_parts([{_unit, _held} | _] = parts), do: {:ok, parts}
-  defp day_parts(%Tempo{} = selection), do: Build.parts(selection)
-  defp day_parts(other), do: no_days(other)
+  defp day_parts([day | _] = days, calendar) when is_atom(day) do
+    if Enum.all?(days, &(&1 in @weekday_names)) do
+      {:ok, [day_of_week: Enum.map(days, &named_day(&1, calendar))]}
+    else
+      no_days(days)
+    end
+  end
+
+  defp day_parts([{_unit, _held} | _] = parts, _calendar) do
+    {:ok, parts}
+  end
+
+  defp day_parts(%Tempo{calendar: own} = selection, calendar) do
+    with {:ok, parts} <- Build.parts(selection) do
+      {:ok, Select.weekdays_in(parts, own, calendar)}
+    end
+  end
+
+  defp day_parts(other, _calendar) do
+    no_days(other)
+  end
+
+  defp named_day(day, calendar) do
+    Tempo.Calendar.day_of_week_from_iso(calendar, Keyword.fetch!(@weekdays, day))
+  end
 
   defp no_days(other),
     do:
@@ -702,7 +723,7 @@ defmodule Tempo.Builder do
 
       iex> import Tempo.Builder
       iex> every(week: 2) |> on([:tuesday, :thursday]) |> weeks_beginning(:sunday)
-      {:ok, ~o"R/../P2W/FL{2,4}KN[u-fw=sun]"}
+      {:ok, ~o"R/../P2W/FL{3,5}KN[u-fw=sun]"}
 
   """
   @spec weeks_beginning(step(), weekday()) :: result()
@@ -1012,10 +1033,24 @@ defmodule Tempo.Builder do
     end
   end
 
+  # A recurrence remade in another calendar, or in weeks begun on another
+  # day, keeps the days of the week its rule names (decision 80):
+  # `on(:monday)` before `weeks_beginning(:sunday)` is Monday still, the
+  # second day of those weeks.
   defp remade(recurrence, cadence, options) do
-    cadence
-    |> Tempo.every(options)
-    |> in_zone_of(recurrence.zone)
+    with {:ok, remade} <- cadence |> Tempo.every(options) |> in_zone_of(recurrence.zone) do
+      {:ok, with_weekdays_of(remade, recurrence.calendar)}
+    end
+  end
+
+  defp with_weekdays_of(%Tempo{form: {:every, first, bound, rule}} = remade, calendar)
+       when is_list(rule) do
+    renumbered = Select.weekdays_in(rule, calendar, remade.calendar)
+    %{remade | form: {:every, first, bound, renumbered}}
+  end
+
+  defp with_weekdays_of(remade, _calendar) do
+    remade
   end
 
   defp a_recurrence(%Tempo{form: {:every, _, _, _}} = recurrence, _change), do: {:ok, recurrence}

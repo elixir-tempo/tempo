@@ -186,7 +186,7 @@ defmodule Tempo.HolidayBuilderTest do
          |> lasting(day: 8)
          |> in_calendar(@hebrew)
      )},
-    {"{R/../P1Y/FL10m17D{1..5,7}KN,R/../P1Y/FLL10m17D6KN/P8D7K-1IN}[u-ca=hebrew]",
+    {"{R/../P1Y/FL10m17D{2..6,1}KN,R/../P1Y/FLL10m17D7KN/P8D1K-1IN}[u-ca=hebrew]",
      quote(
        do:
          all_of([

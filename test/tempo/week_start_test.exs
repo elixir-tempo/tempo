@@ -72,9 +72,12 @@ defmodule Tempo.WeekStartTest do
       assert Tempo.week(~o"2026-06-20[u-fw=sun]") == 24
     end
 
-    test "leaves a weekday on its own as it is: Monday is 1" do
-      assert Tempo.day_of_week(~o"2026-06-21[u-fw=sun]") == 7
-      assert Tempo.day_of_week(~o"2026-06-22[u-fw=sun]") == 1
+    # A day of the week is counted from the day the week begins on,
+    # whether a week is written or not (decision 80).
+    test "counts a weekday on its own from the day it begins on" do
+      assert Tempo.day_of_week(~o"2026-06-21[u-fw=sun]") == 1
+      assert Tempo.day_of_week(~o"2026-06-22[u-fw=sun]") == 2
+      assert Tempo.day_of_week(~o"2026-06-22[u-fw=sun]", :monday) == 1
     end
   end
 

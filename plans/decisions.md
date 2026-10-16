@@ -138,6 +138,8 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **State.** Built, as decision 27 records: `Tempo.to_week_start/2`, `Tempo.week_start/1`, `test/tempo/week_start_test.exs`.
 
+* **Superseded in part (2026-10-16).** A day of the week on its own is counted from the week's first day too, by decision 80; `2026-06-21[u-fw=sun]` is day 1.
+
 ## 15. How `tempo_network` asks a calendar
 
 * **Question.** May the companion package `tempo_network` call Tempo's hidden calendar adapter?
@@ -849,7 +851,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **State.** To build: the census's selections expect `InvalidDateError` for an absent value (`TODO.md`, under the answer fixtures).
 
-## 80. A day of the week in a selection, in a calendar whose week does not begin on Monday
+## 80. A day of the week, in a calendar whose week does not begin on Monday
 
 * **Question.** In a calendar whose week begins on another day (`Calendrical.NRF`, Sunday), does `K` in a selection name the nth day of the calendar's week, as it does in a week date, or the day of the week counted from Monday?
 
@@ -857,4 +859,6 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-16).** The nth day of the calendar's own week, in a selection as in a value, so that a written unit has one meaning; RFC 5545's named weekdays (`WE`) are numbered for the calendar in `Tempo.RRule`'s lowering.
 
-* **State.** To build (`TODO.md`, Open).
+* **Decision revisited (2026-10-16).** Put again with its full reach: nine calendars of the census begin their weeks on another day (Sunday: Hebrew, the three Islamic, Coptic, the two Ethiopic, NRF; Saturday: Persian), as does any expression written `[u-fw=…]`, and decision 14 had a day of the week on its own numbered from Monday (`Tempo.day_of_week(~o"2026-06-21[u-fw=sun]")` was 7). The user chose the nth day of the expression's week everywhere: a week date, a day of the week on its own, a selection, a rule, in every calendar and week start. It supersedes that part of decision 14. A day named from outside Tempo (RFC 5545's `BYDAY`, cron's field, CLDR's weekend, the builder's `:monday`) is numbered in the expression's calendar; a selector of one calendar applied in another names the same days.
+
+* **State.** Built: `Tempo.Calendar.day_of_week/4` asks the calendar's own numbering (`day_of_week(…, :default)`), beside `iso_weekday/4`, `first_weekday/1` and the two conversions; `Tempo.day_of_week/2`, `Tempo.Workdays`, `Tempo.RRule`, `Tempo.Select.weekdays_in/3`, `Tempo.Builder`, `Tempo.Explain`; the census's oracle numbers a day as the calendar does. `tempo_holidays` numbers its weekdays from Monday and is to follow.

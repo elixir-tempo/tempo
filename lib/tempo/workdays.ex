@@ -133,11 +133,12 @@ defmodule Tempo.Workdays do
        ArgumentError.exception("the days off (:except) are a Tempo value, not #{inspect(other)}")}
 
   # Whether a value, a day or finer, falls on a workday: a weekday that is
-  # not a day off. `Tempo.workday?/2` is the API.
+  # not a day off. CLDR numbers the weekdays and the weekend from Monday, so
+  # the value is asked its day so numbered. `Tempo.workday?/2` is the API.
   @doc false
   @spec workday?(Tempo.t(), t()) :: boolean() | {:error, Exception.t()}
   def workday?(%Tempo{} = value, %__MODULE__{} = workdays) do
-    case Tempo.day_of_week(value) do
+    case Tempo.day_of_week(value, :monday) do
       day when is_integer(day) -> day in workdays.weekdays and not day_off?(value, workdays)
       nil -> {:error, ConversionError.exception(value: value, reason: :several)}
     end
@@ -148,7 +149,7 @@ defmodule Tempo.Workdays do
   @doc false
   @spec weekend?(Tempo.t(), t()) :: boolean() | {:error, Exception.t()}
   def weekend?(%Tempo{} = value, %__MODULE__{weekend: weekend}) do
-    case Tempo.day_of_week(value) do
+    case Tempo.day_of_week(value, :monday) do
       day when is_integer(day) -> day in weekend
       nil -> {:error, ConversionError.exception(value: value, reason: :several)}
     end

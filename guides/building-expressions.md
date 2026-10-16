@@ -257,11 +257,11 @@ iex> every(:year) |> in_calendar(Calendrical.Hebrew) |> starting(~o"2026-06-01")
 
 > *"Every year, on the first of Tishri." "Every year from the 1st of June 2026, which is the 16th of Sivan 5786."*
 
-`weeks_beginning/2` begins its weeks on another day, as an RRULE's `WKST` does:
+`weeks_beginning/2` begins its weeks on another day, as an RRULE's `WKST` does. A day of the week is numbered from the day its week begins on, so in weeks that begin on Sunday a Tuesday is day 3 and a Thursday day 5, whichever step comes first:
 
 ```elixir
 iex> every(week: 2) |> on([:tuesday, :thursday]) |> weeks_beginning(:sunday)
-{:ok, ~o"R/../P2W/FL{2,4}KN[u-fw=sun]"}
+{:ok, ~o"R/../P2W/FL{3,5}KN[u-fw=sun]"}
 ```
 
 ## The years it repeats in

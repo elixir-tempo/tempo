@@ -2005,9 +2005,9 @@ defmodule Tempo do
   RRULE's `WKST` reads to.
 
   Week 1 of a year is its first week with four days in it, as in ISO 8601,
-  whatever day begins it; a day of a numbered week (`2026-W25-1`) is counted
-  from that day, and a weekday on its own (`1K`, Monday) is not moved. A
-  week is of one start, so a week converted is the span of its days.
+  whatever day begins it, and a day of the week is counted from that day,
+  in a week date (`2026-W25-1`) as on its own (decision 80). A week is of
+  one start, so a week converted is the span of its days.
 
   ### Arguments
 
@@ -3084,16 +3084,20 @@ defmodule Tempo do
   end
 
   @doc """
-  The day of the week an expression names, 1 to 7, Monday first by default.
+  The day of the week an expression names, 1 to 7, counted by default from
+  the day its weeks begin on: Monday in the Gregorian calendar, Sunday in
+  the Hebrew and in an expression written `[u-fw=sun]`. A day of the week
+  is written and selected the same way (`K`), so the number this answers
+  is the one the expression would be written with.
 
   ### Arguments
 
   * `expression` is a `t:t/0`: a date, a week date, or an interval or set
     within one day.
 
-  * `starting_on` is the day numbered 1: `:default` or `:monday` (the
-    default), `:tuesday`, `:wednesday`, `:thursday`, `:friday`, `:saturday`
-    or `:sunday`.
+  * `starting_on` is the day numbered 1: `:default` (the day the
+    expression's weeks begin on), or a day named, `:monday`, `:tuesday`,
+    `:wednesday`, `:thursday`, `:friday`, `:saturday` or `:sunday`.
 
   ### Returns
 
@@ -3108,6 +3112,12 @@ defmodule Tempo do
       iex> Tempo.day_of_week(~o"2026-06-15", :sunday)
       2
 
+      iex> Tempo.day_of_week(~o"2026-06-15[u-fw=sun]")
+      2
+
+      iex> Tempo.day_of_week(~o"2026-06-15[u-fw=sun]", :monday)
+      1
+
       iex> Tempo.day_of_week(~o"2026-06")
       nil
 
@@ -3115,9 +3125,13 @@ defmodule Tempo do
   @spec day_of_week(t(), atom()) :: 1..7 | nil
   def day_of_week(expression, starting_on \\ :default)
 
+  # A duration names no day, and has no calendar to count one in.
   def day_of_week(expression, starting_on)
-      when is_expression(expression) and starting_on in @week_starts,
-      do: Parts.weekday(Parts.part(expression, :day_of_week), starting_on)
+      when is_expression(expression) and starting_on in @week_starts do
+    expression
+    |> Parts.part(:day_of_week)
+    |> Parts.weekday(starting_on, Map.get(expression, :calendar))
+  end
 
   def day_of_week(expression, starting_on) when is_expression(expression),
     do: raise(ArgumentError, "a week starts on a day, as :monday, not #{inspect(starting_on)}")

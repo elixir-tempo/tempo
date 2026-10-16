@@ -9,11 +9,14 @@ defmodule Tempo.Parts do
 
   @day 86_400_000_000
 
+  # The days a week may be counted from, in ISO 8601's order, Monday first.
+  @named_days [:monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday]
+
   @doc "The number a unit holds in an expression, nil when it holds none or several."
   @spec part(Tempo.t(), Unit.t()) :: integer() | nil
-  # A day of the week is the weekday, Monday 1: a value with a year is asked
-  # its day, since the day of a numbered week is counted from the day the
-  # week begins on, which is the weekday only where weeks begin on Monday.
+  # A day of the week is counted from the day the expression's weeks begin
+  # on (decision 80): a value with a year is asked its day, and one that
+  # holds the unit has it as written.
   def part(%Tempo{form: {:value, units}} = value, :day_of_week) do
     if Unit.anchored?(units) and Unit.concrete?(units),
       do: weekday_on(value, units),
@@ -122,19 +125,24 @@ defmodule Tempo.Parts do
     end)
   end
 
-  @doc "The day of the week renumbered from a starting day: Monday is 1 by default."
-  @spec weekday(integer() | nil, atom()) :: integer() | nil
-  def weekday(nil, _starting_on), do: nil
-  def weekday(day, starting_on) when starting_on in [:default, :monday], do: day
+  @doc """
+  A day of the week as the calendar numbers it, renumbered from a starting
+  day: `:default` keeps the calendar's numbering, from the day its weeks
+  begin on, and a day named counts from that day.
+  """
+  @spec weekday(integer() | nil, atom(), module()) :: integer() | nil
+  def weekday(nil, _starting_on, _calendar) do
+    nil
+  end
 
-  def weekday(day, starting_on) do
-    index =
-      Enum.find_index(
-        [:monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday],
-        &(&1 == starting_on)
-      )
+  def weekday(day, :default, _calendar) do
+    day
+  end
 
-    Integer.mod(day - 1 - index, 7) + 1
+  def weekday(day, starting_on, calendar) do
+    iso_weekday = Calendar.iso_weekday_from_day_of_week(calendar, day)
+    index = Enum.find_index(@named_days, &(&1 == starting_on))
+    Integer.mod(iso_weekday - 1 - index, length(@named_days)) + 1
   end
 
   @doc "The unit an expression is written to: its finest end or member."

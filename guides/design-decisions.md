@@ -177,7 +177,7 @@ iex> Tempo.select(~o"2026-06", ~o"L{1,3}K2IN")
 
 **Why.** ISO 8601-2 §12 allows one selection rule of a kind in a selection, and applies a position (`I`) last, over everything selected. So `L{1,3}K2IN` is the second of the Mondays and Wednesdays taken together, 3 June 2026, and not the second of each. No ISO 8601-2 selection says the RFC 5545 rule. The set of selections is the only alternative that reads every rule RFC 5545 allows and writes it back as it was read. `Tempo.selection(all: [...])` builds the same thing, and it also says "the first Monday and the last Friday" in code.
 
-### Calendars, skipped days and week starts: `RSCALE`, `SKIP` and `WKST` (decisions 13, 14, 24, 27, 28 and 29)
+### Calendars, skipped days and week starts: `RSCALE`, `SKIP` and `WKST` (decisions 13, 14, 24, 27, 28, 29 and 80)
 
 **The question.** Does Tempo read RFC 7529's `RSCALE` (the calendar a rule counts in) and `SKIP` (what becomes of a day a month lacks), and a `WKST` other than Monday where it changes which weeks are counted? And where does a week start live?
 
@@ -199,10 +199,10 @@ iex> Tempo.RRule.parse("FREQ=YEARLY;RSCALE=CHINESE;BYMONTH=1;BYMONTHDAY=1")
 iex> Tempo.RRule.parse("FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29;SKIP=FORWARD;RSCALE=GREGORIAN")
 {:ok, ~o"R/../P1Y/FL2M29D(forward)sN"}
 iex> Tempo.RRule.parse("FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,SU;WKST=SU")
-{:ok, ~o"R/../P2W/FL{2,7}KN[u-fw=sun]"}
+{:ok, ~o"R/../P2W/FL{3,1}KN[u-fw=sun]"}
 ```
 
-**Why.** An expression is in one calendar, so a rule that counts in the Chinese calendar is a recurrence in the Chinese calendar, and its months are named as that calendar names them (`1m`, the first month; `5+m`, a leap month). A week start changes which weeks exist, which week is number 25, and what a two-week cadence steps over, so it belongs to the expression as its calendar does. Holding it as a calendar keeps the struct as it is: the engine already asks an expression's calendar every question about weeks. ISO 8601-2's selection had its own week start part (`nq`), and it was removed so that there is one way to say it. `WKST` that changes nothing is read and not kept.
+**Why.** An expression is in one calendar, so a rule that counts in the Chinese calendar is a recurrence in the Chinese calendar, and its months are named as that calendar names them (`1m`, the first month; `5+m`, a leap month). A week start changes which weeks exist, which week is number 25, and what a two-week cadence steps over, so it belongs to the expression as its calendar does. Holding it as a calendar keeps the struct as it is: the engine already asks an expression's calendar every question about weeks. ISO 8601-2's selection had its own week start part (`nq`), and it was removed so that there is one way to say it. `WKST` that changes nothing is read and not kept. A day of the week is numbered from the day the expression's weeks begin on, in a week date, a selection and a rule alike (decision 80), so `TU,SU` in weeks that begin on Sunday is `{3,1}K`, and `5K` in the Hebrew calendar, whose weeks begin on Sunday, is a Thursday: one written `K` names one day in an expression.
 
 ### A day rolled to a weekday: cron's `W` (decisions 16, 17, 18 and 23)
 

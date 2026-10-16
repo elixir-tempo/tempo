@@ -18,6 +18,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * A value that names no calendar is in `Calendar.ISO`, where it was in `Calendrical.Gregorian`.
 
+* A day of the week (`K`) is counted from the day the expression's weeks begin on, everywhere: `5K` is a Thursday in the Hebrew calendar and in `[u-fw=sun]`, Friday `6K`; `Tempo.day_of_week/2` takes `:monday` for the day as ISO 8601 numbers it.
+
 * `Enum` over a plural expression (a set, a recurrence, a value with a list in it) gives its members. `Enum.count(~o"R5/2022-01-01/P1M")` is 5, where it was 151.
 
 * `Tempo.to_interval/2` of a value carries no `:unit`: the interval of a day walks its one day. `Tempo.walk/3` walks a span at a unit.
