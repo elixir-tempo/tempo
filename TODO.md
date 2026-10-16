@@ -30,7 +30,7 @@ Every item here is upstream: Tempo follows each library as it is, and the item i
 
 * [ ] **Text that is no calendar is read as a calendar of no events**: `Tempo.ICal.parse("hello, world")` is `{:ok, ~o"{}"}`. The `ical` library returns no error for text it cannot read. Rechecked against `ical` 3.2.0 on 2026-10-14.
 
-* [ ] **Three Localize defects**, rechecked against Localize `9ac3e95` on 2026-10-14 and recorded in its TODO.md. A day of the month a year turns in is read back a year early: `Localize.Date.parse("March 20, 1700", calendar: Calendrical.Julian.March25, format: :long)` is `1699-13-20`, where `Localize.Date.to_string/2` wrote it from `1700-13-20`; Tempo reaches it, `Tempo.parse("March 20, 1700", calendar: Calendrical.Julian.March25)` being `1699Y13M20D`. A month that begins after its first day is not written from its year and month: `Localize.Date.to_string(%{year: 1751, month: 3, calendar: Calendrical.Reform.England}, format: :yMMM)` is an `InvalidValueError`; Tempo no longer reaches it, writing a month by its days (`Mar 25 – 31, 1751`). A fiscal date is written with its fiscal year and its Gregorian month: `Localize.Date.to_string(Date.new!(2027, 2, 10, Calendrical.FiscalYear.AU))` is "Aug 10, 2027" for 10 August 2026, so `Tempo.to_string/2` of a fiscal value from July to December names the wrong year (found 2026-10-15).
+* [ ] **A Localize defect: a month that begins after its first day is not named from its year and month**, rechecked against Localize `ffe8fda9` and Calendrical `9a1fa8b` on 2026-10-16. `Localize.Date.to_string(%{year: 1751, month: 3, calendar: Calendrical.Reform.England}, format: :yMMM)` is still an `InvalidValueError`: with no day, `Localize.Calendar.cldr_month/1` asks the calendar's `month_of_year/3` about the month's 1st, and England's 1751 began on 25 March, so it answers `{:error, :invalid_date}`; with a day of the month (the 25th) it is "Mar 1751". Localize's TODO records it done (`c1adb913`), which fixed whether the calendar holds that month and was checked against a stand-in calendar, not the naming. Tempo does not reach it, writing a month by its days (`Mar 25 – 31, 1751`).
 
 ## Deferred
 
@@ -61,6 +61,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **Two Localize defects fixed**, rechecked through Tempo on Localize `ffe8fda9` and Calendrical `dc9beed` on 2026-10-16. A fiscal date is written as the Gregorian date it is: `Localize.Date.to_string(Date.new!(2027, 2, 10, Calendrical.FiscalYear.AU))` is "Aug 10, 2026", where it was "Aug 10, 2027", so `Tempo.to_string/2` of a fiscal value from July to December names the right year; the fiscal year and its ranges are unchanged. A day of the month a year turns in is read back in the year it was written with: `Tempo.parse("March 20, 1700", calendar: Calendrical.Julian.March25)` is `1700Y13M20D`, where it was `1699Y13M20D`. 2026-10-16.
 
 * [x] **Answer fixtures for ports**: `census.json` (the census's full forms, values with no year, shapes and 985 selections in 27 calendars) and `guides.json` (1,646 calls the guides' examples make, with their answers), each read by Tempo's own tests. 2026-10-16.
 
