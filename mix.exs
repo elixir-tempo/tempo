@@ -182,8 +182,9 @@ defmodule Tempo.MixProject do
 
   defp deps do
     [
-      {:localize, path: "../../localize/localize", override: true},
-      {:calendrical, path: "../../localize/calendrical", override: true},
+      {:localize, github: "elixir-localize/localize", branch: "calendrical-2.0", override: true},
+      {:calendrical,
+       github: "elixir-localize/calendrical", branch: "calendrical-2.0", override: true},
       {:astro, "~> 2.7"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},
