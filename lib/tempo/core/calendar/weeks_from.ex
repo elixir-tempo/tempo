@@ -9,35 +9,47 @@
 defmodule Tempo.Calendar.WeeksFrom.Tuesday do
   @moduledoc false
 
-  use Calendrical.Base.Month, month_of_year: 1, day_of_week: 2, min_days_in_first_week: 4
+  use Calendrical.Calendar.Shifted,
+    year_begins: {1, 1},
+    weeks: [first_day: 2, min_days_in_first_week: 4]
 end
 
 defmodule Tempo.Calendar.WeeksFrom.Wednesday do
   @moduledoc false
 
-  use Calendrical.Base.Month, month_of_year: 1, day_of_week: 3, min_days_in_first_week: 4
+  use Calendrical.Calendar.Shifted,
+    year_begins: {1, 1},
+    weeks: [first_day: 3, min_days_in_first_week: 4]
 end
 
 defmodule Tempo.Calendar.WeeksFrom.Thursday do
   @moduledoc false
 
-  use Calendrical.Base.Month, month_of_year: 1, day_of_week: 4, min_days_in_first_week: 4
+  use Calendrical.Calendar.Shifted,
+    year_begins: {1, 1},
+    weeks: [first_day: 4, min_days_in_first_week: 4]
 end
 
 defmodule Tempo.Calendar.WeeksFrom.Friday do
   @moduledoc false
 
-  use Calendrical.Base.Month, month_of_year: 1, day_of_week: 5, min_days_in_first_week: 4
+  use Calendrical.Calendar.Shifted,
+    year_begins: {1, 1},
+    weeks: [first_day: 5, min_days_in_first_week: 4]
 end
 
 defmodule Tempo.Calendar.WeeksFrom.Saturday do
   @moduledoc false
 
-  use Calendrical.Base.Month, month_of_year: 1, day_of_week: 6, min_days_in_first_week: 4
+  use Calendrical.Calendar.Shifted,
+    year_begins: {1, 1},
+    weeks: [first_day: 6, min_days_in_first_week: 4]
 end
 
 defmodule Tempo.Calendar.WeeksFrom.Sunday do
   @moduledoc false
 
-  use Calendrical.Base.Month, month_of_year: 1, day_of_week: 7, min_days_in_first_week: 4
+  use Calendrical.Calendar.Shifted,
+    year_begins: {1, 1},
+    weeks: [first_day: 7, min_days_in_first_week: 4]
 end

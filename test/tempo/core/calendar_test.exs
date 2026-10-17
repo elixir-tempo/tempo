@@ -114,11 +114,17 @@ defmodule Tempo.Core.CalendarTest do
           {:ok, {month_first, month_after}} = Tempo.Calendar.period(@calendar, :month, y, m)
           {:ok, weeks} = Tempo.Calendar.weeks_of_month(@calendar, y, m)
 
-          # TR35 lets a month's first or last days fall in no week of it, so the
-          # weeks hold the month's middle and run on without a gap.
+          # TR35 lets a month's first or last days fall in no week of it, and a
+          # week belongs to the month whose week 1 it is, so a month of a
+          # fortnight or more holds its own middle, and the weeks run on
+          # without a gap. A split month of a week (25 to 31 December in
+          # `Calendrical.Julian.Dec25`) owns only the week its first day is in.
           middle = div(month_first + month_after, 2)
           assert weeks != []
-          assert Enum.any?(weeks, fn {lo, hi} -> lo <= middle and middle < hi end)
+
+          if month_after - month_first >= 14 do
+            assert Enum.any?(weeks, fn {lo, hi} -> lo <= middle and middle < hi end)
+          end
 
           assert weeks
                  |> Enum.chunk_every(2, 1, :discard)

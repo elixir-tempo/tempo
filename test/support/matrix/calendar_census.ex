@@ -298,8 +298,7 @@ defmodule Tempo.Matrix.CalendarCensus do
   end
 
   defp weeks_in_year(y, calendar) do
-    {weeks, _days} = calendar.weeks_in_year(y)
-    weeks
+    calendar.weeks_in_year(y)
   end
 
   defp iso(y, m, d, calendar) do
