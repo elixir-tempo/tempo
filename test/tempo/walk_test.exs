@@ -77,6 +77,11 @@ defmodule Tempo.WalkTest do
                Tempo.walk(~o"{12M/2M,2026}", :day)
     end
 
+    test "a recurrence with no end is walked as it is read" do
+      assert {:ok, days} = Tempo.walk(~o"R/2022-01-01/P1M", :day)
+      assert Enum.take(days, 3) == [~o"2022-01-01", ~o"2022-01-02", ~o"2022-01-03"]
+    end
+
     test "a value written to the microsecond has nothing finer" do
       assert_raise Tempo.ConversionError, ~r/has nothing finer to walk or enumerate/, fn ->
         Enum.to_list(~o"2026-06-15T10:00:00.123456")

@@ -46,7 +46,7 @@ A fiscal quarter as an interval, ready for the set operations, is in the [cookbo
 Retailers count time in **weeks**, grouped four, four and five into quarters of thirteen. Build one with `Calendrical.new/3`:
 
 ```elixir
-iex> {_, retail} = Calendrical.new(MyApp.Retail, :week, weeks_in_month: [4, 4, 5])
+iex> {_, retail} = Calendrical.new(MyApp.Retail, :week, pattern: [4, 4, 5])
 iex> {:ok, retail_2026} = Tempo.from_iso8601("2026", calendar: retail)
 iex> {:ok, weeks} = Tempo.walk(retail_2026, :week)
 iex> Enum.count(weeks)
@@ -58,14 +58,14 @@ iex> Tempo.to_calendar(retail_2026, Calendrical.Gregorian)
 
 > *"The **2026 retail year** is fifty-two weeks, from Monday the 29th of December 2025 through Sunday the 27th of December 2026."*
 
-The `weeks_in_month: [4, 4, 5]` layout is all that tells this calendar from ISO 8601's weeks. Its months are four or five weeks long, and everything else follows.
+The `pattern: [4, 4, 5]` of weeks in each quarter's three months is all that tells this calendar from a year of plain weeks. Its months are four or five weeks long, its year begins on the Monday on or before the 1st of January, and everything else follows.
 
 ## An academic year
 
-An academic year is a year that begins in another month:
+An academic year is a year that begins in another month, here numbered by the year it ends in:
 
 ```elixir
-iex> {_, academic} = Calendrical.new(MyApp.Academic, :month, month_of_year: 9)
+iex> {_, academic} = Calendrical.new(MyApp.Academic, :month, year_begins: {9, 1}, year_number: :ending)
 iex> term_start = Tempo.from_iso8601!("2026-01-01", calendar: academic)
 iex> Tempo.relation(term_start, ~o"2025-09-01")
 :equals

@@ -192,7 +192,7 @@ defmodule Tempo.Children do
   defp walk_error({:ok, steps}, _expression), do: {:ok, steps}
   defp walk_error({:error, reason}, expression), do: {:error, conversion(expression, reason)}
 
-  defp walks(members, unit, options) do
+  defp walks(members, unit, options) when is_list(members) do
     members
     |> Enum.reduce_while({:ok, []}, fn member, {:ok, walks} ->
       case walk(member, unit, options) do
@@ -201,6 +201,29 @@ defmodule Tempo.Children do
       end
     end)
     |> in_order()
+  end
+
+  # A set read from a stream, a recurrence with no end among them, is walked
+  # as it is read, since its members cannot all be walked first: its first
+  # member is walked before any step, the members of one rule being of one
+  # shape, and a later member that cannot be walked raises its error where
+  # the stream reaches it.
+  defp walks(members, unit, options) do
+    case Enum.take(members, 1) do
+      [] ->
+        {:ok, []}
+
+      [first] ->
+        with {:ok, _walk} <- walk(first, unit, options),
+             do: {:ok, [Stream.flat_map(members, &walked!(&1, unit, options))]}
+    end
+  end
+
+  defp walked!(member, unit, options) do
+    case walk(member, unit, options) do
+      {:ok, walk} -> walk
+      {:error, exception} -> raise exception
+    end
   end
 
   defp in_order({:ok, walks}), do: {:ok, Enum.reverse(walks)}
