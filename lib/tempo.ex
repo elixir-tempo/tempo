@@ -2513,6 +2513,28 @@ defmodule Tempo do
   end
 
   @doc """
+  The time zone database Tempo asks for a zone's rules.
+
+  Tempo asks the `Calendar.TimeZoneDatabase` set with
+  `config :ex_tempo, :time_zone_database`, else the one set for Elixir
+  (`Calendar.put_time_zone_database/1`) where it is other than Elixir's own
+  default, which knows only UTC, else the `tz` package's, which comes with
+  Tempo. A library built on Tempo asks this to read a zone as Tempo reads it.
+
+  ### Returns
+
+  * The module of the `Calendar.TimeZoneDatabase` behaviour that Tempo asks.
+
+  ### Examples
+
+      iex> Tempo.time_zone_database()
+      Tz.TimeZoneDatabase
+
+  """
+  @spec time_zone_database() :: Calendar.time_zone_database()
+  def time_zone_database, do: Zone.database()
+
+  @doc """
   One value placed on another: a date at a time of day, a time of day on a
   date, a month and a day. The value with a year keeps it and the other
   supplies the finer units it lacks; a unit between the two that neither

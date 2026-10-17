@@ -617,7 +617,7 @@ Some decisions concern the project rather than the meaning of a date, and are re
 
 * The companion package `tempo_network` may call Tempo's hidden calendar module, as work of the same project.
 
-* `tz` is a dependency, and Tempo asks it for a zone's rules where the application configures no time zone database (decision 77). A database configured under `:ex_tempo` or `:elixir` is asked instead, Elixir's own UTC-only default aside, so an application that prefers another keeps it; Tempo sets no global database of its own.
+* `tz` is a dependency, and Tempo asks it for a zone's rules where the application configures no time zone database (decision 77). A database configured under `:ex_tempo` or `:elixir` is asked instead, Elixir's own UTC-only default aside, so an application that prefers another keeps it; Tempo sets no global database of its own. `Tempo.time_zone_database/0` names the one it asks, so a companion reads a zone as Tempo does rather than repeating the rule (decision 78).
 
 ## Related reading
 

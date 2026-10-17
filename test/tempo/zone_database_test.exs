@@ -8,8 +8,6 @@ defmodule Tempo.ZoneDatabaseTest do
 
   import Tempo.Sigils
 
-  alias Tempo.Zone
-
   describe "with no database configured" do
     setup do
       elixirs = Application.fetch_env(:elixir, :time_zone_database)
@@ -27,7 +25,7 @@ defmodule Tempo.ZoneDatabaseTest do
     end
 
     test "a named zone is read by tz, which comes with Tempo" do
-      assert Zone.database() == Tz.TimeZoneDatabase
+      assert Tempo.time_zone_database() == Tz.TimeZoneDatabase
 
       assert Tempo.from_iso8601("2026-06-15T09:00:00[Europe/Paris]") ==
                {:ok, ~o"2026-06-15T09:00:00[Europe/Paris]"}
@@ -35,7 +33,7 @@ defmodule Tempo.ZoneDatabaseTest do
 
     test "Elixir's own UTC-only default is not read as a choice" do
       Application.put_env(:elixir, :time_zone_database, Calendar.UTCOnlyTimeZoneDatabase)
-      assert Zone.database() == Tz.TimeZoneDatabase
+      assert Tempo.time_zone_database() == Tz.TimeZoneDatabase
       assert {:ok, _paris} = Tempo.in_zone(~o"2026-06-15T09", "Europe/Paris")
     end
   end
@@ -48,6 +46,10 @@ defmodule Tempo.ZoneDatabaseTest do
     on_exit(fn -> Application.delete_env(:ex_tempo, :time_zone_database) end)
 
     %{paris: paris, built: built}
+  end
+
+  test "the database Tempo asks is the one configured for it" do
+    assert Tempo.time_zone_database() == Calendar.UTCOnlyTimeZoneDatabase
   end
 
   test "a named zone given with no database is refused, saying what to configure" do

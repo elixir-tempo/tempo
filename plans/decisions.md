@@ -874,3 +874,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-16).** Follow RFC 7529 consistently: a rule's weeks are its calendar's weeks, as its day of the week is its calendar's day of the week (decision 80). Tempo's reading stands.
 
 * **State.** Built: nothing changes in Tempo.
+
+## 78. The time zone database Tempo asks, as public API
+
+* **Question.** Decision 77 made Tempo ask `tz` where the application configures no time zone database, or only Elixir's UTC-only default. `tempo_holidays` held its own copy of the rule Tempo's README had given before, Tempo's setting else Elixir's, and refused to start under Elixir's default, so after decision 77 it refused a configuration Tempo reads. How does a companion learn the database Tempo asks?
+
+* **Context.** The options were (1) a public `Tempo.time_zone_database/0` that returns it, the companion calling it and refusing only a database that knows only UTC; (2) each companion repeating decision 77's rule in its own code, which drifts as the first copy did; (3) the companion calling the hidden `Tempo.Zone.database/0`, an engine module no companion is agreed to call (decision 15 allows `tempo_network` the calendar adapter alone).
+
+* **Decision (2026-10-18).** Option 1.
+
+* **State.** Built: `Tempo.time_zone_database/0` in the Frames section of `Tempo`, documented with an example and returning `Tempo.Zone.database/0`, held in `zone_database_test.exs` under each source of the database (Tempo's setting, Elixir's default, none). `tempo_holidays` reads it for its start-up check and for its evening day-start, and refuses to start only where it is `Calendar.UTCOnlyTimeZoneDatabase`, which is now only where an application names that database for Tempo.
