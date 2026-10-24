@@ -875,7 +875,7 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **State.** Built: nothing changes in Tempo.
 
-## 78. The time zone database Tempo asks, as public API
+## 82. The time zone database Tempo asks, as public API
 
 * **Question.** Decision 77 made Tempo ask `tz` where the application configures no time zone database, or only Elixir's UTC-only default. `tempo_holidays` held its own copy of the rule Tempo's README had given before, Tempo's setting else Elixir's, and refused to start under Elixir's default, so after decision 77 it refused a configuration Tempo reads. How does a companion learn the database Tempo asks?
 
@@ -884,3 +884,23 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-18).** Option 1.
 
 * **State.** Built: `Tempo.time_zone_database/0` in the Frames section of `Tempo`, documented with an example and returning `Tempo.Zone.database/0`, held in `zone_database_test.exs` under each source of the database (Tempo's setting, Elixir's default, none). `tempo_holidays` reads it for its start-up check and for its evening day-start, and refuses to start only where it is `Calendar.UTCOnlyTimeZoneDatabase`, which is now only where an application names that database for Tempo.
+
+## 83. How long a quiet rule is walked
+
+* **Question.** A rule that selects nothing for a while is ended once it has been quiet for a cycle of its calendar's years (400 Gregorian, 28 Julian, 210 Islamic civil, a thousand years in a calendar with no cycle). Is one cycle enough?
+
+* **Context.** Not when the rule repeats by an interval its calendar's cycle does not divide. `FREQ=MONTHLY;INTERVAL=7;BYMONTH=2;BYMONTHDAY=29;BYDAY=FR` from March 2025 selects in every seventh month, and 4,800 months to a Gregorian cycle is no multiple of seven, so each cycle selects in other months than the last: Tempo answered that it never occurs, where it occurs on 29 February 2504. Six of 56 such rules and starts were answered wrongly against `Tempo.RRuleMeasure`, every one with an interval of seven months or seven years. The options were (1) walking until the rule's periods and the cycle come round together, the cycle times `n / gcd(n, u)` for an interval of `n` and `u` of its units to a cycle, counted from the calendar; (2) `n` cycles for every interval, as right but `n` times as long where one cycle is enough (a quarterly rule, three months to a cycle of 4,800); (3) one cycle, documented as a limit.
+
+* **Decision (2026-10-25).** Option 1. A calendar with no cycle is walked its thousand years `n` times over. A rule that names times of day alone, walked two years for a zone's changes, is walked `n / gcd(n, u)` times as long for an interval of a clock unit, with `u` of them to a day.
+
+* **State.** Built: `horizon/1` in `Tempo.Recurrence` counts the interval's units to a cycle from the calendar (`months_in_year_bounds/1` where every year has as many months, the days between two first days of a year a cycle apart, `days_in_week/1`), and walks the units it cannot count `n` cycles. The six rules and starts answer as the measure does, held in `rrule_test.exs`.
+
+## 84. A quiet rule's look-ahead, in the units an interval selects in
+
+* **Question.** A quiet rule looks ahead to where its parts next name a value and steps to that period. Where the value lies outside the first unit of a repeating interval, the unit RFC 5545's `INTERVAL` selects in, the step finds nothing and the rule looks ahead again from the next period, so a rule that never occurs visits every period of its horizon: about a second in the Gregorian calendar for `FREQ=MONTHLY;INTERVAL=3;BYMONTH=3,9;BYDAY=SA,SU` from January, and 94 seconds in the Persian calendar, whose every date costs about 30 µs. Should the look-ahead pass such values over?
+
+* **Context.** Rules whose parts name nothing in the horizon already end in one look-ahead, in 16 to 60 ms. Decision 83 lengthens the horizon for some intervals, and with it the walk.
+
+* **Decision (2026-10-25).** The look-ahead names only a value in the first unit of its period's interval, so a quiet stretch is passed in one look-ahead.
+
+* **State.** Built, short of its aim: `first_selectable/3` passes over a named value outside its period's first unit, and the search carries the period it has reached. A never-occurring quarterly rule takes 144 ms (306 before), with weekends 334 ms (1,000), every second month 229 ms (508), Islamic civil 208 ms (581), Julian 30 ms (84). The look-ahead still places about seven periods a year of its horizon, of a least of four; Persian, a horizon of 3,000 years at about 30 µs a date, takes 58 s (94).

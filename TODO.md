@@ -10,6 +10,8 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
+* [ ] **A never-occurring interval rule's look-ahead, the rest of it** — decision 84 is built short of its aim: a quarterly rule that never occurs takes 144 ms, not the 20 to 60 ms of a rule that names nothing, and 58 s in the Persian calendar. The look-ahead places about seven periods a year of its horizon where four would do, and a Persian date costs about 30 µs in Calendrical.
+
 ## Blocked
 
 ### Before the release
@@ -59,6 +61,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **A quiet rule walked until its interval's periods come round** — every seventh month or year selects in other months each cycle, and was ended after one; decisions 83 and 84. 2026-10-25.
 
 * [x] **A solar term of a year before 0 fixed**, rechecked through Tempo on Calendrical `fb4a2fe` on 2026-10-16. `Calendrical.Lunisolar.solar_term/3` takes the day of the term's moment with `floor/1` where it took `trunc/1`: `Tempo.Event.date("qingming", -3000, Calendrical.Chinese)` is 6 April -3000, the day its moment (iso day -1095631.11) is in, where it was 7 April; 2026's is unchanged, 5 April.
 * [x] **The Localize month-naming defect fixed**, rechecked through Tempo on Localize `ffe8fda9` and Calendrical `ae58f5b` on 2026-10-16. A month that begins after its first day is named from its year and month: `Localize.Date.to_string(%{year: 1751, month: 3, calendar: Calendrical.Reform.England}, format: :yMMM)` is "Mar 1751", where it was an `InvalidValueError`; the fix is Calendrical's (`ae58f5b`). Tempo did not reach it, writing a month by its days (`Mar 25 – 31, 1751`).

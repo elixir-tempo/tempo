@@ -170,6 +170,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* A rule repeating by an interval its calendar's cycle does not divide is walked until its periods come round, where it was ended after one quiet cycle: every seventh month's Friday the 29th of February from March 2025 is 29 February 2504, not none.
+
 * `Tempo.JSCalendar.parse/2` returns an `ArgumentError` that names why a document cannot be decoded, where it returned the `jscalendar` library's bare reason.
 
 * A selection's units are held to the bounds a unit has in any period of its calendar: `L32DN`, `LT25HN` and an RRULE's `BYMONTH=13` are errors, where they selected nothing; `L31DN` and a `BYSECOND` of 60 stay.

@@ -107,7 +107,12 @@ defmodule Tempo.Recurrence do
   # parts name, and a rule that selects nothing in a whole cycle of its
   # calendar's years comes to an end.
   defp selected_in({:steps, period_at}, walk, first_step) do
-    walk = Map.merge(walk, %{period_at: period_at, horizon: horizon(walk)})
+    walk =
+      Map.merge(walk, %{
+        period_at: period_at,
+        horizon: horizon(walk),
+        interval?: by_interval?(walk.first)
+      })
 
     # The walk carries the start of the next period from the period that
     # reckoned it (`occurrence_at/4`), so that each period's start is placed once.
@@ -158,7 +163,7 @@ defmodule Tempo.Recurrence do
     cond do
       start - since > walk.horizon -> nil
       k - quiet_from < quiet_periods(walk.first) -> {[], {k + 1, {since, quiet_from}, carried}}
-      true -> stepped_on(next_named(stop, period, walk), k, {since, quiet_from}, carried, walk)
+      true -> stepped_on(next_named(stop, period, k, walk), k, {since, quiet_from}, carried, walk)
     end
   end
 
@@ -235,7 +240,8 @@ defmodule Tempo.Recurrence do
   # the cadence: looked for a year, a month or a day at a time, as far as the
   # horizon. A nested selection, or a set of them, is made in the period as a whole (the fifth
   # Sunday of a month, at nine), so its parts are looked for in the next period.
-  defp next_named(tick, period, walk) do
+  # The period the position is in is the k-th or a later one.
+  defp next_named(tick, period, k, walk) do
     parts = picking(walk.parts)
 
     # A skip gives a period that names nothing a day of its own, so no
@@ -245,36 +251,90 @@ defmodule Tempo.Recurrence do
     case {every_period?, Select.probe(parts)} do
       {true, _probe} -> tick
       {false, nil} -> nil
-      {false, probe} -> named_from(tick, tick, probe, period, walk)
+      {false, probe} -> named_from(tick, tick, probe, period, k, walk)
     end
   end
 
-  defp named_from(tick, from, {unit, search} = probe, period, walk) do
+  # The k-th period, or the last the search has reached, is the one a
+  # position is first looked for in, so that a search of many years finds
+  # each position's period near the last.
+  defp named_from(tick, from, {unit, search} = probe, period, k, walk) do
     span = %{period | form: {:value, Shift.period_units(tick, unit, Spans.frame_of(period))}}
     {_start, stop} = ends_of(span)
 
-    cond do
-      found = first_named(span, search, from, walk.options) -> found
-      stop <= tick or stop - from > walk.horizon -> nil
-      true -> named_from(stop, from, probe, period, walk)
+    case first_named(span, search, from, k, walk) do
+      {:ok, found} ->
+        found
+
+      {:none, k} ->
+        if stop <= tick or stop - from > walk.horizon do
+          nil
+        else
+          named_from(stop, from, probe, period, k, walk)
+        end
     end
   end
 
   # A window may carry what it selects back out of its period, so where the
   # parts open one, a period in which anything is selected is the place.
-  defp first_named(span, search, from, options) do
-    case {Select.in_period(span, search, options), Keyword.has_key?(search, :selection)} do
+  defp first_named(span, search, from, k, walk) do
+    case {Select.in_period(span, search, walk.options), Keyword.has_key?(search, :selection)} do
       {{:ok, [_ | _]}, true} ->
-        max(from, Spans.start_position(span))
+        {:ok, max(from, Spans.start_position(span))}
 
       {{:ok, picked}, _windowed?} ->
-        picked
-        |> Enum.map(&Spans.start_position/1)
-        |> Enum.filter(&(&1 >= from))
-        |> Enum.min(fn -> nil end)
+        positions =
+          picked
+          |> Enum.map(&Spans.start_position/1)
+          |> Enum.filter(&(&1 >= from))
+
+        first_selectable(positions, k, walk)
 
       {{:error, _}, _windowed?} ->
-        nil
+        {:none, k}
+    end
+  end
+
+  # Of the positions the parts name, the first a period selects in: any,
+  # where every unit of a period is selected in; where an interval of several
+  # units selects in its first (decision 84), the first in a period's first
+  # unit, a position past it passed over to the next period.
+  defp first_selectable([], k, _walk) do
+    {:none, k}
+  end
+
+  defp first_selectable(positions, k, %{interval?: true} = walk) do
+    positions
+    |> Enum.sort()
+    |> first_in_first_unit(k, walk)
+  end
+
+  defp first_selectable(positions, _k, _walk) do
+    {:ok, Enum.min(positions)}
+  end
+
+  defp first_in_first_unit([], k, _walk) do
+    {:none, k}
+  end
+
+  defp first_in_first_unit([position | later], k, walk) do
+    n = index_at(position, walk.period_at, k, k)
+
+    if in_first_unit?(position, walk.period_at.(n), walk.first) do
+      {:ok, position}
+    else
+      next = Spans.start_position(walk.period_at.(n + 1))
+
+      later
+      |> Enum.drop_while(&(&1 < next))
+      |> first_in_first_unit(n + 1, walk)
+    end
+  end
+
+  defp in_first_unit?(position, period, first) do
+    case period_extent(eligible(period, first)) do
+      {_start, stop} -> position < stop
+      nil -> true
     end
   end
 
@@ -282,11 +342,127 @@ defmodule Tempo.Recurrence do
   # that names times of day alone has named them all in two years, a zone's
   # clock changing by the year. Any other has in a cycle of its calendar's
   # years, in which every date and weekday it could name comes round, or in
-  # a thousand years in a calendar with no cycle.
-  defp horizon(%{parts: parts, first: %Tempo{calendar: calendar}}) do
-    if Enum.all?(Keyword.keys(picking(parts)), &(&1 in [:hour, :minute, :second, :instance])),
-      do: 2 * 366 * @day,
-      else: (Calendar.years_in_cycle(calendar) || 1000) * 366 * @day
+  # a thousand years in a calendar with no cycle. A rule that repeats by an
+  # interval of several units selects in other units in each such span than
+  # in the last, until its periods and the span come round together
+  # (decision 83).
+  defp horizon(%{parts: parts, first: first}) do
+    years =
+      if times_of_day_alone?(parts) do
+        times_of_day_years(cadence_interval(first))
+      else
+        cycle_years(Calendar.years_in_cycle(first.calendar), first)
+      end
+
+    years * 366 * @day
+  end
+
+  defp times_of_day_alone?(parts) do
+    Enum.all?(Keyword.keys(picking(parts)), &(&1 in [:hour, :minute, :second, :instance]))
+  end
+
+  # A period of days or longer holds every time of day; an interval of a
+  # clock unit comes round to the same time of day in as many days as it
+  # takes to divide them.
+  defp times_of_day_years({unit, n}) when unit in [:hour, :minute, :second] do
+    2 * realigned(n, div(@day, Unit.ticks(unit)))
+  end
+
+  defp times_of_day_years(_cadence) do
+    2
+  end
+
+  defp cycle_years(nil, first) do
+    case cadence_interval(first) do
+      {_unit, n} -> 1000 * n
+      nil -> 1000
+    end
+  end
+
+  defp cycle_years(years, first) do
+    case cadence_interval(first) do
+      {unit, n} -> years * realigned(n, units_in_cycle(unit, years, first))
+      nil -> years
+    end
+  end
+
+  # The spans walked for an interval of n units with a given number of them
+  # to a span: as many as bring the interval's periods round to where they
+  # began. Where the units cannot be counted, n spans do.
+  defp realigned(n, units) when is_integer(units) do
+    div(n, Integer.gcd(n, units))
+  end
+
+  defp realigned(n, nil) do
+    n
+  end
+
+  # A cadence's units to a cycle of its calendar's years, asked of the
+  # calendar: its months where every year has as many, its days from the
+  # first day of a cycle to the first of the next.
+  defp units_in_cycle(:year, years, _first) do
+    years
+  end
+
+  defp units_in_cycle(:month, years, %Tempo{calendar: calendar}) do
+    case Calendar.months_in_year_bounds(calendar) do
+      {months, months} -> months * years
+      _varying -> nil
+    end
+  end
+
+  defp units_in_cycle(unit, years, %Tempo{form: {:span, from, _cadence}} = first) do
+    days = days_in_cycle(years, from, first.calendar)
+    units_of_days(unit, days, first.calendar)
+  end
+
+  defp days_in_cycle(years, %Tempo{form: {:value, units}}, calendar) do
+    with year when is_integer(year) <- Keyword.get(units, :year),
+         {:ok, first_day} <- Calendar.first_day(calendar, year: year),
+         {:ok, next_first_day} <- Calendar.first_day(calendar, year: year + years) do
+      next_first_day - first_day
+    else
+      _no_year -> nil
+    end
+  end
+
+  defp days_in_cycle(_years, _from, _calendar) do
+    nil
+  end
+
+  defp units_of_days(_unit, nil, _calendar) do
+    nil
+  end
+
+  defp units_of_days(:day, days, _calendar) do
+    days
+  end
+
+  defp units_of_days(:week, days, calendar) do
+    week = Calendar.days_in_week(calendar)
+
+    if rem(days, week) == 0 do
+      div(days, week)
+    else
+      nil
+    end
+  end
+
+  defp units_of_days(unit, days, _calendar) when unit in [:hour, :minute, :second] do
+    days * div(@day, Unit.ticks(unit))
+  end
+
+  defp units_of_days(_unit, _days, _calendar) do
+    nil
+  end
+
+  # The unit and interval of a cadence of one unit, every n months.
+  defp cadence_interval(%Tempo{form: {:span, _from, %Duration{units: [{unit, n}]}}}) do
+    {unit, n}
+  end
+
+  defp cadence_interval(_first) do
+    nil
   end
 
   # A rule's repeating intervals are whole periods of its cadence's unit, the
@@ -316,6 +492,19 @@ defmodule Tempo.Recurrence do
        do: %{period | form: {:span, from, %Duration{units: [{unit, 1}]}}}
 
   defp eligible(period, _first), do: period
+
+  # Whether a rule repeats by an interval of several units, selecting in the
+  # first unit of each (`eligible/2`).
+  defp by_interval?(%Tempo{
+         form: {:span, %Tempo{form: {:value, _}}, %Duration{units: [{_unit, n}]}}
+       })
+       when n > 1 do
+    true
+  end
+
+  defp by_interval?(_first) do
+    false
+  end
 
   # A period whose extent its building gave keeps it, unless the rule
   # selects in the first unit of a longer repeat; the start of the next

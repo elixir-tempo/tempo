@@ -288,12 +288,34 @@ defmodule Tempo.RRuleTest do
              ]
     end
 
+    # Every seventh month, or seventh year, selects in other months each
+    # 400 years than the last, 4,800 months and 400 years being no multiple
+    # of seven: the first Friday the 29th of February it selects is more than
+    # a cycle of years away, and the rule is walked until its periods come
+    # round (decision 83). The dates are `Tempo.RRuleMeasure`'s.
+    test "a rule quiet for more than a cycle of years is walked until its periods come round" do
+      for {text, from, expected} <- [
+            {"FREQ=MONTHLY;INTERVAL=7;BYMONTH=2;BYMONTHDAY=29;BYDAY=FR", ~o"2025-03-01",
+             [~o"2504-02-29", ~o"2532-02-29"]},
+            {"FREQ=MONTHLY;INTERVAL=7;BYMONTH=2;BYMONTHDAY=29;BYDAY=FR", ~o"2025-04-01",
+             [~o"2724-02-29", ~o"2752-02-29"]},
+            {"FREQ=YEARLY;INTERVAL=7;BYMONTH=2;BYMONTHDAY=29;BYDAY=FR", ~o"2028-01-01",
+             [~o"2504-02-29", ~o"2532-02-29"]},
+            {"FREQ=YEARLY;INTERVAL=7;BYMONTH=2;BYMONTHDAY=29;BYDAY=FR", ~o"2031-01-01",
+             [~o"2724-02-29", ~o"2752-02-29"]}
+          ] do
+        occurrences = Enum.take(RRule.parse!(text, from: from), 2)
+        assert {text, from, Enum.map(occurrences, &Interval.from/1)} == {text, from, expected}
+      end
+    end
+
     test "a rule that selects nothing comes to an end" do
       for {text, from} <- [
             {"FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31;COUNT=2", ~o"2026-01-01"},
             {"FREQ=YEARLY;BYMONTH=3;BYYEARDAY=100", ~o"2026-01-01"},
             {"FREQ=DAILY;BYSETPOS=2", ~o"2026-01-01"},
-            {"FREQ=HOURLY;INTERVAL=12;BYHOUR=9", ~o"2026-01-01T10"}
+            {"FREQ=HOURLY;INTERVAL=12;BYHOUR=9", ~o"2026-01-01T10"},
+            {"FREQ=MONTHLY;INTERVAL=3;BYMONTH=3,9", ~o"2025-01-31"}
           ] do
         assert Enum.empty?(Enum.take(RRule.parse!(text, from: from), 1)), text
       end
