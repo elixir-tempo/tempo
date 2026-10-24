@@ -66,18 +66,21 @@ defmodule Tempo.RRuleMeasureTest do
               do: NaiveDateTime.new!(y, m, d, h, mi, 0)
 
         # The standard's examples begin on the clock of New York and end at
-        # a time of UTC, which the measure reads on that clock.
+        # a time of UTC, which the measure reads on that clock. An example
+        # that lists only the first of its occurrences is held to those.
         occurrences =
-          RRuleMeasure.occurrences(
+          RRuleMeasure.stream(
             unquote(rule),
             start,
             Date.add(NaiveDateTime.to_date(start), @days_tried),
             zone: "America/New_York"
           )
 
-        if example.complete?,
-          do: assert(occurrences == listed),
-          else: assert(Enum.take(occurrences, length(listed)) == listed)
+        if example.complete? do
+          assert Enum.to_list(occurrences) == listed
+        else
+          assert Enum.take(occurrences, length(listed)) == listed
+        end
       end
     end
   end

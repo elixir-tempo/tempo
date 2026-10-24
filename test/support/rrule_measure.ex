@@ -49,24 +49,39 @@ defmodule Tempo.RRuleMeasure do
   """
   @spec occurrences(String.t() | map(), NaiveDateTime.t(), Date.t(), keyword()) ::
           [NaiveDateTime.t()]
-  def occurrences(rule, start, before, options \\ [])
+  def occurrences(rule, start, before, options \\ []) do
+    rule
+    |> stream(start, before, options)
+    |> Enum.to_list()
+  end
 
-  def occurrences(text, start, before, options) when is_binary(text),
-    do: occurrences(read(text, Keyword.get(options, :zone)), start, before, options)
+  @doc """
+  The occurrences `occurrences/4` gives, one at a time: a rule with no
+  `COUNT` or `UNTIL` is tried only as far as its occurrences are taken.
+  """
+  @spec stream(String.t() | map(), NaiveDateTime.t(), Date.t(), keyword()) ::
+          Enumerable.t(NaiveDateTime.t())
+  def stream(rule, start, before, options \\ [])
 
-  def occurrences(%{freq: _} = rule, %NaiveDateTime{} = start, %Date{} = before, _options) do
+  def stream(text, start, before, options) when is_binary(text) do
+    stream(read(text, Keyword.get(options, :zone)), start, before, options)
+  end
+
+  def stream(%{freq: _} = rule, %NaiveDateTime{} = start, %Date{} = before, _options) do
     first = NaiveDateTime.to_date(start)
 
     # A period's days are all of them, those before the start among them:
     # a position counts among the whole period's, and the start's own period
-    # is the first that counts.
+    # is the first that counts. The days are tried in order, one at a time,
+    # so the trial ends at the rule's last occurrence; a period is positioned
+    # once all of its days have been tried.
     first
     |> Date.add(-@longest_period)
     |> Date.range(Date.add(before, -1))
-    |> Enum.filter(&(in_step?(&1, first, rule) and admitted?(&1, first, rule)))
-    |> Enum.flat_map(&times(&1, start, rule))
+    |> Stream.filter(&(in_step?(&1, first, rule) and admitted?(&1, first, rule)))
+    |> Stream.flat_map(&times(&1, start, rule))
     |> positioned(first, rule)
-    |> Enum.filter(&(NaiveDateTime.compare(&1, start) != :lt))
+    |> Stream.filter(&(NaiveDateTime.compare(&1, start) != :lt))
     |> bounded(rule)
   end
 
@@ -231,20 +246,24 @@ defmodule Tempo.RRuleMeasure do
 
   ## The times of day on a day
 
+  # In the order of the clock, whatever order the rule names them in: the
+  # days come in order, so every occurrence then follows the one before.
   defp times(day, start, rule) do
-    for hour <- Map.get(rule, :byhour, [start.hour]),
-        minute <- Map.get(rule, :byminute, [start.minute]),
-        second <- Map.get(rule, :bysecond, [start.second]),
-        do: NaiveDateTime.new!(day, Time.new!(hour, minute, second))
+    times =
+      for hour <- Map.get(rule, :byhour, [start.hour]),
+          minute <- Map.get(rule, :byminute, [start.minute]),
+          second <- Map.get(rule, :bysecond, [start.second]),
+          do: NaiveDateTime.new!(day, Time.new!(hour, minute, second))
+
+    Enum.sort(times, NaiveDateTime)
   end
 
   ## Positions among a period's occurrences, and the end
 
   defp positioned(occurrences, _first, %{bysetpos: positions, freq: frequency}) do
     occurrences
-    |> Enum.sort(NaiveDateTime)
-    |> Enum.chunk_by(&period(NaiveDateTime.to_date(&1), frequency))
-    |> Enum.flat_map(fn of_period ->
+    |> Stream.chunk_by(&period(NaiveDateTime.to_date(&1), frequency))
+    |> Stream.flat_map(fn of_period ->
       positions
       |> Enum.map(&Enum.at(of_period, if(&1 > 0, do: &1 - 1, else: &1)))
       |> Enum.reject(&is_nil/1)
@@ -253,12 +272,19 @@ defmodule Tempo.RRuleMeasure do
     end)
   end
 
-  defp positioned(occurrences, _first, _rule), do: Enum.sort(occurrences, NaiveDateTime)
+  defp positioned(occurrences, _first, _rule) do
+    occurrences
+  end
 
-  defp bounded(occurrences, %{count: count}), do: Enum.take(occurrences, count)
+  defp bounded(occurrences, %{count: count}) do
+    Stream.take(occurrences, count)
+  end
 
-  defp bounded(occurrences, %{until: until}),
-    do: Enum.take_while(occurrences, &(NaiveDateTime.compare(&1, until) != :gt))
+  defp bounded(occurrences, %{until: until}) do
+    Stream.take_while(occurrences, &(NaiveDateTime.compare(&1, until) != :gt))
+  end
 
-  defp bounded(occurrences, _rule), do: occurrences
+  defp bounded(occurrences, _rule) do
+    occurrences
+  end
 end
