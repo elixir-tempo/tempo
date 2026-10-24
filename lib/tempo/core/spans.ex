@@ -378,7 +378,7 @@ defmodule Tempo.Spans do
       Keyword.has_key?(units, :selection) ->
         with {:ok, values} <- selected_values(value, options), do: each_spans_of(values, [])
 
-      not Unit.anchored?(units) and options[:within] != nil ->
+      not Unit.anchored?(units) and not is_nil(options[:within]) ->
         placed_value_spans(value, options[:within], Keyword.delete(options, :within))
 
       Expand.one_span?(units) ->
@@ -390,17 +390,21 @@ defmodule Tempo.Spans do
   end
 
   def placed(%Tempo{form: {:span, from, to}} = span, options) do
-    if options[:within] != nil and match?({:cycle, _}, frame(span)),
-      do: placed_span_spans(span, options[:within], Keyword.delete(options, :within)),
-      else: written_spans(span, from, to, options)
+    if not is_nil(options[:within]) and match?({:cycle, _}, frame(span)) do
+      placed_span_spans(span, options[:within], Keyword.delete(options, :within))
+    else
+      written_spans(span, from, to, options)
+    end
   end
 
   def placed(%Tempo{form: {:every, first, bound, rule}} = recurrence, options) do
     options = windowed_for(options, recurrence)
 
-    if rule == nil,
-      do: Recurrence.occurrences(first, bound, recurrence, options),
-      else: Recurrence.rule_occurrences(first, bound, rule, recurrence, options)
+    if is_nil(rule) do
+      Recurrence.occurrences(first, bound, recurrence, options)
+    else
+      Recurrence.rule_occurrences(first, bound, rule, recurrence, options)
+    end
   end
 
   # A set read from a stream gives its members' spans as they are asked for.
@@ -1308,7 +1312,7 @@ defmodule Tempo.Spans do
       Keyword.has_key?(units, :selection) ->
         selected_values(value, options)
 
-      not Unit.anchored?(units) and options[:within] != nil ->
+      not Unit.anchored?(units) and not is_nil(options[:within]) ->
         placed_members(value, options[:within], Keyword.delete(options, :within))
 
       Expand.one_span?(units) ->

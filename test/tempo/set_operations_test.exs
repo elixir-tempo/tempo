@@ -90,8 +90,8 @@ defmodule Tempo.SetOperationsTest do
     assert marked(outside) == Enum.sort(Sets.members_outside(a, b)),
            "members outside of #{inspect(a)} and #{inspect(b)}"
 
-    assert Tempo.overlaps?(sa, sb) == (Sets.shared(a, b) != [])
-    assert Tempo.within?(sa, sb) == (Sets.difference(a, b) == [])
+    assert Tempo.overlaps?(sa, sb) == match?([_ | _], Sets.shared(a, b))
+    assert Tempo.within?(sa, sb) == Enum.empty?(Sets.difference(a, b))
     assert Tempo.equal?(sa, sb) == (Sets.cover(a) == Sets.cover(b))
   end
 

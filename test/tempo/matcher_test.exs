@@ -36,19 +36,21 @@ defmodule Tempo.MatcherTest do
     end
 
     test "leaves every other rule to the engine" do
-      assert Matcher.compile(
-               [month: 11, selection: [day_of_week: 4, instance: 4]],
-               :year,
-               Calendar.ISO
-             ) == nil
+      assert is_nil(
+               Matcher.compile(
+                 [month: 11, selection: [day_of_week: 4, instance: 4]],
+                 :year,
+                 Calendar.ISO
+               )
+             )
 
-      assert Matcher.compile([all: [[day_of_week: 1, instance: 2]]], :month, Calendar.ISO) == nil
-      assert Matcher.compile([day_of_year: [1, 100, -1]], :year, Calendar.ISO) == nil
-      assert Matcher.compile([minute: 59], :hour, Calendar.ISO) == nil
-      assert Matcher.compile([day: {:mask, [1, :x]}], :month, Calendar.ISO) == nil
-      assert Matcher.compile([day: [1..-1//2]], :month, Calendar.ISO) == nil
-      assert Matcher.compile([month: [-1]], :year, Calendar.ISO) == nil
-      assert Matcher.compile([day_of_week: 1, roll: :nearest], :month, Calendar.ISO) == nil
+      assert is_nil(Matcher.compile([all: [[day_of_week: 1, instance: 2]]], :month, Calendar.ISO))
+      assert is_nil(Matcher.compile([day_of_year: [1, 100, -1]], :year, Calendar.ISO))
+      assert is_nil(Matcher.compile([minute: 59], :hour, Calendar.ISO))
+      assert is_nil(Matcher.compile([day: {:mask, [1, :x]}], :month, Calendar.ISO))
+      assert is_nil(Matcher.compile([day: [1..-1//2]], :month, Calendar.ISO))
+      assert is_nil(Matcher.compile([month: [-1]], :year, Calendar.ISO))
+      assert is_nil(Matcher.compile([day_of_week: 1, roll: :nearest], :month, Calendar.ISO))
     end
   end
 

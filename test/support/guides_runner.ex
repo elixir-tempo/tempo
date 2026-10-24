@@ -175,10 +175,10 @@ defmodule Tempo.GuidesRunner do
           String.starts_with?(trimmed, "iex>") ->
             {pushed(done, current), %{code: stripped(trimmed, "iex>"), expected: ""}, true}
 
-          String.starts_with?(trimmed, "...>") and current != nil ->
+          String.starts_with?(trimmed, "...>") and not is_nil(current) ->
             {done, %{current | code: current.code <> "\n" <> stripped(trimmed, "...>")}, true}
 
-          current == nil or not open? ->
+          is_nil(current) or not open? ->
             {done, current, open?}
 
           trimmed == "" or String.starts_with?(trimmed, "#") ->

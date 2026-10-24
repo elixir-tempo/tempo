@@ -24,7 +24,7 @@ defmodule Tempo.GuidesTest do
 
   for page <- @pages do
     test "the code in #{page} runs and answers as written" do
-      assert GuidesRunner.failures(unquote(page)) == []
+      assert [] = GuidesRunner.failures(unquote(page))
     end
   end
 

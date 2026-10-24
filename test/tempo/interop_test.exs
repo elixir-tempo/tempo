@@ -85,7 +85,7 @@ defmodule Tempo.InteropTest do
                ])
 
       assert IntervalSet.count(set) == 2
-      assert set.zone == nil
+      assert is_nil(set.zone)
     end
 
     test "a member with no zone beside a zoned one is refused" do

@@ -191,7 +191,7 @@ defmodule Tempo.CalendarsTest do
       task =
         ~s({"@type": "Task", "uid": "t", "updated": "2026-06-01T09:00:00Z", "title": "Do it"})
 
-      assert texts(JSCalendar.parse(task)) == []
+      assert [] = texts(JSCalendar.parse(task))
 
       json = ~s({
         "@type": "Event", "uid": "e", "updated": "2026-06-01T09:00:00Z", "start": "2026-06-01T09:00:00",

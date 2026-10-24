@@ -184,10 +184,11 @@ defmodule Tempo.Unit do
   end
 
   defp chained([{unit, held} | rest], first, previous) do
-    if compare(unit, first) == :lt and
-         (previous == nil or follows?(unit, previous)),
-       do: [{unit, held} | chained(rest, first, unit)],
-       else: []
+    if compare(unit, first) == :lt and (is_nil(previous) or follows?(unit, previous)) do
+      [{unit, held} | chained(rest, first, unit)]
+    else
+      []
+    end
   end
 
   defp chained([], _first, _previous), do: []
@@ -339,7 +340,13 @@ defmodule Tempo.Unit do
   margin and a century are worked out first.
   """
   @spec plain?(units()) :: boolean()
-  def plain?(units), do: units != [] and Enum.all?(units, &plain_unit?/1)
+  def plain?([]) do
+    false
+  end
+
+  def plain?([_ | _] = units) do
+    Enum.all?(units, &plain_unit?/1)
+  end
 
   defp plain_unit?({:microsecond, {microseconds, precision}}),
     do: is_integer(microseconds) and is_integer(precision)

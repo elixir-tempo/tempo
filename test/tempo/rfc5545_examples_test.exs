@@ -84,6 +84,6 @@ defmodule Tempo.Rfc5545ExamplesTest do
   test "the standard's examples are all read" do
     examples = Rfc5545Examples.all()
     assert Enum.count_until(examples, 40) == 39
-    assert Enum.all?(examples, &(&1.rules != [] and &1.occurrences != []))
+    assert Enum.all?(examples, &match?(%{rules: [_ | _], occurrences: [_ | _]}, &1))
   end
 end

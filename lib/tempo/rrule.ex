@@ -635,7 +635,7 @@ defmodule Tempo.RRule do
   # month it names, one period a year as RFC 5545 counts it.
   defp lowered(rule, cadence, duration) do
     numbered = numbered_weekday(rule)
-    in_months? = rule.freq == :year and numbered != nil and Map.has_key?(rule, :bymonth)
+    in_months? = rule.freq == :year and not is_nil(numbered) and Map.has_key?(rule, :bymonth)
 
     parts =
       []
@@ -653,7 +653,10 @@ defmodule Tempo.RRule do
       |> numbered_before_times(numbered, in_months?)
       |> windowed(duration)
 
-    if parts == [], do: {cadence, {:ok, nil}}, else: {cadence, {:ok, parts}}
+    case parts do
+      [] -> {cadence, {:ok, nil}}
+      [_ | _] -> {cadence, {:ok, parts}}
+    end
   end
 
   # A numbered weekday (`2MO`) is the nth of its weekday in the period, and
@@ -1017,11 +1020,11 @@ defmodule Tempo.RRule do
 
   # A numbered weekday is of a monthly rule, or a yearly one with no week of
   # the year; a position alone, with no part to count among, is of none.
-  defp positioned(nil, instance, [], frequency, r) when instance != nil,
+  defp positioned(nil, instance, [], frequency, r) when not is_nil(instance),
     do: {:error, no_rrule(r, {:part_at, :instance, frequency})}
 
   defp positioned(weekday, instance, parts, frequency, r)
-       when is_integer(weekday) and instance != nil do
+       when is_integer(weekday) and not is_nil(instance) do
     if frequency == :month or (frequency == :year and not Keyword.has_key?(parts, :week)),
       do: :ok,
       else: {:error, no_rrule(r, {:part_at, :instance, frequency})}

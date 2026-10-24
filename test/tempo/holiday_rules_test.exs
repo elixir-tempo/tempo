@@ -35,7 +35,7 @@ defmodule Tempo.HolidayRulesTest do
       assert Date.day_of_week(~D[2022-01-01]) == 6
 
       assert dates(rule, ~o"2021Y") == [friday_before(~D[2022-01-01])]
-      assert dates(rule, ~o"2022Y") == []
+      assert [] = dates(rule, ~o"2022Y")
     end
 
     test "lands in the year after, where the weekday is" do
@@ -43,7 +43,7 @@ defmodule Tempo.HolidayRulesTest do
       rule = "R/../P1Y/FLLL12M31D6KN/P8DN1K-1IN"
       assert Date.day_of_week(~D[2022-12-31]) == 6
 
-      assert dates(rule, ~o"2022Y") == []
+      assert [] = dates(rule, ~o"2022Y")
       assert dates(rule, ~o"2023Y") == [monday_after(~D[2022-12-31])]
       assert dates(rule, ~o"2021Y/2023Y") == [monday_after(~D[2022-12-31])]
     end
@@ -56,7 +56,7 @@ defmodule Tempo.HolidayRulesTest do
       assert eid == ~D[2006-12-31] and Date.day_of_week(eid) == 7
 
       rule = "R/../P1Y/FLLL12M10D1KN/P8DN2K-1IN[u-ca=islamic-umalqura]"
-      assert dates(rule, ~o"2006Y") == []
+      assert [] = dates(rule, ~o"2006Y")
       assert dates(rule, ~o"2007Y") == [monday_after(eid)]
     end
   end

@@ -94,14 +94,14 @@ defmodule Tempo.DomainTest do
       assert years(Tempo.to_interval(domain, within: ~o"2028Y/2031Y")) == [2028, 2029, 2030, 2031]
 
       christmas = ~o"R/{2020Y..2030Y}/P1Y/FL12M25DN"
-      assert years(Tempo.to_interval(christmas, within: ~o"2060Y")) == []
+      assert [] = years(Tempo.to_interval(christmas, within: ~o"2060Y"))
       assert years(Tempo.to_interval(christmas, within: ~o"2025Y12M")) == [2025]
-      assert years(Tempo.to_interval(christmas, within: ~o"2025Y11M")) == []
+      assert [] = years(Tempo.to_interval(christmas, within: ~o"2025Y11M"))
     end
 
     test "keeps its exclusions and its filter within a window" do
       excluding = ~o"R/{2020Y..2030Y,^2026Y}/P1Y/FL12M25DN"
-      assert years(Tempo.to_interval(excluding, within: ~o"2026Y")) == []
+      assert [] = years(Tempo.to_interval(excluding, within: ~o"2026Y"))
       assert years(Tempo.to_interval(excluding, within: ~o"2025Y/2028Y")) == [2025, 2027, 2028]
 
       assert years(Tempo.to_interval(~o"R/{2020Y..2030Y}e/P1Y/FL1M1DN", within: ~o"2021Y/2024Y")) ==
@@ -200,7 +200,7 @@ defmodule Tempo.DomainTest do
     end
 
     test "has nothing in a window before it, and with no window has no end" do
-      assert years(Tempo.to_interval(~o"R/{2030Y..}/P1Y/FL1M2DN", within: ~o"2026Y")) == []
+      assert [] = years(Tempo.to_interval(~o"R/{2030Y..}/P1Y/FL1M2DN", within: ~o"2026Y"))
       assert {:error, %Tempo.ConversionError{}} = Tempo.to_interval(~o"R/{2023Y..}/P1Y/FL1M2DN")
     end
   end

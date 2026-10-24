@@ -618,8 +618,9 @@ defmodule Tempo.IntervalSet do
   def from_stream(enumerable, options \\ []) do
     Options.check!(options, [:metadata], "Tempo.IntervalSet.from_stream/2")
 
-    if Enumerable.impl_for(enumerable) == nil,
-      do: raise(ArgumentError, "a set is read from an enumerable, not #{inspect(enumerable)}")
+    if is_nil(Enumerable.impl_for(enumerable)) do
+      raise ArgumentError, "a set is read from an enumerable, not #{inspect(enumerable)}"
+    end
 
     %Tempo{form: {:all, enumerable}, metadata: Keyword.get(options, :metadata, %{})}
   end

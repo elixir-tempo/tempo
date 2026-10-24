@@ -94,7 +94,7 @@ defmodule Tempo.Interop do
 
   def to(%Tempo{form: {:value, units}} = value) do
     date? = Keyword.has_key?(units, :day) and Keyword.has_key?(units, :year)
-    zoned? = value.zone != nil or value.shift != nil
+    zoned? = not is_nil(value.zone) or not is_nil(value.shift)
     filled(value, date?, Keyword.has_key?(units, :hour), zoned?)
   end
 

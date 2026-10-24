@@ -623,7 +623,7 @@ defmodule Tempo.ICal.Test do
 
       # No fallback metadata — all fully materialised.
       assert Enum.all?(IntervalSet.members(set), fn iv ->
-               iv.metadata[:recurrence_note] == nil
+               is_nil(iv.metadata[:recurrence_note])
              end)
 
       pairs =
@@ -910,7 +910,7 @@ defmodule Tempo.ICal.Test do
       # input parses to an empty calendar, not a raise. We pass
       # that through — the caller sees zero intervals.
       assert {:ok, set} = ICal.parse("not valid ical")
-      assert IntervalSet.members(set) == []
+      assert [] = IntervalSet.members(set)
     end
   end
 
@@ -1045,13 +1045,13 @@ defmodule Tempo.ICal.Test do
       # to prove we don't crash on incomplete events.
       path = Path.join(@fixtures_dir, "attendees.ics")
       {:ok, set} = ICal.parse_file(path)
-      assert IntervalSet.members(set) == []
+      assert [] = IntervalSet.members(set)
     end
 
     test "timezone_event.ics parses (zoned events)" do
       path = Path.join(@fixtures_dir, "timezone_event.ics")
       assert {:ok, set} = ICal.parse_file(path)
-      assert IntervalSet.members(set) != []
+      assert [_ | _] = IntervalSet.members(set)
     end
 
     test "calendar_name.ics surfaces X-WR-CALNAME on the set's metadata" do
@@ -1090,7 +1090,7 @@ defmodule Tempo.ICal.Test do
       test "parses without error and produces an IntervalSet", %{ics: ics} do
         assert {:ok, set} = ICal.parse(ics)
         assert %Tempo{} = set
-        assert IntervalSet.members(set) != []
+        assert [_ | _] = IntervalSet.members(set)
       end
 
       test "preserves every event's summary on its interval", %{ics: ics} do
@@ -1102,7 +1102,7 @@ defmodule Tempo.ICal.Test do
           |> Enum.map(& &1.metadata[:summary])
           |> Enum.reject(&is_nil/1)
 
-        assert summaries != []
+        assert [_ | _] = summaries
       end
 
       test "calendar name from X-WR-CALNAME is captured", %{ics: ics} do

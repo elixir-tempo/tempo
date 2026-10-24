@@ -331,7 +331,7 @@ defmodule Tempo.DayLeftOutTest do
 
       # Ten o'clock on each Friday: the Friday left out has no ten o'clock.
       assert starts(Tempo.select(december, Tempo.selection!(day_of_week: 5, hour: 10))) == fridays
-      assert starts(Tempo.select(december, Tempo.selection!(day: 30, hour: 10))) == []
+      assert [] = starts(Tempo.select(december, Tempo.selection!(day: 30, hour: 10)))
     end
 
     test "is so for workdays" do

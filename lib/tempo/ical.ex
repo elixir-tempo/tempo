@@ -568,7 +568,10 @@ if Code.ensure_loaded?(ICal) do
           n == 0
         end)
 
-      if units == [], do: nil, else: %Duration{units: units}
+      case units do
+        [] -> nil
+        [_ | _] -> %Duration{units: units}
+      end
     end
 
     defp duration(_event), do: nil

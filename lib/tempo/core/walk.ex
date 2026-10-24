@@ -35,7 +35,7 @@ defmodule Tempo.Walk do
   # A step is a value's units, or `{:shifted, units, shift}` for a reading a
   # zone's clock shows twice.
   def steps({start, stop}, unit, frame)
-      when is_integer(start) and (is_integer(stop) or stop == nil) do
+      when is_integer(start) and (is_integer(stop) or is_nil(stop)) do
     cond do
       clock_unit?(unit) -> {:ok, clock_steps(start, stop, unit, frame)}
       Unit.calendar?(unit) or unit == :quarter -> {:ok, day_steps(start, stop, unit, frame)}
@@ -143,7 +143,7 @@ defmodule Tempo.Walk do
 
     {first_day, nil}
     |> Stream.unfold(fn
-      {day, _month} when last_day != nil and day > last_day ->
+      {day, _month} when not is_nil(last_day) and day > last_day ->
         nil
 
       {day, month} ->
@@ -160,7 +160,7 @@ defmodule Tempo.Walk do
 
     first_day
     |> Stream.unfold(fn
-      day when last_day != nil and day > last_day -> nil
+      day when not is_nil(last_day) and day > last_day -> nil
       day -> {at_day(day, unit, calendar), next_period(day, unit, calendar)}
     end)
   end
@@ -219,7 +219,7 @@ defmodule Tempo.Walk do
 
     start
     |> Stream.iterate(&next_tick(&1, step, frame))
-    |> Stream.take_while(fn tick -> stop == nil or tick < stop end)
+    |> Stream.take_while(fn tick -> is_nil(stop) or tick < stop end)
     |> Stream.map(fn tick -> reading(tick, written_unit(unit), calendar, frame) end)
   end
 

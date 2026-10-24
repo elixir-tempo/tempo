@@ -590,7 +590,8 @@ defmodule Tempo.Algebra do
   end
 
   defp member_ended?(open, covering) do
-    (open.a != nil and open.a not in covering.a) or (open.b != nil and open.b not in covering.b)
+    (not is_nil(open.a) and open.a not in covering.a) or
+      (not is_nil(open.b) and open.b not in covering.b)
   end
 
   # ── The sweep, one result at a time ───────────────────────────────────
@@ -858,22 +859,36 @@ defmodule Tempo.Algebra do
   they cover the same points.
   """
   @spec holds?(atom(), [positioned()], [positioned()], frame()) :: boolean()
-  def holds?(:within, a, b, frame), do: difference(a, b, frame) == []
+  def holds?(:within, a, b, frame) do
+    Enum.empty?(difference(a, b, frame))
+  end
+
   def holds?(:contains, a, b, frame), do: holds?(:within, b, a, frame)
-  def holds?(:overlaps, a, b, frame), do: intersection(a, b, frame) != []
+
+  def holds?(:overlaps, a, b, frame) do
+    match?([_ | _], intersection(a, b, frame))
+  end
+
   def holds?(:disjoint, a, b, frame), do: not holds?(:overlaps, a, b, frame)
 
   def holds?(:equal, a, b, frame),
     do: extents(covered(a, 1, frame)) == extents(covered(b, 1, frame))
 
-  def holds?(:before, a, b, _frame), do: a != [] and b != [] and last_stop(a) <= first_start(b)
+  def holds?(:before, [_ | _] = a, [_ | _] = b, _frame) do
+    last_stop(a) <= first_start(b)
+  end
+
+  def holds?(:before, _a, _b, _frame) do
+    false
+  end
+
   def holds?(:after, a, b, frame), do: holds?(:before, b, a, frame)
 
   def holds?(:adjacent, a, b, frame) do
     ca = extents(covered(a, 1, frame))
     cb = extents(covered(b, 1, frame))
 
-    ca != [] and cb != [] and
+    match?([_ | _], ca) and match?([_ | _], cb) and
       (elem(List.last(ca), 1) == elem(hd(cb), 0) or elem(List.last(cb), 1) == elem(hd(ca), 0))
   end
 

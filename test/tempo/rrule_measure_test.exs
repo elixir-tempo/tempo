@@ -53,8 +53,7 @@ defmodule Tempo.RRuleMeasureTest do
   describe "the measure" do
     # The examples it can say: of days or coarser, with weeks from Monday,
     # and none left out by an EXDATE.
-    for {example, index} <- Enum.with_index(Rfc5545Examples.all()),
-        example.excluded == [],
+    for {%{excluded: []} = example, index} <- Enum.with_index(Rfc5545Examples.all()),
         rule <- example.rules,
         not String.contains?(rule, ["HOURLY", "MINUTELY", "SECONDLY", "WKST=SU"]) do
       test "gives what RFC 5545 lists for #{rule} (#{example.title})" do

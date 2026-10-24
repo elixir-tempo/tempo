@@ -82,7 +82,7 @@ defmodule Tempo.NotAnExpressionTest do
           not named?(outcome),
           do: {module, name, arity, outcome}
 
-    assert unnamed == []
+    assert [] = unnamed
   end
 
   test "every function given a wrong argument after a right one names it, and does not crash" do
@@ -94,7 +94,7 @@ defmodule Tempo.NotAnExpressionTest do
           match?({:raised, %crash{}} when crash in @crashes, outcome),
           do: {module, name, arity, first, outcome}
 
-    assert crashed == []
+    assert [] = crashed
   end
 
   test "the error is :not_an_expression where the argument is the one wrong" do

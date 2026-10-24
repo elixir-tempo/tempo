@@ -332,7 +332,10 @@ defmodule Tempo.Children do
             start < stop,
             do: {start, stop}
 
-      if pairs == [], do: {:error, conversion(span, :open)}, else: {:ok, pairs}
+      case pairs do
+        [] -> {:error, conversion(span, :open)}
+        [_ | _] -> {:ok, pairs}
+      end
     end
   end
 

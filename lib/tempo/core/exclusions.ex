@@ -95,15 +95,17 @@ defmodule Tempo.Exclusions do
     {left, from} =
       Enum.reduce(out, {[], start}, fn {s, e}, {left, from} ->
         cond do
-          e <= from or (stop != nil and s >= stop) -> {left, from}
+          e <= from or (not is_nil(stop) and s >= stop) -> {left, from}
           s > from -> {[{from, s} | left], e}
           true -> {left, max(from, e)}
         end
       end)
 
-    if stop == nil or from < stop,
-      do: Enum.reverse([{from, stop} | left]),
-      else: Enum.reverse(left)
+    if is_nil(stop) or from < stop do
+      Enum.reverse([{from, stop} | left])
+    else
+      Enum.reverse(left)
+    end
   end
 
   defp piece(%Tempo{form: {:span, from, to}} = span, {start, stop}) do
@@ -111,7 +113,11 @@ defmodule Tempo.Exclusions do
     first = Spans.at_position(start, model, :start, span.calendar, span.zone)
 
     last =
-      if stop == nil, do: to, else: Spans.at_position(stop, model, :end, span.calendar, span.zone)
+      if is_nil(stop) do
+        to
+      else
+        Spans.at_position(stop, model, :end, span.calendar, span.zone)
+      end
 
     %{span | form: {:span, first, last}}
   end

@@ -187,7 +187,7 @@ defmodule Tempo.RRuleTest do
       assert Tempo.select(~o"2026", ~o"13D5K") ==
                {:ok, ~o"{2026Y2M13D,2026Y3M13D,2026Y11M13D}"}
 
-      assert Enum.to_list(~o"2026Y3M14D5K") == []
+      assert [] = Enum.to_list(~o"2026Y3M14D5K")
     end
 
     test "an occurrence keeps the start's time of day and the event's length" do
@@ -295,7 +295,7 @@ defmodule Tempo.RRuleTest do
             {"FREQ=DAILY;BYSETPOS=2", ~o"2026-01-01"},
             {"FREQ=HOURLY;INTERVAL=12;BYHOUR=9", ~o"2026-01-01T10"}
           ] do
-        assert Enum.take(RRule.parse!(text, from: from), 1) == [], text
+        assert Enum.empty?(Enum.take(RRule.parse!(text, from: from), 1)), text
       end
 
       april_31st = RRule.parse!("FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=31", from: ~o"2026-01-01")

@@ -120,7 +120,7 @@ defmodule Tempo.Core.CalendarTest do
           # without a gap. A split month of a week (25 to 31 December in
           # `Calendrical.Julian.Dec25`) owns only the week its first day is in.
           middle = div(month_first + month_after, 2)
-          assert weeks != []
+          assert [_ | _] = weeks
 
           if month_after - month_first >= 14 do
             assert Enum.any?(weeks, fn {lo, hi} -> lo <= middle and middle < hi end)

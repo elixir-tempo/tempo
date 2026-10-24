@@ -43,7 +43,7 @@ defmodule Tempo.Format do
     {within, options} = Keyword.pop(options, :within)
 
     cond do
-      cyclic?(expression) and within == nil -> cyclic(expression, options)
+      cyclic?(expression) and is_nil(within) -> cyclic(expression, options)
       Spans.singular?(expression) -> single(expression, options)
       masked?(expression) -> masked(expression, within, options)
       true -> plural(expression, within, options)
@@ -67,9 +67,11 @@ defmodule Tempo.Format do
          {:ok, spans} <- Limit.take(spans, value) do
       extents = Enum.map(spans, &Spans.extent/1)
 
-      if spans != [] and unbroken?(extents),
-        do: cover(value, hd(spans), hd(extents), List.last(extents), options),
-        else: plural(value, within, options)
+      if match?([_ | _], spans) and unbroken?(extents) do
+        cover(value, hd(spans), hd(extents), List.last(extents), options)
+      else
+        plural(value, within, options)
+      end
     end
   end
 

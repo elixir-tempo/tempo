@@ -322,7 +322,7 @@ defmodule Tempo.Recurrence do
   # period, where its building reckoned it, goes on with it.
   defp eligible_at({period, extent, carried}, first) do
     case eligible(period, first) do
-      ^period when extent != nil -> {period, extent, carried}
+      ^period when not is_nil(extent) -> {period, extent, carried}
       narrowed -> {narrowed, period_extent(narrowed), carried}
     end
   end
@@ -399,9 +399,11 @@ defmodule Tempo.Recurrence do
   defp range_start(_domain), do: nil
 
   defp in_range_years(stream, %Tempo{form: {:when, %Tempo{} = inner, [years: filter]}}, calendar) do
-    if range_start(inner) != nil or Exclusions.every_year?(inner),
-      do: Stream.filter(stream, &Exclusions.in_years?(&1.span, filter, calendar)),
-      else: stream
+    if not is_nil(range_start(inner)) or Exclusions.every_year?(inner) do
+      Stream.filter(stream, &Exclusions.in_years?(&1.span, filter, calendar))
+    else
+      stream
+    end
   end
 
   defp in_range_years(stream, _from, _calendar), do: stream
@@ -910,7 +912,7 @@ defmodule Tempo.Recurrence do
   defp cadence(from, to, base, recurrence) do
     with {:ok, {start, stop}} <- Spans.extent(base) do
       cond do
-        start == nil or stop == nil ->
+        is_nil(start) or is_nil(stop) ->
           {:error, conversion(recurrence, :open)}
 
         match?({:cycle, _}, Spans.frame(base)) ->

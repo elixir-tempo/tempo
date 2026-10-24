@@ -21,7 +21,7 @@ defmodule Tempo.PlacedTest do
   test "a span with an open end is placed with no position at that end" do
     {:ok, [placed]} = Spans.placed(~o"2026-06-15/..")
     assert is_integer(placed.start)
-    assert placed.stop == nil
+    assert is_nil(placed.stop)
     refute Placed.bounded?(placed)
   end
 

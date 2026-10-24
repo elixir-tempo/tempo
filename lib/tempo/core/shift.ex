@@ -308,16 +308,22 @@ defmodule Tempo.Shift do
   # agree on, with the placed units stripped, or an error where they differ.
   defp shift_unanchored(%Tempo{form: {:value, units}} = value, by) do
     cyclic = Unit.cyclic(units)
-    coarsest = if cyclic == [], do: :year, else: Unit.coarsest(cyclic)
+
+    coarsest =
+      case cyclic do
+        [] -> :year
+        [_ | _] -> Unit.coarsest(cyclic)
+      end
 
     answers =
       value.calendar
       |> sample_years()
       |> Enum.map(fn year ->
         prefix =
-          if cyclic == [],
-            do: [year: year],
-            else: Expand.filled_to(placing(year, coarsest), coarsest)
+          case cyclic do
+            [] -> [year: year]
+            [_ | _] -> Expand.filled_to(placing(year, coarsest), coarsest)
+          end
 
         placed_units = prefix ++ cyclic
         placed = %{value | form: {:value, placed_units}}
@@ -421,14 +427,19 @@ defmodule Tempo.Shift do
 
   # The shift left every plural unit as it was, and the rest the same in all.
   defp passed_by?(plural, members, shifted) do
-    Enum.zip(members, shifted)
-    |> Enum.all?(fn {%Tempo{form: {:value, m}}, %Tempo{form: {:value, s}}} ->
-      Enum.all?(plural, &(Keyword.get(m, &1) == Keyword.get(s, &1)))
-    end) and
+    plural_kept? =
+      members
+      |> Enum.zip(shifted)
+      |> Enum.all?(fn {%Tempo{form: {:value, m}}, %Tempo{form: {:value, s}}} ->
+        Enum.all?(plural, &(Keyword.get(m, &1) == Keyword.get(s, &1)))
+      end)
+
+    rests =
       shifted
       |> Enum.map(fn %Tempo{form: {:value, s}} -> Keyword.drop(s, plural) end)
       |> Enum.uniq()
-      |> length() == 1
+
+    plural_kept? and match?([_], rests)
   end
 
   defp kept({unit, value}, units, plural),
@@ -645,9 +656,11 @@ defmodule Tempo.Shift do
   defp landed(start, total, busy, extended, %Duration{units: by}, frame) do
     by_days? = Enum.all?(by, fn {unit, _} -> unit in [:week, :day] end)
 
-    if by_days? and Unit.clock_units(extended) == [],
-      do: stepped_days(start, div(total, @day), busy, frame),
-      else: walked(start, total, busy)
+    if by_days? and Enum.empty?(Unit.clock_units(extended)) do
+      stepped_days(start, div(total, @day), busy, frame)
+    else
+      walked(start, total, busy)
+    end
   end
 
   defp walked(start, total, busy) when total >= 0 do
@@ -819,7 +832,7 @@ defmodule Tempo.Shift do
   @doc "A value with the next finer unit written as the values it takes, down to a unit when one is given."
   @spec extend(expression(), Unit.t() | nil) :: {:ok, expression()} | {:error, Exception.t()}
   def extend(%Tempo{form: {:value, units}} = value, unit) do
-    if unit != nil and Unit.compare(unit, Unit.grain(Unit.resolution(units))) != :gt do
+    if not is_nil(unit) and Unit.compare(unit, Unit.grain(Unit.resolution(units))) != :gt do
       {:ok, value}
     else
       with {:ok, extended} <- extend_once(value, units), do: extend_on(extended, unit)
@@ -1031,7 +1044,7 @@ defmodule Tempo.Shift do
 
   # A value in a named zone written with a time shift takes the zone's shift where it lands.
   defp rezoned(%Tempo{zone: %Zone{} = zone} = moved, %Tempo{shift: shift}, position)
-       when shift != nil do
+       when not is_nil(shift) do
     offset = Zone.offset_at_utc(zone, position)
     hours = div(offset, 3_600_000_000)
     minutes = div(rem(offset, 3_600_000_000), 60_000_000)

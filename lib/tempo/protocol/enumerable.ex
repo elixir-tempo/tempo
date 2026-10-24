@@ -44,8 +44,11 @@ defimpl Enumerable, for: Tempo do
   @impl Enumerable
   def member?(%Tempo{} = expression, %Tempo{} = element) do
     case Tempo.Algebra.aligned(element, expression, []) do
-      {:ok, frame, pe, px} -> {:ok, pe != [] and Tempo.Algebra.holds?(:within, pe, px, frame)}
-      {:error, _} -> {:ok, false}
+      {:ok, frame, pe, px} ->
+        {:ok, match?([_ | _], pe) and Tempo.Algebra.holds?(:within, pe, px, frame)}
+
+      {:error, _} ->
+        {:ok, false}
     end
   end
 

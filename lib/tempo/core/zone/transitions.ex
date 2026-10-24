@@ -80,7 +80,7 @@ defmodule Tempo.Zone.Transitions.Tz do
     {changes, _earliest} =
       Enum.flat_map_reduce(periods, nil, fn
         {from, {utc_offset, std_offset, _abbreviation}, _before, _rule}, earliest
-        when earliest == nil or from < earliest ->
+        when is_nil(earliest) or from < earliest ->
           {[{from, utc_offset + std_offset}], from}
 
         _shadowed, earliest ->
@@ -94,6 +94,9 @@ defmodule Tempo.Zone.Transitions.Tz do
 
   # The latest period carries a rule where the zone's changes go on: from
   # its start the list is no longer whole.
-  defp rule_from([{from, _period, _before, rule} | _earlier]) when rule != nil, do: from
+  defp rule_from([{from, _period, _before, rule} | _earlier]) when not is_nil(rule) do
+    from
+  end
+
   defp rule_from(_periods), do: nil
 end

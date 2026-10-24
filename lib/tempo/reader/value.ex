@@ -128,7 +128,7 @@ defmodule Tempo.Reader.Value do
   # The size is read as a duration's units, with a `T` of its own before the clock's.
   defp designated(held, <<"G", rest::binary>>, _context) do
     case Duration.units(rest, :date) do
-      {:ok, duration, <<"U", rest::binary>>} when duration != [] ->
+      {:ok, [_ | _] = duration, <<"U", rest::binary>>} ->
         {:ok, :group, {held, duration}, rest}
 
       _ ->

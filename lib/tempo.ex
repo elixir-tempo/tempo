@@ -2504,7 +2504,7 @@ defmodule Tempo do
 
     clock =
       cond do
-        clock == [] -> [hour: 0, minute: 0]
+        Enum.empty?(clock) -> [hour: 0, minute: 0]
         Keyword.has_key?(clock, :minute) -> clock
         true -> clock ++ [minute: 0]
       end

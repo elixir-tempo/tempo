@@ -49,7 +49,7 @@ defmodule Tempo.Sigils do
 
   """
   defmacro sigil_o({:<<>>, _meta, [text]}, modifiers) when is_binary(text) do
-    if modifiers != [] do
+    if match?([_ | _], modifiers) do
       raise ArgumentError,
             "~o takes no modifiers; #{inspect(List.to_string(modifiers))} was given on #{inspect(text)}"
     end

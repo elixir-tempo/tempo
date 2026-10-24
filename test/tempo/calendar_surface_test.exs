@@ -24,7 +24,7 @@ defmodule Tempo.CalendarSurfaceTest do
           calendar_module?(atom),
           do: {module, atom}
 
-    assert named == []
+    assert [] = named
   end
 
   # The adapter, and the Gregorian calendars of other week starts it names,

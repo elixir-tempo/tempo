@@ -273,10 +273,9 @@ defmodule Tempo.Matrix.Reference do
     {year, week} = :calendar.iso_week_number(Date.to_erl(date))
 
     weekday =
-      if day == [] do
-        []
-      else
-        [day_of_week: Date.day_of_week(date)]
+      case day do
+        [] -> []
+        [_ | _] -> [day_of_week: Date.day_of_week(date)]
       end
 
     [year: year, week: week] ++ weekday

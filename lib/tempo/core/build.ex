@@ -77,7 +77,7 @@ defmodule Tempo.Build do
 
   defp known(parts) do
     cond do
-      not Keyword.keyword?(parts) or parts == [] ->
+      not Keyword.keyword?(parts) or Enum.empty?(parts) ->
         {:error, argument("a selection is a keyword list of parts, not #{inspect(parts)}")}
 
       unknown = Enum.find(Keyword.keys(parts), &(&1 not in @parts)) ->
@@ -217,7 +217,10 @@ defmodule Tempo.Build do
   end
 
   defp cadence(%Duration{units: [_ | _]} = cadence), do: {:ok, cadence}
-  defp cadence(units) when is_list(units) and units != [], do: Duration.new(units)
+
+  defp cadence([_ | _] = units) do
+    Duration.new(units)
+  end
 
   defp cadence(other),
     do: {:error, argument("a cadence is a duration or its units, not #{inspect(other)}")}
@@ -291,7 +294,7 @@ defmodule Tempo.Build do
   defp bound(count, nil) when is_integer(count) and count > 0, do: {:ok, count}
   defp bound(nil, %Tempo{form: {:value, _}} = until), do: {:ok, until}
 
-  defp bound(count, until) when count != nil and until != nil,
+  defp bound(count, until) when not is_nil(count) and not is_nil(until),
     do: {:error, argument("a recurrence ends by :count or by :until, not by both")}
 
   defp bound(count, nil),

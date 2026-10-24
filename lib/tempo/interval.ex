@@ -324,7 +324,10 @@ defmodule Tempo.Interval do
   defp instant(nil, _interval), do: {:ok, nil}
 
   defp instant(position, %Tempo{calendar: calendar, zone: zone} = interval) do
-    shift = if zone == nil and Spans.frame(interval) == :utc, do: [hour: 0]
+    shift =
+      if is_nil(zone) and Spans.frame(interval) == :utc do
+        [hour: 0]
+      end
 
     model = %Tempo{
       form:
@@ -405,7 +408,7 @@ defmodule Tempo.Interval do
 
   def spans_leap_second?(%Tempo{} = interval) do
     case LeapSeconds.spanned(interval) do
-      {:ok, dates} -> dates != []
+      {:ok, dates} -> match?([_ | _], dates)
       {:error, exception} -> raise exception
     end
   end

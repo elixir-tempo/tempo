@@ -30,14 +30,14 @@ defmodule Tempo.PartsTest do
   end
 
   test "an expression that names several or none answers nil" do
-    assert Tempo.year(~o"202XY6M15D") == nil
-    assert Tempo.day(~o"2026Y6MXD") == nil
-    assert Tempo.week(~o"2026-06") == nil
-    assert Tempo.hour(~o"2026-06-15") == nil
+    assert is_nil(Tempo.year(~o"202XY6M15D"))
+    assert is_nil(Tempo.day(~o"2026Y6MXD"))
+    assert is_nil(Tempo.week(~o"2026-06"))
+    assert is_nil(Tempo.hour(~o"2026-06-15"))
     assert Tempo.day(~o"2026-06-15T10/2026-06-15T17") == 15
-    assert Tempo.hour(~o"2026-06-15T10/2026-06-15T17") == nil
+    assert is_nil(Tempo.hour(~o"2026-06-15T10/2026-06-15T17"))
     assert Tempo.month(~o"{2026-06-01,2026-06-15}") == 6
-    assert Tempo.day_of_week(~o"6M15D") == nil
+    assert is_nil(Tempo.day_of_week(~o"6M15D"))
   end
 
   test "resolution, anchored, zoned, bounded and empty" do
@@ -67,7 +67,7 @@ defmodule Tempo.PartsTest do
              day: :uncertain
            }
 
-    assert Tempo.qualification(~o"2026-06-15", :day) == nil
+    assert is_nil(Tempo.qualification(~o"2026-06-15", :day))
     assert Tempo.put_metadata(~o"2026-06-15", %{a: 1}).metadata == %{a: 1}
   end
 

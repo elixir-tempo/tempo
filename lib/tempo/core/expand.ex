@@ -45,7 +45,8 @@ defmodule Tempo.Expand do
     units = Unit.cyclic(units)
 
     Unit.concrete?(units) and annotation_last?(units) and each_within_its_parent?(units) and
-      (units == [] or match?([{unit, _} | _] when unit in [:century, :decade, :year], units) or
+      (Enum.empty?(units) or
+         match?([{unit, _} | _] when unit in [:century, :decade, :year], units) or
          not Unit.anchored?(units))
   end
 
@@ -129,7 +130,7 @@ defmodule Tempo.Expand do
       contains?(unit, held, next) ->
         [{next, next_held} | fill_from(next, next_held, rest)]
 
-      Unit.child(unit) == nil ->
+      is_nil(Unit.child(unit)) ->
         [{next, next_held} | fill_from(next, next_held, rest)]
 
       true ->
@@ -152,7 +153,8 @@ defmodule Tempo.Expand do
   def filled_to(prefix, unit) do
     {last, _} = List.last(prefix) || {nil, nil}
 
-    if last == nil or Unit.grain(last) == unit or contains?(last, Keyword.get(prefix, last), unit) do
+    if is_nil(last) or Unit.grain(last) == unit or
+         contains?(last, Keyword.get(prefix, last), unit) do
       prefix
     else
       case filler(last) do
@@ -568,7 +570,7 @@ defmodule Tempo.Expand do
       Unit.clock?(unit) ->
         clock_children(prefix, unit, frame)
 
-      unit in [:century, :decade, :year] and prefix == [] ->
+      unit in [:century, :decade, :year] and Enum.empty?(prefix) ->
         {:error, :unbounded}
 
       not Unit.anchored?(prefix) ->

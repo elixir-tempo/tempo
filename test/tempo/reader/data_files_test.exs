@@ -33,7 +33,7 @@ defmodule Tempo.Reader.DataFilesTest do
             result != :ok,
             do: {text, result}
 
-      assert failures == [],
+      assert Enum.empty?(failures),
              "#{length(failures)} texts fail:\n" <>
                inspect(failures, pretty: true, limit: :infinity)
     end

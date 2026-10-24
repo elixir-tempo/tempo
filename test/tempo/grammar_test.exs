@@ -19,7 +19,7 @@ defmodule Tempo.GrammarTest do
           result != :ok,
           do: {production, text, result}
 
-    assert failures == [],
+    assert Enum.empty?(failures),
            "#{length(failures)} generated texts fail (seed #{@seed}):\n" <>
              inspect(failures, pretty: true, limit: :infinity)
   end
@@ -31,7 +31,7 @@ defmodule Tempo.GrammarTest do
           {:ok, value} <- [Tempo.from_iso8601(broken)],
           do: {production, mutation, text, broken, Tempo.to_iso8601!(value)}
 
-    assert read == [],
+    assert Enum.empty?(read),
            "#{length(read)} broken texts are read (seed #{@seed}):\n" <>
              inspect(read, pretty: true, limit: :infinity)
   end
@@ -46,7 +46,7 @@ defmodule Tempo.GrammarTest do
           result != :ok,
           do: {production, text, varied, result}
 
-    assert raised == [],
+    assert Enum.empty?(raised),
            "#{length(raised)} varied texts raise (seed #{@seed}):\n" <>
              inspect(raised, pretty: true, limit: :infinity)
   end

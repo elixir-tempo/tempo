@@ -180,7 +180,7 @@ defmodule Tempo.Matcher do
   defp frame_of(period) do
     case Spans.frame_of(period) do
       %{zone: %Zone{name: name}} = frame when is_binary(name) -> %{frame | shift: nil}
-      %{zone: %Zone{}, shift: shift} when shift != nil -> :engine
+      %{zone: %Zone{}, shift: shift} when not is_nil(shift) -> :engine
       frame -> frame
     end
   end
@@ -209,7 +209,7 @@ defmodule Tempo.Matcher do
         for day <- first_day..last//1,
             month_wanted?(matcher, month.month),
             label = month.label + day - month.first,
-            labels == nil or label in labels,
+            is_nil(labels) or label in labels,
             weekday_wanted?(matcher, day, week),
             do: {day, month.year, month.month, label}
 

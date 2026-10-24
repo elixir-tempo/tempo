@@ -33,7 +33,7 @@ defmodule Tempo.Skip do
 
     for asked <- months(container, parts),
         month = month_in(calendar, year, asked, direction),
-        month != nil,
+        not is_nil(month),
         date <- dates(calendar, month, days, direction),
         do: date
   end

@@ -194,7 +194,7 @@ defmodule Tempo.Validate do
 
   # A clock end of a span may be written 24:00 where the day cycle has no next day to begin.
   defp end_of(%Tempo{form: {:value, [{:hour, 24} | finer]}} = value, _expression)
-       when finer == [] or finer == [minute: 0] or finer == [minute: 0, second: 0],
+       when finer in [[], [minute: 0], [minute: 0, second: 0]],
        do: form({:value, [{:hour, 23} | finer]}, value)
 
   defp end_of(%Tempo{form: form} = value, _expression), do: form(form, value)
@@ -268,7 +268,7 @@ defmodule Tempo.Validate do
   # names, and a decade written after a century is refused (decision 71).
   defp years_named(units, expression) do
     case {Keyword.get(units, :century), Keyword.get(units, :decade)} do
-      {century, decade} when century != nil and decade != nil ->
+      {century, decade} when not is_nil(century) and not is_nil(decade) ->
         invalid(expression, :decade, :after_a_century)
 
       {century, nil} when is_integer(century) ->

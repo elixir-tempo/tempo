@@ -86,8 +86,8 @@ defmodule Tempo.Reader.Suffix do
 
   # The zone comes first and at most once; `u-ca` names the calendar and
   # `u-fw` the day its weeks begin on; other tags are kept.
-  defp tag(content, critical, %{zone: nil, tags: tags} = suffix)
-       when map_size(tags) == 0 and suffix.calendar == nil and suffix.week_start == nil do
+  defp tag(content, critical, %{zone: nil, calendar: nil, week_start: nil, tags: tags} = suffix)
+       when map_size(tags) == 0 do
     cond do
       offset?(content) ->
         {:ok, %{suffix | zone: %Tempo.Zone{offset: offset_minutes(content), critical: critical}}}

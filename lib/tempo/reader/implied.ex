@@ -74,9 +74,13 @@ defmodule Tempo.Reader.Implied do
 
     units = Enum.map(components, fn {unit, held, _, _} -> {unit, held} end)
 
-    if units == [],
-      do: :error,
-      else: {:ok, %{units: units, qualifications: qualifications(components), shift: shift}, rest}
+    case units do
+      [] ->
+        :error
+
+      [_ | _] ->
+        {:ok, %{units: units, qualifications: qualifications(components), shift: shift}, rest}
+    end
   end
 
   defp time_only(text) do
@@ -268,7 +272,7 @@ defmodule Tempo.Reader.Implied do
   # `2018-02-2G14DU`: a group in the day's place.
   defp group(run, <<"G", rest::binary>>, acc) do
     case Duration.units(rest, :date) do
-      {:ok, duration, <<"U", rest::binary>>} when duration != [] ->
+      {:ok, [_ | _] = duration, <<"U", rest::binary>>} ->
         {:ok, Enum.reverse([{:group, {mask_or_integer(run), duration}, nil, nil} | acc]), rest}
 
       _ ->

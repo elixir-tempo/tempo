@@ -37,8 +37,8 @@ defmodule Tempo.LazyTest do
     test "says what it is" do
       refute Tempo.bounded?(fifteenths())
       refute Tempo.empty?(fifteenths())
-      assert Tempo.resolution(fifteenths()) == nil
-      assert Tempo.year(fifteenths()) == nil
+      assert is_nil(Tempo.resolution(fifteenths()))
+      assert is_nil(Tempo.year(fifteenths()))
       assert Tempo.explain(fifteenths()) =~ "may have no last member"
     end
 

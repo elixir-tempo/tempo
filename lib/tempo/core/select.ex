@@ -72,7 +72,12 @@ defmodule Tempo.Select do
          {:ok, periods} <-
            windows(scopes(period, before, outer, options), nested, window, options) do
       # Where the period is selected in whole, its extent is the one known.
-      known = if before == [] and nested == nil, do: {:ok, outer}, else: nil
+      known =
+        if Enum.empty?(before) and is_nil(nested) do
+          {:ok, outer}
+        else
+          nil
+        end
 
       periods
       |> Enum.flat_map(&selected(&1, later, outer_of(&1, nested, {start, stop}), options, known))
@@ -125,7 +130,7 @@ defmodule Tempo.Select do
     units = Enum.filter(search, fn {unit, _} -> unit in @part_units end)
 
     cond do
-      units != [] -> {container_of(coarsest(units)), search}
+      match?([_ | _], units) -> {container_of(coarsest(units)), search}
       Keyword.has_key?(search, :event) -> {:year, search}
       true -> nil
     end
@@ -219,8 +224,13 @@ defmodule Tempo.Select do
 
   defp windowed(other, _window, _period), do: other
 
-  defp backward?(%Duration{units: units}),
-    do: units != [] and Enum.all?(units, fn {_unit, held} -> is_integer(held) and held <= 0 end)
+  defp backward?(%Duration{units: []}) do
+    false
+  end
+
+  defp backward?(%Duration{units: [_ | _] = units}) do
+    Enum.all?(units, fn {_unit, held} -> is_integer(held) and held <= 0 end)
+  end
 
   defp back_window({:ok, from}, window, _value, period),
     do: %{period | form: {:span, from, Spans.negated(window)}}
@@ -248,7 +258,7 @@ defmodule Tempo.Select do
     case known || bounded_extent(period) do
       {:ok, extent} ->
         extent = clipped(extent, outer)
-        moved? = event != nil or roll != nil or skip != nil
+        moved? = not is_nil(event) or not is_nil(roll) or not is_nil(skip)
         picked(on_its_day(moved?, period, parts, extent), period, extent, moves, options)
 
       {:error, _} ->
@@ -404,7 +414,7 @@ defmodule Tempo.Select do
     unit_parts = Enum.filter(parts, fn {unit, _} -> unit in @part_units end)
     {times, dates} = Enum.split_with(unit_parts, fn {unit, _} -> Unit.clock?(unit) end)
 
-    if dates == [] or not Enum.all?(Keyword.keys(dates), &(&1 in @skipped_units)) do
+    if Enum.empty?(dates) or not Enum.all?(Keyword.keys(dates), &(&1 in @skipped_units)) do
       []
     else
       period
@@ -459,14 +469,16 @@ defmodule Tempo.Select do
       |> Enum.filter(fn {unit, _} -> unit in @part_units end)
       |> Enum.map(&weekday_from_end(&1, period.calendar))
 
-    if unit_parts == [] do
-      []
-    else
-      unit = coarsest(unit_parts)
+    case unit_parts do
+      [] ->
+        []
 
-      period
-      |> containers(counted_in(unit, period, extent), extent)
-      |> Enum.flat_map(&in_container(&1, period, unit_parts, unit, extent))
+      [_ | _] ->
+        unit = coarsest(unit_parts)
+
+        period
+        |> containers(counted_in(unit, period, extent), extent)
+        |> Enum.flat_map(&in_container(&1, period, unit_parts, unit, extent))
     end
   end
 
@@ -706,7 +718,12 @@ defmodule Tempo.Select do
   defp as_value(%Tempo{} = period, units) do
     %{shift: shift, zone: zone} = frame(period)
     value = %{period | form: {:value, units}, qualifications: nil, shift: shift}
-    if zone != nil and shift != nil, do: rezoned(value, zone), else: value
+
+    if not is_nil(zone) and not is_nil(shift) do
+      rezoned(value, zone)
+    else
+      value
+    end
   end
 
   # The frame a period is selected in. In a named zone that is the zone's
@@ -868,7 +885,7 @@ defmodule Tempo.Select do
       picked =
         first
         |> Stream.iterate(&next_of_unit(&1, unit))
-        |> Stream.take_while(&(&1 != nil and before_end?(&1, ends)))
+        |> Stream.take_while(&(not is_nil(&1) and before_end?(&1, ends)))
         |> Stream.flat_map(&picked_in(selector, %{&1 | metadata: base.metadata}, options))
         |> Stream.filter(&(Spans.start_position(&1) >= start))
 
@@ -999,9 +1016,12 @@ defmodule Tempo.Select do
   # whatever order its members are written in and however often one is named.
   defp apply_selector(selector, period, options) when is_list(selector) do
     picked =
-      if selector != [] and Enum.all?(selector, &(is_integer(&1) or is_struct(&1, Range))),
-        do: in_period(period, [day: selector], options),
-        else: each_picked(selector, &apply_selector(&1, period, options))
+      if match?([_ | _], selector) and
+           Enum.all?(selector, &(is_integer(&1) or is_struct(&1, Range))) do
+        in_period(period, [day: selector], options)
+      else
+        each_picked(selector, &apply_selector(&1, period, options))
+      end
 
     with {:ok, picked} <- picked do
       {:ok, picked |> Enum.uniq_by(&Spans.extent/1) |> Enum.sort_by(&Spans.start_position/1)}

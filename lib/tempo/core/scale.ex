@@ -38,9 +38,9 @@ defmodule Tempo.Scale do
   @spec frame(Unit.units(), Zone.t() | nil, Zone.shift() | nil) :: frame()
   def frame(units, zone, shift) do
     cond do
-      Unit.cyclic(units) == [] -> {:cycle, :year}
+      Enum.empty?(Unit.cyclic(units)) -> {:cycle, :year}
       not Unit.anchored?(units) -> {:cycle, Unit.coarsest(Unit.cyclic(units))}
-      zone != nil or shift != nil -> :utc
+      not is_nil(zone) or not is_nil(shift) -> :utc
       true -> :floating
     end
   end
@@ -65,7 +65,13 @@ defmodule Tempo.Scale do
   @spec extent_of({integer(), integer()}, Unit.units(), Zone.t() | nil, Zone.shift() | nil) ::
           {:ok, {position(), position()}}
   def extent_of({first, after_last}, clock_units, zone, shift) do
-    frame = if zone != nil or shift != nil, do: :utc, else: :floating
+    frame =
+      if not is_nil(zone) or not is_nil(shift) do
+        :utc
+      else
+        :floating
+      end
+
     {:ok, line_extent_of({first, after_last}, clock_units, zone, shift, frame)}
   end
 

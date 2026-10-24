@@ -44,7 +44,7 @@ defmodule Tempo.WeekStartTest do
                Tempo.from_iso8601("5786-07-15[u-ca=hebrew][u-fw=sun]")
 
       assert Exception.message(other) =~ "Gregorian calendar only"
-      assert Tempo.week_start(~o"5786-07-15[u-ca=hebrew]") == nil
+      assert is_nil(Tempo.week_start(~o"5786-07-15[u-ca=hebrew]"))
     end
 
     test "is written once, after the whole expression" do

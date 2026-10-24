@@ -148,7 +148,7 @@ defmodule Tempo.ReadInCalendarTest do
             not named?(outcome),
             do: {name, arity, outcome}
 
-      assert unnamed == []
+      assert [] = unnamed
     end
   end
 

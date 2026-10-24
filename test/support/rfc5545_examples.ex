@@ -47,7 +47,7 @@ defmodule Tempo.Rfc5545Examples do
   defp examples(lines) do
     lines
     |> Enum.chunk_while([], &chunk/2, &{:cont, Enum.reverse(&1), []})
-    |> Enum.reject(&(&1 == []))
+    |> Enum.reject(&Enum.empty?/1)
     |> Enum.map(&example/1)
   end
 

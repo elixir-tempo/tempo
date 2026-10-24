@@ -36,7 +36,7 @@ defmodule Tempo.Core.UnitTest do
     assert Unit.resolution(units) == :hour
     assert Unit.coarsest(units) == :year
     assert Unit.child(:hour) == :minute
-    assert Unit.child(:microsecond) == nil
+    assert is_nil(Unit.child(:microsecond))
     assert Unit.anchored?(units)
     refute Unit.anchored?(month: 6, day: 15)
   end

@@ -339,22 +339,16 @@ defmodule Tempo.Cron do
     restricted = Enum.reject(fields, fn {_, values} -> values == :any end)
     finest = fields |> hd() |> elem(0)
     coarsest = restricted |> Enum.map(&elem(&1, 0)) |> Enum.max_by(&order/1, fn -> finest end)
-    cadence = if restricted == [], do: finest, else: cadence_above(coarsest, restricted)
 
-    parts =
-      fields
-      |> Enum.reject(&(unconstrained?(&1, restricted) or match?({:day, :extension}, &1)))
-      |> Enum.filter(fn {name, _} -> order(name) <= order(coarsest) end)
-      |> Enum.map(fn
-        {name, :any} -> {name, Enum.to_list(Keyword.fetch!(@fields, name))}
-        {name, values} -> {name, values}
-      end)
-      |> Enum.sort_by(fn {name, _} -> -order(name) end)
-      |> Enum.map(fn {name, values} ->
-        {name, if(match?([_], values), do: hd(values), else: values)}
-      end)
-      |> with_years(year)
-      |> then(&if(restricted == [], do: [], else: &1))
+    {cadence, parts} =
+      case restricted do
+        [] ->
+          {finest, []}
+
+        [_ | _] ->
+          {cadence_above(coarsest, restricted),
+           restricted_parts(fields, restricted, coarsest, year)}
+      end
 
     {roll, day} = Map.pop(day, :roll)
     rule = %{freq: cadence} |> Map.merge(parts_as_rule(parts)) |> Map.merge(day)
@@ -363,6 +357,23 @@ defmodule Tempo.Cron do
     |> RRule.from_rule(options)
     |> day_before_times()
     |> rolled(roll)
+  end
+
+  # The fields a rule restricts, down to its coarsest, each as the values
+  # it takes and with the years the rule is written for.
+  defp restricted_parts(fields, restricted, coarsest, year) do
+    fields
+    |> Enum.reject(&(unconstrained?(&1, restricted) or match?({:day, :extension}, &1)))
+    |> Enum.filter(fn {name, _} -> order(name) <= order(coarsest) end)
+    |> Enum.map(fn
+      {name, :any} -> {name, Enum.to_list(Keyword.fetch!(@fields, name))}
+      {name, values} -> {name, values}
+    end)
+    |> Enum.sort_by(fn {name, _} -> -order(name) end)
+    |> Enum.map(fn {name, values} ->
+      {name, if(match?([_], values), do: hd(values), else: values)}
+    end)
+    |> with_years(year)
   end
 
   # The weekday nearest a day, and the last weekday of a month, are that day

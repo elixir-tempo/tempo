@@ -14,7 +14,7 @@ defmodule Tempo.MatrixWrittenTest do
           Tempo.from_iso8601(text) != {:ok, value},
           do: {entry.class, text}
 
-    assert unread == []
+    assert [] = unread
   end
 
   @tag :exhaustive
@@ -25,6 +25,6 @@ defmodule Tempo.MatrixWrittenTest do
           Tempo.from_iso8601(text) != {:ok, value},
           do: {entry.class, text}
 
-    assert unread == []
+    assert [] = unread
   end
 end

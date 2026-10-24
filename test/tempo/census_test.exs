@@ -93,7 +93,7 @@ defmodule Tempo.CensusTest do
 
           assert {form, parts, extent!(value)} == {form, parts, List.to_tuple(extent)}
 
-          if walk != nil do
+          if not is_nil(walk) do
             expected =
               walk
               |> Enum.take(@walk_limit)
@@ -183,7 +183,7 @@ defmodule Tempo.CensusTest do
 
           assert {shape, parts, members(value)} == {shape, parts, expected}
 
-          if walk != nil do
+          if not is_nil(walk) do
             assert {shape, parts, starts(value)} == {shape, parts, walk}
           end
         end

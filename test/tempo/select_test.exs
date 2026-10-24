@@ -35,7 +35,7 @@ defmodule Tempo.SelectTest do
                "2026Y6M15DT10H30MZ"
              ]
 
-      assert texts(Tempo.select(~o"2024-03-10[America/New_York]", ~o"T02")) == []
+      assert [] = texts(Tempo.select(~o"2024-03-10[America/New_York]", ~o"T02"))
 
       assert texts(Tempo.select(~o"2024-03-10[America/New_York]", ~o"T02/T04")) == [
                "2024Y3M10DT2H/T4H[America/New_York]"
@@ -155,7 +155,7 @@ defmodule Tempo.SelectTest do
       assert days(Tempo.to_interval(~o"2026Y6ML1K{-2..5}IN")) == [22, 29]
       assert days(Tempo.to_interval(~o"2026Y6ML1K{2..9}IN")) == [8, 15, 22, 29]
       assert days(Tempo.to_interval(~o"2026Y6ML1K{1..-1//2}IN")) == [1, 15, 29]
-      assert days(Tempo.to_interval(~o"2026Y6ML1K{4..-3}IN")) == []
+      assert [] = days(Tempo.to_interval(~o"2026Y6ML1K{4..-3}IN"))
 
       {:ok, from_the_second} = Tempo.selection(day_of_week: 1, instance: [2..-1//1])
       assert days(Tempo.select(~o"2026-06", from_the_second)) == [8, 15, 22, 29]
@@ -298,7 +298,7 @@ defmodule Tempo.SelectTest do
     test "a window carries what it selects out of its period, into the window asked for" do
       observed = "R/../P1Y/FLLL1M1D6KN/-P7DN5K1IN"
       assert starts(observed, within: ~o"2021") == ["2021Y12M31D"]
-      assert starts(observed, within: ~o"2022") == []
+      assert [] = starts(observed, within: ~o"2022")
     end
 
     test "a traditional month is selected as its year numbers it" do
@@ -380,7 +380,7 @@ defmodule Tempo.SelectTest do
       # The Friday that falls 7 to 13 April, and the Thursday that falls
       # 17 to 21 December, of which 2027 has none.
       assert selected(~o"2027", ~o"LLL4M7DN/P7DN5K1IN") == [~o"2027-04-09"]
-      assert selected(~o"2027", ~o"LLL12M17DN/P5DN4K1IN") == []
+      assert [] = selected(~o"2027", ~o"LLL12M17DN/P5DN4K1IN")
 
       # The five days from the fourth Wednesday.
       assert selected(~o"2026", ~o"LL3K4IN/P5DN") == [~o"2026-01-28/P5D"]

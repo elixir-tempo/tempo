@@ -22,7 +22,7 @@ defmodule Tempo.Reader.EdtfCorpusTest do
             result != :ok,
             do: {text, result}
 
-      assert failures == [],
+      assert Enum.empty?(failures),
              "#{length(failures)} texts fail:\n" <>
                inspect(failures, pretty: true, limit: :infinity)
     end
@@ -60,7 +60,7 @@ defmodule Tempo.Reader.EdtfCorpusTest do
             {:ok, value} <- [Tempo.from_iso8601(text)],
             do: {text, Tempo.to_iso8601!(value)}
 
-      assert read == [],
+      assert Enum.empty?(read),
              "#{length(read)} invalid texts are read:\n" <>
                inspect(read, pretty: true, limit: :infinity)
     end

@@ -286,7 +286,10 @@ if Code.ensure_loaded?(JSCalendar) do
         |> Map.take([:year, :month, :week, :day, :hour, :minute, :second])
         |> Enum.reject(fn {_, amount} -> amount == 0 end)
 
-      if units == [], do: nil, else: %Tempo.Duration{units: ordered(units)}
+      case units do
+        [] -> nil
+        [_ | _] -> %Tempo.Duration{units: ordered(units)}
+      end
     end
 
     defp ordered(units) do

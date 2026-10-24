@@ -157,7 +157,7 @@ defmodule Tempo.ConformanceFixtures do
     cells
     |> Enum.sort()
     |> Enum.chunk_while([], &chunk_run/2, &{:cont, &1, []})
-    |> Enum.reject(&(&1 == []))
+    |> Enum.reject(&Enum.empty?/1)
     |> Enum.map(fn run -> [List.first(run), List.last(run) + 1] end)
   end
 

@@ -82,7 +82,7 @@ defmodule Tempo.LeapSecondsTest do
     test "the interval's questions" do
       assert Interval.spans_leap_second?(~o"2016-12-31T23:00:00Z/2017-01-01T01:00:00Z")
       refute Interval.spans_leap_second?(~o"2026-06-15/2026-06-16")
-      assert Interval.leap_seconds_spanned(~o"2026-06-15/2026-06-16") == []
+      assert [] = Interval.leap_seconds_spanned(~o"2026-06-15/2026-06-16")
       assert_raise ConversionError, fn -> Interval.spans_leap_second?(~o"2015/..") end
     end
   end

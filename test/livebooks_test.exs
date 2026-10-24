@@ -18,7 +18,14 @@ unless Code.ensure_loaded?(Kino.DataTable) do
     end
 
     defp row?(row) when is_map(row), do: true
-    defp row?(row), do: row != [] and Keyword.keyword?(row)
+
+    defp row?([]) do
+      false
+    end
+
+    defp row?(row) do
+      Keyword.keyword?(row)
+    end
   end
 end
 
@@ -112,11 +119,11 @@ defmodule Tempo.LivebooksTest do
   for livebook <- Path.wildcard("livebook/*.livemd"),
       LivebooksRunner.for_this_version?(livebook) do
     test "the setup cell of #{livebook} names no module" do
-      assert LivebooksRunner.setup_directives(unquote(livebook)) == []
+      assert [] = LivebooksRunner.setup_directives(unquote(livebook))
     end
 
     test "the cells of #{livebook} run" do
-      assert LivebooksRunner.failures(unquote(livebook)) == []
+      assert [] = LivebooksRunner.failures(unquote(livebook))
     end
   end
 end

@@ -299,7 +299,7 @@ A result begins where `keep` turns true and ends where it turns false, so a resu
 
 Operands come to the sweep on one frame: the second operand is brought to the first's calendar; two zoned operands meet on the UTC line and the result is written in the first's zone; a floating operand beside a zoned one is an error unless placed. An operand with no end is bounded by the window, or by the other operand where the operation's result lies within it (an intersection; a difference from a bounded first operand); a union of two endless operands is itself endless and is given as a stream in time order; any other operation on two endless operands is refused without a window.
 
-The everyday predicates are defined on covered time: `within?(a, b)` is `difference(a, b) == []`, `overlaps?(a, b)` is `intersection(a, b) != []`, `before?(a, b)` is that `a` ends no later than `b` begins, `adjacent?` that the coalesced forms meet, `equal?` that they cover the same points. For two single spans they coincide with the relation sets of 5.7.
+The everyday predicates are defined on covered time: `within?(a, b)` is that `difference(a, b)` is empty, `overlaps?(a, b)` that `intersection(a, b)` is not, `before?(a, b)` is that `a` ends no later than `b` begins, `adjacent?` that the coalesced forms meet, `equal?` that they cover the same points. For two single spans they coincide with the relation sets of 5.7.
 
 ### 5.7 Allen's relations: four comparisons, and a derived table
 

@@ -346,7 +346,7 @@ defmodule Tempo.RecurrenceSetTest do
 
       assert RecurrenceSet.members(kept) == [christmas, new_year]
       assert Tempo.metadata(kept) == %{territory: :GB}
-      assert RecurrenceSet.members(RecurrenceSet.filter(holidays, fn _member -> false end)) == []
+      assert [] = RecurrenceSet.members(RecurrenceSet.filter(holidays, fn _member -> false end))
     end
 
     test "a conditional member is given to the function as it is" do

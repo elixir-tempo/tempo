@@ -176,7 +176,7 @@ defmodule Tempo.Parts do
   @spec zoned?(Tempo.t()) :: boolean()
   def zoned?(%Tempo{} = expression) do
     %{zone: zone, shift: shift} = Spans.frame_of(expression)
-    zone != nil or shift != nil
+    not is_nil(zone) or not is_nil(shift)
   end
 
   @doc "Whether every end an expression has is written: no open end, no sequence without one."

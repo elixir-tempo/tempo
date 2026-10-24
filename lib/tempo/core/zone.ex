@@ -179,8 +179,8 @@ defmodule Tempo.Zone do
   defp shown_in(stretches, wall) do
     for {start, stop, offset} <- stretches,
         moment = wall - offset,
-        start == nil or moment >= start,
-        stop == nil or moment < stop,
+        is_nil(start) or moment >= start,
+        is_nil(stop) or moment < stop,
         do: offset
   end
 
@@ -204,8 +204,9 @@ defmodule Tempo.Zone do
   December 2011: a day no reading of which is ever shown.
   """
   @spec day_skipped?(t() | nil, shift() | nil, integer()) :: boolean()
-  def day_skipped?(%__MODULE__{name: name}, nil, day) when is_binary(name),
-    do: days_skipped_in(table(name, (day + 2) * @day), day, day + 1) != []
+  def day_skipped?(%__MODULE__{name: name}, nil, day) when is_binary(name) do
+    match?([_ | _], days_skipped_in(table(name, (day + 2) * @day), day, day + 1))
+  end
 
   def day_skipped?(_zone, _shift, _day), do: false
 
@@ -391,9 +392,11 @@ defmodule Tempo.Zone do
     table = table(name, utc + 2 * step + @day)
     offset = Table.offset_at(table, utc)
 
-    if shift == nil or shift_ticks(shift) == offset,
-      do: shown_until(table, offset, utc, step),
-      else: utc + step
+    if is_nil(shift) or shift_ticks(shift) == offset do
+      shown_until(table, offset, utc, step)
+    else
+      utc + step
+    end
   end
 
   def unit_end(_zone, _shift, utc, step) when is_integer(utc) and is_integer(step),
@@ -408,7 +411,7 @@ defmodule Tempo.Zone do
   @spec steady_offset(t(), shift() | nil, tick(), tick()) :: {:ok, tick()} | :changes
   def steady_offset(%__MODULE__{name: name}, shift, start, stop) when is_binary(name) do
     case Table.steady(table(name, stop), start, stop) do
-      {:ok, offset} when shift == nil -> {:ok, offset}
+      {:ok, offset} when is_nil(shift) -> {:ok, offset}
       {:ok, offset} -> if shift_ticks(shift) == offset, do: {:ok, offset}, else: :changes
       :changes -> :changes
     end
@@ -468,7 +471,7 @@ defmodule Tempo.Zone do
   # `:ex_tempo`.
   def database do
     case :application.get_env(:ex_tempo, :time_zone_database) do
-      {:ok, database} when database != nil -> database
+      {:ok, database} when not is_nil(database) -> database
       _none -> elixirs_database()
     end
   end
