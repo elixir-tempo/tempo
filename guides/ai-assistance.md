@@ -9,10 +9,15 @@ So the fastest way into Tempo is often to **describe your problem in plain langu
 Give it a sentence like any of these and it will represent and solve it:
 
 * *"Do these two delivery windows clash?"* → Allen relations (`overlaps?`, `relation/2`).
+
 * *"When is everyone free for an hour on Monday?"* → set algebra (`difference`, `intersection`) and bookable `slots/3`.
+
 * *"List the second Monday of every month next year."* → recurrence (`Tempo.RRule.parse!/2`, then `Tempo.to_interval/2`).
+
 * *"Given these radiocarbon dates ±, which finds could be contemporary?"* → relations that answer in three values (`Tempo.certainty/3`, `Tempo.certainly?/3`, `Tempo.possibly?/3`).
+
 * *"Order these dependent tasks and find the critical path."* → the companion package `tempo_network`.
+
 * *"These reigns and strata only have relative dates — are they consistent, and what do they pin down?"* → `tempo_network`'s constraint networks.
 
 Because ISO 8601-2 is easy to get subtly wrong (`2004-06~-11` and `2004-?06-11` mean different things), the skill's first rule is to **never present a value it hasn't validated** — it parses every representation and echoes its meaning back with `Tempo.explain/1` before building on it.

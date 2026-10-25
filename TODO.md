@@ -16,7 +16,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ### Before the release
 
-* [ ] **Calendrical 2.0 and Localize 1.4 on hex.** `mix.exs` takes both from GitHub `main`, where their `calendrical-2.0` branches were merged (2026-10-18); a release needs published versions. Calendrical has one behaviour that every calendar answers, `Localize.Calendar.ISO` among them by shape (Calendrical's `localize_calendar_iso_test.exs` and its laws test hold it there); `leap_month/1`, `weeks_in_month/2` and `month_week/3` left the behaviour on 2026-10-14, as nothing called them and another callback answers each.
+* [ ] **Calendrical's astronomical years, worked out once.** On Calendrical 2.0.0 and Astro 2.8.0 the Persian and lunisolar calendars work out a year's astronomy on every call, 3 to 6 times dearer on Astro's ephemeris, and the calendar census's fixture test takes 106 s, over ExUnit's 60 s; it passes given time. Tempo waits for Calendrical's fix (its TODO and `plans/astronomy-tables.md`) and leaves the test as it is, the user's decision of 2026-10-26.
 
 * [ ] **`tempo_network` 0.1.0.** The companion package (`~/Development/tempo/tempo_network`) is built and its gates pass against a path dependency on this repository; it needs its own repository, and `{:ex_tempo, "~> 2.0"}` once 2.0 is on hex. It calls the hidden `Tempo.Calendar` in one file (`Tempo.Network.Calendar`), an agreed private seam for now (`plans/decisions.md`, 15), so a change to the adapter checks the companions.
 
@@ -61,6 +61,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **Calendrical 2.0, Localize 1.4 and Astro 2.8 from hex** — `mix.exs` requires `~> 2.0`, `~> 1.4` and `~> 2.8` and the lock holds 2.0.0, 1.4.0 and 2.8.0. 2026-10-26.
 
 * [x] **A quiet interval rule's look-ahead placed once a period** — a never-occurring quarterly rule in 61 ms, where it took a second; decision 84. 2026-10-25.
 

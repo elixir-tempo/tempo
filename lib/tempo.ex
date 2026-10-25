@@ -302,6 +302,10 @@ defmodule Tempo do
 
   * The arguments are those of `from_iso8601/2`.
 
+  ### Options
+
+  * The options of `from_iso8601/2`.
+
   ### Returns
 
   * What `from_iso8601/2` returns as `{:ok, answer}`, the answer alone. The
@@ -457,6 +461,10 @@ defmodule Tempo do
   ### Arguments
 
   * The arguments are those of `parse/2`.
+
+  ### Options
+
+  * The options of `parse/2`.
 
   ### Returns
 
@@ -1024,6 +1032,10 @@ defmodule Tempo do
   ### Arguments
 
   * The arguments are those of `to_interval/2`.
+
+  ### Options
+
+  * The options of `to_interval/2`.
 
   ### Returns
 
@@ -3829,6 +3841,10 @@ defmodule Tempo do
 
   * The arguments are those of `select/3`.
 
+  ### Options
+
+  * The options of `select/3`.
+
   ### Returns
 
   * What `select/3` returns as `{:ok, answer}`, the answer alone. The
@@ -3895,6 +3911,10 @@ defmodule Tempo do
   ### Arguments
 
   * The arguments are those of `workdays/2`.
+
+  ### Options
+
+  * The options of `workdays/2`.
 
   ### Returns
 
@@ -4278,6 +4298,10 @@ defmodule Tempo do
   ### Arguments
 
   * The arguments are those of `from_elixir/2`.
+
+  ### Options
+
+  * The options of `from_elixir/2`.
 
   ### Returns
 
@@ -4664,6 +4688,10 @@ defmodule Tempo do
   ### Arguments
 
   * The arguments are those of `to_string/2`.
+
+  ### Options
+
+  * The options of `to_string/2`.
 
   ### Returns
 

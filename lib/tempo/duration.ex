@@ -526,6 +526,10 @@ defmodule Tempo.Duration do
 
   * The arguments are those of `to_unit/3`.
 
+  ### Options
+
+  * The options of `to_unit/3`.
+
   ### Returns
 
   * What `to_unit/3` returns as `{:ok, answer}`, the answer alone.

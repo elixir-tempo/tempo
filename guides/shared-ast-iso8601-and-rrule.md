@@ -3,6 +3,7 @@
 Tempo reads two otherwise unrelated notations for a recurrence into the same expression:
 
 * **ISO 8601-2**, whose repeating interval (`R…/…`) and repeat rule (`F…`) are part of the big, descriptive standard Tempo is built around.
+
 * **RFC 5545 RRULE**, the tight recurrence-rule language of iCalendar.
 
 This guide says what the two have in common, where each says something the other cannot, and what Tempo does at those edges.
@@ -10,8 +11,11 @@ This guide says what the two have in common, where each says something the other
 In short:
 
 * A rule and an ISO 8601-2 recurrence that mean the same thing **are the same value**. There is no RRULE struct: `Tempo.RRule.parse/2` returns the `%Tempo{}` that `Tempo.from_iso8601/2` returns for the equivalent text.
+
 * ISO 8601 says **far more** than RRULE: uncertainty, unspecified digits, sets, open ends, other calendars, events such as Easter. None has an RRULE form.
+
 * RRULE leaves to its `DTSTART` what it does not say. ISO 8601-2 has no implicit selection, so the reader **states** what the rule took from its start.
+
 * What one notation cannot write is an **error that says why**, never a rule that means something else.
 
 ## Setup — required for every example
@@ -246,6 +250,9 @@ iex> Tempo.Cron.parse("0 0 13 * 5")
 ## Further reading
 
 * [RRULE conformance](rfc5545_rrule_conformance.md) — RFC 5545, part by part.
+
 * [ISO 8601 conformance](iso8601-conformance.md) — the selection and repeat rule grammar, and Tempo's extensions to it.
+
 * [iCalendar integration](ical-integration.md) — rules as they arrive in `.ics` files, with their starts, lengths, exceptions and zones.
+
 * [Scheduling](scheduling.md) — bounding a recurrence, and zones.

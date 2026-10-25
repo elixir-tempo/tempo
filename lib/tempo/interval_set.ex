@@ -116,6 +116,10 @@ defmodule Tempo.IntervalSet do
 
   * `members` and `options` are as for `new/2`.
 
+  ### Options
+
+  * The options of `new/2`.
+
   ### Returns
 
   * The set, a `t:Tempo.t/0`, or raises the error `new/2` returns.
@@ -212,6 +216,10 @@ defmodule Tempo.IntervalSet do
   ### Arguments
 
   * The arguments are those of `slots/3`.
+
+  ### Options
+
+  * The options of `slots/3`.
 
   ### Returns
 
@@ -325,6 +333,10 @@ defmodule Tempo.IntervalSet do
 
   * The arguments are those of `coalesce/2`.
 
+  ### Options
+
+  * The options of `coalesce/2`.
+
   ### Returns
 
   * What `coalesce/2` returns as `{:ok, answer}`, the answer alone.
@@ -398,6 +410,10 @@ defmodule Tempo.IntervalSet do
   ### Arguments
 
   * The arguments are those of `covered/2`.
+
+  ### Options
+
+  * The options of `covered/2`.
 
   ### Returns
 

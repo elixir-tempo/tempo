@@ -23,6 +23,7 @@ The reward is **tractability**: reasoning in the point algebra is polynomial (pa
 Allen and Hayes put the interval ontology on a rigorous first-order footing. Remarkably, they axiomatise the entire algebra from a **single primitive relation, `meets`** — all thirteen relations are derived from it. Points are *not* primitive here either; they are **reconstructed** as derived entities, in two flavours:
 
 * **Moments** — intervals with no proper subinterval (atomic, but still intervals, not points).
+
 * **Meeting-places** — a "point" is the place where one interval meets another, a Dedekind-cut-like construction, never a first-class object.
 
 This is the deepest expression of the interval-first stance: even points are made of intervals.
@@ -137,22 +138,35 @@ The companion package's own guide develops the layer from a practitioner's point
 ## Summary
 
 * Tempo takes the **interval-first** ontology of Allen–Hayes and Grüninger–Li (no instants, no degenerate intervals).
+
 * It uses the **point-algebra** reduction of Vilain–Kautz as its computational engine (endpoints projected to a real UTC frame).
+
 * Because its core values are **fully grounded**, relation queries are point-algebra comparisons, not constraint propagation — the core is an algebra, not a solver.
+
 * Where the values *aren't* grounded, the companion package's **`Tempo.Network`** does solve constraints, but only in the polynomial **Simple Temporal Problem** fragment (metric, conjunctive) — never the NP-hard qualitative-disjunctive regime.
+
 * Its **atomicity is resolution-indexed** — an "instant" is the one-unit interval at the finest declared ISO 8601 resolution — a special case of the **time-granularity** lattice (Bettini; Euzenat & Montanari).
+
 * Its one **genuinely novel** move is **shift-invariance arithmetic**: a shift on an underspecified value (a month-day with no year) is computed only when the result is invariant to the missing field, and returns a `Tempo.ConversionError` with the reason `:needs_a_year` otherwise.
 
 ## Further reading
 
 * J. F. Allen. *Maintaining Knowledge about Temporal Intervals.* CACM 26(11), 1983.
+
 * M. B. Vilain and H. A. Kautz. *Constraint Propagation Algorithms for Temporal Reasoning.* AAAI-86, 1986.
+
 * J. F. Allen and P. J. Hayes. *Moments and Points in an Interval-Based Temporal Logic.* Computational Intelligence 5(3), 1989.
+
 * C. Bettini, S. Jajodia, and X. S. Wang. *Time Granularities in Databases, Data Mining, and Temporal Reasoning.* Springer, 2000.
+
 * J. Euzenat and A. Montanari. *Time Granularity.* In *Handbook of Temporal Reasoning in Artificial Intelligence*, ch. 3. Elsevier, 2005.
+
 * B. Nebel and H.-J. Bürckert. *Reasoning about Temporal Relations: A Maximal Tractable Subclass of Allen's Interval Algebra.* JACM 42(1), 1995.
+
 * R. Dechter, I. Meiri, and J. Pearl. *Temporal Constraint Networks.* Artificial Intelligence 49(1–3), 1991.
+
 * E. Levy, G. Geeraerts, F. Pluquet, E. Piasetzky, and A. Fantalkin. *Chronological Networks in Archaeology: A Formalised Scheme.* Journal of Archaeological Science 124, 2020.
+
 * M. Grüninger and Z. Li. *The Time Ontology of Allen's Interval Algebra.* TIME 2017.
 
 The accompanying paper, *Time as Intervals, Not Instants* (`papers/time-2027/`), develops this positioning in full.

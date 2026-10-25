@@ -6,6 +6,28 @@ Tempo is an Elixir library that models time the way humans actually use it — a
 
 This conceptual shift — *time as interval, not instant* — removes a surprising number of real-world bugs (off-by-one day errors, ambiguous "end of day", last day of month, last day of year, DST edge cases, "what date does this year mean?") while unlocking queries that are awkward or impossible in other libraries.
 
+## Features
+
+* **One type.** No more `Date` for days, `Time` for hours, `DateTime` for both, `NaiveDateTime` for "I don't know what I have" — one `%Tempo{}` holds a value at any resolution, an interval, a recurrence, a set of them or a choice among them. `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.RecurrenceSet` are constructors of that one struct, not types of their own; the one distinct companion is `Tempo.Duration`, a length with no place on the time line. Conversion from Elixir's types is `Tempo.from_elixir/2`.
+
+* **Correctness by construction.** Every value denotes half-open spans `[from, to)` on the time line, so adjacent spans join cleanly (`[a, b)` and `[b, c)` are `[a, c)`). An interval is read as it is written: one written to a date runs through that date (`2026/2028` is three years), and one written to a time of day runs to that reading. "End of day" ambiguity, midnight off-by-ones and DST-hour confusion vanish at the type level.
+
+* **Full support for the time standards that matter.** ISO 8601 Parts 1 and 2, EDTF Levels 0–2, IXDTF. 100% of the `unt-libraries/edtf-validate` corpus passes. Long years (`Y17E8`), significant-digits notation, mask syntax, open-ended intervals, per-endpoint qualifications — all parsed and queryable — and the leap seconds a span holds are counted into its length (`Tempo.LeapSeconds`).
+
+* **First-class set algebra on time.** Union, intersection, complement, difference, symmetric difference — plus the predicate set (`disjoint?`, `overlaps?`, `within?`, `contains?`, `equal?`) — all defined over any Tempo value. Cross-zone, cross-calendar, across resolutions.
+
+* **Constraint reasoning, in a companion package.** `Tempo.Network` models a web of partially-known intervals — reigns, strata, project tasks — and computes the tightest dates each one can take (the ChronoLog scheme), and `Tempo.Schedule` applies the same solver to project scheduling. Both live in the `tempo_network` package, which depends on this one.
+
+* **Business days and territory-aware calendars.** `Tempo.weekend?/2`, `Tempo.workday?/2`, `Tempo.add_workdays/3`, and `Tempo.count_workdays/2` answer "how many workdays until the deadline?" with CLDR-correct weekends per territory (the US weekends Saturday/Sunday, Saudi Arabia Friday/Saturday) and correct on any calendar, and `Tempo.roll_to_workday/3` moves a date that falls on a day off by a contract's business day convention.
+
+* **iCalendar import with metadata that travels.** `Tempo.ICal.parse/2` parses RFC 5545 `.ics` data and every event's metadata (summary, location, attendees, status, …) rides along through every downstream operation. Intersect your schedule with work hours, get back *which meetings* are in work hours.
+
+* **Unlocking queries that used to be hard.** "Every Friday the 13th this century." "When was I both in Japan and enrolled at my university?" "Free time on Tuesday, accounting for meetings across three zones." "Does this dig layer overlap with this dynasty?" All direct expressions over the same `Tempo` API.
+
+## Supported Elixir and OTP versions
+
+Tempo supports **Elixir 1.17** and later on **Erlang/OTP 27** and later; OTP 26 is not supported.
+
 ## Installation
 
 ```elixir
@@ -18,21 +40,9 @@ def deps do
 end
 ```
 
-Tempo requires Elixir 1.17 or later and Erlang/OTP 27 or later.
+Tempo is published on hex as `ex_tempo` because the `tempo` name on hex was already taken; its modules are `Tempo` and `Tempo.*`, so in code it is `tempo`. Docs at [https://hexdocs.pm/ex_tempo](https://hexdocs.pm/ex_tempo).
 
-## Why intervals, not instants
-
-Every mainstream language treats `date`, `time`, and `datetime` as distinct scalar types. That fragmentation creates three classes of common bugs that Tempo eliminates by construction:
-
-1. *The "what does this value mean" ambiguity:* Is `~D[2026-06-15]` the instant of midnight on June 15, or the whole day? Most libraries can't say — the type is a scalar but it's being *used* as a span, with every developer inventing their own `end_of_day/1` helper. In Tempo, `~o"2026-06-15"` *is* the interval `[2026-06-15T00:00, 2026-06-16T00:00)`. No helpers needed; the semantics are the type.
-
-2. *The type-per-resolution explosion:* `Date` for days, `Time` for hours/minutes/seconds, `DateTime` for the combination — and conversions between them are lossy in confusing directions. Tempo's single `%Tempo{}` struct carries its own resolution. A year, a month, a meeting, a millennium — same type, different resolution.
-
-3. *The "I can't express that" ceiling:* Archaeological dates ("sometime in the 1560s"), EDTF-qualified values ("approximately 2022"), open-ended intervals ("from 1985 onwards"), Hebrew-to-Gregorian queries, recurrences, free-busy spans — all awkward or impossible to express cleanly as scalar instants. All natural in Tempo.
-
-Once every value is a bounded interval, set operations follow naturally: union, intersection, complement, difference, and predicates (`overlaps?`, `within?`, `contains?`) all work on any combination of Tempo values, across resolutions, across timezones, across calendars.
-
-## What it looks like
+## Quick start
 
 Full ISO 8601-2 / EDTF / IXDTF support, calendar-aware arithmetic, cross-zone set operations. In fact, probably the only full implementation of ISO 8601 Parts 1 and 2 in existence (really, I couldn't find one anywhere - please let me know if you know of one).
 
@@ -177,49 +187,19 @@ iex> case today do
 
 More in the [Pattern matching with sigils](https://hexdocs.pm/ex_tempo/pattern-matching-with-sigils.html) guide.
 
-## Objectives
+## Why intervals, not instants
 
-* **One type.** No more `Date` for days, `Time` for hours, `DateTime` for both, `NaiveDateTime` for "I don't know what I have" — one `%Tempo{}` holds a value at any resolution, an interval, a recurrence, a set of them or a choice among them. `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.RecurrenceSet` are constructors of that one struct, not types of their own; the one distinct companion is `Tempo.Duration`, a length with no place on the time line. Conversion from Elixir's types is `Tempo.from_elixir/2`.
+Every mainstream language treats `date`, `time`, and `datetime` as distinct scalar types. That fragmentation creates three classes of common bugs that Tempo eliminates by construction:
 
-* **Correctness by construction.** Every value denotes half-open spans `[from, to)` on the time line, so adjacent spans join cleanly (`[a, b)` and `[b, c)` are `[a, c)`). An interval is read as it is written: one written to a date runs through that date (`2026/2028` is three years), and one written to a time of day runs to that reading. "End of day" ambiguity, midnight off-by-ones and DST-hour confusion vanish at the type level.
+1. *The "what does this value mean" ambiguity:* Is `~D[2026-06-15]` the instant of midnight on June 15, or the whole day? Most libraries can't say — the type is a scalar but it's being *used* as a span, with every developer inventing their own `end_of_day/1` helper. In Tempo, `~o"2026-06-15"` *is* the interval `[2026-06-15T00:00, 2026-06-16T00:00)`. No helpers needed; the semantics are the type.
 
-* **Full support for the time standards that matter.** ISO 8601 Parts 1 and 2, EDTF Levels 0–2, IXDTF. 100% of the `unt-libraries/edtf-validate` corpus passes. Long years (`Y17E8`), significant-digits notation, mask syntax, open-ended intervals, per-endpoint qualifications — all parsed and queryable — and the leap seconds a span holds are counted into its length (`Tempo.LeapSeconds`).
+2. *The type-per-resolution explosion:* `Date` for days, `Time` for hours/minutes/seconds, `DateTime` for the combination — and conversions between them are lossy in confusing directions. Tempo's single `%Tempo{}` struct carries its own resolution. A year, a month, a meeting, a millennium — same type, different resolution.
 
-* **First-class set algebra on time.** Union, intersection, complement, difference, symmetric difference — plus the predicate set (`disjoint?`, `overlaps?`, `within?`, `contains?`, `equal?`) — all defined over any Tempo value. Cross-zone, cross-calendar, across resolutions.
+3. *The "I can't express that" ceiling:* Archaeological dates ("sometime in the 1560s"), EDTF-qualified values ("approximately 2022"), open-ended intervals ("from 1985 onwards"), Hebrew-to-Gregorian queries, recurrences, free-busy spans — all awkward or impossible to express cleanly as scalar instants. All natural in Tempo.
 
-* **Constraint reasoning, in a companion package.** `Tempo.Network` models a web of partially-known intervals — reigns, strata, project tasks — and computes the tightest dates each one can take (the ChronoLog scheme), and `Tempo.Schedule` applies the same solver to project scheduling. Both live in the `tempo_network` package, which depends on this one.
+Once every value is a bounded interval, set operations follow naturally: union, intersection, complement, difference, and predicates (`overlaps?`, `within?`, `contains?`) all work on any combination of Tempo values, across resolutions, across timezones, across calendars.
 
-* **Business days and territory-aware calendars.** `Tempo.weekend?/2`, `Tempo.workday?/2`, `Tempo.add_workdays/3`, and `Tempo.count_workdays/2` answer "how many workdays until the deadline?" with CLDR-correct weekends per territory (the US weekends Saturday/Sunday, Saudi Arabia Friday/Saturday) and correct on any calendar, and `Tempo.roll_to_workday/3` moves a date that falls on a day off by a contract's business day convention.
-
-* **iCalendar import with metadata that travels.** `Tempo.ICal.parse/2` parses RFC 5545 `.ics` data and every event's metadata (summary, location, attendees, status, …) rides along through every downstream operation. Intersect your schedule with work hours, get back *which meetings* are in work hours.
-
-* **Unlocking queries that used to be hard.** "Every Friday the 13th this century." "When was I both in Japan and enrolled at my university?" "Free time on Tuesday, accounting for meetings across three zones." "Does this dig layer overlap with this dynasty?" All direct expressions over the same `Tempo` API.
-
-## Talks and background
-
-The [ElixirConf '22 talk](https://www.youtube.com/watch?v=4VfPvCI901c) introduces the core idea of a unified time type and builds toward intervals as the primary representation. The talk is still a good overview of the thesis; the library has evolved substantially since — full ISO 8601-2 support, set operations, cross-calendar comparisons, iCalendar import, and recurring events have all landed in the years that followed.
-
-## Prior art
-
-Tempo draws on several bodies of work:
-
-* **Allen's Interval Algebra** — James F. Allen's 13 relations between intervals (`precedes`, `meets`, `overlaps`, `finished_by`, `contains`, `starts`, `equals`, and their inverses). [See the survey](https://ics.uci.edu/~alspaugh/cls/shr/allen.html). Tempo's interval relations and `overlaps?/2` / `contains?/2` predicates descend directly from this work.
-
-* **Temporal databases and the chronon concept.** Jensen, Dyreson, and Tansel's *Consensus Glossary of Temporal Database Concepts* (1998) defines the *chronon* — an indivisible time unit whose resolution determines how the surrounding value is interpreted. Tempo's resolution (`Tempo.resolution/1`) is the direct analogue.
-
-* **Eric Evans' "Exploring Time"** talk. Evans makes the case for considering time as an interval rather than an instant in a domain-driven-design setting. His framing influenced the earliest design sketches of Tempo.
-
-* **PostgreSQL multirange types.** Postgres 14+ ships sorted, non-overlapping, coalesced interval sets. The result of a Tempo set operation follows the same conceptual model, and is computed by the same sweep-line algorithm.
-
-* **Wojtek Mach's [`calendar_interval`](https://github.com/wojtekmach/calendar_interval).** A partial-but-elegant implementation of calendar intervals in Elixir. Concepts from this library informed Tempo's implicit-span semantics.
-
-* **ISO 8601-2 / EDTF.** The 2019 extension to ISO 8601 formalises archaeological and approximate dates. The `unt-libraries/edtf-validate` conformance corpus — the only public test suite for EDTF — is exercised in full.
-
-* **RFC 5545 (iCalendar) / RFC 7529 (RSCALE).** The iCalendar specification for RRULE, RDATE, EXDATE, VTIMEZONE. Tempo imports `.ics` data via `Tempo.ICal.parse/2`.
-
-* **RFC 9557, the Internet Extended Date/Time Format (IXDTF).** The extended date-time format for annotations such as `[Europe/Paris][u-ca=hebrew]`. Supported in both parse and round-trip.
-
-Tempo is published on hex as `ex_tempo` because the `tempo` name on hex was already taken; its modules are `Tempo` and `Tempo.*`, so in code it is `tempo`. Docs at [https://hexdocs.pm/ex_tempo](https://hexdocs.pm/ex_tempo).
+## Configuration
 
 ### Time-zone database
 
@@ -255,7 +235,67 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 
 * [![Run in Livebook](https://livebook.dev/badge/v1/blue.svg)](https://livebook.dev/run?url=https%3A%2F%2Fraw.githubusercontent.com%2Felixir-tempo%2Ftempo%2Fmain%2Flivebook%2Funcertain-dates-workbook.livemd) **Uncertain dates** — masks, one-of sets, margins, EDTF qualifications, and three-valued certainty.
 
-## Guides
+## Talks and background
+
+The [ElixirConf '22 talk](https://www.youtube.com/watch?v=4VfPvCI901c) introduces the core idea of a unified time type and builds toward intervals as the primary representation. The talk is still a good overview of the thesis; the library has evolved substantially since — full ISO 8601-2 support, set operations, cross-calendar comparisons, iCalendar import, and recurring events have all landed in the years that followed.
+
+## Prior art
+
+Tempo draws on several bodies of work:
+
+* **Allen's Interval Algebra** — James F. Allen's 13 relations between intervals (`precedes`, `meets`, `overlaps`, `finished_by`, `contains`, `starts`, `equals`, and their inverses). [See the survey](https://ics.uci.edu/~alspaugh/cls/shr/allen.html). Tempo's interval relations and `overlaps?/2` / `contains?/2` predicates descend directly from this work.
+
+* **Temporal databases and the chronon concept.** Jensen, Dyreson, and Tansel's *Consensus Glossary of Temporal Database Concepts* (1998) defines the *chronon* — an indivisible time unit whose resolution determines how the surrounding value is interpreted. Tempo's resolution (`Tempo.resolution/1`) is the direct analogue.
+
+* **Eric Evans' "Exploring Time"** talk. Evans makes the case for considering time as an interval rather than an instant in a domain-driven-design setting. His framing influenced the earliest design sketches of Tempo.
+
+* **PostgreSQL multirange types.** Postgres 14+ ships sorted, non-overlapping, coalesced interval sets. The result of a Tempo set operation follows the same conceptual model, and is computed by the same sweep-line algorithm.
+
+* **Wojtek Mach's [`calendar_interval`](https://github.com/wojtekmach/calendar_interval).** A partial-but-elegant implementation of calendar intervals in Elixir. Concepts from this library informed Tempo's implicit-span semantics.
+
+* **ISO 8601-2 / EDTF.** The 2019 extension to ISO 8601 formalises archaeological and approximate dates. The `unt-libraries/edtf-validate` conformance corpus — the only public test suite for EDTF — is exercised in full.
+
+* **RFC 5545 (iCalendar) / RFC 7529 (RSCALE).** The iCalendar specification for RRULE, RDATE, EXDATE, VTIMEZONE. Tempo imports `.ics` data via `Tempo.ICal.parse/2`.
+
+* **RFC 9557, the Internet Extended Date/Time Format (IXDTF).** The extended date-time format for annotations such as `[Europe/Paris][u-ca=hebrew]`. Supported in both parse and round-trip.
+
+## Related links
+
+Tempo implements or interoperates with these standards:
+
+* [ISO 8601-1:2019](https://www.iso.org/standard/70907.html) — date and time representations: the base grammar for dates, times, durations, and intervals.
+
+* [ISO 8601-2:2019](https://www.iso.org/standard/70908.html) — extensions: uncertain and approximate dates, unspecified digits, seasons, sets, and negative components.
+
+* [EDTF](https://www.loc.gov/standards/datetime/) — the Library of Congress Extended Date/Time Format, aligned with ISO 8601-2.
+
+* [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557.html) — Internet Extended Date/Time Format (IXDTF): the `[zone]`, `[u-ca=…]`, and `[key=value]` suffixes and the critical `!` flag.
+
+* [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) — Date and Time on the Internet: Timestamps, the internet profile of ISO 8601.
+
+* [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545.html) — iCalendar: `RRULE` recurrences and `VEVENT` parsing.
+
+* [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html) — Calendar Availability: `VAVAILABILITY` and `AVAILABLE`.
+
+* [RFC 8984](https://www.rfc-editor.org/rfc/rfc8984.html) — JSCalendar.
+
+* [BCP 47](https://www.rfc-editor.org/info/bcp47) — language and territory tags, used by the `u-ca` calendar and `u-rg` territory subtags.
+
+* [Unicode CLDR](https://cldr.unicode.org/) — calendar, locale, and territory data (via Calendrical and Localize).
+
+* [Allen's Interval Algebra](https://ics.uci.edu/~alspaugh/cls/shr/allen.html) — the 13 interval relations behind `Tempo.relation/2`.
+
+Further reading:
+
+* [RFC 3339 and ISO 8601](https://ijmacd.github.io/rfc3339-iso8601/) — a helpful visual crossref of the two.
+
+* [Computerphile: Timezones](https://www.youtube.com/watch?v=-5wpm-gesOY) — an excellent primer on why timezones are hard.
+
+* [Time words don't mean what you think](https://www.youtube.com/watch?v=TK-8gfqmFNo) — a fun look at the etymology of the words we use to describe time.
+
+* [Computerphile: Why CPU Time ≠ Wall Clock Time](https://www.youtube.com/watch?v=xs5iOwkX9fU).
+
+## Documentation
 
 * [Migrating from Tempo 1.6 to 2.0](https://hexdocs.pm/ex_tempo/migration.html) — each change, with its 1.6 form and its 2.0 form.
 
@@ -295,29 +335,8 @@ Interactive, runnable tours for [Livebook](https://livebook.dev):
 
 * [Architecture](https://hexdocs.pm/ex_tempo/architecture.html) — the model as types, each algorithm in pseudo-code, the calendar and zone contracts, the errors and the cost of each operation, written for a reader porting or assessing the design.
 
-## Related links
+The full documentation, every module and function with the guides above, is on [HexDocs](https://hexdocs.pm/ex_tempo).
 
-Tempo implements or interoperates with these standards:
+## License
 
-* [ISO 8601-1:2019](https://www.iso.org/standard/70907.html) — date and time representations: the base grammar for dates, times, durations, and intervals.
-* [ISO 8601-2:2019](https://www.iso.org/standard/70908.html) — extensions: uncertain and approximate dates, unspecified digits, seasons, sets, and negative components.
-* [EDTF](https://www.loc.gov/standards/datetime/) — the Library of Congress Extended Date/Time Format, aligned with ISO 8601-2.
-* [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557.html) — Internet Extended Date/Time Format (IXDTF): the `[zone]`, `[u-ca=…]`, and `[key=value]` suffixes and the critical `!` flag.
-* [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) — Date and Time on the Internet: Timestamps, the internet profile of ISO 8601.
-* [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545.html) — iCalendar: `RRULE` recurrences and `VEVENT` parsing.
-* [RFC 7953](https://www.rfc-editor.org/rfc/rfc7953.html) — Calendar Availability: `VAVAILABILITY` and `AVAILABLE`.
-* [RFC 8984](https://www.rfc-editor.org/rfc/rfc8984.html) — JSCalendar.
-* [BCP 47](https://www.rfc-editor.org/info/bcp47) — language and territory tags, used by the `u-ca` calendar and `u-rg` territory subtags.
-* [Unicode CLDR](https://cldr.unicode.org/) — calendar, locale, and territory data (via Calendrical and Localize).
-* [Allen's Interval Algebra](https://ics.uci.edu/~alspaugh/cls/shr/allen.html) — the 13 interval relations behind `Tempo.relation/2`.
-
-Further reading:
-
-* [RFC 3339 and ISO 8601](https://ijmacd.github.io/rfc3339-iso8601/) — a helpful visual crossref of the two.
-* [Computerphile: Timezones](https://www.youtube.com/watch?v=-5wpm-gesOY) — an excellent primer on why timezones are hard.
-* [Time words don't mean what you think](https://www.youtube.com/watch?v=TK-8gfqmFNo) — a fun look at the etymology of the words we use to describe time.
-* [Computerphile: Why CPU Time ≠ Wall Clock Time](https://www.youtube.com/watch?v=xs5iOwkX9fU).
-
-## Licence
-
-See [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.0.0/LICENSE.md). Copyright © Kip Cole.
+Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.0.0/LICENSE.md). Copyright © Kip Cole.

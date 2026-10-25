@@ -60,6 +60,7 @@ iex> Tempo.shift(~o"2024-03-09T12[America/New_York]", hour: 24)
 Two ways this is wrong:
 
 * **Spring-forward gaps**: the clock jumps from 01:59 to 03:00, so 02:30 never appears.
+
 * **Fall-back duplicates**: the clock rolls back from 02:00 to 01:00, so 01:30 appears twice.
 
 Libraries that read `"02:30 America/New_York"` on a spring-forward date and return *something* have hidden a bug behind convenience.
@@ -343,5 +344,7 @@ iex> Tempo.utc_today()
 ## Related reading
 
 * [Scheduling](./scheduling.md) — how Tempo handles future dates, DST, floating vs zoned events, and bounded recurrence.
+
 * [Set operations](./set-operations.md) — union, intersection and free-busy queries.
+
 * [The cookbook](./cookbook.md) — recipe-format queries for the common patterns referenced here.

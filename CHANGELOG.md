@@ -18,7 +18,7 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * A value that names no calendar is in `Calendar.ISO`, where it was in `Calendrical.Gregorian`.
 
-* Tempo runs on Calendrical 2.0: the six Gregorian calendars whose weeks begin on another day are made with `Calendrical.Calendar.Shifted`, and every calendar question goes through the kernel and the derived API.
+* Tempo runs on Calendrical 2.0: the six Gregorian calendars whose weeks begin on another day are made with `Calendrical.Calendar.Shifted`, and every calendar question goes through the kernel and the derived API. It requires Calendrical 2.0, Localize 1.4 and Astro 2.8 or later.
 
 * A day of the week (`K`) is counted from the day the expression's weeks begin on, everywhere: `5K` is a Thursday in the Hebrew calendar and in `[u-fw=sun]`, Friday `6K`; `Tempo.day_of_week/2` takes `:monday` for the day as ISO 8601 numbers it.
 
@@ -927,10 +927,15 @@ The named set operations now behave the way the symbols in `A ∩ B`, `A ∖ B`,
 Migration:
 
 * "What's the overlap?" / "What time is in both?" → `intersection/2` (no change in name; behaviour now trimmed).
+
 * "Which of these meetings hit the query window?" → `members_overlapping/2` (was `intersection/2`).
+
 * "Workday minus lunch as free-time blocks" / "Free time around busy" → `difference/2` (no change in name; behaviour now trimmed). This fixes the previously broken `Tempo.difference(workday, lunch)` pattern, which used to drop the whole workday.
+
 * "Which workdays aren't holidays?" → `members_outside/2` (was `difference/2`). The numeric result is the same when each `A` member is either fully covered or fully outside any `B` member (workdays/holidays case), but `members_outside` is the right name for an event-list question.
+
 * Callers of `Tempo.overlap_trim/2` → `Tempo.intersection/2`.
+
 * Callers of `Tempo.split_difference/2` → `Tempo.difference/2`.
 
 The motivation: when a user reads `Tempo.intersection(japan_trip, enrolled)` or `Tempo.difference(workday, lunch)` aloud, they're describing a covered-time question. The library should return that, not surprise them by collapsing whole members. The member-preserving forms remain available — and clearly named — for the event-list questions where they're the right shape.

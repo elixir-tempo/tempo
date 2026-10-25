@@ -95,6 +95,10 @@ if Code.ensure_loaded?(JSCalendar) do
 
     * The arguments are those of `parse/2`.
 
+    ### Options
+
+    * The options of `parse/2`.
+
     ### Returns
 
     * What `parse/2` returns as `{:ok, answer}`, the answer alone.
@@ -170,6 +174,10 @@ if Code.ensure_loaded?(JSCalendar) do
     ### Arguments
 
     * The arguments are those of `from_jscalendar/2`.
+
+    ### Options
+
+    * The options of `from_jscalendar/2`.
 
     ### Returns
 

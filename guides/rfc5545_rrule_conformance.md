@@ -190,7 +190,14 @@ iex> first.("FREQ=DAILY;BYSETPOS=2", ~o"2026-01-01", 1)
 
 > *"The **31st of April**. Every seventh day from a Tuesday that is a **Monday**. The **second** of a day's one."*
 
-A rule is given up once it has selected nothing in a whole cycle of its calendar's years — four hundred in the Gregorian calendar, in which every date and weekday it could name comes round — or in a thousand years in a calendar with no such cycle. A rule that names times of day alone is given up after two years.
+A rule is given up once it has selected nothing in a whole cycle of its calendar's years — four hundred in the Gregorian calendar, in which every date and weekday it could name comes round — or in a thousand years in a calendar with no such cycle. A rule that names times of day alone is given up after two years. A rule that repeats by an interval its cycle does not divide selects in other months in each cycle than in the last, and is walked until its periods come round:
+
+```elixir
+iex> first.("FREQ=MONTHLY;INTERVAL=7;BYMONTH=2;BYMONTHDAY=29;BYDAY=FR", ~o"2025-03-01", 1)
+[~o"2504Y2M29D"]
+```
+
+> *"Every **seventh month**'s **Friday the 29th of February**: none for more than a cycle of four hundred years, and then one in **2504**."*
 
 ## Other calendars
 

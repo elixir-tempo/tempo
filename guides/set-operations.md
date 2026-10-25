@@ -5,7 +5,9 @@ Tempo implements the core set operations — `union/3`, `intersection/3`, `compl
 When you need to ask an **event-list question** — "*which* meetings hit this window?", "*which* workdays aren't holidays?" — reach for the `members_*` companion. Each of them is a member-preserving filter that keeps surviving members whole, with their identity and metadata intact:
 
 * `members_overlapping/3` — companion to `intersection/3`
+
 * `members_outside/3` — companion to `difference/3`
+
 * `members_in_exactly_one/3` — companion to `symmetric_difference/3`
 
 Companion predicates (`disjoint?/2`, `overlaps?/2`, `within?/2`, `contains?/2`, `equal?/2`) operate at the instant-set level.
@@ -76,7 +78,7 @@ Before any operation runs, both operands are read as spans on one **frame**. Thr
 
 Operands of different resolutions are compared as the spans they are: `2022Y` is the span from the start of 1 January 2022 to the start of 1 January 2023, whatever unit it is written in, so nothing is extended or truncated.
 
-```
+```elixir
 iex> {:ok, set} = Tempo.intersection(~o"2022Y", ~o"2022-06-15")
 iex> Tempo.IntervalSet.count(set)
 1
@@ -353,10 +355,13 @@ iex> free
 
 Set-algebra identities hold at the **instant-set level** — i.e. after coalescing, or equivalently, when compared via `Tempo.equal?/2`. The instant-level operations (`intersection`, `difference`, `symmetric_difference`, `complement`) satisfy them directly. The member-preserving operation `union` and the member-preserving filters (`members_overlapping`, `members_outside`, `members_in_exactly_one`) preserve A-side member identity, so they don't satisfy classical laws like commutativity at the member-list level — but they do at the covered-instant level once you compare via `Tempo.equal?/2`:
 
-- Commutativity: `intersection(A, B) ≡ intersection(B, A)` (same covered instants — symmetric by construction)
-- Associativity: `(A ∪ B) ∪ C ≡ A ∪ (B ∪ C)` under coalescing
-- Identity: `A ∪ ∅ ≡ A`, `intersection(A, U) ≡ A` (with `U` = the window)
-- De Morgan's laws: `¬(A ∪ B) ≡ ¬A ∩ ¬B` and `¬(A ∩ B) ≡ ¬A ∪ ¬B` (within a common window)
+* Commutativity: `intersection(A, B) ≡ intersection(B, A)` (same covered instants — symmetric by construction)
+
+* Associativity: `(A ∪ B) ∪ C ≡ A ∪ (B ∪ C)` under coalescing
+
+* Identity: `A ∪ ∅ ≡ A`, `intersection(A, U) ≡ A` (with `U` = the window)
+
+* De Morgan's laws: `¬(A ∪ B) ≡ ¬A ∩ ¬B` and `¬(A ∩ B) ≡ ¬A ∪ ¬B` (within a common window)
 
 Tempo's test suite covers all of these.
 
@@ -382,7 +387,7 @@ Each error is returned by the operations that return a set, and raised by the pr
 
 ## 6. Not in scope
 
-- **Rule-algebra** — intersecting two infinite recurrences to produce a closed-form rule. Intentionally deferred.
+* **Rule-algebra** — intersecting two infinite recurrences to produce a closed-form rule. Intentionally deferred.
 
 ## 7. Implementation notes
 

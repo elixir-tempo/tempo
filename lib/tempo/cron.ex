@@ -116,6 +116,10 @@ defmodule Tempo.Cron do
 
   * `expression` and `options` are as for `parse/2`.
 
+  ### Options
+
+  * The options of `parse/2`.
+
   ### Returns
 
   * The recurrence, a `t:Tempo.t/0`, or raises the error `parse/2` returns.

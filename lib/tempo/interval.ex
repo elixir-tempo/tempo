@@ -159,6 +159,10 @@ defmodule Tempo.Interval do
 
   * `options` is a keyword list with the two ends, as for `new/1`.
 
+  ### Options
+
+  * The options of `new/1`.
+
   ### Returns
 
   * The interval, a `t:Tempo.t/0`, or raises the error `new/1` returns.

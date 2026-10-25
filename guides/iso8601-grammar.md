@@ -152,7 +152,7 @@ yearE      = negint "Y"                       ; §7.2, §4.4.1.2: 1985Y, -2018Y
 monthE     = integer "M"
 weekE      = negint "W"                       ; §4.4.1.3: a negative week counts from the year's end
 dayE       = negint "D"                       ; §4.4.1.4: -5D is the fifth last day of the month
-daykE      = integer "K"                      ; §4.3.3, 1K is Monday
+daykE      = integer "K"                      ; §4.3.3, the nth day of the week: 1K is Monday in an ISO week
 dayoE      = negint "O"                       ; §4.3.4, §4.4.1.5
 hourE      = integer "H"
 minE       = integer "M"                      ; the M after T is a minute
@@ -187,7 +187,9 @@ qualifier  = "?" / "~" / "%"                  ; uncertain, approximate, both: IS
 Three placements, in the implied and the explicit form (§8.2):
 
 * **Complete** (§8.2.1): a qualifier at the end of the whole expression, `1985-04-12?`, `1985Y04M12D?`, qualifying every component.
+
 * **Group** (§8.2.2): a qualifier immediately after a component, qualifying it and every component to its left: `2004-06~-11`, `2004Y06M~11D` (year and month approximate).
+
 * **Individual** (§8.2.3): in the implied form a qualifier immediately *before* a component, `2004-%06-%11`; in the explicit form between the value and its designator, `2004Y6%M11%D`.
 
 ```abnf
@@ -401,5 +403,7 @@ The reader splits a text at the places the grammar makes structural before it re
 ## 7. How the grammar is tested
 
 * **Generated texts.** `test/support/grammar/` holds a generator for each production that produces texts the production matches, with unit values the validator accepts, and a property test asserts that `Tempo.from_iso8601/2` reads each one and `Tempo.to_iso8601/1` writes a text the reader reads to the same value.
+
 * **Mutated texts.** A mutator takes a generated text and makes one change the grammar forbids (a separator dropped, a designator doubled, a suffix moved inside, a set left unclosed) and asserts a `Tempo.ParseError` that names the position.
+
 * **The standards' examples.** Every example in ISO 8601-1 Annex A and in the clauses of ISO 8601-2 cited above, and every example of RFC 9557 §4, is a row of a table with the value it is read as or the reason it is refused; the conformance guide's "partial or divergent" list says which rows diverge and why.

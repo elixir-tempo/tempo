@@ -43,7 +43,7 @@ iex> Tempo.relation(~o"2026/2028", ~o"2029")
 
 One type holds every expression. In a notation of sum and product types:
 
-```
+```text
 Expression  = { form : Form, calendar : Calendar, zone : Zone?, shift : Shift?,
                 qualifications : Qualifications?, metadata : Map }
 
@@ -98,7 +98,7 @@ A **position** is an integer. On a line it is a count of microseconds, called ti
 
 A **frame** is where positions are comparable:
 
-```
+```text
 Frame = UTCLine | FloatingLine | Cycle Unit
 
 frame(value) = Cycle (coarsest unit)   if the value has no year
@@ -116,7 +116,7 @@ The **day scale** is the count of days from the same origin, the proleptic Grego
 
 `spans : Expression × Options → Sequence of Span` is the meaning of any expression, and every operation reads an expression through it. The options carry a window (`within`), without which a sequence that has no end of its own is refused where every member is needed and read lazily where it is not.
 
-```
+```text
 spans(Value units, options)
   | units hold a Selection      = the selection applied in each period the units before it name (5.4)
   | units have no year, window  = the value placed on each period of the window (5.4), then spans of each
@@ -140,7 +140,7 @@ spans(When member conditions)   = the member's spans, each kept, moved or droppe
 
 The **extent** of a span is its two positions on its frame. For a written span `a/b` (law 9):
 
-```
+```text
 extent(Span a b) = ( start(a), end(b) )
   where end(b) = stop of extent(b)   if b is written to a calendar unit (year … day)
                = start of extent(b)  if b is written to a clock unit (hour … fraction)
@@ -148,7 +148,7 @@ extent(Span a b) = ( start(a), end(b) )
 
 **Enumeration** (law 6) is a function of the form:
 
-```
+```text
 children(E) | E is singular = walk(extent(E), one unit below E's resolution)   (5.2)
             | E is plural   = members(E)
 
@@ -163,7 +163,7 @@ A value is singular when every unit holds one value and each unit lies within th
 
 ### 5.1 The extent of a value
 
-```
+```text
 extent(units, calendar, zone, shift):
   if the units are not anchored (no year):
       cycle position of the units (section 3), and that plus one unit of the resolution
@@ -183,7 +183,7 @@ A value with a count from the end (`-1D`), a group, a century, a quarter or a se
 
 A span is walked at a unit by stepping on the scale the unit lives on. There is one rule and no special case for a change of the clock.
 
-```
+```text
 walk((start, stop), unit, frame):
   calendar unit (year, month, week, day, quarter):
       day = the day of start on the frame's wall clock
@@ -203,7 +203,7 @@ A day across a change of the clock has 23 or 25 hours because its two ends are 2
 
 Expansion gives every concrete value a value's units allow, in order, coarsest unit first. It is the one engine for a set in a unit, a mask, a count from the end, a group, a gap between units, and the parts of a selection and of an RRULE.
 
-```
+```text
 expand(units, frame):
   units = units with gaps filled by Any (a day after a year gets "any month" between)
   values of the first unit from what it holds (a year, a decade, a century name their own values)
@@ -238,7 +238,7 @@ Two shortcuts are exact and are the only ones: a month of a year or a day of a m
 
 A selection (`L…N` in ISO 8601-2; what an RRULE, a cron expression and a JSCalendar rule lower to) is parts applied in a period. The period is the units written before the selection, or each period of a window, or each period of a base for `select(base, selector)`.
 
-```
+```text
 in_period(period, parts):
   split the parts into: those before a nested selection, the nested selection with its window, those after
   scopes  = the period, or each value the parts before select in it
@@ -264,8 +264,10 @@ With a rule, the cadence's periods are the repeating intervals (RFC 5545's weeks
 The walk ends, which a port must be able to argue for:
 
 * A count or an until ends it directly, and a window ends it at the window's end.
-* With none of those, a period of a day or finer in which the rule selects nothing is followed by the next for two periods, and then the walk looks ahead to where the rule's parts next name a value, a year, a month or a day at a time.
-* The look-ahead has a horizon: two years for a rule that names times of day alone (a zone's clock changes by the year), and otherwise a full cycle of the calendar's years (four hundred in the Gregorian), in which every date and weekday the rule could name has come round, or a thousand years in a calendar with no cycle. A rule that selects nothing within its horizon has no more occurrences, and the sequence ends.
+
+* With none of those, a period of a day or finer in which the rule selects nothing is followed by the next for two periods, and then the walk looks ahead to where the rule's parts next name a value, a year, a month or a day at a time. A rule that repeats by an interval of several units selects in the first unit of each period, so its look-ahead names only a value in a period's first unit, placing each period it passes once.
+
+* The look-ahead has a horizon: two years for a rule that names times of day alone (a zone's clock changes by the year), and otherwise a full cycle of the calendar's years (four hundred in the Gregorian), in which every date and weekday the rule could name has come round, or a thousand years in a calendar with no cycle. A rule that repeats by an interval of `n` units, `u` of them to such a span (to a day, for a rule of times of day by hours, minutes or seconds), selects in other units in each span than in the last until its periods come round, so it is walked `n / gcd(n, u)` spans: seven Gregorian cycles for every seventh month, one for every third. Where the units cannot be counted it is walked `n` spans, and in a calendar with no cycle a thousand years `n` times over. A rule that selects nothing within its horizon has no more occurrences, and the sequence ends.
 
 Occurrences are made with the positions the walk found them at, and the start of each next period is handed from the period that reckoned it, so no occurrence is placed twice.
 
@@ -273,7 +275,7 @@ Occurrences are made with the positions the walk found them at, and the start of
 
 Every instant-level set operation is one sweep over the sorted ends of the operands' spans, asking at each position how many spans of each operand cover the point after it.
 
-```
+```text
 sweep(a, b, keep):                                 -- a, b: lists of (start, stop, span, side)
   edges = for each span: (start, Open, side, span), (stop, Close, side, span)
   group the edges by position, in order of position
@@ -305,7 +307,7 @@ The everyday predicates are defined on covered time: `within?(a, b)` is that `di
 
 The relation of two spans is read from four integer comparisons: start against start, end against end, the first's end against the second's start, the first's start against the second's end. Every pair of spans stands in exactly one relation.
 
-```
+```text
 relation((a_from, a_to), (b_from, b_to)):
   ss = compare(a_from, b_from); ee = compare(a_to, b_to)
   es = compare(a_to, b_from);   se = compare(a_from, b_to)
@@ -336,7 +338,7 @@ The **certainty** of a relation between uncertain expressions (a year with a mar
 
 An expression is moved by a duration at the position of its start, and written back at the moved position on its own axis and at its own resolution, extended to the duration's finest unit where that is finer (a year a day on is its second day).
 
-```
+```text
 shifted(position, duration, frame):
   date part (years, months, weeks, days):
       day    = the day of position on the frame's wall clock
@@ -454,9 +456,13 @@ Tempo is the representation and selection layer: the written grammar, the forms,
 The library is held to oracles written apart from it, and those oracles are exported as fixtures a port can run from its own test suite, under `test/fixtures/conformance/` in the repository, each with a README of its shape:
 
 * `allen.json`: the thirteen relations with a pair of spans for each, and the 169 cells of the composition table.
+
 * `set_operations.json`: every pair of sets of up to two members between five points of a line, with the covered cells of each operation, and the lines (days, hours, hours in two zones, days in two calendars) the points stand on.
+
 * `rrule.json`: 192 recurrence rules from three starts, each with the occurrences an expander written to RFC 5545 section 3.3.10 gives, beside the standard's own examples.
+
 * `clock_changes.json`: the hours a zone's clock shows on each of twenty-two days on which it changes, as the platform's own date and time say.
+
 * `expressions.json`: every expression of a corpus written by hand against every operation, with every cell that refuses and the name and reason of its error; every other cell answers with a value.
 
 * `census.json`: a value in each full form, each value with no year, each shape and each selection in 27 calendars, with the positions each covers, its walk yields or it selects, worked out from the calendar alone.

@@ -1160,13 +1160,13 @@ iex> workable_daylight = fn december, territory, location, zone ->
 ...>   Float.round(hours, 1)
 ...> end
 iex> workable_daylight.(~o"2026-12[Europe/Helsinki]", :FI, {24.9384, 60.1699}, "Europe/Helsinki")
-137.8
+137.7
 
 iex> workable_daylight.(~o"2026-12[Europe/Lisbon]", :PT, {-9.1393, 38.7223}, "Europe/Lisbon")
 184.0
 ```
 
-> *"For each **workday** of a December, the **site hours**, eight to four, **intersected** with that day's **daylight**, and their lengths **summed**. Lisbon's crew has all 184 of its site hours; Helsinki's has 137.8 — a quarter fewer, from geography alone."*
+> *"For each **workday** of a December, the **site hours**, eight to four, **intersected** with that day's **daylight**, and their lengths **summed**. Lisbon's crew has all 184 of its site hours; Helsinki's has 137.7 — a quarter fewer, from geography alone."*
 
 Three details matter. The December is in its zone (`~o"2026-12[Europe/Helsinki]"`), and the days and site hours selected from it are too, so they are compared with the sunrise as the instants they are. `Astro.sunrise/3` needs `time_zone:` named unless `tz_world` is a dependency to find the zone from the coordinates. And `DateTime.truncate(:second)` keeps sunrise to the second, as precise as any site schedule needs.
 
@@ -1316,6 +1316,9 @@ Two intervals stand in exactly one of thirteen relations — [Allen's interval a
 * [ISO 8601 conformance](./iso8601-conformance.md) — what's supported from the standard.
 
 * [Enumeration semantics](./enumeration-semantics.md) — how iteration works across Tempo values.
+
 * [Set operations](./set-operations.md) — union, intersection, complement, difference.
+
 * [iCalendar integration](./ical-integration.md) — full `.ics` import with RRULE/RDATE/EXDATE.
+
 * [One form for ISO 8601 and RRULE](./shared-ast-iso8601-and-rrule.md) — how a rule and an ISO 8601 recurrence are the same expression.

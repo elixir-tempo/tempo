@@ -58,6 +58,10 @@ defmodule Tempo.RecurrenceSet do
 
   * `members` and `options` are as for `new/2`.
 
+  ### Options
+
+  * The options of `new/2`.
+
   ### Returns
 
   * The set, a `t:Tempo.t/0`, or raises the error `new/2` returns.

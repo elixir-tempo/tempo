@@ -155,6 +155,10 @@ defmodule Tempo.RRule do
 
   * `text` and `options` are as for `parse/2`.
 
+  ### Options
+
+  * The options of `parse/2`.
+
   ### Returns
 
   * The recurrence, a `t:Tempo.t/0`, or raises the error `parse/2` returns.
@@ -388,6 +392,10 @@ defmodule Tempo.RRule do
   ### Arguments
 
   * The arguments are those of `from_rule/2`.
+
+  ### Options
+
+  * The options of `from_rule/2`.
 
   ### Returns
 

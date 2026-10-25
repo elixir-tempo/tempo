@@ -114,6 +114,10 @@ if Code.ensure_loaded?(ICal) do
 
     * The arguments are those of `parse/2`.
 
+    ### Options
+
+    * The options of `parse/2`.
+
     ### Returns
 
     * What `parse/2` returns as `{:ok, answer}`, the answer alone.
@@ -187,6 +191,10 @@ if Code.ensure_loaded?(ICal) do
     ### Arguments
 
     * The arguments are those of `parse_file/2`.
+
+    ### Options
+
+    * The options of `parse_file/2`.
 
     ### Returns
 
@@ -265,6 +273,10 @@ if Code.ensure_loaded?(ICal) do
     ### Arguments
 
     * The arguments are those of `from_ical/2`.
+
+    ### Options
+
+    * The options of `from_ical/2`.
 
     ### Returns
 
@@ -361,6 +373,10 @@ if Code.ensure_loaded?(ICal) do
     ### Arguments
 
     * The arguments are those of `available/2`.
+
+    ### Options
+
+    * The options of `available/2`.
 
     ### Returns
 

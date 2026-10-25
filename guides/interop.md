@@ -5,7 +5,9 @@ Tempo treats every value as a **bounded interval on the time line**, never as an
 This guide answers the questions that follow from that:
 
 * **At what resolution** does a converted value land?
+
 * **What interval** does a "point in time" actually become — and why does the width matter?
+
 * **What kind of value** does a text become — and how do you say which kind you expected?
 
 ## Setup — required for every example
@@ -232,7 +234,9 @@ iex> {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026-02-30", prof
 Convert at the **edges**, compute in the **middle**:
 
 * **Edge layer** (HTTP, DB, log parsing): stdlib types. Parse Unix timestamps and ISO strings into `Date` and `DateTime`.
+
 * **Domain layer** (scheduling, availability, recurrence, set operations): Tempo. Convert in with `from_elixir/2` when the next operation is interval-shaped.
+
 * **Display layer**: `Tempo.to_string/2` for a locale's words, or the `to_*` projections above to hand a stdlib value back to code that does not use Tempo.
 
 See [When to use Tempo](when-to-use-tempo.md) for the full decision tree.

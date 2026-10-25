@@ -171,6 +171,9 @@ Ten values and eight operations: opening hours and an iCal feed became free time
 ## Where next
 
 * The [scheduling guide](https://hexdocs.pm/ex_tempo/scheduling.html) — floating vs zoned events, zone-rule-proof future dates, and critical-path scheduling.
+
 * The [scheduling livebook](https://hexdocs.pm/ex_tempo/scheduling-workbook.html) — this material, runnable.
+
 * The [iCal integration guide](https://hexdocs.pm/ex_tempo/ical-integration.html) — recurring events in feeds, attendee filtering, metadata flow.
+
 * The [cookbook](https://hexdocs.pm/ex_tempo/cookbook.html) — recipe-format answers when you know the question.

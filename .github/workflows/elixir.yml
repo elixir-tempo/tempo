@@ -29,25 +29,25 @@ jobs:
 
           # Elixir 1.17 — on OTP 27
           - elixir: "1.17.3-otp-27"
-            otp: "27.3.4.18"
+            otp: "27.3.4.19"
 
           # Elixir 1.18 — on OTP 27
           - elixir: "1.18.5-otp-27"
-            otp: "27.3.4.18"
+            otp: "27.3.4.19"
 
           # Elixir 1.19 — on OTP 27–28
           - elixir: "1.19.6-otp-27"
-            otp: "27.3.4.18"
+            otp: "27.3.4.19"
           - elixir: "1.19.6-otp-28"
-            otp: "28.5.0.7"
+            otp: "28.5.0.8"
 
           # Elixir 1.20 — on OTP 27–29
           - elixir: "1.20.4-otp-27"
-            otp: "27.3.4.18"
+            otp: "27.3.4.19"
           - elixir: "1.20.4-otp-28"
-            otp: "28.5.0.7"
+            otp: "28.5.0.8"
           - elixir: "1.20.4-otp-29"
-            otp: "29.1.1"
+            otp: "29.1.2"
             lint: true
 
     steps:

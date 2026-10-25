@@ -104,6 +104,10 @@ defmodule Tempo.Workdays do
 
   * The arguments are those of `new/2`.
 
+  ### Options
+
+  * The options of `new/2`.
+
   ### Returns
 
   * What `new/2` returns as `{:ok, answer}`, the answer alone.

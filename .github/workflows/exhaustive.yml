@@ -30,7 +30,7 @@ jobs:
           # The lint row of `elixir.yml`, the latest Elixir on the latest
           # OTP, verified against the release tags. Bump it with that row.
           - elixir: "1.20.4-otp-29"
-            otp: "29.1.1"
+            otp: "29.1.2"
 
     steps:
       - name: Checkout
