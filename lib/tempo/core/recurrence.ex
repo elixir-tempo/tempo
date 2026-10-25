@@ -41,6 +41,10 @@ defmodule Tempo.Recurrence do
   # nothing, before it looks ahead for where its parts next name a value.
   @quiet_periods 2
 
+  # The periods a look-ahead steps to, one placed from the next, before it
+  # reckons where a value further on lies (decision 84).
+  @periods_stepped_to 5
+
   # ── Repeat rules ──────────────────────────────────────────────────────
 
   @doc """
@@ -161,9 +165,20 @@ defmodule Tempo.Recurrence do
     {since, quiet_from} = quiet_since || {start, k}
 
     cond do
-      start - since > walk.horizon -> nil
-      k - quiet_from < quiet_periods(walk.first) -> {[], {k + 1, {since, quiet_from}, carried}}
-      true -> stepped_on(next_named(stop, period, k, walk), k, {since, quiet_from}, carried, walk)
+      start - since > walk.horizon ->
+        nil
+
+      k - quiet_from < quiet_periods(walk.first) ->
+        {[], {k + 1, {since, quiet_from}, carried}}
+
+      true ->
+        stepped_on(
+          next_named(stop, period, {:at, k + 1, carried}, walk),
+          k,
+          {since, quiet_from},
+          carried,
+          walk
+        )
     end
   end
 
@@ -240,8 +255,9 @@ defmodule Tempo.Recurrence do
   # the cadence: looked for a year, a month or a day at a time, as far as the
   # horizon. A nested selection, or a set of them, is made in the period as a whole (the fifth
   # Sunday of a month, at nine), so its parts are looked for in the next period.
-  # The period the position is in is the k-th or a later one.
-  defp next_named(tick, period, k, walk) do
+  # The place is the period the value is looked for from: the k-th, with
+  # what the period before it carried.
+  defp next_named(tick, period, place, walk) do
     parts = picking(walk.parts)
 
     # A skip gives a period that names nothing a day of its own, so no
@@ -251,87 +267,158 @@ defmodule Tempo.Recurrence do
     case {every_period?, Select.probe(parts)} do
       {true, _probe} -> tick
       {false, nil} -> nil
-      {false, probe} -> named_from(tick, tick, probe, period, k, walk)
+      {false, probe} -> named_from(tick, tick, probe, period, place, walk)
     end
   end
 
-  # The k-th period, or the last the search has reached, is the one a
-  # position is first looked for in, so that a search of many years finds
-  # each position's period near the last.
-  defp named_from(tick, from, {unit, search} = probe, period, k, walk) do
+  # A search of many years carries its place among the periods from one of
+  # its spans to the next, so that each period it passes is placed once.
+  defp named_from(tick, from, {unit, search} = probe, period, place, walk) do
     span = %{period | form: {:value, Shift.period_units(tick, unit, Spans.frame_of(period))}}
     {_start, stop} = ends_of(span)
 
-    case first_named(span, search, from, k, walk) do
+    case first_named(span, search, from, place, walk) do
       {:ok, found} ->
         found
 
-      {:none, k} ->
+      {:none, place} ->
         if stop <= tick or stop - from > walk.horizon do
           nil
         else
-          named_from(stop, from, probe, period, k, walk)
+          named_from(stop, from, probe, period, place, walk)
         end
     end
   end
 
   # A window may carry what it selects back out of its period, so where the
   # parts open one, a period in which anything is selected is the place.
-  defp first_named(span, search, from, k, walk) do
+  defp first_named(span, search, from, place, walk) do
     case {Select.in_period(span, search, walk.options), Keyword.has_key?(search, :selection)} do
       {{:ok, [_ | _]}, true} ->
         {:ok, max(from, Spans.start_position(span))}
 
       {{:ok, picked}, _windowed?} ->
-        positions =
+        named =
           picked
-          |> Enum.map(&Spans.start_position/1)
-          |> Enum.filter(&(&1 >= from))
+          |> Enum.map(&{Spans.start_position(&1), &1})
+          |> Enum.filter(fn {position, _value} -> position >= from end)
 
-        first_selectable(positions, k, walk)
+        first_selectable(named, place, walk)
 
       {{:error, _}, _windowed?} ->
-        {:none, k}
+        {:none, place}
     end
   end
 
-  # Of the positions the parts name, the first a period selects in: any,
-  # where every unit of a period is selected in; where an interval of several
+  # Of the values the parts name, the first a period selects in: any, where
+  # every unit of a period is selected in; where an interval of several
   # units selects in its first (decision 84), the first in a period's first
-  # unit, a position past it passed over to the next period.
-  defp first_selectable([], k, _walk) do
-    {:none, k}
+  # unit, a value past it passed over to the next period.
+  defp first_selectable([], place, _walk) do
+    {:none, place}
   end
 
-  defp first_selectable(positions, k, %{interval?: true} = walk) do
-    positions
-    |> Enum.sort()
-    |> first_in_first_unit(k, walk)
+  defp first_selectable(named, place, %{interval?: true} = walk) do
+    named
+    |> Enum.sort_by(&elem(&1, 0))
+    |> first_in_first_unit(place, walk)
   end
 
-  defp first_selectable(positions, _k, _walk) do
-    {:ok, Enum.min(positions)}
+  defp first_selectable(named, _place, _walk) do
+    {position, _value} = Enum.min_by(named, &elem(&1, 0))
+    {:ok, position}
   end
 
-  defp first_in_first_unit([], k, _walk) do
-    {:none, k}
+  # The periods a look-ahead passes are placed one after another, each from
+  # the start the one before it carried; a value further on than the period
+  # after next is reached by the walk's reckoning (`index_at/4`).
+  defp first_in_first_unit([], place, _walk) do
+    {:none, place}
   end
 
-  defp first_in_first_unit([position | later], k, walk) do
-    n = index_at(position, walk.period_at, k, k)
+  defp first_in_first_unit(named, {:at, k, carried}, walk) do
+    first_in_first_unit(named, placed(k, carried, walk), walk)
+  end
 
-    if in_first_unit?(position, walk.period_at.(n), walk.first) do
-      {:ok, position}
-    else
-      next = Spans.start_position(walk.period_at.(n + 1))
+  defp first_in_first_unit(
+         [{position, _value} = named_value | later] = named,
+         {:placed, _k, period, start, next_start, _next} = place,
+         walk
+       ) do
+    cond do
+      position < start ->
+        first_in_first_unit(later, place, walk)
 
-      later
-      |> Enum.drop_while(&(&1 < next))
-      |> first_in_first_unit(n + 1, walk)
+      position >= next_start ->
+        first_in_first_unit(named, onward(position, place, walk), walk)
+
+      in_first_unit?(named_value, period, walk.first) ->
+        {:ok, position}
+
+      true ->
+        later
+        |> Enum.drop_while(fn {at, _value} -> at < next_start end)
+        |> first_in_first_unit(place, walk)
     end
   end
 
-  defp in_first_unit?(position, period, first) do
+  # The k-th period, where it starts and where the next does, placed with
+  # the start the period before carried where it did.
+  defp placed(k, carried, walk) do
+    case walk.period_at.({:with_extent, k, carried}) do
+      {period, {start, _stop}, {_next_k, _value, next_start} = next}
+      when is_integer(start) and is_integer(next_start) ->
+        {:placed, k, period, start, next_start, next}
+
+      {period, _extent, _carried} ->
+        next_start = Spans.start_position(walk.period_at.(k + 1))
+        {:placed, k, period, Spans.start_position(period), next_start, nil}
+    end
+  end
+
+  # A period placed from the start the one before carried costs one move
+  # of the first span, where the walk's reckoning of a period further on
+  # costs several: a value a few periods on is stepped to.
+  defp onward(position, {:placed, k, _period, start, next_start, next}, walk) do
+    reckoned = k + div(position - start, max(next_start - start, 1))
+
+    if reckoned - k <= @periods_stepped_to do
+      {:at, k + 1, next}
+    else
+      {:at, index_at(position, walk.period_at, k + 1, k + 1), nil}
+    end
+  end
+
+  # A named value is in a period's first unit where it is written in the
+  # period's units, down to the cadence's, and agrees with them; one written
+  # in other units is in it where it begins before the first unit ends.
+  defp in_first_unit?({position, value}, period, first) do
+    case written_alike(value, period, first) do
+      {:ok, alike?} -> alike?
+      :unlike -> begins_in_first_unit?(position, period, first)
+    end
+  end
+
+  defp written_alike(
+         %Tempo{form: {:value, units}},
+         %Tempo{form: {:span, %Tempo{form: {:value, period_units}}, _to}},
+         %Tempo{form: {:span, _from, %Duration{units: [{unit, _n}]}}}
+       ) do
+    keys = Keyword.keys(period_units)
+    taken = Keyword.take(units, keys)
+
+    if List.last(keys) == unit and Keyword.keys(taken) == keys do
+      {:ok, taken == period_units}
+    else
+      :unlike
+    end
+  end
+
+  defp written_alike(_value, _period, _first) do
+    :unlike
+  end
+
+  defp begins_in_first_unit?(position, period, first) do
     case period_extent(eligible(period, first)) do
       {_start, stop} -> position < stop
       nil -> true

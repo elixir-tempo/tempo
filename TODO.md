@@ -10,7 +10,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
-* [ ] **A never-occurring interval rule's look-ahead, the rest of it** — decision 84 is built short of its aim: a quarterly rule that never occurs takes 144 ms, not the 20 to 60 ms of a rule that names nothing, and 58 s in the Persian calendar. The look-ahead places about seven periods a year of its horizon where four would do, and a Persian date costs about 30 µs in Calendrical.
+* [ ] **A Persian rule's walk** — a never-occurring interval rule takes 15 s in the Persian calendar, its horizon 3,000 years (decision 83) at about 5 ms a year, where a Gregorian one takes 61 ms. A Persian date costs about 30 µs in Calendrical, against nearly nothing in the Gregorian, and a placed period asks many.
 
 ## Blocked
 
@@ -61,6 +61,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **A quiet interval rule's look-ahead placed once a period** — a never-occurring quarterly rule in 61 ms, where it took a second; decision 84. 2026-10-25.
 
 * [x] **A quiet rule walked until its interval's periods come round** — every seventh month or year selects in other months each cycle, and was ended after one; decisions 83 and 84. 2026-10-25.
 
