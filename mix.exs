@@ -13,7 +13,7 @@ defmodule Tempo.MixProject do
     )
   end
 
-  @version "1.6.4"
+  @version "1.6.5"
 
   def project do
     [
@@ -186,8 +186,8 @@ defmodule Tempo.MixProject do
     [
       {:nimble_parsec, "~> 1.0"},
       {:calendrical, "~> 1.0"},
-      {:astro, "~> 2.4"},
-      {:localize, "~> 1.0"},
+      {:astro, "~> 2.4 and < 2.7.0"},
+      {:localize, "~> 1.0 and < 1.4.0"},
       # 3.2 is the first release carrying VAVAILABILITY (RFC 7953), which
       # `Tempo.ICal.available/2` needs, so the floor cannot go lower.
       {:ical, "~> 3.2", optional: true},

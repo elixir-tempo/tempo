@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.6.5] — 2026-10-26
+
+### Fixed
+
+* Astro is required below 2.7.0 and Localize below 1.4.0: a new install of 1.6.4 resolved Calendrical 1.3.0 with Astro 2.8.0, which does not compile, or with Localize 1.4.0, whose formatting does not know Calendrical 1.3's calendars. Tempo 2.0 runs on Calendrical 2.0, Localize 1.4 and Astro 2.8.
+
 ## [v1.6.4] — 2026-09-03
 
 ### Fixed
