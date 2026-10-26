@@ -492,6 +492,10 @@ defmodule Tempo.Validate do
       else: {:error, {:no_such_date, n}}
   end
 
+  defp within(0, {:dates, year, month}, calendar) do
+    {:error, {:out_of_range, 0, 1..Calendar.days_in_month(calendar, year, month)}}
+  end
+
   defp within(n, {:dates, year, month}, calendar) when is_integer(n) and n < 0 do
     if -n <= Calendar.days_in_month(calendar, year, month),
       do: :ok,

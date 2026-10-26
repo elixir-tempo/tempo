@@ -96,6 +96,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * An interval may start or end at 24:00, the end of its day, as ISO 8601-1's Amendment 1 (2022) restores it: `2026-06-15T09/2026-06-15T24` is nine until midnight, written back as `2026Y6M15DT9H/16DT0H`. 24:00 alone is an `InvalidDateError` with the reason `:end_of_day`.
 
+* `Tempo.from_iso8601/2` takes `overflow: :carry` to read a value's parts out of range as ISO 8601-2's Amendment 1 (2025) does: `2018Y13M` is January 2019 and `2020Y2M59D` is 30 March 2020. By default they are an `InvalidDateError`, as before.
+
 * `Tempo.new/1`, `Tempo.selection/2` and `Tempo.every/2`'s `:select` take a day of the week by its name (`day_of_week: :friday`), numbered in the expression's calendar: `6K` in the Hebrew calendar. `Tempo.selection/2` takes a `:calendar`.
 
 * `Tempo.time_zone_database/0` returns the time zone database Tempo asks, so a library built on Tempo reads a zone as Tempo does.
@@ -173,6 +175,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 * ISO 8601-1's alternative duration format (`P0002-01-10T22:33:55`) is read.
 
 ### Fixed
+
+* A day of the month written as zero (`2020-03-00`) is an `InvalidDateError`, where the reader raised a `FunctionClauseError`.
 
 * An interval's end written with no time shift takes its start's, as ISO 8601-1 §5.5.1 has it: `2018-01-15T12:00+05:00/T13:00` is one hour, where the end was read as UTC and it was six. A start with no shift before an end with one is a `Tempo.FrameError`.
 

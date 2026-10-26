@@ -20,16 +20,41 @@ defmodule Tempo.Shift do
     ConversionError,
     Duration,
     Expand,
+    InvalidDateError,
     Limit,
     Scale,
     Spans,
     Unit,
+    Validate,
     Walk,
     Zone
   }
 
   @day 86_400_000_000
   @sample_years 33
+
+  # The least value of each unit a value's out-of-range parts are carried
+  # from, and the unit of a duration that carries them.
+  @carried_from [
+    month: 1,
+    week: 1,
+    day: 1,
+    day_of_year: 1,
+    day_of_week: 1,
+    hour: 0,
+    minute: 0,
+    second: 0
+  ]
+  @carried_by [
+    month: :month,
+    week: :week,
+    day: :day,
+    day_of_year: :day,
+    day_of_week: :day,
+    hour: :hour,
+    minute: :minute,
+    second: :second
+  ]
 
   @type expression :: Tempo.t()
 
@@ -99,6 +124,123 @@ defmodule Tempo.Shift do
     do: {:error, conversion(expression, :conditions)}
 
   def shift(%Duration{} = duration, _by), do: {:error, conversion(duration, :bare_duration)}
+
+  @doc """
+  An expression with each value written with parts out of range carried
+  into range, as ISO 8601-2's Amendment 1 (2025) reads them (§14.5, D.3.1):
+  `2018Y13M` is January 2019 and `2020Y2M59D` is 30 March 2020. A value is
+  carried when it has a year and a date, holds whole numbers no lower than
+  its units' least, and is no date as written: its parts are offsets from
+  their least, added in turn. A negative day counts back from the end of its
+  month (§4.4.1.4) and is not carried. Anything else is left as it is, for
+  validation to answer.
+  """
+  @spec carried(term()) :: {:ok, term()} | {:error, Exception.t()}
+  def carried(%Tempo{form: {:value, units}} = value) do
+    if carriable?(value, units) do
+      carried_value(value, units)
+    else
+      {:ok, value}
+    end
+  end
+
+  def carried(%Tempo{form: {:span, from, to}} = span) do
+    with {:ok, from} <- carried(from),
+         {:ok, to} <- carried(to) do
+      {:ok, %{span | form: {:span, from, to}}}
+    end
+  end
+
+  def carried(%Tempo{form: {:every, first, bound, rule}} = recurrence) do
+    with {:ok, first} <- carried(first),
+         {:ok, bound} <- carried(bound) do
+      {:ok, %{recurrence | form: {:every, first, bound, rule}}}
+    end
+  end
+
+  def carried(%Tempo{form: {kind, members}} = set)
+      when kind in [:all, :one] and is_list(members) do
+    with {:ok, members} <- carried_members(members) do
+      {:ok, %{set | form: {kind, members}}}
+    end
+  end
+
+  def carried(other) do
+    {:ok, other}
+  end
+
+  defp carried_members(members) do
+    results = Enum.map(members, &carried_member/1)
+    error = Enum.find(results, &match?({:error, _}, &1))
+
+    if is_nil(error) do
+      {:ok, Enum.map(results, &elem(&1, 1))}
+    else
+      error
+    end
+  end
+
+  defp carried_member({:except, member}) do
+    with {:ok, member} <- carried(member) do
+      {:ok, {:except, member}}
+    end
+  end
+
+  defp carried_member(member) do
+    carried(member)
+  end
+
+  defp carriable?(value, [{:year, year} | [_ | _] = parts]) when is_integer(year) do
+    Enum.all?(parts, &carriable_part?/1) and no_date?(value)
+  end
+
+  defp carriable?(_value, _units) do
+    false
+  end
+
+  defp carriable_part?({:microsecond, {part, _precision}}) do
+    is_integer(part)
+  end
+
+  defp carriable_part?({unit, n}) when is_integer(n) do
+    Keyword.has_key?(@carried_from, unit) and n >= 0
+  end
+
+  defp carriable_part?(_part) do
+    false
+  end
+
+  defp no_date?(value) do
+    match?({:error, %InvalidDateError{}}, Validate.run(value))
+  end
+
+  # The value at the least of each unit, moved by the offsets of its parts
+  # from their least, on the clock as it reads (a zone or a shift is put
+  # back after).
+  defp carried_value(%Tempo{zone: zone, shift: offset} = value, [year | parts]) do
+    least = %{value | form: {:value, [year | Enum.map(parts, &least/1)]}, zone: nil, shift: nil}
+
+    with {:ok, by} <- Duration.new(offsets(parts)),
+         {:ok, carried} <- shift(least, by) do
+      {:ok, %{carried | zone: zone, shift: offset}}
+    end
+  end
+
+  defp least({:microsecond, _} = part) do
+    part
+  end
+
+  defp least({unit, _n}) do
+    {unit, Keyword.fetch!(@carried_from, unit)}
+  end
+
+  defp offsets(parts) do
+    for {unit, n} <- parts,
+        unit != :microsecond,
+        n != Keyword.fetch!(@carried_from, unit) do
+      {Keyword.fetch!(@carried_by, unit), n - Keyword.fetch!(@carried_from, unit)}
+    end
+  end
 
   defp shift_bound(%Tempo{} = until, by), do: shift(until, by)
   defp shift_bound(count_or_infinity, _by), do: {:ok, count_or_infinity}

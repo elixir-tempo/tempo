@@ -78,8 +78,6 @@ Taken by the user on 2026-10-27 (decision 86 in `plans/decisions.md`).
 
 ## Tasks
 
-* [ ] **Out-of-range parts by option** — `Tempo.from_iso8601/2` with `overflow: :carry` carries and borrows a value's parts into range (D2).
-
 * [ ] **Canonical durations** — D.5 on `Tempo.Duration` with a 60-second minute and the calendar's months, and `compare/3` through it (D4).
 
 * [ ] **Expanded years** — a sign and five or more digits (D5).
@@ -87,6 +85,8 @@ Taken by the user on 2026-10-27 (decision 86 in `plans/decisions.md`).
 * [ ] **The conformance guide** — cite both amendments; state the 60-second minute as Tempo's nominal duration rule (D6); the negative day (D3), overflow (D2) and expanded years (D5) as decided.
 
 ### Done
+
+* [x] **Out-of-range parts by option** — `Tempo.from_iso8601/2` with `overflow: :carry` (`Shift.carried/1`): each value's parts are offsets from their least, added by `Shift.shift/2`, in the form written; a negative day is not carried (D3), a time with no date has no day to carry into. Found beside it and fixed: a day of zero raised a `FunctionClauseError` in `Validate`. 2026-10-27.
 
 * [x] **24:00 as the end of a day** — on a date, at either end of an interval, the next day's first unit at the resolution written, placed where the day's extent ends (`Spans.next_day_from_end_of_day/1`); alone, an `InvalidDateError` with `:end_of_day`; on the day's cycle unchanged (`T22/T24`). 2026-10-27.
 

@@ -18,6 +18,7 @@ defmodule Tempo.Reader do
   alias Tempo.Reader.Suffix
   alias Tempo.Reader.Value
   alias Tempo.Season
+  alias Tempo.Shift
   alias Tempo.Spans
   alias Tempo.Unit
   alias Tempo.Validate
@@ -26,7 +27,9 @@ defmodule Tempo.Reader do
 
   @doc """
   Reads a text. Options: `:calendar`, the calendar a text that names none is
-  in (the default is `Calendar.ISO`).
+  in (the default is `Calendar.ISO`); `:territory`, where a season is
+  placed; `:overflow`, `:carry` to carry a value's parts out of range into
+  range rather than refuse them.
   """
   @spec read(String.t(), keyword()) ::
           {:ok, Tempo.t() | Duration.t()} | {:error, ParseError.t() | Exception.t()}
@@ -34,12 +37,23 @@ defmodule Tempo.Reader do
     with {:ok, body, suffix} <- split_suffix(text),
          {:ok, calendar} <- calendar(suffix, options, text),
          {:ok, calendar} <- week_start(suffix, calendar, text),
-         {:ok, expression} <- body |> normalised() |> expression(text) |> suffix_inside() do
+         {:ok, expression} <- body |> normalised() |> expression(text) |> suffix_inside(),
+         framed = in_frame(expression, calendar, suffix),
+         {:ok, expression} <- overflow(framed, options[:overflow]) do
       expression
-      |> in_frame(calendar, suffix)
       |> seasons_placed(options[:territory])
       |> validated()
     end
+  end
+
+  # With `overflow: :carry`, a value's parts out of range are carried into
+  # range (ISO 8601-2, Amendment 1, §14.5); otherwise validation refuses them.
+  defp overflow(expression, :carry) do
+    Shift.carried(expression)
+  end
+
+  defp overflow(expression, _refuse) do
+    {:ok, expression}
   end
 
   # With a territory named, a season of 21 to 24 is given its months there

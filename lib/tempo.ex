@@ -236,6 +236,13 @@ defmodule Tempo do
 
   * `:locale` is a locale whose territory is used as `:territory` is.
 
+  * `:overflow` is `:refuse`, the default, or `:carry`. ISO 8601-2's
+    Amendment 1 (2025) lets a value be written with a part out of its range,
+    meaning the date it carries to: with `:carry`, `2018Y13M` is January 2019
+    and `2020Y2M59D` is 30 March 2020. With `:refuse` such a value is a
+    `Tempo.InvalidDateError`, so that a mistyped date is not read as another.
+    A negative day counts back from the end of its month either way.
+
   ### Returns
 
   * `{:ok, expression}`, a `t:t/0`, or a `t:Tempo.Duration.t/0` for a
@@ -264,6 +271,9 @@ defmodule Tempo do
 
       iex> {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026-02-30")
 
+      iex> Tempo.from_iso8601("2026-02-30", overflow: :carry)
+      {:ok, ~o"2026-03-02"}
+
       iex> {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("tomorrow")
 
   """
@@ -287,12 +297,25 @@ defmodule Tempo do
     with :ok <-
            Options.check(
              options,
-             [:calendar, :profile, :territory, :locale],
+             [:calendar, :profile, :territory, :locale, :overflow],
              "Tempo.from_iso8601/2"
            ),
+         :ok <- overflow_named(Keyword.get(options, :overflow, :refuse)),
          {:ok, territory} <- territory_named(options) do
-      Text.read(text, [territory: territory] ++ Keyword.take(options, [:calendar, :profile]))
+      read_options = Keyword.take(options, [:calendar, :profile, :overflow])
+      Text.read(text, [territory: territory] ++ read_options)
     end
+  end
+
+  defp overflow_named(overflow) when overflow in [:refuse, :carry] do
+    :ok
+  end
+
+  defp overflow_named(other) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.from_iso8601/2 takes overflow: :refuse or :carry, not #{inspect(other)}"
+     )}
   end
 
   @doc """
