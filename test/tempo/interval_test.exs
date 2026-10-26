@@ -137,6 +137,51 @@ defmodule Tempo.IntervalTest do
     end
   end
 
+  # ISO 8601-1 §5.3.2, as Amendment 1 (2022) restores it: 24:00 is the last
+  # instant of a day, which is the next day's first.
+  describe "24:00, the end of a day" do
+    test "is the next day's first instant, at either end" do
+      day = ~o"2022-04-19T00:00:00/2022-04-20T00:00:00"
+
+      assert ~o"2022-04-19T00:00:00/2022-04-19T24:00:00" == day
+      assert ~o"2022-04-18T24:00:00/2022-04-19T24:00:00" == day
+      assert ~o"2022-04-18T24:00:00/2022-04-20T00:00:00" == day
+      assert Tempo.duration(~o"2026-06-15T09/2026-06-15T24") == ~o"PT15H"
+    end
+
+    test "is written as the next day's first unit, in the form the end was written in" do
+      assert Tempo.to_iso8601(~o"2026-06-15T09/2026-06-15T24") == {:ok, "2026Y6M15DT9H/16DT0H"}
+      assert ~o"2026-12-31T22/2026-12-31T24" == ~o"2026-12-31T22/2027-01-01T00"
+      assert ~o"2026-W25-1T09/2026-W25-1T24" == ~o"2026-W25-1T09/2026-W25-2T00"
+      assert ~o"2026-166T09/2026-166T24" == ~o"2026-166T09/2026-167T00"
+
+      assert ~o"2026-06-15T09/2026-06-15T24:00:00.000" ==
+               ~o"2026-06-15T09/2026-06-16T00:00:00.000"
+    end
+
+    test "ends where the next day begins in a zone that skips its midnight" do
+      # Chile's clocks went from 00:00 to 01:00 on 6 September 2026.
+      evening = ~o"2026-09-05T22/2026-09-05T24[America/Santiago]"
+
+      assert Tempo.duration(evening) == ~o"PT2H"
+      assert Interval.to(evening) == ~o"2026-09-06T01[America/Santiago]"
+    end
+
+    test "takes nothing but zeros below the hour" do
+      assert {:error, %Tempo.InvalidDateError{unit: :hour, reason: {:out_of_range, 24, 0..23}}} =
+               Tempo.from_iso8601("2026-06-15T09/2026-06-15T24:30")
+    end
+
+    test "is an instant, and an error written alone" do
+      for text <- ["2026-06-15T24:00", "2026-06-15T24", "T24:00:00"] do
+        assert {:error, %Tempo.InvalidDateError{reason: :end_of_day}} = Tempo.from_iso8601(text)
+      end
+
+      assert {:error, %Tempo.InvalidDateError{reason: :end_of_day}} =
+               Tempo.new(year: 2026, month: 6, day: 15, hour: 24)
+    end
+  end
+
   describe "instants/1" do
     # An interval of dates runs from the first's midnight to the midnight
     # after the last, as `Date` counts them.

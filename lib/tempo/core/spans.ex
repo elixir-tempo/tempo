@@ -1127,6 +1127,42 @@ defmodule Tempo.Spans do
   end
 
   @doc """
+  An end of a span written 24:00 on a date, with nothing but zeros below the
+  hour, read as ISO 8601-1 §5.3.2 (Amendment 1, 2022) has it: the next day's
+  first instant, written as the next day's first unit at the resolution
+  written. It is placed where the day's extent ends, so a day whose next
+  midnight a zone skips ends where the next day begins. Anything else, and a
+  24:00 with no date (on the day's cycle, where it stays), is returned as it is.
+  """
+  @spec next_day_from_end_of_day(term()) :: term()
+  def next_day_from_end_of_day(%Tempo{form: {:value, units}} = value) do
+    dated = Unit.date_units(units)
+
+    if Unit.end_of_day?(units) and match?([_ | _], dated) do
+      next_day_begun(value, dated, units)
+    else
+      value
+    end
+  end
+
+  def next_day_from_end_of_day(other) do
+    other
+  end
+
+  defp next_day_begun(value, dated, units) do
+    day = %{value | form: {:value, dated}}
+
+    case extent(day) do
+      {:ok, {_start, stop}} when is_integer(stop) ->
+        model = %{value | form: {:value, List.keyreplace(units, :hour, 0, {:hour, 0})}}
+        value_at(stop, model, :start, value)
+
+      _no_place ->
+        value
+    end
+  end
+
+  @doc """
   The value at a position, written to the resolution of a model value: a
   date end is the period that ends there.
   """

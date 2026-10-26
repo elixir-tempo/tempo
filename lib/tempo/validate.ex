@@ -305,7 +305,22 @@ defmodule Tempo.Validate do
 
   # The bounds of a unit, given the units around it: a day's depend on its
   # month and year when those are whole numbers.
+  # 24:00 is the end of a day, an instant (ISO 8601-1 §5.3.2, Amendment 1):
+  # it is read only as an end of an interval, where the reader has made it
+  # the next day's first unit.
+  defp unit(:hour, 24, units, calendar) do
+    if Unit.end_of_day?(units) do
+      {:error, :end_of_day}
+    else
+      in_bounds(:hour, 24, units, calendar)
+    end
+  end
+
   defp unit(unit, held, units, calendar) do
+    in_bounds(unit, held, units, calendar)
+  end
+
+  defp in_bounds(unit, held, units, calendar) do
     case bounds(unit, held, units, calendar) do
       nil -> :ok
       {:named, year} -> named_in(calendar, year, held)

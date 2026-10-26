@@ -94,6 +94,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Added
 
+* An interval may start or end at 24:00, the end of its day, as ISO 8601-1's Amendment 1 (2022) restores it: `2026-06-15T09/2026-06-15T24` is nine until midnight, written back as `2026Y6M15DT9H/16DT0H`. 24:00 alone is an `InvalidDateError` with the reason `:end_of_day`.
+
 * `Tempo.new/1`, `Tempo.selection/2` and `Tempo.every/2`'s `:select` take a day of the week by its name (`day_of_week: :friday`), numbered in the expression's calendar: `6K` in the Hebrew calendar. `Tempo.selection/2` takes a `:calendar`.
 
 * `Tempo.time_zone_database/0` returns the time zone database Tempo asks, so a library built on Tempo reads a zone as Tempo does.

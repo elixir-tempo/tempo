@@ -8,7 +8,8 @@ defmodule Tempo.InvalidDateError do
 
   * `:unit` is the unit at fault, where one is.
 
-  * `:reason` says why: `:out_of_range`, `:no_such_date`, `:skipped_by_the_clock`,
+  * `:reason` says why: `:out_of_range`, `:end_of_day` (24:00 written where it
+    is not an end of an interval), `:no_such_date`, `:skipped_by_the_clock`,
     `:needs_a_year`, `{:not_a_unit_value, held}`, `{:annotated, held}`, or a
     short description.
 
@@ -31,6 +32,10 @@ defmodule Tempo.InvalidDateError do
   end
 
   defp describe(:out_of_range), do: "outside the values its calendar gives it"
+
+  defp describe(:end_of_day) do
+    "24, the end of its day: an instant, which is written as an end of an interval"
+  end
 
   defp describe({:out_of_range, value, low..high//_}),
     do: "#{value}, outside the #{low} to #{high} its calendar gives it"

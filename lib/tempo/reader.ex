@@ -18,6 +18,7 @@ defmodule Tempo.Reader do
   alias Tempo.Reader.Suffix
   alias Tempo.Reader.Value
   alias Tempo.Season
+  alias Tempo.Spans
   alias Tempo.Unit
   alias Tempo.Validate
 
@@ -150,10 +151,15 @@ defmodule Tempo.Reader do
 
   defp framed_form({:value, _} = form, _, _), do: form
 
-  # An end written with no time shift takes its start's (ISO 8601-1 §5.5.1).
+  # An end written with no time shift takes its start's (ISO 8601-1 §5.5.1),
+  # and an end written 24:00 on a date is the next day's first instant
+  # (§5.3.2, Amendment 1).
   defp framed_form({:span, from, to}, calendar, zone) do
     framed_from = framed_end(from, calendar, zone)
-    {:span, framed_from, Build.carried_shift(framed_from, framed_end(to, calendar, zone))}
+    framed_to = Build.carried_shift(framed_from, framed_end(to, calendar, zone))
+
+    {:span, Spans.next_day_from_end_of_day(framed_from),
+     Spans.next_day_from_end_of_day(framed_to)}
   end
 
   defp framed_form({:every, first, bound, rule}, calendar, zone),

@@ -358,6 +358,30 @@ defmodule Tempo.Unit do
   @spec date_units(units()) :: units()
   def date_units(units), do: Enum.reject(units, fn {unit, _} -> clock?(unit) end)
 
+  @doc """
+  Whether a value's clock reads 24:00 with nothing but zeros below the hour:
+  the end of its day (ISO 8601-1 §5.3.2, Amendment 1, 2022).
+  """
+  @spec end_of_day?(units()) :: boolean()
+  def end_of_day?(units) do
+    case clock_units(units) do
+      [{:hour, 24} | finer] -> Enum.all?(finer, &zero?/1)
+      _other -> false
+    end
+  end
+
+  defp zero?({_unit, 0}) do
+    true
+  end
+
+  defp zero?({:microsecond, {0, _precision}}) do
+    true
+  end
+
+  defp zero?(_part) do
+    false
+  end
+
   @doc "The units of a value that are of the clock."
   @spec clock_units(units()) :: units()
   def clock_units(units), do: Enum.filter(units, fn {unit, _} -> clock?(unit) end)

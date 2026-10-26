@@ -70,6 +70,8 @@ Write the extended format for input: it is what people know and what other syste
 | Duration, alternative format (§5.5.2.4) | `P0002-01-10T22:33:55`, `P0002-178T22:33:55` |
 | Interval | `2022-01/2022-06`, `2022-01-01/P1Y`, `P1Y/2022-12-31` |
 | Interval with an abbreviated end (§5.5.1) | `2018-01-15/02-20`, `2026-06-15/20`, `2025-08-28T09:00/T10:15` |
+| Interval with a time shift on its start only (§5.5.1) | `2018-01-15T12:00+05:00/2018-02-20T12:00` |
+| Interval ending or starting at 24:00 (§5.3.2, Amendment 1) | `2026-06-15T09/2026-06-15T24`, `2022-04-18T24:00:00/2022-04-19T24:00:00` |
 | Recurring interval | `R/2022-01/P1M`, `R5/2022-01/P1M` |
 
 ### Where a reading may surprise
@@ -79,6 +81,8 @@ Write the extended format for input: it is what people know and what other syste
 * **An interval's end is read through, when it is a date.** `2022-01/2022-06` is January through June, and `2026-06-15/2026-06-20` six days. An end that is a time of day is the reading the span runs to: `T09/T17` is eight hours. So `2004-06-11/2004-06` is read, as the 11th through the end of June.
 
 * **An abbreviated end takes from the start the components it leaves out**, down to the one it begins with: `2018-01-15/02-20` ends on the 20th of February 2018. An end cut down to one bare number is the day of a calendar date (`2026-06-15/20`); after a time, a week date or an ordinal date, write the end with its designator or its `T`.
+
+* **24:00 is the end of a day, and the next day's first instant**, as ISO 8601-1's Amendment 1 (2022) restores it. `2026-06-15T09/2026-06-15T24` is nine until midnight, and its end is written back as the next day's first hour, `16DT0H`, the same interval. Written alone, 24:00 is an instant rather than a unit, and an `InvalidDateError`.
 
 * **A time of day under a year, a month or a week is that time on each of its days.** ISO 8601 wants the date of a date and time complete; Tempo reads `2026-06T17` as five o'clock on each day of June, as it reads any gap between two units written.
 
@@ -91,6 +95,9 @@ iex> Tempo.duration(~o"2026-06-15/2026-06-20")
 
 iex> ~o"2018-01-15/02-20" == ~o"2018-01-15/2018-02-20"
 true
+
+iex> Tempo.duration(~o"2026-06-15T09/2026-06-15T24")
+~o"PT15H"
 
 iex> Enum.count(~o"2026-06T17")
 30

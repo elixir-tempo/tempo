@@ -78,8 +78,6 @@ Taken by the user on 2026-10-27 (decision 86 in `plans/decisions.md`).
 
 ## Tasks
 
-* [ ] **24:00 as the end of a day** — read at either end of an interval as the next day's first instant; non-zero parts below the hour, and 24:00 alone, a named error; written back as the next day's `T00` (D1).
-
 * [ ] **Out-of-range parts by option** — `Tempo.from_iso8601/2` with `overflow: :carry` carries and borrows a value's parts into range (D2).
 
 * [ ] **Canonical durations** — D.5 on `Tempo.Duration` with a 60-second minute and the calendar's months, and `compare/3` through it (D4).
@@ -89,5 +87,7 @@ Taken by the user on 2026-10-27 (decision 86 in `plans/decisions.md`).
 * [ ] **The conformance guide** — cite both amendments; state the 60-second minute as Tempo's nominal duration rule (D6); the negative day (D3), overflow (D2) and expanded years (D5) as decided.
 
 ### Done
+
+* [x] **24:00 as the end of a day** — on a date, at either end of an interval, the next day's first unit at the resolution written, placed where the day's extent ends (`Spans.next_day_from_end_of_day/1`); alone, an `InvalidDateError` with `:end_of_day`; on the day's cycle unchanged (`T22/T24`). 2026-10-27.
 
 * [x] **A time shift carried to the end** — an end with no shift takes its start's where there is no zone, in the reader and `Tempo.Interval.new/1`; a floating start before a shifted end is a `Tempo.FrameError`. 2026-10-27.
