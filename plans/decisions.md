@@ -914,3 +914,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-26).** Option 1, law 9 as published: dates through, times of day as boundaries. It is how each is said and the reading most of the standard's examples take. The two changes made while option 2 was built stay: the writer writes an end with a time of day from its hour (`2026Y1M5DT9H15M/T9H30M`, where 1.6 and the first 2.0.0 wrote `/T30M`), and a fraction of a second is truncated to its precision (`Scale.clock_at/2`).
 
 * **State.** Option 2 reverted in Tempo, 2026-10-26; the writer and the truncation kept, their tests, the CHANGELOG and the migration guide updated. The companions are unchanged.
+
+## 86. The ISO 8601 amendments
+
+* **Question.** What ISO 8601-1:2019/Amd 1:2022 and ISO 8601-2:2019/Amd 1:2025 ask of Tempo, where they leave a choice: 24:00, a value's out-of-range parts, a negative day, canonical durations and the minute, expanded years, and the leap second.
+
+* **Context.** The user bought both amendments on 2026-10-27; `plans/iso8601-amendments.md` sets each clause beside what Tempo did. One finding was no choice: an end written with no time shift takes its start's (Part 1 §5.5.1, already in 2019), which Tempo read as UTC.
+
+* **Decision (2026-10-27).** D1: 24:00 is read at either end of an interval as the next day's first instant, is an error alone, and is written back as the next day's `T00`. D2: a value's out-of-range parts are refused, and carried with `overflow: :carry`. D3: a negative day counts back from the month's end (Part 2 §4.4.1.4), as before. D4: a canonical form for durations, a minute 60 seconds and years and months converting by the calendar's count, with `Tempo.Duration.compare/3` answering through it. D5: a sign and five or more digits is an expanded year. D6: second 60 stays an error, the 60-second minute stated as Tempo's nominal duration rule.
+
+* **State.** The carried time shift is built (2026-10-27). D1, D2, D4, D5 and the conformance guide are open in `plans/iso8601-amendments.md`.

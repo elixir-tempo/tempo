@@ -17,6 +17,7 @@ defmodule Tempo.Interval do
 
   """
 
+  alias Tempo.Build
   alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Interop
@@ -131,7 +132,7 @@ defmodule Tempo.Interval do
         {:error, IntervalEndpointsError.exception(from: from, to: to, reason: :zones)}
 
       true ->
-        validated(from, to, from, metadata)
+        validated(from, Build.carried_shift(from, to), from, metadata)
     end
   end
 

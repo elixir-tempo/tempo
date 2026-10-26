@@ -8,6 +8,7 @@ defmodule Tempo.Reader do
   # piece is read by its form. The result is a `%Tempo{}` or a `%Tempo.Duration{}`
   # before validation: `Tempo.Validate` runs once over what is built.
 
+  alias Tempo.Build
   alias Tempo.Duration
   alias Tempo.InvalidCalendarError
   alias Tempo.ParseError
@@ -149,8 +150,11 @@ defmodule Tempo.Reader do
 
   defp framed_form({:value, _} = form, _, _), do: form
 
-  defp framed_form({:span, from, to}, calendar, zone),
-    do: {:span, framed_end(from, calendar, zone), framed_end(to, calendar, zone)}
+  # An end written with no time shift takes its start's (ISO 8601-1 §5.5.1).
+  defp framed_form({:span, from, to}, calendar, zone) do
+    framed_from = framed_end(from, calendar, zone)
+    {:span, framed_from, Build.carried_shift(framed_from, framed_end(to, calendar, zone))}
+  end
 
   defp framed_form({:every, first, bound, rule}, calendar, zone),
     do: {:every, framed(first, calendar, zone), framed_end(bound, calendar, zone), rule}

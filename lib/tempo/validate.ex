@@ -12,6 +12,7 @@ defmodule Tempo.Validate do
   alias Tempo.Duration
   alias Tempo.Event
   alias Tempo.Expand
+  alias Tempo.FrameError
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
   alias Tempo.Scale
@@ -528,7 +529,32 @@ defmodule Tempo.Validate do
   # unit for a date and at its reading for a time of day (law 9), is not
   # empty and does not run backwards. On a cycle an end at or before the start
   # runs on through the cycle's end, so any order is a span.
-  defp ordered(%Tempo{form: {:value, from}} = a, %Tempo{form: {:value, to}} = b, _expression) do
+  defp ordered(%Tempo{form: {:value, _}} = a, %Tempo{form: {:value, _}} = b, _expression) do
+    if floating_beside_shifted?(a, b) do
+      {:error, FrameError.exception(a: a, b: b, reason: :floating_and_zoned)}
+    else
+      in_order(a, b)
+    end
+  end
+
+  defp ordered(_from, _to, _expression), do: :ok
+
+  # A start with no zone and no shift before an end with a shift is on no
+  # frame with it: a start's shift carries to its end (ISO 8601-1 §5.5.1),
+  # an end's does not carry back.
+  defp floating_beside_shifted?(
+         %Tempo{form: {:value, from}, zone: nil, shift: nil},
+         %Tempo{zone: nil, shift: shift}
+       )
+       when not is_nil(shift) do
+    Unit.anchored?(from)
+  end
+
+  defp floating_beside_shifted?(_a, _b) do
+    false
+  end
+
+  defp in_order(%Tempo{form: {:value, from}} = a, %Tempo{form: {:value, to}} = b) do
     with {:ok, {start, _}} <- position(from, a),
          {:ok, {to_start, to_stop}} <- position(to, b) do
       finish = if Unit.clock?(Unit.resolution(to)), do: to_start, else: to_stop
@@ -540,8 +566,6 @@ defmodule Tempo.Validate do
     |> order_result()
     |> seasons_ordered(a, b)
   end
-
-  defp ordered(_from, _to, _expression), do: :ok
 
   # A season of 21 to 24 has its dates in a hemisphere, which a text does
   # not name, so its place is not asked for as it is read. A season of a

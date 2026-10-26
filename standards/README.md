@@ -4,7 +4,7 @@ The texts Tempo implements or reads, kept here so that a clause can be found and
 
 ## `iso8601/` (not distributed)
 
-`ISO_8601-1_2019(en).PDF` and `ISO_8601-2_2019(en).PDF`, the two parts of ISO 8601:2019, under a single-user licence. They are listed in `.gitignore` and never committed or packaged; read them with `pdftotext -layout`. Part 1 (date and time representations) and Part 2 (extensions: explicit forms, sets, groups, qualification, unspecified digits, selections, repeat rules) are the source of truth for `Tempo.Iso8601` and for `guides/iso8601-grammar.md`.
+`ISO_8601-1_2019(en).PDF` and `ISO_8601-2_2019(en).PDF`, the two parts of ISO 8601:2019, and their amendments `ISO_8601-1_2019_Amd_1_2022(en).pdf` (technical corrections, among them 24:00 as the end of a day) and `ISO_8601-2_2019_Amd_1_2025(en).pdf` (canonical expressions, time scale components and date and time arithmetic), under a single-user licence. What the amendments ask of Tempo is in `plans/iso8601-amendments.md`. They are listed in `.gitignore` and never committed or packaged; read them with `pdftotext -layout`. Part 1 (date and time representations) and Part 2 (extensions: explicit forms, sets, groups, qualification, unspecified digits, selections, repeat rules) are the source of truth for `Tempo.Iso8601` and for `guides/iso8601-grammar.md`.
 
 ## `rfc/` (public)
 

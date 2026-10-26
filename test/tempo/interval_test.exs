@@ -92,6 +92,51 @@ defmodule Tempo.IntervalTest do
     end
   end
 
+  # ISO 8601-1 §5.5.1 (and its Amendment 1, 2022): a time shift written on the
+  # start applies to an end written without one.
+  describe "a time shift written on the start" do
+    test "is the shift of an end written with none" do
+      assert ~o"2018-01-15T12:00:00+05:00/2018-02-20T12:00:00" ==
+               ~o"2018-01-15T12:00:00+05:00/2018-02-20T12:00:00+05:00"
+
+      assert Tempo.duration(~o"2018-01-15T12:00+05:00/2018-02-20T12:00") == ~o"PT51840M"
+      assert Tempo.duration(~o"2018-01-15T12:00+05:00/T13:00") == ~o"PT60M"
+      assert Tempo.duration(~o"2018Y1M15DT12HZ5H0M/2018Y2M20DT12H") == ~o"PT864H"
+    end
+
+    test "is the shift of an end written as a date" do
+      assert ~o"2018-01-15T12:00+05:00/2018-02-20" == ~o"2018Y1M15DT12H0MZ5H0M/2018Y2M20DZ5H0M"
+    end
+
+    test "leaves an end written with its own shift as it is" do
+      assert Tempo.duration(~o"2018-01-15T12:00+05:00/2018-01-15T13:00+03:00") == ~o"PT180M"
+    end
+
+    test "is the shift of the end of a recurrence's first interval" do
+      assert ~o"R2/2018-01-15T12:00+05:00/2018-01-15T13:00" ==
+               ~o"R2/2018-01-15T12:00+05:00/2018-01-15T13:00+05:00"
+    end
+
+    test "is not carried in a zone, which gives each end its own offset" do
+      # The clocks in Paris go forward on 25 March 2018.
+      assert Tempo.duration(~o"2018-03-24T12:00+01:00/2018-03-26T12:00[Europe/Paris]") ==
+               ~o"PT2820M"
+    end
+
+    test "is carried by Interval.new/1 as by the reader" do
+      assert Interval.new(from: ~o"2018-01-15T12:00+05:00", to: ~o"2018-02-20T12:00") ==
+               {:ok, ~o"2018-01-15T12:00+05:00/2018-02-20T12:00"}
+    end
+
+    test "is not carried back from an end: a start with no shift is on no frame with it" do
+      assert {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+               Tempo.from_iso8601("2018-01-15T12:00/2018-01-15T13:00+05:00")
+
+      assert {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+               Interval.new(from: ~o"2018-01-15T12:00", to: ~o"2018-01-15T13:00+05:00")
+    end
+  end
+
   describe "instants/1" do
     # An interval of dates runs from the first's midnight to the midnight
     # after the last, as `Date` counts them.

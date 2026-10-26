@@ -64,7 +64,7 @@ An **expression** is one thing as it is written or built: a value, an interval (
 
 * **Extensions apply to the whole expression, always** — "The extensions apply to the whole expression, always." A zone or a calendar written after an interval is the zone and the calendar of both its ends; one written after a set is that of every member.
 
-* **An interval is in one zone** — decided 2026-10-12, as for two calendars: `Tempo.Interval.new/1` returns an error for two ends in different named zones, and the caller converts one with `Tempo.shift_zone/2`. A time shift (`+02:00`, `Z`) is not an extension: ISO 8601 writes one on each end, and each end keeps its own.
+* **An interval is in one zone** — decided 2026-10-12, as for two calendars: `Tempo.Interval.new/1` returns an error for two ends in different named zones, and the caller converts one with `Tempo.shift_zone/2`. A time shift (`+02:00`, `Z`) is not an extension: ISO 8601 writes one on each end, and each end keeps its own. An end written with none takes its start's where there is no zone (ISO 8601-1 §5.5.1; `Tempo.Build.carried_shift/2`, used by the reader and `Tempo.Interval.new/1`), and a start with none before an end with one is a `Tempo.FrameError`.
 
 * **Qualifiers are not extensions** — decided 2026-10-12: the rule covers the bracketed suffixes only. EDTF's `?`, `~` and `%` stay where ISO 8601-2 §8 puts them, on an end of an interval, a member of a set or a single component.
 
@@ -190,7 +190,7 @@ Positions cross a module boundary only where they already do, as the occurrence-
 
 The following documents are **critical** when working on this project. Consult them whenever behaviour, syntax, or semantics need to be verified — do not guess.
 
-* **ISO 8601 standards** — the canonical PDFs live in this repository at `standards/iso8601/` (`ISO_8601-1_2019(en).PDF` and `ISO_8601-2_2019(en).PDF`; read them with `pdftotext -layout`). They are git-ignored, never committed or packaged. These are the source of truth for ISO 8601 Part 1 (date/time representations) and Part 2 (extensions), which Tempo implements.
+* **ISO 8601 standards** — the canonical PDFs live in this repository at `standards/iso8601/` (`ISO_8601-1_2019(en).PDF` and `ISO_8601-2_2019(en).PDF`, with their amendments `ISO_8601-1_2019_Amd_1_2022(en).pdf` and `ISO_8601-2_2019_Amd_1_2025(en).pdf`; read them with `pdftotext -layout`). What the amendments ask of Tempo is in `plans/iso8601-amendments.md`. They are git-ignored, never committed or packaged. These are the source of truth for ISO 8601 Part 1 (date/time representations) and Part 2 (extensions), which Tempo implements.
 
 * **RFC 9557 (IXDTF)** — vendored at `standards/rfc/rfc9557.txt` (<https://www.rfc-editor.org/rfc/rfc9557>), the published form of draft-ietf-sedate-datetime-extended. The other RFCs Tempo implements (3339, 5234, 5545, 7529, 8984) are beside it; `standards/README.md` lists them. Defines the extended information suffix syntax (`[zone]`, `[u-ca=calendar]`, `[key=value]`, critical `!` flag) read by `Tempo.Reader.Suffix`.
 

@@ -317,6 +317,25 @@ defmodule Tempo.Build do
 
   def bound_in_frame(bound, _first), do: {:ok, bound}
 
+  @doc """
+  An interval's end as its start makes it: an end written with no time shift
+  takes its start's, where the interval has no zone (ISO 8601-1 §5.5.1,
+  ISO 8601-2 §7.14.3). In a zone the zone gives each end its own offset, which
+  a carried one would contradict across a change of the clock.
+  """
+  @spec carried_shift(term(), term()) :: term()
+  def carried_shift(
+        %Tempo{form: {:value, _}, zone: nil, shift: shift},
+        %Tempo{form: {:value, _}, zone: nil, shift: nil} = to
+      )
+      when not is_nil(shift) do
+    %{to | shift: shift}
+  end
+
+  def carried_shift(_from, to) do
+    to
+  end
+
   defp until_in(%Tempo{calendar: calendar} = until, calendar), do: {:ok, until}
 
   defp until_in(%Tempo{} = until, calendar) do

@@ -172,6 +172,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 ### Fixed
 
+* An interval's end written with no time shift takes its start's, as ISO 8601-1 §5.5.1 has it: `2018-01-15T12:00+05:00/T13:00` is one hour, where the end was read as UTC and it was six. A start with no shift before an end with one is a `Tempo.FrameError`.
+
 * A rule repeating by an interval its calendar's cycle does not divide is walked until its periods come round, where it was ended after one quiet cycle: every seventh month's Friday the 29th of February from March 2025 is 29 February 2504, not none.
 
 * `Tempo.JSCalendar.parse/2` returns an `ArgumentError` that names why a document cannot be decoded, where it returned the `jscalendar` library's bare reason.
