@@ -96,6 +96,17 @@ jobs:
               https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp
           fi
 
+      # Localize from hex carries only `en` and `und`, and downloads no locale
+      # at run time. The tests, the README and the guides read French and
+      # German, so those are fetched here, with retries for a flaky network.
+      - name: Download the locales the tests read
+        run: |
+          for attempt in 1 2 3; do
+            mix localize.download_locales fr de && exit 0
+            sleep 5
+          done
+          exit 1
+
       - name: Check formatting
         if: matrix.lint
         run: mix format --check-formatted
