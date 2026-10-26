@@ -10,15 +10,11 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
-* [ ] **A Persian rule's walk** — a never-occurring interval rule takes 15 s in the Persian calendar, its horizon 3,000 years (decision 83) at about 5 ms a year, where a Gregorian one takes 61 ms. A Persian date costs about 30 µs in Calendrical, against nearly nothing in the Gregorian, and a placed period asks many.
-
 ## Blocked
 
 ### Before the release
 
-* [ ] **Calendrical's astronomical years, worked out once.** On Calendrical 2.0.0 and Astro 2.8.0 the Persian and lunisolar calendars work out a year's astronomy on every call, 3 to 6 times dearer on Astro's ephemeris, and the calendar census's fixture test takes 106 s, over ExUnit's 60 s; it passes given time. Tempo waits for Calendrical's fix (its TODO and `plans/astronomy-tables.md`) and leaves the test as it is, the user's decision of 2026-10-26.
-
-* [ ] **`tempo_network` 0.1.0.** The companion package (`~/Development/tempo/tempo_network`) is built and its gates pass against a path dependency on this repository; it needs its own repository, and `{:ex_tempo, "~> 2.0"}` once 2.0 is on hex. It calls the hidden `Tempo.Calendar` in one file (`Tempo.Network.Calendar`), an agreed private seam for now (`plans/decisions.md`, 15), so a change to the adapter checks the companions.
+* [ ] **`ex_tempo_network` 1.0.0.** The companion package (`~/Development/tempo/tempo_network`, `elixir-tempo/tempo_network`) carries `Tempo.Network` and `Tempo.Schedule` onto 2.0 and takes Tempo from GitHub `main`, its gates passing (225 tests, 2026-10-26); it names `{:ex_tempo, "~> 2.0"}` and is published once Tempo 2.0 is on hex. It calls the hidden `Tempo.Calendar` in one file (`Tempo.Network.Calendar`), an agreed private seam for now (`plans/decisions.md`, 15), so a change to the adapter checks the companions.
 
 * [ ] **Companions on 2.0.** `agenda`, `tempo_sql` and `tempo_holidays` take Tempo from GitHub `main` (2026-10-15), and move to `~> 2.0` once it is on hex; all three pass their gates against `2b04789`. `agenda` is ported (2026-10-15) under decisions 64 to 69. `tempo_holidays` is ported (2026-10-14) against a path dependency: its rules are built from parts, its conformance unchanged (168,186 matched, 0 mismatched), all 223 of its tests passing. `tempo_sql` is ported (2026-10-14) against a path dependency, under decisions 43 and 44: all 280 of its tests pass against Postgres, its version 1 and 2 composite rows read as 1.x meant them.
 
@@ -62,7 +58,9 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 
 ## Done
 
-* [x] **Calendrical 2.0, Localize 1.4 and Astro 2.8 from hex** — `mix.exs` requires `~> 2.0`, `~> 1.4` and `~> 2.8` and the lock holds 2.0.0, 1.4.0 and 2.8.0. 2026-10-26.
+* [x] **Calendrical 2.1, Localize 1.4 and Astro 2.9 from hex** — `mix.exs` requires `~> 2.1`, `~> 1.4` and `~> 2.9`, and the lock holds 2.1.0, 1.4.0 and 2.9.0. 2026-10-26.
+
+* [x] **Calendrical's astronomical years worked out once** — Calendrical 2.1 keeps each Persian and lunisolar year once worked out: the census's fixture test takes 6.5 s, where it took 106 s on 2.0.0, and a never-occurring Persian interval rule 2.7 s, where it took 32.5 s. 2026-10-26.
 
 * [x] **A quiet interval rule's look-ahead placed once a period** — a never-occurring quarterly rule in 61 ms, where it took a second; decision 84. 2026-10-25.
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## [v2.0.0] — Unreleased
+## [v2.0.0] — 2026-10-26
 
 Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migration guide](https://hexdocs.pm/ex_tempo/migration.html) takes each change below with its 1.6 form and its 2.0 form.
 
@@ -18,7 +18,7 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * A value that names no calendar is in `Calendar.ISO`, where it was in `Calendrical.Gregorian`.
 
-* Tempo runs on Calendrical 2.0: the six Gregorian calendars whose weeks begin on another day are made with `Calendrical.Calendar.Shifted`, and every calendar question goes through the kernel and the derived API. It requires Calendrical 2.0, Localize 1.4 and Astro 2.8 or later.
+* Tempo runs on Calendrical 2.0: the six Gregorian calendars whose weeks begin on another day are made with `Calendrical.Calendar.Shifted`, and every calendar question goes through the kernel and the derived API. It requires Calendrical 2.1, Localize 1.4 and Astro 2.9 or later.
 
 * A day of the week (`K`) is counted from the day the expression's weeks begin on, everywhere: `5K` is a Thursday in the Hebrew calendar and in `[u-fw=sun]`, Friday `6K`; `Tempo.day_of_week/2` takes `:monday` for the day as ISO 8601 numbers it.
 

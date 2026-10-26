@@ -6,7 +6,7 @@ defmodule Tempo.MixProject do
     Mix.raise("ex_tempo requires Erlang/OTP 27 or later: OTP #{System.otp_release()} detected.")
   end
 
-  @version "2.0.0-dev"
+  @version "2.0.0"
 
   def project do
     [
@@ -183,8 +183,8 @@ defmodule Tempo.MixProject do
   defp deps do
     [
       {:localize, "~> 1.4"},
-      {:calendrical, "~> 2.0"},
-      {:astro, "~> 2.8"},
+      {:calendrical, "~> 2.1"},
+      {:astro, "~> 2.9"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},
       {:ex_doc, "~> 0.38", only: [:dev, :test, :release], optional: true, runtime: false},

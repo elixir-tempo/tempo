@@ -16,7 +16,7 @@ def deps do
 end
 ```
 
-`Tempo.Network` and `Tempo.Schedule` are no longer in this package. They are in `tempo_network`, with their module names unchanged; add it beside `ex_tempo` if you use them.
+`Tempo.Network` and `Tempo.Schedule` are no longer in this package. They are in the companion package `ex_tempo_network`, with their module names unchanged; add `{:ex_tempo_network, "~> 1.0"}` beside `ex_tempo` if you use them.
 
 ## A written end is read through
 
