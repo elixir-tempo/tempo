@@ -100,6 +100,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * `Tempo.Duration.canonical/2` writes a duration in ISO 8601-2's canonical form (Amendment 1, 2025), a minute 60 seconds: `PT1H-10M` is `PT50M` and `P7Y24M` is `P9Y`. `Tempo.Duration.compare/3` counts years in months by the calendar, so `P7Y24M` equals `P9Y` where it raised.
 
+* A signed year of five or more digits followed by `-` is read as an expanded year (`+12345-06-15`), as ISO 8601-1's Amendment 1 (2022) allows; a signed six-digit year reads as before.
+
 * `Tempo.new/1`, `Tempo.selection/2` and `Tempo.every/2`'s `:select` take a day of the week by its name (`day_of_week: :friday`), numbered in the expression's calendar: `6K` in the Hebrew calendar. `Tempo.selection/2` takes a `:calendar`.
 
 * `Tempo.time_zone_database/0` returns the time zone database Tempo asks, so a library built on Tempo reads a zone as Tempo does.

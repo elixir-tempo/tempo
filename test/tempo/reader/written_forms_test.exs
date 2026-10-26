@@ -59,7 +59,14 @@ defmodule Tempo.Reader.WrittenFormsTest do
     {"XXXX-12-25", "XXXXY12M25D"},
     {"2026-1X", "2026Y1XM"},
     {"-0044-03-15", "-44Y3M15D"},
-    {"Y12026", "12026Y"}
+    {"Y12026", "12026Y"},
+    # An expanded year of five or more digits, delimited by a `-` (ISO 8601-1
+    # §5.2.2.3, Amendment 1 §4.3.2), and the agreed six alone.
+    {"+12345-06-15", "12345Y6M15D"},
+    {"-12345-06-15", "-12345Y6M15D"},
+    {"+1234567-06", "1234567Y6M"},
+    {"+12345-W15", "12345Y15W"},
+    {"+002023", "2023Y"}
   ]
 
   for {text, written} <- @forms do
@@ -68,6 +75,10 @@ defmodule Tempo.Reader.WrittenFormsTest do
       assert Tempo.to_iso8601(read) == {:ok, unquote(written)}
       assert Tempo.from_iso8601(unquote(written)) == {:ok, read}
     end
+  end
+
+  test "a signed run of five digits alone is no year: the standard's six-digit agreement makes it a decade" do
+    assert {:error, %ParseError{}} = Tempo.from_iso8601("+12345")
   end
 
   describe "a suffix that cannot be read" do

@@ -135,7 +135,7 @@ defmodule Tempo.Reader.Implied do
   defp year(<<sign, rest::binary>>) when sign in [?+, ?-] do
     {run, rest} = masked_run(rest)
 
-    case signed_run(run, sign) do
+    case signed_run(run, sign, rest) do
       {:ok, {:year, held}} -> annotated_year(:year, held, rest)
       {:ok, {unit, held}} -> {:ok, {unit, held}, rest}
       :error -> :error
@@ -196,23 +196,40 @@ defmodule Tempo.Reader.Implied do
   end
 
   # A signed run: four digits a year, six an expanded year; `+` is for an
-  # expanded year alone (ISO 8601-1 §5.2.2.3), and `-0000` is no year.
-  defp signed_run("0000", ?-), do: :error
-  defp signed_run(run, ?+) when byte_size(run) <= 4, do: :error
+  # expanded year alone (ISO 8601-1 §5.2.2.3), and `-0000` is no year. How
+  # many digits an expanded year has is the parties' to agree (Amendment 1,
+  # §4.3.2): a run of five or more with a `-` after it is a year whatever
+  # its length, where a run alone of five is a decade by the six-digit
+  # agreement of the standard's own example (`+00198`), and is not read.
+  defp signed_run("0000", ?-, _rest), do: :error
+  defp signed_run(run, ?+, _rest) when byte_size(run) <= 4, do: :error
 
-  defp signed_run(run, sign) do
-    negate = fn
-      {:mask, digits} -> if sign == ?-, do: {:mask, [:negative | digits]}, else: {:mask, digits}
-      integer -> if sign == ?-, do: -integer, else: integer
-    end
+  defp signed_run(run, sign, <<"-", _::binary>>) when byte_size(run) >= 5 do
+    {:ok, {:year, signed_held(mask_or_integer(run), sign)}}
+  end
+
+  defp signed_run(run, sign, _rest) do
+    held = signed_held(mask_or_integer(run), sign)
 
     case byte_size(run) do
-      2 -> {:ok, {:century, negate.(mask_or_integer(run))}}
-      3 -> {:ok, {:decade, negate.(mask_or_integer(run))}}
-      4 -> {:ok, {:year, negate.(mask_or_integer(run))}}
-      6 -> {:ok, {:year, negate.(mask_or_integer(run))}}
+      2 -> {:ok, {:century, held}}
+      3 -> {:ok, {:decade, held}}
+      4 -> {:ok, {:year, held}}
+      6 -> {:ok, {:year, held}}
       _ -> :error
     end
+  end
+
+  defp signed_held({:mask, digits}, ?-) do
+    {:mask, [:negative | digits]}
+  end
+
+  defp signed_held(integer, ?-) when is_integer(integer) do
+    -integer
+  end
+
+  defp signed_held(held, _sign) do
+    held
   end
 
   # After the year: the extended format's `-`, the basic format's run (marked

@@ -72,17 +72,17 @@ Taken by the user on 2026-10-27 (decision 86 in `plans/decisions.md`).
 
 * **D4 — canonical durations.** A canonical form on `Tempo.Duration` by D.5, years and months converting by the calendar's count (Calendrical), weeks, days, hours and minutes by their fixed counts, and a minute 60 seconds, as Tempo's clock has it: `PT1H-10M` is `PT50M`, `P7Y24M` is `P9Y`, `PT59M120S` is `PT1H1M`. `compare/3` answers through it, so `P7Y24M` equals `P9Y`, and `PT1M` still equals `PT60S`.
 
-* **D5 — expanded years.** A sign and five or more digits is an expanded year: `+12345-06-15` reads. Six read as now.
+* **D5 — expanded years.** A sign and five or more digits is an expanded year: `+12345-06-15` reads. Six read as now. Narrowed in building, 2026-10-27: how many digits an expanded year has is the parties' agreement (Part 1 §5.2.2.3), and the standard's own example agrees six, under which a run alone of five is a decade (`+00198`, the 1980s) and of four a century. So a run of five or more is a year where a `-` follows it (`+12345-06-15`, `-12345-06-15`, `+1234567-06`), and a run alone keeps the reading it had: six a year, five refused. The expanded basic date (`+0019850412`), decade (`+00198`) and century (`+0019`) are not read, as before.
 
 * **D6 — the leap second.** `23:59:60` stays an `InvalidDateError`. The conformance guide states the 60-second minute as Tempo's nominal duration rule (§14.6, example 15) and points to `Tempo.LeapSeconds`.
 
 ## Tasks
 
-* [ ] **Expanded years** — a sign and five or more digits (D5).
-
 * [ ] **The conformance guide** — cite both amendments; state the 60-second minute as Tempo's nominal duration rule (D6); the negative day (D3), overflow (D2) and expanded years (D5) as decided.
 
 ### Done
+
+* [x] **Expanded years** — a signed run of five or more digits with a `-` after it is a year (`Implied.signed_run/3`); a run alone as before (D5, narrowed). 2026-10-27.
 
 * [x] **Canonical durations** — `Tempo.Duration.canonical/2` (and `canonical!/2`): two chains, years and months by `Tempo.Calendar.months_in_year_bounds/1` where they agree, weeks to fractions of a second by `days_in_week/1` and a 60-second minute; a positive chain written from its top (so `P10D` is `P1W3D`, as the amendment's overflow has it), a negative one from its coarsest unit written. `compare/3` without `:relative_to` counts months and the rest apart and orders them where they agree. 2026-10-27.
 
