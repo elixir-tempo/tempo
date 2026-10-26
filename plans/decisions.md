@@ -904,3 +904,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-25).** The look-ahead names only a value in the first unit of its period's interval, so a quiet stretch is passed in one look-ahead.
 
 * **State.** Built: `first_selectable/3` passes over a named value outside its period's first unit, read from the units the value is written in where they are the period's own. The search carries its place among the periods from one year to the next, each period placed once from the start the one before carried, and reckons a value more than five periods on (`@periods_stepped_to`). A never-occurring quarterly rule takes 61 ms (306 before), every second month 79 ms (508), Islamic civil 78 ms (581), Julian 12 ms (84); with weekends named, 175 ms (1,000), of which 146 ms is finding the weekends. Persian, a horizon of 3,000 years at about 5 ms a year, takes 15 s (94).
+
+## 85. A written end read as it is said
+
+* **Question.** Law 9 reads an end written to a calendar unit through (`2026/2028` is three years) and one written to a clock unit as a boundary (`T09/T17` is eight hours, ending as five begins). A value written to a clock unit is the unit it names (`T14H` alone is the hour from 14:00), so as an end the hour counts as an instant where the year counts whole. Should every end be read the same way?
+
+* **Context.** Found by the user on 2026-10-26, after 2.0.0 was published. The options were (1) keep law 9, each end read as it is said aloud; (2) every end read through, the clock's as the calendar's; (3) every end a boundary, as in 1.6. Option 2 was built and then withdrawn the same day: nine to five became `T09/T16`, which nobody says. ISO 8601 does not decide it. Part 1 defines an interval by two instants, both included unless otherwise stated, and gives no rule for an end of reduced precision. Part 2 reads date ends through in its grouped units (the first half of 2018 is `2018-01-01/2018-06-30`, and `2018Y9M25D/P8D` is `2018Y9M25D/2018Y10M2D`) and as boundaries in its repeat rules (a one-day occurrence is `2018-08-08/2018-08-09`). Every clock end in either part is a boundary.
+
+* **Decision (2026-10-26).** Option 1, law 9 as published: dates through, times of day as boundaries. It is how each is said and the reading most of the standard's examples take. The two changes made while option 2 was built stay: the writer writes an end with a time of day from its hour (`2026Y1M5DT9H15M/T9H30M`, where 1.6 and the first 2.0.0 wrote `/T30M`), and a fraction of a second is truncated to its precision (`Scale.clock_at/2`).
+
+* **State.** Option 2 reverted in Tempo, 2026-10-26; the writer and the truncation kept, their tests, the CHANGELOG and the migration guide updated. The companions are unchanged.

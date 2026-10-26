@@ -277,7 +277,7 @@ iex> {:ok, alice_free} = Tempo.difference(work, alice_busy)
 iex> {:ok, bob_free} = Tempo.difference(work, bob_busy)
 iex> {:ok, mutual} = Tempo.intersection(alice_free, bob_free)
 iex> mutual
-~o"{2026Y6M15DT9H0M/T30M,2026Y6M15DT11H0M/T14H0M,2026Y6M15DT15H0M/T16H0M}"
+~o"{2026Y6M15DT9H0M/T9H30M,2026Y6M15DT11H0M/T14H0M,2026Y6M15DT15H0M/T16H0M}"
 ```
 
 > *"Alice's free time is the workday **minus** her meetings; Bob's is the same. **Mutual** free time is the **intersection** of theirs."*

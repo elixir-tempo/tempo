@@ -117,7 +117,7 @@ iex> Tempo.RRule.parse!("FREQ=DAILY", from: ~o"2026-06-01T10") |> Enum.take(1)
 [~o"2026Y6M1DT10H/T11H"]
 
 iex> Tempo.RRule.parse!("FREQ=DAILY", from: ~o"2026-06-01T10:00", duration: ~o"PT45M") |> Enum.take(1)
-[~o"2026Y6M1DT10H0M/T45M"]
+[~o"2026Y6M1DT10H0M/T10H45M"]
 ```
 
 ### Dates that do not exist

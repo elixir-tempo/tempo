@@ -99,10 +99,10 @@ iex> working_hours = ~o"2026-04-21T09/2026-04-21T17[Europe/London]"
 iex> {:ok, in_hours} = Tempo.intersection(schedule, working_hours)
 iex> {:ok, busy} = Tempo.IntervalSet.coalesce(in_hours)
 iex> busy
-~o"{2026Y4M21DT9H30M0S/T45M0S,2026Y4M21DT10H30M0S/T12H0M0S}[Europe/London]"
+~o"{2026Y4M21DT9H30M0S/T9H45M0S,2026Y4M21DT10H30M0S/T12H0M0S}[Europe/London]"
 
 iex> Tempo.difference(working_hours, schedule)
-{:ok, ~o"{2026Y4M21DT9H/T30M0S,2026Y4M21DT9H45M0S/T10H30M0S,2026Y4M21DT12H0M0S/T17H}[Europe/London]"}
+{:ok, ~o"{2026Y4M21DT9H/T9H30M0S,2026Y4M21DT9H45M0S/T10H30M0S,2026Y4M21DT12H0M0S/T17H}[Europe/London]"}
 ```
 
 > *"**Busy** is the schedule **within** working hours, its meetings **joined** where they overlap: the stand-up, then half past ten to noon. **Free** is working hours **minus** the schedule."*
@@ -125,10 +125,10 @@ A `VEVENT` is an interval from its `DTSTART` to its `DTEND`:
 
 ```elixir
 iex> Tempo.IntervalSet.first(schedule)
-~o"2026Y4M20DT9H30M0S/T45M0S[Europe/London]"
+~o"2026Y4M20DT9H30M0S/T9H45M0S[Europe/London]"
 
 iex> Tempo.shift_zone(Tempo.IntervalSet.first(schedule), "America/New_York")
-{:ok, ~o"2026Y4M20DT4H30M0S/T45M0S[America/New_York]"}
+{:ok, ~o"2026Y4M20DT4H30M0S/T4H45M0S[America/New_York]"}
 ```
 
 > *"The first stand-up: half past nine to a quarter to ten in London, **half past four** in the morning in New York."*
@@ -171,7 +171,7 @@ To see a schedule on another clock, move it:
 ```elixir
 iex> {:ok, in_new_york} = Tempo.shift_zone(schedule, "America/New_York")
 iex> Tempo.IntervalSet.first(in_new_york)
-~o"2026Y4M20DT4H30M0S/T45M0S[America/New_York]"
+~o"2026Y4M20DT4H30M0S/T4H45M0S[America/New_York]"
 ```
 
 Members that carry only a UTC time (`Z`) keep it where no event names a zone.

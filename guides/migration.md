@@ -614,6 +614,21 @@ iex> Tempo.to_relative_string(~o"2026-12-25", from: ~o"2026-06-15")
 {:ok, "in 6 months"}
 ```
 
+An interval's end with a time of day is written from its hour, where 1.6 dropped every unit it shared with the start.
+
+<!-- guides:skip -->
+
+```elixir
+# 1.6
+Tempo.to_iso8601(~o"2026-01-05T09:15/2026-01-05T09:30")
+#=> "2026Y1M5DT9H15M/T30M"
+```
+
+```elixir
+iex> Tempo.to_iso8601(~o"2026-01-05T09:15/2026-01-05T09:30")
+{:ok, "2026Y1M5DT9H15M/T9H30M"}
+```
+
 ## Rounding
 
 `Tempo.round/2` is to the nearest boundary, half way up, for every unit. 1.6 rounded half an hour down and a day in mid-June up to the next year.

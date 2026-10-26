@@ -163,7 +163,7 @@ iex> {:error, %Tempo.FrameError{reason: :needs_a_year}} = Tempo.intersection(~o"
 
 # With a window, half past ten is placed on the day
 iex> Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
-{:ok, ~o"{2026Y1M4DT10H30M/T31M}"}
+{:ok, ~o"{2026Y1M4DT10H30M/T10H31M}"}
 ```
 
 A window places a time of day on each day it touches, and what is placed is inside the window: on a window from noon on Monday to noon on Wednesday, nine to five is noon to five on Monday, nine to five on Tuesday and nine to noon on Wednesday, for every operation alike. The other operand is not cut by the window. A dated window places every operand that has no year, whatever the other operand is, so the working hours of a week with no meetings in it are still that week's hours, and each placed span keeps the metadata of the time of day it is.

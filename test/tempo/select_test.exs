@@ -194,7 +194,7 @@ defmodule Tempo.SelectTest do
 
     test "inherits the start's finer units" do
       assert texts(Tempo.to_interval(~o"R2/2026-01-01T10:00/P1Y/FL12M25DN")) ==
-               ["2026Y12M25DT10H0M/T1M", "2027Y12M25DT10H0M/T1M"]
+               ["2026Y12M25DT10H0M/T10H1M", "2027Y12M25DT10H0M/T10H1M"]
     end
 
     test "over a domain selects in each member, filtered" do

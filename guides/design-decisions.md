@@ -286,7 +286,7 @@ iex> Tempo.select(~o"2026-11-01[America/Chicago]", half_past_one)
 {:ok, ~o"{2026Y11M1DT1H30M}[America/Chicago]"}
 iex> {:ok, hourly} = Tempo.RRule.parse("FREQ=HOURLY;COUNT=4", from: ~o"2026-11-01T00:30[America/Chicago]")
 iex> Enum.map(hourly, &Tempo.to_iso8601!/1)
-["2026Y11M1DT0H30M/T31M[America/Chicago]", "2026Y11M1DT1H30M/T31M[America/Chicago]", "2026Y11M1DT1H30MZ-6H0M/T31MZ-6H0M[America/Chicago]", "2026Y11M1DT2H30M/T31M[America/Chicago]"]
+["2026Y11M1DT0H30M/T0H31M[America/Chicago]", "2026Y11M1DT1H30M/T1H31M[America/Chicago]", "2026Y11M1DT1H30MZ-6H0M/T1H31MZ-6H0M[America/Chicago]", "2026Y11M1DT2H30M/T2H31M[America/Chicago]"]
 ```
 
 **Why.** It is how Tempo already reads a value written to that time, and it is what RFC 5545 §3.3.5 says of a local time that occurs twice. Having a selection answer one way and the same selection inside a rule another would make one written form mean two things. On a time that does not occur RFC 5545 contradicts itself: §3.3.10 says such instances "MUST be ignored", and later that they are read by the offset before the gap. Tempo follows the first, which needs no invented time.

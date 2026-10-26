@@ -345,13 +345,11 @@ defmodule Tempo.Writer do
 
   # ── Intervals, recurrences, sets, durations ───────────────────────────
 
-  # An end drops the leading units it shares with its start, keeping at least one.
-  # An end drops the leading units it shares with the start, when the reader
-  # would give exactly those back (`Tempo.Unit.inherited/2`).
   # An end drops the leading units it shares with the start down the chain of
-  # years, months, days and the clock (ISO 8601-1 §5.5.1), when the two ends
-  # agree on their shift; an end on another axis, or with its own shift, is
-  # written whole. The reader gives exactly these back (`Tempo.Unit.inherited/2`).
+  # years, months and days (ISO 8601-1 §5.5.1), when the two ends agree on
+  # their shift, and is written from its hour where it has a time of day; an
+  # end on another axis, or with its own shift, is written whole. The reader
+  # gives exactly these back (`Tempo.Unit.inherited/2`).
   defp abbreviated(
          %Tempo{form: {:value, to_units}, shift: shift} = to,
          %Tempo{form: {:value, from_units}, shift: shift} = from
@@ -391,6 +389,12 @@ defmodule Tempo.Writer do
   # A second is not split from its fraction: `T10H30M45.5S/T45.6S`, not `/T0.6S`.
   defp shared_prefix([{:second, held} | _], [{:second, held} | [{:microsecond, _}]], _previous),
     do: 0
+
+  # An end with a time of day is written from its hour, whatever it shares
+  # with the start: `T9H0M0S/T9H59M59S`, not `/T59M59S`.
+  defp shared_prefix([{:hour, _} | _], [{:hour, _} | _], _previous) do
+    0
+  end
 
   defp shared_prefix([{unit, held} | from], [{unit, held} | to], previous) do
     if chained?(unit, previous), do: 1 + shared_prefix(from, to, unit), else: 0

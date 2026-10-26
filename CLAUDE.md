@@ -32,7 +32,11 @@ What is *written* is read as it is said aloud (law 9):
 
 * An end written to a **clock unit** (an hour, a minute, a second) is a **boundary**: `T09/T17` is eight hours and ends as five begins.
 
-The reader makes the half-open bound and the writer writes a span back as it was read. `Tempo.to_interval(~o"2026-06")` is therefore `~o"2026-06/2026-06"`, June through June.
+* Docs say an interval as it is written: dates by their first and last day, inclusively ("the 15th through the 20th", `2026-06-15/2026-06-20`), and times of day as a range that stops where its end begins ("nine to five", `T09/T17`).
+
+The reader makes the half-open bound and the writer writes a span back as it was read, an end with a time of day from its hour (`2026Y1M5DT9H15M/T9H30M`). `Tempo.to_interval(~o"2026-06")` is therefore `~o"2026-06/2026-06"`, June through June.
+
+ISO 8601 leaves the reading of a reduced-precision end open; law 9 follows the weight of its examples (decision 85).
 
 ### Enumeration
 

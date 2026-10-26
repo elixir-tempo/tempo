@@ -94,7 +94,11 @@ defmodule Tempo.Scale do
         [hour: hour, minute: minute, second: second]
 
       {:microsecond, precision} ->
-        [hour: hour, minute: minute, second: second, microsecond: {microsecond, precision}]
+        # The part of a second the tick is in, at the precision: 0.749999 is
+        # in the hundredth 0.74, as 10:59 is in the hour 10.
+        step = Integer.pow(10, 6 - precision)
+        part = microsecond - rem(microsecond, step)
+        [hour: hour, minute: minute, second: second, microsecond: {part, precision}]
 
       :microsecond ->
         [hour: hour, minute: minute, second: second, microsecond: {microsecond, 6}]

@@ -151,7 +151,7 @@ iex> Tempo.to_iso8601(standup)
 {:ok, "R/2026Y6M1DT9H30M/P1W/FLL1KN/PT15MN"}
 
 iex> Enum.take(standup, 2)
-[~o"2026Y6M1DT9H30M/T45M", ~o"2026Y6M8DT9H30M/T45M"]
+[~o"2026Y6M1DT9H30M/T9H45M", ~o"2026Y6M8DT9H30M/T9H45M"]
 
 iex> Tempo.RRule.to_string(standup)
 {:ok, "FREQ=WEEKLY;BYDAY=MO"}

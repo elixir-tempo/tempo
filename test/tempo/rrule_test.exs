@@ -449,14 +449,14 @@ defmodule Tempo.RRuleTest do
 
     test "fires at the minutes its fields name" do
       assert firings("*/15 * * * *", ~o"2026-01-05T09:05", ~o"2026-01-05T09") == [
-               "2026Y1M5DT9H15M/T16M",
-               "2026Y1M5DT9H30M/T31M",
-               "2026Y1M5DT9H45M/T46M"
+               "2026Y1M5DT9H15M/T9H16M",
+               "2026Y1M5DT9H30M/T9H31M",
+               "2026Y1M5DT9H45M/T9H46M"
              ]
 
       assert firings("30 9 * * *", ~o"2026-01-05", ~o"2026-01-05/2026-01-06") == [
-               "2026Y1M5DT9H30M/T31M",
-               "2026Y1M6DT9H30M/T31M"
+               "2026Y1M5DT9H30M/T9H31M",
+               "2026Y1M6DT9H30M/T9H31M"
              ]
 
       assert Enum.count(firings("0 */2 * * *", ~o"2026-01-05", ~o"2026-01-05")) == 12
@@ -469,13 +469,13 @@ defmodule Tempo.RRuleTest do
       assert firings("0 0 * JAN MON", ~o"2026-01-01", ~o"2026-01") |> Enum.count() == 4
 
       assert firings("@daily", ~o"2026-01-05", ~o"2026-01-05/2026-01-06") == [
-               "2026Y1M5DT0H0M/T1M",
-               "2026Y1M6DT0H0M/T1M"
+               "2026Y1M5DT0H0M/T0H1M",
+               "2026Y1M6DT0H0M/T0H1M"
              ]
 
       assert firings("*/30 * * * * *", ~o"2026-01-05T09:00:00", ~o"2026-01-05T09:00") == [
-               "2026Y1M5DT9H0M0S/T1S",
-               "2026Y1M5DT9H0M30S/T31S"
+               "2026Y1M5DT9H0M0S/T9H0M1S",
+               "2026Y1M5DT9H0M30S/T9H0M31S"
              ]
     end
 

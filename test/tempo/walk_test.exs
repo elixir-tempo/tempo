@@ -7,6 +7,8 @@ defmodule Tempo.WalkTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Walk
+
   describe "a span is walked at the resolution of its ends" do
     test "a span of groups walks the units it groups" do
       halves = ~o"2026Y1G6MU/2026Y2G6MU"
@@ -24,6 +26,16 @@ defmodule Tempo.WalkTest do
                Tempo.from_iso8601!("4722Y9M[u-ca=chinese]"),
                Tempo.from_iso8601!("4722Y10M[u-ca=chinese]")
              ]
+    end
+
+    test "a tick inside a fraction of a second is in the fraction that holds it" do
+      # 10:00:00.749999 is in the hundredth 0.74, as 10:59 is in the hour 10.
+      tick = 36_000_749_999
+
+      assert Walk.clock_at(tick, {:microsecond, 2}) ==
+               [hour: 10, minute: 0, second: 0, microsecond: {740_000, 2}]
+
+      assert Walk.clock_at(tick, :hour) == [hour: 10]
     end
 
     test "a span written to a fraction of a second walks that fraction" do

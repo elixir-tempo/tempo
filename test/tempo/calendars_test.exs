@@ -112,8 +112,8 @@ defmodule Tempo.CalendarsTest do
       {:ok, set} = ICal.parse(ics, within: ~o"2026-06-01/2026-06-02")
 
       assert texts({:ok, set}) == [
-               "2026Y6M1DT9H30M0S/T45M0S[Europe/London]",
-               "2026Y6M2DT9H30M0S/T45M0S[Europe/London]"
+               "2026Y6M1DT9H30M0S/T9H45M0S[Europe/London]",
+               "2026Y6M2DT9H30M0S/T9H45M0S[Europe/London]"
              ]
     end
 
@@ -149,7 +149,7 @@ defmodule Tempo.CalendarsTest do
       {:ok, set} = ICal.parse(text)
 
       assert Tempo.to_iso8601!(set) ==
-               "{2026Y6M1DT9H30M0S/T45M0S,2026Y6M1DT12H0M0S/T13H0M0S,2026Y6M1DT14H30M0S/T45M0S}[Europe/London]"
+               "{2026Y6M1DT9H30M0S/T9H45M0S,2026Y6M1DT12H0M0S/T13H0M0S,2026Y6M1DT14H30M0S/T14H45M0S}[Europe/London]"
 
       assert IntervalSet.map(set, &Tempo.metadata(&1).summary) == ["London", "Lunch", "New York"]
     end
@@ -184,7 +184,7 @@ defmodule Tempo.CalendarsTest do
 
       {:ok, set} = JSCalendar.parse(json)
       assert IntervalSet.map(set, &Tempo.day/1) == [1, 8, 15]
-      assert texts({:ok, set}) |> hd() == "2026Y6M1DT9H0M0S/T30M0S[Europe/Paris]"
+      assert texts({:ok, set}) |> hd() == "2026Y6M1DT9H0M0S/T9H30M0S[Europe/Paris]"
     end
 
     test "a task takes no time, and a rule Tempo does not read is an error" do

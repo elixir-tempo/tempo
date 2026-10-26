@@ -12,6 +12,8 @@ Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migra
 
 * An interval written to a date runs through that date: `~o"2026-06-15/2026-06-20"` is six days and holds the 20th. An end written to a time of day is still a boundary.
 
+* An interval's end with a time of day is written from its hour: `~o"2026-01-05T09:15/2026-01-05T09:30"` is `2026Y1M5DT9H15M/T9H30M`, where 1.6 wrote `/T30M`.
+
 * Every expression is a `%Tempo{}` with a `:form`. `%Tempo.Interval{}`, `%Tempo.IntervalSet{}`, `%Tempo.Set{}` and `%Tempo.Range{}` are no longer structs; their modules keep their functions.
 
 * Every function that can fail returns `{:ok, value}` or `{:error, exception}`, and every constructor, conversion, parser and set operation has a `!` form. `shift/3`, `trunc/2`, `round/2`, `to_iso8601/1`, `to_string/2`, `from_elixir/2`, `today/1` and `now/1` returned a bare value.

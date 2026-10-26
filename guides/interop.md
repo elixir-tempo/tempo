@@ -88,7 +88,7 @@ iex> Tempo.to_interval(~o"2022-07-04")
 {:ok, ~o"2022Y7M4D/2022Y7M4D"}
 
 iex> Tempo.to_interval(~o"2022-07-04T14:30:45")
-{:ok, ~o"2022Y7M4DT14H30M45S/T46S"}
+{:ok, ~o"2022Y7M4DT14H30M45S/T14H30M46S"}
 ```
 
 Two notes:
