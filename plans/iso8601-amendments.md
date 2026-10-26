@@ -78,13 +78,13 @@ Taken by the user on 2026-10-27 (decision 86 in `plans/decisions.md`).
 
 ## Tasks
 
-* [ ] **Canonical durations** — D.5 on `Tempo.Duration` with a 60-second minute and the calendar's months, and `compare/3` through it (D4).
-
 * [ ] **Expanded years** — a sign and five or more digits (D5).
 
 * [ ] **The conformance guide** — cite both amendments; state the 60-second minute as Tempo's nominal duration rule (D6); the negative day (D3), overflow (D2) and expanded years (D5) as decided.
 
 ### Done
+
+* [x] **Canonical durations** — `Tempo.Duration.canonical/2` (and `canonical!/2`): two chains, years and months by `Tempo.Calendar.months_in_year_bounds/1` where they agree, weeks to fractions of a second by `days_in_week/1` and a 60-second minute; a positive chain written from its top (so `P10D` is `P1W3D`, as the amendment's overflow has it), a negative one from its coarsest unit written. `compare/3` without `:relative_to` counts months and the rest apart and orders them where they agree. 2026-10-27.
 
 * [x] **Out-of-range parts by option** — `Tempo.from_iso8601/2` with `overflow: :carry` (`Shift.carried/1`): each value's parts are offsets from their least, added by `Shift.shift/2`, in the form written; a negative day is not carried (D3), a time with no date has no day to carry into. Found beside it and fixed: a day of zero raised a `FunctionClauseError` in `Validate`. 2026-10-27.
 

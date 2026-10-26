@@ -225,9 +225,80 @@ defmodule Tempo.MeasureTest do
       assert Duration.to_unit(~o"P1M", :day, relative_to: ~o"2026-03-01") == {:ok, 31.0}
     end
 
-    test "compare/3 of a month needs a date to lay it from" do
+    test "compare/3 of a month against days needs a date to lay it from" do
       assert_raise ArgumentError, fn -> Duration.compare(~o"P1M", ~o"P30D") end
       assert Duration.compare(~o"P1M", ~o"P30D", relative_to: ~o"2026-03-01") == :gt
+    end
+
+    test "compare/3 counts years in months, and orders what differs one way only" do
+      assert Duration.compare(~o"P7Y24M", ~o"P9Y") == :eq
+      assert Duration.compare(~o"P1Y", ~o"P11M") == :gt
+      assert Duration.compare(~o"P1Y1D", ~o"P12M") == :gt
+      assert Duration.compare(~o"P1Y", ~o"P12M1D") == :lt
+      assert Enum.sort([~o"P2Y", ~o"P13M", ~o"P1Y"], Duration) == [~o"P1Y", ~o"P13M", ~o"P2Y"]
+
+      # A Hebrew year has 12 months or 13.
+      assert_raise ArgumentError, fn ->
+        Duration.compare(~o"P1Y", ~o"P12M", calendar: Calendrical.Hebrew)
+      end
+    end
+  end
+
+  # ISO 8601-2, Amendment 1 (2025), §14.7 and D.5, with a minute of 60
+  # seconds (decision 86, D4).
+  describe "canonical/2" do
+    test "the amendment's examples" do
+      for {written, canonical} <- [
+            {~o"P7Y24M", ~o"P9Y"},
+            {~o"PT1H90M", ~o"PT2H30M"},
+            {~o"PT1H-10M", ~o"PT50M"},
+            {~o"P3DT-10M", ~o"P2DT23H50M"},
+            {~o"PT3H3M3S", ~o"PT3H3M3S"},
+            {~o"P-1Y-15M3D", ~o"P-3Y9M3D"},
+            {~o"P3Y-15M3DT-8H-30M9S", ~o"P1Y9M2DT15H30M9S"},
+            {~o"P3Y15M3DT-10M", ~o"P4Y3M2DT23H50M"}
+          ] do
+        assert Duration.canonical(written) == {:ok, canonical}
+      end
+    end
+
+    test "a minute is 60 seconds, where the amendment keeps the two apart" do
+      # The amendment leaves PT1H-122M60S as PT-2H58M60S.
+      assert Duration.canonical(~o"PT1H-122M60S") == {:ok, ~o"PT-2H59M"}
+      assert Duration.canonical(~o"PT59M120S") == {:ok, ~o"PT1H1M"}
+    end
+
+    test "a positive length is written from the coarsest unit it reaches" do
+      assert Duration.canonical(~o"PT26H") == {:ok, ~o"P1DT2H"}
+      assert Duration.canonical(~o"P10D") == {:ok, ~o"P1W3D"}
+    end
+
+    test "months and days, and years and weeks, stay apart" do
+      assert Duration.canonical(~o"P1M30D") == {:ok, ~o"P1M4W2D"}
+      assert Duration.canonical(~o"P1Y-1D") == {:ok, ~o"P1Y-1D"}
+    end
+
+    test "a fraction is written in the units below it" do
+      assert Duration.canonical(~o"P1.5W") == {:ok, ~o"P1W3DT12H"}
+      assert Duration.canonical(~o"PT1.5S") == {:ok, ~o"PT1.5S"}
+    end
+
+    test "a calendar whose years differ in months keeps years and months apart" do
+      assert Duration.canonical(~o"P1Y13M", calendar: Calendrical.Hebrew) == {:ok, ~o"P1Y13M"}
+    end
+
+    test "a length of nothing is written as nothing of its finest unit" do
+      assert Duration.canonical(~o"P1Y-12M") == {:ok, ~o"P0M"}
+    end
+
+    test "returns an error for what it cannot take" do
+      assert {:error, %ConversionError{}} = Duration.canonical(~o"2026")
+      assert {:error, %ArgumentError{}} = Duration.canonical(~o"P1D", bogus: 1)
+
+      assert {:error, %Tempo.InvalidCalendarError{}} =
+               Duration.canonical(~o"P1D", calendar: :hebrew)
+
+      assert_raise ArgumentError, fn -> Duration.canonical!(~o"P1D", bogus: 1) end
     end
   end
 end

@@ -18,6 +18,7 @@ defmodule Tempo.Duration do
   """
 
   alias Tempo.ConversionError
+  alias Tempo.InvalidCalendarError
   alias Tempo.Options
   alias Tempo.Scale
   alias Tempo.Spans
@@ -423,8 +424,13 @@ defmodule Tempo.Duration do
 
   Two exact durations are compared as lengths, however they are written:
   `PT90M` and `PT1H30M` are equal. A duration with a month or a year has no
-  length until it is counted from a date, given as `:relative_to`; without
-  one the comparison raises, having only three answers to give.
+  length until it is counted from a date, given as `:relative_to`. Without
+  one, years and months are counted in months by the calendar's year, as
+  ISO 8601-2's Amendment 1 (2025) converts them, and the rest as a length:
+  `P7Y24M` and `P9Y` are equal, and `P1Y1D` is longer than `P12M`. Where
+  the months differ one way and the rest the other (`P1M` against `P30D`),
+  or the calendar's years differ in months, the comparison raises, having
+  only three answers to give.
 
   ### Arguments
 
@@ -437,6 +443,9 @@ defmodule Tempo.Duration do
   * `:relative_to` is a `t:Tempo.t/0` the two durations are counted from:
     each is laid from the value's start, and the two ends compared.
 
+  * `:calendar` is the calendar whose year counts the months of a year,
+    without `:relative_to`. The default is `Calendar.ISO`.
+
   ### Returns
 
   * `:lt`, `:eq` or `:gt`.
@@ -444,6 +453,9 @@ defmodule Tempo.Duration do
   ### Examples
 
       iex> Tempo.Duration.compare(~o"PT90M", ~o"PT1H30M")
+      :eq
+
+      iex> Tempo.Duration.compare(~o"P7Y24M", ~o"P9Y")
       :eq
 
       iex> Enum.sort([~o"PT2H", ~o"PT30M", ~o"PT1H"], Tempo.Duration)
@@ -457,8 +469,19 @@ defmodule Tempo.Duration do
   def compare(a, b, options \\ [])
 
   def compare(%__MODULE__{} = a, %__MODULE__{} = b, options) do
-    Options.check!(options, [:relative_to], "Tempo.Duration.compare/3")
+    Options.check!(options, [:relative_to, :calendar], "Tempo.Duration.compare/3")
 
+    if is_nil(options[:relative_to]) and not (exact?(a) and exact?(b)) do
+      by_parts(a, b, Keyword.get(options, :calendar, Tempo.Calendar.default()))
+    else
+      by_length(a, b, options)
+    end
+  end
+
+  def compare(%__MODULE__{}, b, _options), do: not_a_duration!(b)
+  def compare(a, _b, _options), do: not_a_duration!(a)
+
+  defp by_length(a, b, options) do
     case {laid(a, options), laid(b, options)} do
       {{:ok, x}, {:ok, y}} -> Scale.compare(x, y)
       {{:error, exception}, _} -> raise exception
@@ -466,8 +489,291 @@ defmodule Tempo.Duration do
     end
   end
 
-  def compare(%__MODULE__{}, b, _options), do: not_a_duration!(b)
-  def compare(a, _b, _options), do: not_a_duration!(a)
+  # Months counted by the calendar's year, and the rest as a length: two
+  # durations are in order where the two counts do not disagree.
+  defp by_parts(a, b, calendar) do
+    case {months_and_rest(a, calendar), months_and_rest(b, calendar)} do
+      {{:ok, {months_a, rest_a}}, {:ok, {months_b, rest_b}}} ->
+        agreed(Scale.compare(months_a, months_b), Scale.compare(rest_a, rest_b), a, b)
+
+      _months_not_counted ->
+        raise argument(
+                "#{inspect(a)} or #{inspect(b)} has years in a calendar whose years differ " <>
+                  "in months, which have no fixed length; give :relative_to"
+              )
+    end
+  end
+
+  defp agreed(:eq, order, _a, _b) do
+    order
+  end
+
+  defp agreed(order, :eq, _a, _b) do
+    order
+  end
+
+  defp agreed(order, order, _a, _b) do
+    order
+  end
+
+  defp agreed(_months, _rest, a, b) do
+    raise argument(
+            "#{inspect(a)} and #{inspect(b)} differ one way in months and the other in the " <>
+              "rest, so which is longer depends on the date they are counted from; give :relative_to"
+          )
+  end
+
+  defp months_and_rest(%__MODULE__{units: units}, calendar) do
+    {years_and_months, rest} = Enum.split_with(units, fn {unit, _} -> unit in [:year, :month] end)
+
+    with {:ok, months} <- months_of(years_and_months, calendar) do
+      {:ok, {months, chain_length(rest, week_sizes(calendar))}}
+    end
+  end
+
+  defp months_of(parts, calendar) do
+    years = Keyword.get(parts, :year, 0)
+    months = Keyword.get(parts, :month, 0)
+
+    case {years, Tempo.Calendar.months_in_year_bounds(calendar)} do
+      {0, _bounds} -> {:ok, months}
+      {_years, {in_year, in_year}} -> {:ok, years * in_year + months}
+      _varying -> :error
+    end
+  end
+
+  @doc """
+  A duration in canonical form, as ISO 8601-2's Amendment 1 (2025) defines
+  it (§14.7 and D.5): no part past the unit above it that it converts into,
+  and a negative part only where no coarser part written can take it in.
+
+  Parts convert along two chains. Years and months convert by the months in
+  the calendar's year, where every year has as many. Weeks, days, hours,
+  minutes, seconds and parts of a second convert by the days in the
+  calendar's week, 24 hours, 60 minutes and 60 seconds. A minute is 60
+  seconds, as Tempo's clock has it, which is the nominal duration rule the
+  amendment allows (§14.6). Months and days do not convert, and nor do years
+  and weeks: the month and the days of `P1M30D` stay apart.
+
+  A chain of positive length is written from the coarsest unit it reaches:
+  `PT26H` is `P1DT2H`, and `P10D` is `P1W3D`. A chain of negative length
+  carries its sign on the coarsest unit written in it, the rest positive:
+  `P-1Y-15M` is `P-3Y9M`.
+
+  The canonical form is for comparing and for writing. A shift by it can
+  land elsewhere in a zone across a change of the clock, where a day is a
+  day of the calendar and 24 hours are elapsed time.
+
+  ### Arguments
+
+  * `duration` is a `t:t/0`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:calendar` is the calendar whose years and weeks count the months and
+    days. The default is `Calendar.ISO`.
+
+  ### Returns
+
+  * `{:ok, duration}` in canonical form, or
+
+  * `{:error, exception}` for a value that is no duration, an option the
+    function does not take, or a calendar Tempo does not know.
+
+  ### Examples
+
+      iex> Tempo.Duration.canonical(~o"P7Y24M")
+      {:ok, ~o"P9Y"}
+
+      iex> Tempo.Duration.canonical(~o"PT1H-10M")
+      {:ok, ~o"PT50M"}
+
+      iex> Tempo.Duration.canonical(~o"P3DT-10M")
+      {:ok, ~o"P2DT23H50M"}
+
+  """
+  @spec canonical(t(), keyword()) :: {:ok, t()} | {:error, Exception.t()}
+  def canonical(duration, options \\ [])
+
+  def canonical(%__MODULE__{units: units}, options) do
+    with :ok <- Options.check(options, [:calendar], "Tempo.Duration.canonical/2"),
+         {:ok, calendar} <- calendar_named(options) do
+      {:ok, %__MODULE__{units: canonical_units(units, calendar)}}
+    end
+  end
+
+  def canonical(other, _options) do
+    {:error, not_a_duration(other)}
+  end
+
+  @doc """
+  `canonical/2`, returning its answer or raising the error.
+
+  ### Arguments
+
+  * The arguments are those of `canonical/2`.
+
+  ### Returns
+
+  * What `canonical/2` returns as `{:ok, answer}`, the answer alone. The
+    error it returns as `{:error, exception}` is raised.
+
+  ### Examples
+
+      iex> Tempo.Duration.canonical!(~o"PT1H90M")
+      ~o"PT2H30M"
+
+  """
+  @spec canonical!(t(), keyword()) :: t()
+  def canonical!(duration, options \\ []) do
+    case canonical(duration, options) do
+      {:ok, answer} -> answer
+      {:error, exception} -> raise exception
+    end
+  end
+
+  defp calendar_named(options) do
+    calendar = Keyword.get(options, :calendar, Tempo.Calendar.default())
+
+    if Tempo.Calendar.calendar?(calendar) do
+      {:ok, calendar}
+    else
+      {:error, InvalidCalendarError.exception(calendar: calendar)}
+    end
+  end
+
+  defp canonical_units([], _calendar) do
+    []
+  end
+
+  defp canonical_units(units, calendar) do
+    {years_and_months, rest} = Enum.split_with(units, fn {unit, _} -> unit in [:year, :month] end)
+    canonical = years_and_months(years_and_months, calendar) ++ weeks_and_less(rest, calendar)
+
+    case canonical do
+      [] -> [zero(List.last(units))]
+      [_ | _] -> canonical
+    end
+  end
+
+  defp zero({:microsecond, {_microseconds, precision}}) do
+    {:microsecond, {0, precision}}
+  end
+
+  defp zero({unit, _n}) do
+    {unit, 0}
+  end
+
+  # Years and months are one chain where every year has as many months.
+  defp years_and_months([], _calendar) do
+    []
+  end
+
+  defp years_and_months(parts, calendar) do
+    case Tempo.Calendar.months_in_year_bounds(calendar) do
+      {months, months} -> chained(parts, [year: months, month: 1], :year)
+      _varying -> parts
+    end
+  end
+
+  defp weeks_and_less([], _calendar) do
+    []
+  end
+
+  defp weeks_and_less(parts, calendar) do
+    chained(parts, week_sizes(calendar), :week)
+  end
+
+  # The microseconds in each unit from a week down, a week the calendar's.
+  defp week_sizes(calendar) do
+    [
+      week: Tempo.Calendar.days_in_week(calendar) * @day,
+      day: @day,
+      hour: 3_600_000_000,
+      minute: 60_000_000,
+      second: 1_000_000,
+      microsecond: 1
+    ]
+  end
+
+  defp chain_length(parts, sizes) do
+    Enum.reduce(parts, 0, fn part, sum -> sum + part_length(part, sizes) end)
+  end
+
+  # The parts of one chain as one length, written again down to the chain's
+  # finest unit, a part of zero left out: from the chain's top for a
+  # positive length, from the coarsest unit written for a negative one.
+  defp chained(parts, sizes, top) do
+    length = chain_length(parts, sizes)
+    {coarsest, _} = List.first(parts)
+    {finest, _} = List.last(sizes)
+    precision = precision(parts)
+
+    cond do
+      length == 0 -> []
+      length > 0 -> written(length, units_between(sizes, top, finest), sizes, precision)
+      true -> written(length, units_between(sizes, coarsest, finest), sizes, precision)
+    end
+  end
+
+  defp part_length({:microsecond, {microseconds, _precision}}, _sizes) do
+    microseconds
+  end
+
+  defp part_length({unit, n}, sizes) when is_integer(n) do
+    n * Keyword.fetch!(sizes, unit)
+  end
+
+  # A decimal fraction on the finest part (`P1.5W`) is counted to the
+  # microsecond.
+  defp part_length({unit, n}, sizes) when is_float(n) do
+    round(n * Keyword.fetch!(sizes, unit))
+  end
+
+  defp precision(parts) do
+    case List.keyfind(parts, :microsecond, 0) do
+      {:microsecond, {_microseconds, precision}} -> precision
+      nil -> 6
+    end
+  end
+
+  defp units_between(sizes, from, to) do
+    sizes
+    |> Keyword.keys()
+    |> Enum.drop_while(&(&1 != from))
+    |> Enum.take_while(&(&1 != to))
+    |> Kernel.++([to])
+  end
+
+  # The first unit takes the length's sign (a floor, so the rest is
+  # positive); each after it what is left.
+  defp written(length, [first | rest], sizes, precision) do
+    size = Keyword.fetch!(sizes, first)
+    count = Integer.floor_div(length, size)
+
+    [{first, count} | each_written(length - count * size, rest, sizes)]
+    |> Enum.reject(fn {_unit, n} -> n == 0 end)
+    |> Enum.map(&with_precision(&1, precision))
+  end
+
+  defp each_written(_left, [], _sizes) do
+    []
+  end
+
+  defp each_written(left, [unit | rest], sizes) do
+    size = Keyword.fetch!(sizes, unit)
+    [{unit, div(left, size)} | each_written(rem(left, size), rest, sizes)]
+  end
+
+  defp with_precision({:microsecond, microseconds}, precision) do
+    {:microsecond, {microseconds, precision}}
+  end
+
+  defp with_precision(part, _precision) do
+    part
+  end
 
   @doc """
   The length of a duration in one unit of fixed length, as a float.
