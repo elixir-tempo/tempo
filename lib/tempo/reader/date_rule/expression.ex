@@ -25,7 +25,7 @@ defmodule Tempo.Reader.DateRule.Expression do
   @all_weekdays 1..7
 
   @doc false
-  @spec build(map(), keyword()) :: {:ok, Tempo.t()} | {:error, String.t()}
+  @spec build(map(), keyword()) :: {:ok, Tempo.t()} | {:error, String.t() | Exception.t()}
   def build(%{conditional: conditional} = plan, options) do
     falls_on = Keyword.get(options, :falls_on, %{type: conditional.type})
 

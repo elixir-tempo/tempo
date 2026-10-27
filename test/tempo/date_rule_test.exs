@@ -274,6 +274,10 @@ defmodule Tempo.DateRuleTest do
                DateRule.parse("12-31 14:00 PT12H if Sunday then 00:00")
     end
 
+    test "is the date's own for a date its calendar does not have" do
+      assert {:error, %Tempo.InvalidDateError{unit: :month}} = DateRule.parse("13-01")
+    end
+
     test "is returned for what is no text" do
       assert {:error, %ParseError{}} = DateRule.parse(:christmas)
       assert_raise ParseError, fn -> DateRule.parse!("12-25 tomorrow") end

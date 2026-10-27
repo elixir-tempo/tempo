@@ -54,7 +54,10 @@ defmodule Tempo.DateRule do
     `%{substitute: true}` in its metadata.
 
   * `{:error, %Tempo.ParseError{}}` for a rule that cannot be read, naming
-    where reading stopped or which part is not read.
+    where reading stopped or which part is not read, or
+
+  * `{:error, exception}` for a date the rule names that its calendar does
+    not have, such as a `Tempo.InvalidDateError` for the month of `13-01`.
 
   ### Examples
 
@@ -69,7 +72,7 @@ defmodule Tempo.DateRule do
       iex> {:error, %Tempo.ParseError{rest: "a full moon"}} = Tempo.DateRule.parse("12-25 on a full moon")
 
   """
-  @spec parse(String.t(), keyword()) :: {:ok, Tempo.t()} | {:error, ParseError.t()}
+  @spec parse(String.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def parse(rule, options \\ [])
 
   def parse(rule, options) when is_binary(rule) and is_list(options) do
