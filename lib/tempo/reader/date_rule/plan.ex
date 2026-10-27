@@ -62,6 +62,16 @@ defmodule Tempo.Reader.DateRule.Plan do
     13 => {:traditional_month, 6}
   }
 
+  # The directions a step or a move is written with, each to its atom by this
+  # table rather than by the atom table, which holds an atom only once a
+  # module naming it is loaded.
+  @directions %{
+    "before" => :before,
+    "after" => :after,
+    "next" => :next,
+    "previous" => :previous
+  }
+
   @types %{
     "public" => :public,
     "bank" => :bank,
@@ -200,8 +210,8 @@ defmodule Tempo.Reader.DateRule.Plan do
     {:error, "this weekday step is not read yet"}
   end
 
-  defp step_direction(direction) when direction in ["before", "after", "next", "previous"] do
-    String.to_existing_atom(direction)
+  defp step_direction(direction) when is_map_key(@directions, direction) do
+    Map.fetch!(@directions, direction)
   end
 
   # A date in a year of its own calendar (`31 Shahrivar 1401`).
@@ -251,7 +261,7 @@ defmodule Tempo.Reader.DateRule.Plan do
        day: day,
        count: count,
        weekday: weekday_number(weekday),
-       direction: String.to_existing_atom(direction)
+       direction: step_direction(direction)
      }}
   end
 
@@ -269,7 +279,7 @@ defmodule Tempo.Reader.DateRule.Plan do
        count: count,
        inner_weekday: weekday_number(inner),
        weekday: weekday_number(outer),
-       direction: String.to_existing_atom(direction)
+       direction: step_direction(direction)
      }}
   end
 
@@ -412,8 +422,7 @@ defmodule Tempo.Reader.DateRule.Plan do
   defp part(%{rule: "dateIfThen", if: triggers, direction: direction, then: target}, plan, state)
        when direction in ["next", "previous"] and is_map_key(@weekdays, target) do
     mode = clause_mode(state)
-    direction = String.to_existing_atom(direction)
-    clause = {weekday_numbers(triggers), direction, weekday_number(target), mode}
+    clause = {weekday_numbers(triggers), step_direction(direction), weekday_number(target), mode}
     {:ok, plan, %{state | mode: mode, pending_and: false, clauses: state.clauses ++ [clause]}}
   end
 
@@ -441,10 +450,10 @@ defmodule Tempo.Reader.DateRule.Plan do
   end
 
   defp part(%{rule: "ruleIfHoliday", direction: direction} = token, plan, state)
-       when is_binary(direction) do
+       when is_map_key(@directions, direction) do
     move = %{
       count: token.count,
-      direction: String.to_existing_atom(direction),
+      direction: step_direction(direction),
       target: move_target(token.weekday),
       omit: weekday_numbers(token.omit)
     }
