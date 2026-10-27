@@ -85,6 +85,93 @@ defmodule Tempo.Walk do
     end
   end
 
+  @doc """
+  How many values of a unit `steps/3` gives a span, counted without stepping
+  where the count has a closed form: a clock unit on a floating or fixed
+  clock, a part of a second, and a named zone's clock through each stretch
+  in which its offset holds.
+  """
+  @spec touched({Scale.position(), Scale.position()}, Unit.t(), frame()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def touched({start, stop}, unit, frame) when is_integer(start) and is_integer(stop) do
+    if clock_unit?(unit) do
+      {:ok, clock_touched(start, stop, step_of(unit), frame)}
+    else
+      with {:ok, steps} <- steps({start, stop}, unit, frame), do: {:ok, Enum.count(steps)}
+    end
+  end
+
+  def touched(_span, _unit, _frame) do
+    {:error, :open}
+  end
+
+  defp clock_touched(start, stop, _step, _frame) when stop <= start do
+    0
+  end
+
+  # A named zone's clock is counted stretch by stretch where its offset holds.
+  defp clock_touched(start, stop, step, %{zone: %Zone{name: name} = zone, shift: shift})
+       when is_binary(name) and step >= @second do
+    zone_touched(start, stop, step, {zone, shift}, 0)
+  end
+
+  # A part of a second is below any offset; a floating or fixed clock keeps one.
+  defp clock_touched(start, stop, step, frame) do
+    ticks_in(start, stop, step, steady_offset(step, frame))
+  end
+
+  defp steady_offset(step, _frame) when step < @second do
+    0
+  end
+
+  defp steady_offset(_step, %{shift: nil}) do
+    0
+  end
+
+  defp steady_offset(_step, %{shift: shift}) do
+    Zone.shift_ticks(shift)
+  end
+
+  # The ticks a walk gives from `tick` to `stop` on a clock that keeps one
+  # offset: the first, then each whole unit of the wall reading after it.
+  defp ticks_in(tick, stop, step, offset) do
+    1 + Integer.floor_div(stop - 1 + offset, step) - Integer.floor_div(tick + offset, step)
+  end
+
+  # Through a day in which the zone's offset holds, the ticks are counted to
+  # the last whole unit before the day's end, from which the next stretch
+  # begins as the walk would step to it; through a change of the clock, one
+  # unit at a time where the clock leaves it (`Tempo.Zone.unit_end/4`).
+  defp zone_touched(tick, stop, _step, _in_zone, count) when tick >= stop do
+    count
+  end
+
+  defp zone_touched(tick, stop, step, {zone, shift} = in_zone, count) do
+    limit = min(tick + @day, stop)
+
+    case Zone.steady_offset(zone, shift, tick, limit) do
+      {:ok, offset} ->
+        steady_touched(tick, limit, stop, step, offset, in_zone, count)
+
+      :changes ->
+        zone_touched(Zone.unit_end(zone, shift, tick, step), stop, step, in_zone, count + 1)
+    end
+  end
+
+  defp steady_touched(tick, stop, stop, step, offset, _in_zone, count) do
+    count + ticks_in(tick, stop, step, offset)
+  end
+
+  defp steady_touched(tick, limit, stop, step, offset, {zone, shift} = in_zone, count) do
+    boundary = Integer.floor_div(limit + offset, step) * step - offset
+
+    if boundary > tick do
+      zone_touched(boundary, stop, step, in_zone, count + ticks_in(tick, boundary, step, offset))
+    else
+      zone_touched(Zone.unit_end(zone, shift, tick, step), stop, step, in_zone, count + 1)
+    end
+  end
+
   # ── Values at a place on the scale ────────────────────────────────────
 
   @doc "The units of a day on the day scale, written to a unit: the day's date, month, week or year."

@@ -41,6 +41,26 @@ defmodule Tempo.CountTest do
     end
   end
 
+  test "a clock unit is counted as it is walked, through a change of the clock" do
+    for expression <- [
+          ~o"2026-03-28T22:15/2026-03-30T02:45[Europe/Paris]",
+          ~o"2026-10-24T22:15/2026-10-26T02:45[Europe/Paris]",
+          ~o"2026-04-04T23:10/2026-04-06T03:20[Australia/Lord_Howe]",
+          ~o"2026-03-07T22:10/2026-03-09T04:20[America/St_Johns]",
+          ~o"2026-06-15T10:30+05:45/2026-06-16T12:31+05:45"
+        ],
+        unit <- [:hour, :minute] do
+      {:ok, walked} = Tempo.walk(expression, unit)
+      assert Tempo.count(expression, unit) == {:ok, Enum.count(walked)}
+    end
+  end
+
+  test "a long span of a clock unit is counted without walking it" do
+    assert Tempo.count(~o"2026", :second) == {:ok, 31_536_000}
+    assert Tempo.count(~o"2026[Europe/Paris]", :second) == {:ok, 31_536_000}
+    assert Tempo.count(~o"2026-03-29[Europe/Paris]", :second) == {:ok, 82_800}
+  end
+
   test "an expression with no end or no year is counted within a window" do
     assert Tempo.count(~o"R/2026-06-01/P1W", :day, within: ~o"2026-06") == {:ok, 35}
     assert Tempo.count(~o"{6,7}K", :day, within: ~o"2026-06") == {:ok, 8}

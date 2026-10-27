@@ -130,10 +130,49 @@ defmodule Tempo.Children do
   @spec count(Tempo.t(), Unit.t() | {:microsecond, 1..6} | nil, keyword()) ::
           {:ok, non_neg_integer()} | {:error, Exception.t()}
   def count(expression, unit, options) do
-    with :ok <- countable(expression, options),
-         {:ok, walked} <- walk(expression, unit, options) do
-      {:ok, Enum.count(walked)}
+    with :ok <- countable(expression, options), do: counted(expression, unit, options)
+  end
+
+  # A singular expression on a line is counted from its extent, without its
+  # values (`Tempo.Walk.touched/3`); one on a cycle as it is walked; a plural
+  # expression member by member, as it is walked.
+  defp counted(%Tempo{} = expression, unit, options) when not is_nil(unit) do
+    if Spans.singular?(expression) do
+      counted_span(expression, unit)
+    else
+      with {:ok, members} <- Spans.members(expression, options),
+           do: counted_members(members, unit, options)
     end
+  end
+
+  defp counted(expression, unit, options) do
+    with {:ok, walked} <- walk(expression, unit, options), do: {:ok, Enum.count(walked)}
+  end
+
+  defp counted_span(expression, unit) do
+    with {:ok, {start, stop}} <- Spans.extent(expression),
+         :ok <- walkable(start, expression) do
+      span_count(Spans.frame(expression), expression, {start, stop}, unit)
+    end
+  end
+
+  defp span_count({:cycle, _coarsest}, expression, extent, unit) do
+    with {:ok, steps} <- steps(expression, extent, unit), do: {:ok, Enum.count(steps)}
+  end
+
+  defp span_count(_line, expression, extent, unit) do
+    extent
+    |> Walk.touched(unit, Spans.frame_of(expression))
+    |> walk_error(expression)
+  end
+
+  defp counted_members(members, unit, options) do
+    Enum.reduce_while(members, {:ok, 0}, fn member, {:ok, total} ->
+      case counted(member, unit, options) do
+        {:ok, count} -> {:cont, {:ok, total + count}}
+        error -> {:halt, error}
+      end
+    end)
   end
 
   # One of several has no one count.

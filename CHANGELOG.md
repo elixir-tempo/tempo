@@ -4,7 +4,7 @@
 
 ### Added
 
-* `Tempo.count/3` — how many values of a unit an expression holds, the values `Tempo.walk/3` gives counted: `Tempo.count(business_days, :day)`. Takes `:within` for an expression with no end.
+* `Tempo.count/3` — how many values of a unit an expression holds, the values `Tempo.walk/3` gives counted (`Tempo.count(business_days, :day)`), a clock unit without walking it. Takes `:within` for an expression with no end.
 
 * `Tempo.DateRule.parse/2` reads a yearly date written in date-holidays' rule grammar (`4th Thursday in November`, `easter -2`, `15 Nisan`, `chinese 01-0-01`) into the Tempo recurrence it means. Observed days, bridges and `if is holiday` moves read to members of a `Tempo.RecurrenceSet`; the [date rules guide](https://hexdocs.pm/ex_tempo/date-rules.html) takes the grammar part by part.
 
