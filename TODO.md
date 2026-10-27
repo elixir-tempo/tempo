@@ -58,6 +58,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 
 ## Done
 
+* [x] **A set operation's window that is a range** — `:within` given as a range placed no operand with no year (`difference(range, ~o"6K", within: range)` was `:needs_a_year`), and a one-value window placed a wrapping span (`12M/2M` in June) outside it; both now place it as `to_interval/2` does. 2026-10-28.
+
 * [x] **`ex_tempo_network` 1.0.0** — published on hex 2026-10-26 from `v1.0.0` (`0e8bb93`), requiring `{:ex_tempo, "~> 2.0"}`; its gates pass against the republished 2.0.0, its lock moved to it (2026-10-27). It calls the hidden `Tempo.Calendar` in `Tempo.Network.Calendar`, an agreed private seam (`plans/decisions.md`, 15), so a change to the adapter checks it. 2026-10-26.
 
 * [x] **The ISO 8601 amendments** — ISO 8601-1:2019/Amd 1:2022 and ISO 8601-2:2019/Amd 1:2025 against Tempo (decision 86, [plans/iso8601-amendments.md](plans/iso8601-amendments.md)): a carried time shift, 24:00, `overflow: :carry`, canonical durations, expanded years, the conformance guide. 2026-10-27, v2.0.0.

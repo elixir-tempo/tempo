@@ -100,9 +100,7 @@ defmodule Tempo.Algebra do
   defp spans_within(%Tempo{form: {:all, []}}, _expression, _side), do: {:ok, []}
 
   defp spans_within(window, expression, side) do
-    placed = if window, do: Spans.placed_in(expression, window), else: expression
-
-    with {:ok, spans} <- Spans.placed(placed, if(window, do: [within: window], else: [])),
+    with {:ok, spans} <- Spans.placed(expression, if(window, do: [within: window], else: [])),
          {:ok, spans} <- bounded(spans, expression),
          {:ok, positioned} <- placed_spans(spans, side) do
       {:ok, Enum.sort_by(positioned, &{&1.start, &1.stop})}
@@ -156,12 +154,28 @@ defmodule Tempo.Algebra do
 
   defp anchored?(%Tempo{} = expression), do: not match?({:cycle, _}, Spans.frame(expression))
 
-  # What an expression is once placed by a window, if it is.
+  # What an expression is once placed by a window, if it is: under the
+  # window's one value, or else on each of the window's periods, as its spans
+  # are (`Spans.placed/2`), which puts it on the window's line.
   defp placed(%Tempo{} = expression, %Tempo{} = window) do
-    if anchored?(expression), do: expression, else: Spans.placed_in(expression, window)
+    if anchored?(expression) do
+      expression
+    else
+      expression
+      |> Spans.placed_in(window)
+      |> on_the_line_of(window)
+    end
   end
 
   defp placed(expression, _window), do: expression
+
+  defp on_the_line_of(placed, window) do
+    if anchored?(placed) or not anchored?(window) do
+      placed
+    else
+      window
+    end
+  end
 
   # An operand with no spans has no frame of its own, and takes the other's.
   defp one_frame(_a, b, [], [_ | _], options), do: one_frame(b, b, [], [], options)

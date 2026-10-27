@@ -16,6 +16,8 @@
 
 * `Tempo.bounded?/1` is true of a rule over years that end (`R/{2020Y..2024Y}/…`), which `to_interval/2` lists with no window, and asks a conditional member about what it holds.
 
+* A set operation's `:within` places an operand with no year on each period of a window that is a range (`within: ~o"2026-01-02/2026-03-31"` with `~o"{6,7}K"`), where it was a `Tempo.FrameError`, and as `Tempo.to_interval/2` places it, so a span that wraps past a one-value window (`12M/2M` in June) is outside it.
+
 ## [v2.0.0] — 2026-10-26
 
 Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migration guide](https://hexdocs.pm/ex_tempo/migration.html) takes each change below with its 1.6 form and its 2.0 form.

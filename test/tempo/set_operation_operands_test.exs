@@ -70,4 +70,48 @@ defmodule Tempo.SetOperationOperandsTest do
   test "an option it does not take is refused even with no operands" do
     assert {:error, %ArgumentError{}} = Tempo.intersection(@workday, [], bound: 1)
   end
+
+  describe "an operand with no year placed by the window" do
+    test "a window that is a range places it on each of the range's periods" do
+      fortnight = ~o"2026-06-01/2026-06-14"
+      years = ~o"2026/2027"
+      hours = ~o"2026-06-01T00/2026-06-03T00"
+
+      assert Tempo.difference(fortnight, ~o"{6,7}K", within: fortnight) ==
+               {:ok, ~o"{2026Y6M1D/5D,2026Y6M8D/12D}"}
+
+      assert Tempo.intersection(years, ~o"12M25D", within: years) ==
+               {:ok, ~o"{2026Y12M25D/2026Y12M25D,2027Y12M25D/2027Y12M25D}"}
+
+      assert Tempo.intersection(hours, ~o"T09/T17", within: hours) ==
+               {:ok, ~o"{2026Y6M1DT9H/T17H,2026Y6M2DT9H/T17H}"}
+    end
+
+    test "a span placed past the window's one value is outside it" do
+      # Winter, December through February, placed by June is the winter after
+      # it, none of which is in June.
+      june = ~o"2026-06"
+
+      assert Tempo.union(june, ~o"12M/2M", within: june) == {:ok, ~o"{2026Y6M/2026Y6M}"}
+      assert Tempo.difference(~o"12M/2M", june, within: june) == {:ok, ~o"{}"}
+    end
+
+    test "every operation takes it as Tempo.to_interval/2 places it" do
+      operands = [~o"6K", ~o"{6,7}K", ~o"12M25D", ~o"T09/T17", ~o"12M/2M"]
+      windows = [~o"2026-06", ~o"2026-01-02/2026-03-31", ~o"2026/2027"]
+      operations = [:union, :intersection, :difference, :symmetric_difference]
+
+      for window <- windows, operand <- operands, operation <- operations do
+        {:ok, placed} = Tempo.to_interval(operand, within: window)
+
+        assert apply(Tempo, operation, [window, operand, [within: window]]) ==
+                 apply(Tempo, operation, [window, placed]),
+               "#{operation} of #{inspect(window)} and #{inspect(operand)}"
+
+        assert apply(Tempo, operation, [operand, window, [within: window]]) ==
+                 apply(Tempo, operation, [placed, window]),
+               "#{operation} of #{inspect(operand)} and #{inspect(window)}"
+      end
+    end
+  end
 end
