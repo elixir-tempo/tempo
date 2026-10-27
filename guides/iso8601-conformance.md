@@ -1,6 +1,6 @@
 # ISO 8601 Conformance Guide
 
-Tempo reads and writes [ISO 8601-1:2019](https://www.iso.org/standard/70907.html), [ISO 8601-2:2019](https://www.iso.org/standard/70908.html) and the suffix of [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557) (IXDTF). This guide says what is read, how each form is held and written back, where Tempo reads a text another way than the standard does, what it adds, and what it does not read.
+Tempo reads and writes [ISO 8601-1:2019](https://www.iso.org/standard/70907.html) with its [Amendment 1 (2022)](https://www.isotc154.org/standards/iso-8601-1-2019-amd-1-2022/), [ISO 8601-2:2019](https://www.iso.org/standard/70908.html) with its [Amendment 1 (2025)](https://www.iso.org/standard/86124.html), and the suffix of [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557) (IXDTF). This guide says what is read, how each form is held and written back, where Tempo reads a text another way than the standard does, what it adds, and what it does not read.
 
 The grammar itself — every production, with the clause it comes from — is in [The grammar Tempo reads](iso8601-grammar.md). When this page and the standard disagree, the standard wins: please file an issue.
 
@@ -58,6 +58,7 @@ Write the extended format for input: it is what people know and what other syste
 | Feature | Examples |
 |---|---|
 | Year | `2022`, `-0001`, `+002022` |
+| Expanded year before a `-` (§5.2.2.3, Amendment 1 §4.3.2) | `+12345-06-15`, `-12345-06-15`, `+002022-06` |
 | Year and month | `2022-06` |
 | Calendar date | `2022-06-15`, `20220615` |
 | Ordinal date | `2022-166`, `2022166` |
@@ -105,7 +106,7 @@ iex> Enum.count(~o"2026-06T17")
 
 * **A fraction of a second is kept, with its precision.** `T10:30:00.120` is a millisecond and `T10:30:00.12` a hundredth of a second, two spans of different lengths. Six digits are kept, as Elixir's own types keep them, and more are cut.
 
-* **A second numbered 60 is no value**, on any date, as it is none in Elixir's types. A leap second is a fact about a span: see `Tempo.LeapSeconds`.
+* **A second numbered 60 is no value**, on any date, as it is none in Elixir's types. Tempo's clock has 60 seconds in every minute: the nominal duration rule ISO 8601-2's Amendment 1 (§14.6) allows, where the standard writes the leap second inserted at the end of a minute as `23:59:60Z`. A leap second is a fact about a span: see `Tempo.LeapSeconds`.
 
 * **Truncated forms** (`--06-15`, a two-digit year) were removed from the standard in 2019 and are not read.
 
@@ -232,6 +233,34 @@ A window may carry a date out of the period that made it, and a `:within` window
 A day `D` is always a day of a month, in each month of the period it is selected in, and `O` a day of the year: `2026YL-1DN` is the last day of each month of 2026 and `2026YL-1ON` the 31st of December.
 
 [One form for ISO 8601 and RRULE](shared-ast-iso8601-and-rrule.md) says how an RFC 5545 rule is the same expression.
+
+### Amendment 1 (2025): canonical form and arithmetic
+
+* **A part out of its range is refused, unless asked to carry.** The amendment lets a value be written with a part past its range, meaning the date it carries to: `2018Y13M` is January 2019. Tempo reads it so with `overflow: :carry`; by default it is a `Tempo.InvalidDateError`, so a mistyped date is not read as another.
+
+* **A duration has a canonical form**, `Tempo.Duration.canonical/2`: no part past the unit above it, and a negative part only where nothing coarser can take it in. Years convert to months by the calendar's year, and weeks to seconds by their fixed counts, a minute 60 seconds. `Tempo.Duration.compare/3` counts years in months the same way, so `P7Y24M` equals `P9Y`.
+
+* **Arithmetic carries and borrows** as the amendment's Annex D does: `Tempo.shift/3` of `2023Y12M` back fifteen months is September 2022.
+
+* **A negative day counts back from the end of its month**, as ISO 8601-2 §4.4.1.4 has it: `2020Y4M-1D` is the 30th of April. The amendment's examples read a negative day as a day before the month instead, and do not agree with each other on which; the clause they would change is unamended.
+
+* **Expression templates** (§15.3) are a notation for the forms two parties agree on, not a form of their own, so there is nothing more to read.
+
+```elixir
+iex> Tempo.from_iso8601("2018Y13M", overflow: :carry)
+{:ok, ~o"2019Y1M"}
+
+iex> Tempo.Duration.canonical(~o"PT1H-10M")
+{:ok, ~o"PT50M"}
+
+iex> Tempo.shift(~o"2023-12", "-P15M")
+{:ok, ~o"2022Y9M"}
+
+iex> Tempo.equal?(~o"2020Y4M-1D", ~o"2020-04-30")
+true
+```
+
+> *"Month **thirteen** of 2018, carried, is January 2019. An hour **less ten minutes** is fifty minutes. Fifteen months **before** December 2023 is September 2022. The **last day** of April is the 30th."*
 
 ## 4. RFC 9557 — the suffix
 
@@ -379,6 +408,10 @@ A domain that lists its periods needs no window. One that is open (`{1848Y..}`) 
 * **`D` as a day of the year.** `1985Y102D` is refused; write `1985Y102O`.
 
 * **Truncated forms**, and a year and month in the basic format.
+
+* **Expanded forms whose length only an agreement fixes**: a signed run of digits alone other than a six-digit year (`+12345`), the expanded basic date (`+0019850412`), and the expanded decade and century (`+00198`, `+0019`). How many digits an expanded year has is for the parties to agree (§5.2.2.3); Tempo reads a signed year of six digits, or of five or more before a `-`.
+
+* **24:00 alone**, which is an instant at the end of a day rather than a unit (§5.3.2, Amendment 1): written at the end or the start of an interval, it is read.
 
 Each is a `Tempo.ParseError`, or a `Tempo.InvalidDateError` where the text is well formed and names no date, that says where the reading stopped.
 

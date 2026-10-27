@@ -923,4 +923,4 @@ Each entry has the same parts: the question, the context it arose in (with what 
 
 * **Decision (2026-10-27).** D1: 24:00 is read at either end of an interval as the next day's first instant, is an error alone, and is written back as the next day's `T00`. D2: a value's out-of-range parts are refused, and carried with `overflow: :carry`. D3: a negative day counts back from the month's end (Part 2 §4.4.1.4), as before. D4: a canonical form for durations, a minute 60 seconds and years and months converting by the calendar's count, with `Tempo.Duration.compare/3` answering through it. D5: a sign and five or more digits is an expanded year; narrowed in building to a run with a `-` after it, since the standard's six-digit agreement reads a run alone of five as a decade. D6: second 60 stays an error, the 60-second minute stated as Tempo's nominal duration rule.
 
-* **State.** Built 2026-10-27: the carried time shift, D1, D2, D4 and D5; the conformance guide (D3, D6) is open in `plans/iso8601-amendments.md`.
+* **State.** Built 2026-10-27: the carried time shift, D1, D2, D4, D5, and the conformance guide for D3 and D6 (`plans/iso8601-amendments.md`).

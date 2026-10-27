@@ -1,6 +1,6 @@
 # ISO 8601 amendments
 
-**Status:** in progress, 2026-10-27
+**Status:** implemented (v2.0.0), 2026-10-27
 
 What the two amendments to ISO 8601 ask of Tempo: ISO 8601-1:2019/Amd 1:2022 (technical corrections) and ISO 8601-2:2019/Amd 1:2025 (canonical expressions, time scale components and date and time arithmetic). Their texts are in `standards/iso8601/`, under a single-user licence and not distributed, so this document cites clauses and paraphrases them. Each clause is set beside what Tempo does, probed on `fc86ca0` (2.0.0 as it stands, law 9). Every clause of both amendments is listed; none was skipped.
 
@@ -78,9 +78,9 @@ Taken by the user on 2026-10-27 (decision 86 in `plans/decisions.md`).
 
 ## Tasks
 
-* [ ] **The conformance guide** — cite both amendments; state the 60-second minute as Tempo's nominal duration rule (D6); the negative day (D3), overflow (D2) and expanded years (D5) as decided.
-
 ### Done
+
+* [x] **The conformance guide** — both amendments cited; the 60-second minute stated as Tempo's nominal duration rule (D6); a section on the 2025 amendment (overflow, canonical durations, arithmetic, the negative day, templates); the agreed-length expanded forms and 24:00 alone under what is not read. 2026-10-27.
 
 * [x] **Expanded years** — a signed run of five or more digits with a `-` after it is a year (`Implied.signed_run/3`); a run alone as before (D5, narrowed). 2026-10-27.
 
