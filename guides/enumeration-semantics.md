@@ -136,11 +136,14 @@ iex> {:ok, months} = Tempo.union(~o"2022Y1M", ~o"2022Y3M")
 iex> {:ok, days} = Tempo.walk(months, :day)
 iex> Enum.count(days)
 62
+
+iex> Tempo.count(months, :day)
+{:ok, 62}
 ```
 
-> *"The weeks that begin in June. The minutes of the fifteenth. The days of January and of March."*
+> *"The weeks of June. The minutes of the fifteenth. The days of January and of March, walked and then counted."*
 
-A calendar unit gives the periods that begin within the span, and a clock unit the readings one unit apart from its start to its end.
+A calendar unit gives each period the span touches, the first and the last in part where the span begins or ends within them: July walked by week begins with the week of the 29th of June. A clock unit gives the readings one unit apart from its start to its end. `Tempo.count/3` counts what a walk gives, without the stream.
 
 ## 5. Membership is cover
 

@@ -4,6 +4,8 @@
 
 ### Added
 
+* `Tempo.count/3` — how many values of a unit an expression holds, the values `Tempo.walk/3` gives counted: `Tempo.count(business_days, :day)`. Takes `:within` for an expression with no end.
+
 * `Tempo.DateRule.parse/2` reads a yearly date written in date-holidays' rule grammar (`4th Thursday in November`, `easter -2`, `15 Nisan`, `chinese 01-0-01`) into the Tempo recurrence it means. Observed days, bridges and `if is holiday` moves read to members of a `Tempo.RecurrenceSet`; the [date rules guide](https://hexdocs.pm/ex_tempo/date-rules.html) takes the grammar part by part.
 
 ### Changed
@@ -15,6 +17,8 @@
 * Requires Calendrical 2.2, whose lunisolar calendars give the year a sexagenary cycle and its year name, as a date rule written with them (`chinese 78-32-08-0-15`) is read.
 
 ### Fixed
+
+* `Tempo.walk/3` of a duration is a `Tempo.ConversionError` (`:bare_duration`), where it raised.
 
 * A value with no year a window places is the part of each occurrence within the window (`Tempo.to_interval(~o"6M", within: ~o"2026-06-10/2026-07-05")` is the 10th to the 30th), where a window holding part of one placed none, one within a day placed the whole day, and a day of the month could be placed outside the window.
 

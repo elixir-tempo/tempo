@@ -13,6 +13,7 @@ defmodule Tempo.Children do
   alias Tempo.Duration
   alias Tempo.Expand
   alias Tempo.Limit
+  alias Tempo.Parts
   alias Tempo.Placed
   alias Tempo.Scale
   alias Tempo.Season
@@ -98,6 +99,9 @@ defmodule Tempo.Children do
           {:ok, Enumerable.t()} | {:error, Exception.t()}
   def walk(expression, unit, options)
 
+  def walk(%Duration{} = duration, _unit, _options),
+    do: {:error, conversion(duration, :bare_duration)}
+
   def walk(%Tempo{} = expression, nil, _options),
     do: {:error, conversion(expression, :nothing_finer)}
 
@@ -115,6 +119,33 @@ defmodule Tempo.Children do
            {:ok, walks} <- walks(members, unit, options) do
         {:ok, Stream.concat(walks)}
       end
+    end
+  end
+
+  @doc """
+  How many values of a unit an expression's walk gives: each one its extent
+  touches, a plural expression's members counted in turn. An expression
+  with no end has a count only within a window.
+  """
+  @spec count(Tempo.t(), Unit.t() | {:microsecond, 1..6} | nil, keyword()) ::
+          {:ok, non_neg_integer()} | {:error, Exception.t()}
+  def count(expression, unit, options) do
+    with :ok <- countable(expression, options),
+         {:ok, walked} <- walk(expression, unit, options) do
+      {:ok, Enum.count(walked)}
+    end
+  end
+
+  # One of several has no one count.
+  defp countable(%Tempo{form: {:one, _members}} = one, _options) do
+    {:error, conversion(one, :one_of)}
+  end
+
+  defp countable(expression, options) do
+    if Keyword.has_key?(options, :within) or Parts.bounded?(expression) do
+      :ok
+    else
+      {:error, conversion(expression, :unbounded)}
     end
   end
 

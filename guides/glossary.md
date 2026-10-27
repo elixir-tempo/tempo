@@ -103,6 +103,7 @@ The tables are grouped by subject, and within a table the terms a later one buil
 | explain | Say in English what a value means. | `Tempo.explain/1` |
 | convert | Turn a value into another kind: its span, its occurrences, an Elixir date. | `Tempo.to_interval/2`, `Tempo.to_date/1` |
 | walk | Take a span's values one after another. | `Enum`, `Tempo.walk/2` |
+| count | How many of a unit an expression holds: the values a walk gives, counted. | `Tempo.count/3` |
 | select | Pick, from a base, the values a selector names. | `Tempo.select/3` |
 | selector | What `select/3` selects by: a value with no year, a selection, the workdays. | `Tempo.select/3` |
 | shift | Move a value by a duration. | `Tempo.shift/3` |

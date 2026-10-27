@@ -1203,6 +1203,63 @@ defmodule Tempo do
 
   def walk(other, _unit, _options), do: not_an_expression(other)
 
+  @doc """
+  How many values of a unit an expression holds: the values `walk/3` gives,
+  counted. A calendar unit is counted for each period the expression
+  touches, the first and last in part; a clock unit for each reading one
+  unit apart from its start. A plural expression's members are counted in
+  turn.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0`.
+
+  * `unit` is a `t:unit/0`, as for `walk/3`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:within` is a `t:t/0`, the window an expression with no end of its own (a
+    recurrence with no count) or no year is placed in.
+
+  ### Returns
+
+  * `{:ok, count}`, a non-negative integer, or
+
+  * `{:error, %Tempo.ConversionError{reason: :unbounded}}` for an expression
+    with no end and no `:within`, `{:error, %Tempo.ConversionError{reason:
+    :one_of}}` for one of several values, which has no one count, or another
+    error `walk/3` returns.
+
+  ### Examples
+
+      iex> Tempo.count(~o"2026-06", :day)
+      {:ok, 30}
+
+      iex> {:ok, weekends} = Tempo.weekends(:BR)
+      iex> {:ok, business_days} = Tempo.difference(~o"2026-01-02/2026-03-31", weekends)
+      iex> Tempo.count(business_days, :day)
+      {:ok, 63}
+
+      iex> Tempo.count(~o"2026-06-01T12/2026-06-03T12", :day)
+      {:ok, 3}
+
+      iex> Tempo.count(~o"2026-06-15T10:30/2026-06-15T12:30", :hour)
+      {:ok, 2}
+
+  """
+  @spec count(t(), unit() | {:microsecond, 1..6}, keyword()) ::
+          {:ok, non_neg_integer()} | {:error, error()}
+  def count(expression, unit, options \\ [])
+
+  def count(expression, unit, options) when is_expression(expression) do
+    with :ok <- Options.check(options, [:within], "Tempo.count/3"),
+         do: Children.count(expression, unit, options)
+  end
+
+  def count(other, _unit, _options), do: not_an_expression(other)
+
   # ── Set operations ────────────────────────────────────────────────────
 
   @doc """
