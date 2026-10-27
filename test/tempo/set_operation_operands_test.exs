@@ -96,6 +96,66 @@ defmodule Tempo.SetOperationOperandsTest do
       assert Tempo.difference(~o"12M/2M", june, within: june) == {:ok, ~o"{}"}
     end
 
+    test "with no window, an intersection places it on the other operand, in either order" do
+      fortnight = ~o"2026-06-01/2026-06-14"
+      weekend = ~o"{6,7}K"
+
+      assert Tempo.intersection(fortnight, weekend) ==
+               Tempo.intersection(fortnight, weekend, within: fortnight)
+
+      assert Tempo.intersection(weekend, fortnight) ==
+               Tempo.intersection(weekend, fortnight, within: fortnight)
+
+      assert {:ok, weekend_days} = Tempo.intersection(fortnight, weekend)
+      assert IntervalSet.count(weekend_days) == 4
+    end
+
+    test "with no window, a difference from the operand with a year places it there" do
+      fortnight = ~o"2026-06-01/2026-06-14"
+      fourth_of_june = ~o"R/../P1Y/FL6M4DN"
+
+      assert Tempo.difference(fortnight, ~o"{6,7}K") ==
+               {:ok, ~o"{2026Y6M1D/5D,2026Y6M8D/12D}"}
+
+      assert Tempo.difference(fortnight, [~o"{6,7}K", fourth_of_june]) ==
+               {:ok, ~o"{2026-06-01/2026-06-03,2026-06-05/2026-06-05,2026-06-08/2026-06-12}"}
+    end
+
+    test "with no window, an operation whose answer has no first or last member needs one" do
+      fortnight = ~o"2026-06-01/2026-06-14"
+      weekend = ~o"{6,7}K"
+
+      for {operation, a, b} <- [
+            {:union, fortnight, weekend},
+            {:union, weekend, fortnight},
+            {:symmetric_difference, fortnight, weekend},
+            {:difference, weekend, fortnight}
+          ] do
+        assert {:error, %Tempo.FrameError{reason: :needs_a_year}} =
+                 apply(Tempo, operation, [a, b])
+      end
+    end
+
+    test "with no window, it is placed on the stretch of every shape of operand with a year" do
+      operands = [~o"6K", ~o"{6,7}K", ~o"12M25D", ~o"T09/T17", ~o"12M/2M"]
+
+      # Each operand with a year, and its stretch, from its first day to its last.
+      dated = [
+        {~o"2026-06", ~o"2026-06"},
+        {~o"2026-01-02/2026-03-31", ~o"2026-01-02/2026-03-31"},
+        {~o"2026/2027", ~o"2026/2027"},
+        {~o"{2026-01,2026-03}", ~o"2026-01/2026-03"}
+      ]
+
+      for {a, stretch} <- dated, b <- operands do
+        assert Tempo.intersection(a, b) == Tempo.intersection(a, b, within: stretch),
+               "intersection of #{inspect(a)} and #{inspect(b)}"
+
+        assert Tempo.difference(a, b) == Tempo.difference(a, b, within: stretch),
+               "difference of #{inspect(a)} and #{inspect(b)}"
+      end
+    end
+
     test "every operation takes it as Tempo.to_interval/2 places it" do
       operands = [~o"6K", ~o"{6,7}K", ~o"12M25D", ~o"T09/T17", ~o"12M/2M"]
       windows = [~o"2026-06", ~o"2026-01-02/2026-03-31", ~o"2026/2027"]

@@ -1226,7 +1226,16 @@ defmodule Tempo do
   * `:within` is a `t:t/0`, the window the operation works in: a value with
     no year is placed on each of its periods, and a recurrence with no end
     is bounded by it. Required when one operand has a year and the other
-    none.
+    none, but for the operations that place it as the next section says.
+
+  ### An operand with no year
+
+  With no window, an `intersection/3`, and a `difference/3` from an operand
+  with a year and an end, place an operand with no year (`~o"{6,7}K"`, the
+  weekend; `~o"12M25D"`; `~o"T09/T17"`) on that operand's stretch, as
+  `:within` would: their answer lies within it. A `union/3`, a
+  `symmetric_difference/3` and a `difference/3` from the operand with no
+  year have no first member and no last, and need a window.
 
   ### An operand with no end
 
@@ -1246,8 +1255,8 @@ defmodule Tempo do
     the answer has no end.
 
   * `{:error, %Tempo.FrameError{}}` when the operands share no frame: one
-    zoned and one not, one with a year and one without and no window, two
-    with no year on different cycles.
+    zoned and one not, one with a year and one without and no window where
+    the operation needs one, two with no year on different cycles.
 
   * `{:error, %Tempo.ConversionError{}}` for a duration, a one-of set, an
     open end, more than 10,000 spans (the application's
@@ -1339,7 +1348,7 @@ defmodule Tempo do
 
   * `:within` is a `t:t/0`, the window an expression with no end of its own (a
     recurrence with no count) or no year is placed in. With none, an operand
-    with no end is treated as `union/3` says.
+    with no end or no year is treated as `union/3` says.
 
   * `:metadata` says which member's metadata a result carries: `:first` (the
     default), `:second`, `:merge`, or a function of the two.
@@ -1392,7 +1401,7 @@ defmodule Tempo do
 
   * `:within` is a `t:t/0`, the window an expression with no end of its own (a
     recurrence with no count) or no year is placed in. With none, an operand
-    with no end is treated as `union/3` says.
+    with no end or no year is treated as `union/3` says.
 
   * `:metadata` says which member's metadata a result carries: `:first` (the
     default), `:second`, `:merge`, or a function of the two.
@@ -1414,6 +1423,10 @@ defmodule Tempo do
 
       iex> Tempo.difference(~o"2026-06-15T09/2026-06-15T17", ~o"2026-06-15T12/2026-06-15T13")
       {:ok, ~o"{2026-06-15T09/2026-06-15T12,2026-06-15T13/2026-06-15T17}"}
+
+      iex> fortnight = ~o"2026-06-01/2026-06-14"
+      iex> Tempo.difference(fortnight, ~o"{6,7}K")
+      {:ok, ~o"{2026-06-01/2026-06-05,2026-06-08/2026-06-12}"}
 
   """
   @spec difference(t(), t() | [t()], keyword()) :: {:ok, t()} | {:error, error()}
@@ -1453,7 +1466,7 @@ defmodule Tempo do
 
   * `:within` is a `t:t/0`, the window an expression with no end of its own (a
     recurrence with no count) or no year is placed in. With none, an operand
-    with no end is treated as `union/3` says.
+    with no end or no year is treated as `union/3` says.
 
   * `:metadata` says which member's metadata a result carries: `:first` (the
     default), `:second`, `:merge`, or a function of the two.
@@ -1631,6 +1644,7 @@ defmodule Tempo do
 
   defp operate(operation, a, b, options, function) do
     with :ok <- Options.check(options, @set_options, function) do
+      options = Algebra.with_placing_window(operation, a, b, options)
       operated(Algebra.streamed(operation, a, b, options), operation, a, b, options)
     end
   end

@@ -8,6 +8,8 @@
 
 ### Changed
 
+* `Tempo.intersection/3`, and `Tempo.difference/3` from an operand with a year, place an operand with no year on the other operand's stretch when no `:within` is given (`Tempo.difference(fortnight, ~o"{6,7}K")`), where it was a `Tempo.FrameError`.
+
 * Requires Calendrical 2.2, whose lunisolar calendars give the year a sexagenary cycle and its year name, as a date rule written with them (`chinese 78-32-08-0-15`) is read.
 
 ### Fixed

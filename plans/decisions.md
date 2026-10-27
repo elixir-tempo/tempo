@@ -924,3 +924,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-27).** D1: 24:00 is read at either end of an interval as the next day's first instant, is an error alone, and is written back as the next day's `T00`. D2: a value's out-of-range parts are refused, and carried with `overflow: :carry`. D3: a negative day counts back from the month's end (Part 2 §4.4.1.4), as before. D4: a canonical form for durations, a minute 60 seconds and years and months converting by the calendar's count, with `Tempo.Duration.compare/3` answering through it. D5: a sign and five or more digits is an expanded year; narrowed in building to a run with a `-` after it, since the standard's six-digit agreement reads a run alone of five as a decade. D6: second 60 stays an error, the 60-second minute stated as Tempo's nominal duration rule.
 
 * **State.** Built 2026-10-27: the carried time shift, D1, D2, D4, D5, and the conformance guide for D3 and D6 (`plans/iso8601-amendments.md`).
+
+## 87. An operand with no year and no window
+
+* **Question.** A set operation on an operand with a year and one without (`~o"{6,7}K"`, `~o"12M25D"`, `~o"T09/T17"`) needs a `:within` window to place the second. Should an operation whose answer lies within the first take its stretch as the window, as an operand with no end already takes the other's stretch?
+
+* **Context.** Asked by the user on 2026-10-28, writing the ANBIMA business-days example (`Tempo.difference(period, ~o"6K", within: period)`). The same session found that a window that is a range placed no operand with no year (the frame was read from `Spans.placed_in/2`, which places under one value only) and that a one-value window placed a wrapping span outside it (`12M/2M` in June); both fixed in `5ed8df8`.
+
+* **Decision (2026-10-28).** An `intersection/3`, and a `difference/3` from the operand with a year and an end, place the operand with no year on that operand's stretch, as `:within` would. A `union/3`, a `symmetric_difference/3` and a `difference/3` from the operand with no year have no first member and no last, and still need a window. The member filters (`members_overlapping/3`, `members_outside/3`) are unchanged.
+
+* **State.** Built 2026-10-28: `Tempo.Algebra.with_placing_window/4`, called by the set operations; `union/3`'s docs and the set operations guide.

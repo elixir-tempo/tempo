@@ -150,27 +150,31 @@ Set operations require **both operands to share an anchor class**:
 |---|---|---|
 | anchored | anchored | ✓ compare on the universal time line |
 | unanchored | unanchored | ✓ when both recur on the **same axis** (see below) |
-| anchored | unanchored | needs `:within` |
+| anchored | unanchored | ✓ for `intersection/3`, and `difference/3` from the anchored one; otherwise needs `:within` |
 | duration | anything | an error — a duration has no place on the time line |
 
 Two unanchored operands must recur on the **same axis** — share their coarsest (leading) unit — to be comparable. `~o"1M31D"` and `~o"6M15D"` are both annual, so they align; `~o"1M31D"` (annual) and `~o"15D"` (monthly) recur on different cycles with no common time line, so they return a `Tempo.FrameError` rather than a silently misaligned result. Place them on a date, or give both the same leading unit.
 
-The cross-axis case *is* mathematically defined — a bare time-of-day is an infinite set of 1-second slots (one per day), and an anchored operand bounds it to finite occurrences. But picking the universe (what year range does "every day" mean?) isn't something Tempo can do without inventing a default. The `:within` option makes the choice explicit:
+The cross-axis case *is* mathematically defined — a bare time-of-day is an infinite set of 1-second slots (one per day), and an anchored operand bounds it to finite occurrences. Where the answer lies within the anchored operand — an intersection, and a difference from it — that operand's stretch is the universe, and Tempo places the other there as `:within` would. A union, a symmetric difference and a difference from the unanchored operand have no first member and no last, and picking their universe (what year range does "every day" mean?) isn't something Tempo can do without inventing a default. The `:within` option makes the choice explicit:
 
 ```elixir
-# No window: an error that says what to give
-iex> {:error, %Tempo.FrameError{reason: :needs_a_year}} = Tempo.intersection(~o"2026-01-04", ~o"T10:30")
+# An intersection lies within the day, so half past ten is placed on it
+iex> Tempo.intersection(~o"2026-01-04", ~o"T10:30")
+{:ok, ~o"{2026Y1M4DT10H30M/T10H31M}"}
+
+# A union has no first or last member to bound: an error that says what to give
+iex> {:error, %Tempo.FrameError{reason: :needs_a_year}} = Tempo.union(~o"2026-01-04", ~o"T10:30")
 
 # With a window, half past ten is placed on the day
-iex> Tempo.intersection(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
-{:ok, ~o"{2026Y1M4DT10H30M/T10H31M}"}
+iex> Tempo.union(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
+{:ok, ~o"{2026Y1M4D/2026Y1M4D,2026Y1M4DT10H30M/T10H31M}"}
 ```
 
 A window places a time of day on each day it touches, and what is placed is inside the window: on a window from noon on Monday to noon on Wednesday, nine to five is noon to five on Monday, nine to five on Tuesday and nine to noon on Wednesday, for every operation alike. The other operand is not cut by the window. A dated window places every operand that has no year, whatever the other operand is, so the working hours of a week with no meetings in it are still that week's hours, and each placed span keeps the metadata of the time of day it is.
 
 The `:within` option is also required on `complement/2` — for the same reason. An unbounded complement is infinite; Tempo refuses to pick a universe.
 
-A window may be several spans, an interval set of two separate days say. A time of day is placed inside each span. A recurrence, or a set of recurrences, is kept across the one stretch from the first span's start to the last one's end, so a daily rule within 2 June and 5 June has 3 and 4 June too. The other operand serves as the window the same way when no `:within` is given: `Tempo.difference(holidays, meetings)` is every holiday from the first meeting to the last, less the meetings.
+A window may be several spans, an interval set of two separate days say. A time of day is placed inside each span. A recurrence, or a set of recurrences, is kept across the one stretch from the first span's start to the last one's end, so a daily rule within 2 June and 5 June has 3 and 4 June too. The other operand serves as the window the same way when no `:within` is given: `Tempo.difference(holidays, meetings)` is every holiday from the first meeting to the last, less the meetings, and `Tempo.difference(fortnight, ~o"{6,7}K")` is the fortnight less its weekends.
 
 ### Composing across axes — `at/2` and `on/2`
 

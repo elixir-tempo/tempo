@@ -305,6 +305,52 @@ defmodule Tempo.Algebra do
   defp endless_member?(_exclusion), do: false
 
   @doc """
+  The options of an operation with the window an operand with no year is
+  placed in when none is given: the other operand's stretch, for an
+  intersection, and for a difference from an operand with a year, whose
+  answers lie within that operand.
+  """
+  @spec with_placing_window(atom(), term(), term(), keyword()) :: keyword()
+  def with_placing_window(operation, a, b, options) do
+    if Keyword.has_key?(options, :within) do
+      options
+    else
+      placing_window(operation, a, b, options)
+    end
+  end
+
+  defp placing_window(:intersection, a, b, options) do
+    cond do
+      places?(a, b) -> Keyword.put(options, :within, stretch_of(a))
+      places?(b, a) -> Keyword.put(options, :within, stretch_of(b))
+      true -> options
+    end
+  end
+
+  defp placing_window(:difference, a, b, options) do
+    if places?(a, b) do
+      Keyword.put(options, :within, stretch_of(a))
+    else
+      options
+    end
+  end
+
+  defp placing_window(_operation, _a, _b, options) do
+    options
+  end
+
+  # Whether one operand places the other: it has a year and an end, and the
+  # other has no year and is no rule (a rule with no end is bounded by the
+  # other operand's stretch already).
+  defp places?(%Tempo{} = dated, %Tempo{} = undated) do
+    anchored?(dated) and not endless?(dated) and not anchored?(undated) and not endless?(undated)
+  end
+
+  defp places?(_dated, _undated) do
+    false
+  end
+
+  @doc """
   How an operation is answered where an operand has no end and no window is
   given. A result is as bounded as the operation makes it: where it lies
   within a bounded operand (an intersection, and a difference from a bounded
