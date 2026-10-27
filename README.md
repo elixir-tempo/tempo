@@ -20,6 +20,8 @@ This conceptual shift — *time as interval, not instant* — removes a surprisi
 
 * **Business days and territory-aware calendars.** `Tempo.weekend?/2`, `Tempo.workday?/2`, `Tempo.add_workdays/3`, and `Tempo.count_workdays/2` answer "how many workdays until the deadline?" with CLDR-correct weekends per territory (the US weekends Saturday/Sunday, Saudi Arabia Friday/Saturday) and correct on any calendar, and `Tempo.roll_to_workday/3` moves a date that falls on a day off by a contract's business day convention.
 
+* **Yearly dates written in words, and counting.** `Tempo.DateRule.parse/2` reads a date as a holiday calendar writes it — `4th Thursday in November`, `easter -2`, `15 Nisan`, `01-26 and if saturday then next monday` — into the Tempo recurrence it means, and `Tempo.count/3` counts the days, hours or seconds an expression holds: `Tempo.count(business_days, :day)`.
+
 * **iCalendar import with metadata that travels.** `Tempo.ICal.parse/2` parses RFC 5545 `.ics` data and every event's metadata (summary, location, attendees, status, …) rides along through every downstream operation. Intersect your schedule with work hours, get back *which meetings* are in work hours.
 
 * **Unlocking queries that used to be hard.** "Every Friday the 13th this century." "When was I both in Japan and enrolled at my university?" "Free time on Tuesday, accounting for meetings across three zones." "Does this dig layer overlap with this dynasty?" All direct expressions over the same `Tempo` API.
@@ -33,7 +35,7 @@ Tempo supports **Elixir 1.17** and later on **Erlang/OTP 27** and later; OTP 26 
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 2.0"},
+    {:ex_tempo, "~> 2.1"},
     # Optional but recommended - needed for iCalendar import.
     {:ical, "~> 3.2"}
   ]
@@ -343,4 +345,4 @@ The full documentation, every module and function with the guides above, is on [
 
 ## License
 
-Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.0.0/LICENSE.md). Copyright © Kip Cole.
+Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.1.0/LICENSE.md). Copyright © Kip Cole.
