@@ -944,3 +944,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-28).** A set in a unit keeps the candidates any member names in their own order, which is the order of time, each once; a set in the first unit is sorted. A selection already ordered its picks by start, and is unchanged.
 
 * **State.** Built 2026-10-28: `Tempo.Expand.select/2` and the first unit's literal values; the architecture guide 5.3a.
+
+## 89. What Tempo asks of no calendar
+
+* **Question.** The last calls Tempo made of Calendrical's own functions rather than of the calendar a value holds: its parser, the Easter computus, the names of the solar terms, a calendar resolved from its name, and the default calendar's solar terms answered by the Gregorian.
+
+* **Context.** The TODO item "Every calendar call a callback, the rest of it" (the user, 2026-10-10: "all calendar calls in Tempo should be `calendar.some_callback`"), taken up on 2026-10-28 as "an architectural proof point we should validate". Calendrical already answers a solar term on every calendar (`solar_term/2`, the date of the term in any calendar); `Localize.Calendar.ISO` answers none, having no astronomy.
+
+* **Decision (2026-10-28, the user).** No new callbacks for now. Easter is a question of the Gregorian and Julian churches, not of every calendar, and stays the event `(easter)e` that Calendrical computes; a solar term is asked of the calendar a value holds, and the default calendar's of the Gregorian, as decided on 2026-10-14; a question a calendar does not answer is an error. A locale's words for a date are read by Localize's parser, which Calendrical's only called. The grammar's words for the solar terms and a calendar named by an IXDTF `u-ca` value are resolved where they are read (global rule 10).
+
+* **State.** Built 2026-10-28: `Tempo.Calendar.words/2` calls `Localize.DateTime.Parser.parse/2`; `test/tempo/calendar_surface_test.exs` reads the remote calls of every compiled module and holds Tempo to five calls into Calendrical, each with its reason, failing on any other and on any listed call no longer made.

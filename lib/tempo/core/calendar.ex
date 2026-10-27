@@ -22,6 +22,7 @@ defmodule Tempo.Calendar do
   # answer.
 
   alias Calendrical.{Ecclesiastical, Lunisolar}
+  alias Localize.DateTime.Parser
   alias Tempo.Calendar.WeeksFrom
   alias Tempo.InvalidCalendarError
 
@@ -177,11 +178,11 @@ defmodule Tempo.Calendar do
   @spec week_start_name(1..7) :: String.t()
   def week_start_name(day) when day in 1..7, do: Enum.at(@week_day_names, day - 1)
 
-  @doc "The fields a locale's words for a date name, read through Calendrical in the default calendar unless one is given."
+  @doc "The fields a locale's words for a date name, read by Localize's parser in the default calendar unless one is given."
   @spec words(String.t(), keyword()) ::
           {:ok, map() | {map(), map()}} | {:error, Exception.t()}
   def words(text, options),
-    do: Calendrical.parse(text, Keyword.put_new(options, :calendar, default()))
+    do: Parser.parse(text, Keyword.put_new(options, :calendar, default()))
 
   # ── Days a calendar or the sky fixes ──────────────────────────────────
 

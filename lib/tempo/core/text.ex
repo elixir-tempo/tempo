@@ -66,7 +66,7 @@ defmodule Tempo.Text do
   defp held_to({:ok, read}, options, text), do: of_profile(read, options[:profile], text)
   defp held_to(error, _options, _text), do: error
 
-  # The locale's words, through Calendrical, as the units they name.
+  # The locale's words, through Localize's parser, as the units they name.
   defp words(text, options, error) do
     as_fields =
       options |> Keyword.take([:locale, :calendar, :reference_date]) |> Keyword.put(:as, :map)
@@ -84,7 +84,7 @@ defmodule Tempo.Text do
          do: Interval.new(from: from, to: to)
   end
 
-  # Calendrical's fields as Tempo's units: a zone by name, UTC as a zero
+  # The parser's fields as Tempo's units: a zone by name, UTC as a zero
   # shift, and a time zone that is an offset (`"-05:00"`, what "EST" and
   # "GMT+5" are read as) as the shift it is.
   defp named(fields) do

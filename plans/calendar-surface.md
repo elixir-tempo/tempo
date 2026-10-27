@@ -1,6 +1,6 @@
 # One calendar surface
 
-**Status:** in progress, 2026-10-13
+**Status:** in progress, 2026-10-28
 
 Tempo is to know nothing of how a calendar is implemented (the user, 2026-10-10: "Tempo, by design, should not know anything about a calendars implementation", and no special cases for a calendar are acceptable). Today it knows a great deal, and this plan is to take that knowledge out and leave one surface that every calendar answers alike. It rests on a census of the whole implementation, [calendar-surface-census.md](calendar-surface-census.md): 109 files and 36,162 lines of code read by a script, every match written, nothing sampled. The decisions at the foot were taken on 2026-10-10 and the work is under way: the tasks at the end say what is done, and what waits on Calendrical is in its `TODO.md`.
 
@@ -371,6 +371,8 @@ Each is the third cause above, and goes with the task for `Tempo.UnitValues`.
 * [ ] **Calendrical an optional dependency, with no conditional code** — the user, 2026-10-11. With every question asked of the value's calendar, what is left is 9 calls of Calendrical's own modules (its parser, `validate_calendar/1`, `calendar_from_cldr_calendar_type/1`, `Kday`, `Ecclesiastical`, the additional calendars) and the calendars named for week dates: each is to become a callback, a question of Localize, or a module the caller gives.
 
 ### Done
+
+* [x] **Every calendar call a callback** — the last calls of Calendrical's own functions settled (decision 89): its parser is Localize's, called directly; Easter stays an event Calendrical computes; a solar term is the calendar's, the default calendar's the Gregorian's; a named calendar and the grammar's solar term words are resolved where they are read. `calendar_surface_test.exs` holds the five calls left to their reasons. 2026-10-28.
 
 * [x] **No question of a calendar's kind** — Calendrical's calendars of weeks hold a month and a day, Localize reads and writes them as any calendar, and Tempo asks none whether it is of weeks or of months: 79 places gone, the week start and the year step asked of the calendar, 93 tests rewritten. 2026-10-13.
 
