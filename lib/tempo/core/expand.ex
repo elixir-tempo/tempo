@@ -847,9 +847,9 @@ defmodule Tempo.Expand do
   # ── What a held shape selects ─────────────────────────────────────────
 
   @doc """
-  The children a held shape keeps, in the order written: one by number
-  (negative from the end), a set and its ranges, a mask, every one for
-  `:any`, the nth group of a size.
+  The children a held shape keeps, in their own order, which is the order
+  of time, each once: one by number (negative from the end), a set and its
+  ranges, a mask, every one for `:any`, the nth group of a size.
   """
   @spec select(Unit.held(), [child()]) :: [child()]
   def select(:any, children), do: children
@@ -868,8 +868,16 @@ defmodule Tempo.Expand do
   def select({n, :leap}, children), do: Enum.filter(children, &match?({{^n, :leap}, _}, &1))
   def select({n, _annotation}, children) when is_integer(n), do: select(n, children)
 
-  def select(members, children) when is_list(members),
-    do: Enum.flat_map(members, &select_member(&1, children))
+  # A set keeps the children any of its members selects, in the children's
+  # order, which is the order of time, and each once.
+  def select(members, children) when is_list(members) do
+    chosen =
+      members
+      |> Enum.flat_map(&select_member(&1, children))
+      |> MapSet.new()
+
+    Enum.filter(children, &MapSet.member?(chosen, &1))
+  end
 
   def select({:mask, [:negative | digits]}, children) do
     count = length(children)
@@ -1013,7 +1021,8 @@ defmodule Tempo.Expand do
           []
       end)
 
-    {:ok, values}
+    # In the order of time, each once, as a later unit's set is.
+    {:ok, values |> Enum.uniq() |> Enum.sort()}
   end
 
   defp literal_values({:mask, digits}) do

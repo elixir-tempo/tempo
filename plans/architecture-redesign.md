@@ -705,7 +705,7 @@ defmodule Tempo.Expand do
     if Unit.label?(unit), do: labelled(prefix, unit, calendar), else: children(prefix, unit, calendar)
   end
 
-  # What a held shape keeps of the children, in the order written.
+  # What a held shape keeps of the children, in their order (decision 88).
   defp select(n, children) when is_integer(n) and n > 0, do: Enum.filter(children, &match?({^n, _}, &1))
   defp select(n, children) when is_integer(n) and n < 0, do: children |> Enum.reverse() |> Enum.drop(-n - 1) |> Enum.take(1)
   defp select(list, children) when is_list(list), do: Enum.flat_map(list, &select(&1, children))

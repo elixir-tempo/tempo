@@ -226,7 +226,7 @@ children(prefix, unit):
 
 select(held, candidates):                                       -- 5.3a
   Whole n          -> those numbered n            (negative: the nth from the end)
-  Several members  -> each member, ranges included, in the order written
+  Several members  -> the candidates any member names, ranges included, each once, in order
   Mask digits      -> those whose number matches the mask digit by digit
   Any              -> all
   Group nth size   -> the candidates in groups of `size`, the nth group

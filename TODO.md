@@ -58,6 +58,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 
 ## Done
 
+* [x] **A set in a unit in the order of time** — `2026Y6M{6,7}K` is 6, 7, 13, 14, … and `{15,1}D` the 1st before the 15th, where a set expanded member by member in the order written (decision 88). 2026-10-28.
+
 * [x] **A value with no year placed by a window** — is the part of each occurrence within the window, selected in the whole units of its resolution the window touches and cut to it: one that lay outside the window (`15D` within `2026-06-06`), one the window held only part of (`6M` within `2026-06-10/2026-07-05`, nothing before) and one within a day (`6M` from ten to noon, the whole day before) are placed as the set operations guide says; a span keeps decision 72 (the user, 2026-10-28), and the guide's sentence now says so. 2026-10-28.
 
 * [x] **An open end placed at a window edge finer than its span** — is written to the other end's unit where that reads back to the edge, and else to the edge's own: `to_interval(~o"2026-06/..", within: ~o"2026-06-01T00/2026-06-03T00")` is `2026Y6M/3DT0H`, where it was written `2026Y6M/2026Y6M` and read back as all of June. 2026-10-28.

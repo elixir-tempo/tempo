@@ -934,3 +934,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-28).** An `intersection/3`, and a `difference/3` from the operand with a year and an end, place the operand with no year on that operand's stretch, as `:within` would. A `union/3`, a `symmetric_difference/3` and a `difference/3` from the operand with no year have no first member and no last, and still need a window. The member filters (`members_overlapping/3`, `members_outside/3`) are unchanged.
 
 * **State.** Built 2026-10-28: `Tempo.Algebra.with_placing_window/4`, called by the set operations; `union/3`'s docs and the set operations guide.
+
+## 88. The members of a set in a unit, in the order of time
+
+* **Question.** A set in a unit (`{6,7}K`, `{15,1}D`, `{2027,2026}Y`) expanded to each member in the order written, member by member: `2026Y6M{6,7}K` was every Saturday of June and then every Sunday, and `2026Y6M{15,1}D` the 15th before the 1st. Should a set's values come in the order of time?
+
+* **Context.** Found on 2026-10-28 placing the weekend by a window for the ANBIMA business days; the architecture guide (5.3a) wrote the order as written. The user: "Fix the older quirk too (date order)".
+
+* **Decision (2026-10-28).** A set in a unit keeps the candidates any member names in their own order, which is the order of time, each once; a set in the first unit is sorted. A selection already ordered its picks by start, and is unchanged.
+
+* **State.** Built 2026-10-28: `Tempo.Expand.select/2` and the first unit's literal values; the architecture guide 5.3a.
