@@ -317,6 +317,8 @@ Further reading:
 
 * [iCalendar integration](https://hexdocs.pm/ex_tempo/ical-integration.html) — importing `.ics` schedules with metadata preserved.
 
+* [Date rules](https://hexdocs.pm/ex_tempo/date-rules.html) — yearly dates written in words (`4th Thursday in November`, `easter -2`, `15 Nisan`) read into Tempo recurrences.
+
 * [Enumeration semantics](https://hexdocs.pm/ex_tempo/enumeration-semantics.html) — iterating across Tempo values and interval sets.
 
 * [Interop](https://hexdocs.pm/ex_tempo/interop.html) — anchored and unanchored values, and bridging native Elixir types.

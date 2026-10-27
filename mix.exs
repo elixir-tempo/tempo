@@ -156,6 +156,7 @@ defmodule Tempo.MixProject do
         "guides/enumeration-semantics.md",
         "guides/pattern-matching-with-sigils.md",
         "guides/ical-integration.md",
+        "guides/date-rules.md",
         "guides/falsehoods.md"
       ],
       Reference: [

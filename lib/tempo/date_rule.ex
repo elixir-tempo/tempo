@@ -15,7 +15,13 @@ defmodule Tempo.DateRule do
   and RFC 5545's `RRULE` (`Tempo.RRule`) say the same things in forms made
   for machines to exchange; a date rule is the form people write.
 
-  `parse/2` reads a rule.
+  `parse/2` reads a rule, and `parse!/2` raises its error. The
+  [date rules guide](date-rules.md) takes the grammar part by part, with the
+  dates each part falls on.
+
+  A part of the grammar the reading does not take returns an error naming
+  it: the Bengali calendar, a year of the sexagenary cycle, `if equal`, and
+  an `if is holiday` move by more than one or back.
 
   """
 

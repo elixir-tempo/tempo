@@ -2,6 +2,8 @@
 
 Holidays are the sternest test of a recurrence language: they are fixed dates, nth-weekdays, moon phases, computed feasts, and dates in half a dozen calendars, often with an observed-day shift on top. This cookbook takes each **rule family** a holiday library uses (the shapes `date-holidays` and `tempo_holidays` classify rules into) and gives the equivalent Tempo value.
 
+`Tempo.DateRule.parse/2` reads a rule written in date-holidays' own words (`4th Thursday in November`, `easter -2`) into these expressions; the [date rules guide](./date-rules.md) takes its grammar part by part. This cookbook writes them by hand, to show what each is.
+
 Every expression below has been **listed as its dates and checked against the holiday's real date** — the dates in the prose are what Tempo answers. The fourth column is the equivalent RFC 5545 **RRULE** where there is one; a dash means the rule is one RRULE cannot say (a computed feast, a date in another calendar, a domain of years), and `Tempo.RRule.to_string/1` returns an error that says why rather than a rule that means something else.
 
 ## Setup — required for every example
