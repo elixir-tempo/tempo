@@ -30,11 +30,15 @@ defmodule Tempo.AllenAxiomsTest do
     test "has the 169 cells of the composition table, each as the library composes" do
       assert Enum.count_until(@fixture["composition"], 170) == 169
 
+      # The fixture's names are read through Allen's own list of relations,
+      # which holds whether or not its atoms have been loaded yet.
+      named = Map.new(Allen.relations(), &{Atom.to_string(&1), &1})
+
       for %{"first" => first, "second" => second, "composed" => composed} <-
             @fixture["composition"] do
         assert {first, second, composed} ==
                  {first, second,
-                  Allen.compose(String.to_existing_atom(first), String.to_existing_atom(second))
+                  Allen.compose(Map.fetch!(named, first), Map.fetch!(named, second))
                   |> Enum.map(&Atom.to_string/1)}
       end
     end
