@@ -54,8 +54,8 @@ defmodule Tempo.DateRule do
   * `:observed` is how a rule's observed days are read: `:as_written` (the
     default); `:moved`, each clause moving the date, so that `and if sunday
     then next monday` gives the Monday in place of a Sunday rather than
-    beside it; or `:none`, the date with no observed day, which for a rule
-    that begins `substitutes` is the date on the weekdays it substitutes for.
+    beside it; or `:none`, the date with no observed day, which leaves a rule
+    that begins `substitutes`, only observed days, no date: an empty set.
 
   * `:active` is a list of `{from, to}` windows of `t:Date.t/0`, `from`
     included and `to` not, either `nil` for an open end: the rule falls in

@@ -110,7 +110,9 @@ The first three were taken in tempo_holidays and carry here; D4, holidays an app
 
 Taken by the user on 2026-10-27, for tempo_holidays to compile its dataset with `Tempo.DateRule` (a census of its 5,154 entries counts each):
 
-* **D6 — observed days.** `parse(rule, observed: :as_written | :moved | :none)`: as written (the default); each clause moving the date, an `and` adding nothing (tempo_holidays' `dates: :substitute`, 333 `and if` entries); or no observed day (`:gazetted`), which for a `substitutes` rule is the dates it substitutes for.
+* **D6 — observed days.** `parse(rule, observed: :as_written | :moved | :none)`: as written (the default); each clause moving the date, an `and` adding nothing (tempo_holidays' `dates: :substitute`, 333 `and if` entries); or no observed day (`:gazetted`), which leaves a `substitutes` rule, only observed days, no date (amended by D12: it was the dates the rule substitutes for, which `:replaced_by` does not use).
+
+* **D12 — a substitutes rule read with `observed: :none`** (user, 2026-10-27). An empty set, so tempo_holidays' `dates: :gazetted` passes `observed: :none` to every rule and drops what is empty.
 
 * **D7 — substitute entries.** `parse(rule, replaced_by: [entry])`: the date read as not on the entry's trigger weekdays in the entry's years, a recurrence with its ISO 8601 text (229 `substitutes …` entries stand in for a holiday of their type).
 

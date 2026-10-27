@@ -107,8 +107,8 @@ defmodule Tempo.Reader.DateRule.Plan do
 
   # A plan with its observed days read as `Tempo.DateRule.parse/2`'s
   # `:observed` asks: as written; each clause moving the date, an `and`
-  # adding nothing; or none, which for a `substitutes` rule leaves the date
-  # on the weekdays its clauses substitute for.
+  # adding nothing; or none, which leaves a `substitutes` rule, only observed
+  # days, no date at all.
   @doc false
   @spec observed(map(), :as_written | :moved | :none) :: map()
   def observed(plan, :as_written) do
@@ -121,11 +121,7 @@ defmodule Tempo.Reader.DateRule.Plan do
 
   def observed(%{substitute: clauses} = plan, :none) do
     if Enum.any?(clauses, &substitute_only?/1) do
-      gate = {:only, substituted_weekdays(plan, clauses)}
-
-      plan
-      |> Map.delete(:substitute)
-      |> Map.put(:weekday_gate, gate)
+      %{no_date: true}
     else
       Map.delete(plan, :substitute)
     end
@@ -685,30 +681,6 @@ defmodule Tempo.Reader.DateRule.Plan do
 
   defp substitute_only?({_triggers, _direction, _target, mode, _span}) do
     mode == :substitute_only
-  end
-
-  # The weekdays a `substitutes` rule's clauses fire on, of those its
-  # weekday gate allows.
-  defp substituted_weekdays(plan, clauses) do
-    triggers = Enum.flat_map(clauses, &elem(&1, 0))
-    allowed = gate_allowed(Map.get(plan, :weekday_gate))
-
-    @weekdays
-    |> Map.values()
-    |> Enum.sort()
-    |> Enum.filter(&(&1 in triggers and &1 in allowed))
-  end
-
-  defp gate_allowed(nil) do
-    Map.values(@weekdays)
-  end
-
-  defp gate_allowed({:only, weekdays}) do
-    weekdays
-  end
-
-  defp gate_allowed({:except, weekdays}) do
-    Map.values(@weekdays) -- weekdays
   end
 
   # The days from the date's start to the last minute before its end.

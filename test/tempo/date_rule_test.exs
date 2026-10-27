@@ -260,17 +260,12 @@ defmodule Tempo.DateRuleTest do
       assert Tempo.to_iso8601!(alone) == "R/../P1Y/FL1M1DN"
     end
 
-    test ":none on a substitutes rule is the date on the weekdays it substitutes for" do
-      {:ok, substituted} =
+    test ":none on a substitutes rule, only observed days, is no date" do
+      {:ok, substitute} =
         DateRule.parse("substitutes 01-01 if saturday, sunday then next monday", observed: :none)
 
-      {:ok, gated} =
-        DateRule.parse("substitutes 12-26 if sunday then next monday not on Saturday",
-          observed: :none
-        )
-
-      assert Tempo.to_iso8601!(substituted) == "R/../P1Y/FL1M1D{6..7}KN"
-      assert Tempo.to_iso8601!(gated) == "R/../P1Y/FL12M26D7KN"
+      assert Tempo.to_iso8601!(substitute) == "{}"
+      assert RecurrenceSet.members(substitute) == []
     end
 
     test "is one of three, and parse/2 takes no other option" do
