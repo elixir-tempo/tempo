@@ -1018,10 +1018,30 @@ defmodule Tempo do
   end
 
   defp spanned(%__MODULE__{} = expression, options) do
-    if Spans.singular?(expression),
-      do: singular_interval(expression, options),
-      else: plural_interval(expression, options)
+    cond do
+      Spans.singular?(expression) ->
+        singular_interval(expression, options)
+
+      not Keyword.has_key?(options, :within) and unbounded?(expression) ->
+        {:error, ConversionError.exception(value: expression, reason: :unbounded)}
+
+      true ->
+        plural_interval(expression, options)
+    end
   end
+
+  # A plural expression with no window is unbounded where a member recurs with
+  # no end: a rule with no start, or over a domain with an open range.
+  defp unbounded?(%__MODULE__{form: {:every, first, :infinity, _rule}}), do: not domain?(first)
+
+  # A set read from a stream holds its members as one, and may have no last
+  # member; its walk refuses it, so only a set's listed members are asked.
+  defp unbounded?(%__MODULE__{form: {kind, members}})
+       when kind in [:all, :one] and is_list(members),
+       do: Enum.any?(members, &unbounded?/1)
+
+  defp unbounded?(%__MODULE__{form: {:when, member, _conditions}}), do: unbounded?(member)
+  defp unbounded?(_expression), do: false
 
   defp singular_interval(expression, options) do
     with {:ok, spans} <- Spans.spans(expression, options) do
@@ -1286,11 +1306,20 @@ defmodule Tempo do
   defp united({:error, _exception} = error, _a, _b, _options), do: error
 
   # A member kept whole is brought to the result's calendar, as the sweep's results are.
-  # A recurrence over a domain (`R/{2020Y..2024Y}/P1Y/F…`) is bounded by it.
-  defp domain?(%__MODULE__{form: {:span, %__MODULE__{form: form}, _}}),
-    do: elem(form, 0) in [:all, :when]
+  # A recurrence over a domain (`R/{2020Y..2024Y}/P1Y/F…`) is bounded by it,
+  # unless a range of the domain runs on with no end (`{1973Y/..}`), which is
+  # no more bounded than a rule with no start.
+  defp domain?(%__MODULE__{form: {:span, %__MODULE__{form: form} = domain, _}}),
+    do: elem(form, 0) in [:all, :when] and not open_domain?(domain)
 
   defp domain?(_first), do: false
+
+  defp open_domain?(%__MODULE__{form: {:all, members}}), do: Enum.any?(members, &open_range?/1)
+  defp open_domain?(%__MODULE__{form: {:when, member, _conditions}}), do: open_domain?(member)
+  defp open_domain?(_domain), do: false
+
+  defp open_range?(%__MODULE__{form: {:span, from, to}}), do: :open in [from, to]
+  defp open_range?(_member), do: false
 
   defp in_frame(%__MODULE__{calendar: calendar} = span, %{calendar: calendar}), do: span
 

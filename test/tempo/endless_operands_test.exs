@@ -3,7 +3,7 @@ defmodule Tempo.EndlessOperandsTest do
 
   import Tempo.Sigils
 
-  alias Tempo.{Algebra, ConversionError, IntervalSet}
+  alias Tempo.{Algebra, ConversionError, IntervalSet, RecurrenceSet}
 
   # A set operation with an operand that has no end, a recurrence or a set
   # read from a stream, is as bounded as the operation makes it
@@ -218,6 +218,33 @@ defmodule Tempo.EndlessOperandsTest do
 
         assert joined(one_at_a_time) == joined(whole)
       end
+    end
+  end
+
+  describe "listed with no window" do
+    test "a rule over years that run on with no end has no end, as one with no start" do
+      # The equinox was listed to the end of the ephemeris rather than refused.
+      equinox_day = ~o"R/{1948Y/..}/P1Y/FL(september-equinox@+09:00)eN"
+
+      assert {:error, %ConversionError{reason: :unbounded}} = Tempo.to_interval(equinox_day)
+
+      assert {:error, %ConversionError{reason: :unbounded}} =
+               Tempo.to_interval(~o"R/{../2019Y}/P1Y/FL5M5DN")
+
+      assert {:ok, _days} = Tempo.to_interval(equinox_day, within: ~o"2026")
+    end
+
+    test "a set has no end where one of its members has none" do
+      {:ok, holidays} =
+        RecurrenceSet.new([
+          ~o"R/{1948Y/..}/P1Y/FL(september-equinox@+09:00)eN",
+          ~o"R/{2020Y..2021Y}/P1Y/FL1M1DN"
+        ])
+
+      assert {:error, %ConversionError{reason: :unbounded}} = Tempo.to_interval(holidays)
+
+      assert {:ok, ~o"{2020Y1M1D/2020Y1M1D,2021Y1M1D/2021Y1M1D}"} =
+               Tempo.to_interval(~o"R/{2020Y..2021Y}/P1Y/FL1M1DN")
     end
   end
 
