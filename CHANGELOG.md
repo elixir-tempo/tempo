@@ -14,6 +14,8 @@
 
 ### Fixed
 
+* A span with no year placed by a window is placed from each start the window holds (decision 72) whole, where a window finer than its unit raised (`to_interval(~o"6M/8M", within: ~o"2026-06-01T00/2026-06-03T00")`), and its open end is cut at the window's edge, as a span with a year's is (`complement(~o"6M/..", within: ~o"2026")`).
+
 * `Tempo.to_interval/2` with no window refuses at once a rule over years with no end (`R/{1973Y/..}/…`), or a set holding one, where it walked to a limit for seconds and listed an equinox to the end of the ephemeris.
 
 * `Tempo.bounded?/1` is true of a rule over years that end (`R/{2020Y..2024Y}/…`), which `to_interval/2` lists with no window, and asks a conditional member about what it holds.

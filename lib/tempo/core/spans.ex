@@ -475,15 +475,90 @@ defmodule Tempo.Spans do
   end
 
   defp each_placed_span(%Tempo{form: {:span, %Tempo{} = from, to}} = span, window, options) do
-    with {:ok, starts} <- in_each_period(from, window, options) do
+    with {:ok, starts} <- held_in(from, window, options) do
       starts
       |> Enum.map(&%{span | form: {:span, &1, end_after(to, &1, from)}})
-      |> each_spans_of([])
+      |> each_spans_of(open_end_options(to, window))
+    end
+  end
+
+  # A span with an open start is placed by its end: from where the window
+  # begins to each end the window holds.
+  defp each_placed_span(%Tempo{form: {:span, :open, %Tempo{} = to}} = span, window, options) do
+    with {:ok, ends} <- held_in(to, window, options) do
+      ends
+      |> Enum.map(&%{span | form: {:span, :open, &1}})
+      |> each_spans_of(within: window)
     end
   end
 
   defp each_placed_span(%Tempo{form: {:span, from, to}} = span, _window, options),
     do: written_spans(span, from, to, options)
+
+  # An open end of a placed span is placed where the window ends, as the open
+  # end of a span with a year is.
+  defp open_end_options(:open, window) do
+    [within: window]
+  end
+
+  defp open_end_options(_end, _window) do
+    []
+  end
+
+  # The values of an end with no year whose first instant the window holds,
+  # each whole (decision 72): a window finer than the value selects a part
+  # of it, and the value is that part written to the value's own unit, held
+  # where one of the window's periods holds its first instant.
+  defp held_in(value, window, options) do
+    with {:ok, placed} <- in_each_period(value, window, options),
+         {:ok, periods} <- placed(window, []),
+         {:ok, periods} <- Limit.take(periods, window) do
+      bounds = Enum.map(periods, &{&1.start, &1.stop})
+
+      placed
+      |> Enum.flat_map(&held(&1, value, bounds))
+      |> Enum.uniq()
+      |> then(&{:ok, &1})
+    end
+  end
+
+  defp held(placed, value, bounds) do
+    case whole_of(first_of(placed), value) do
+      {:ok, whole, start} -> held_whole(whole, start, bounds)
+      {:error, _exception} -> []
+    end
+  end
+
+  defp held_whole(whole, start, bounds) do
+    if Enum.any?(bounds, &holds?(&1, start)) do
+      [whole]
+    else
+      []
+    end
+  end
+
+  defp first_of(%Tempo{form: {:span, %Tempo{} = first, _last}}) do
+    first
+  end
+
+  defp first_of(value) do
+    value
+  end
+
+  defp whole_of(first, %Tempo{form: {:value, units}}) do
+    with {:ok, whole} <- Shift.trunc(first, Unit.grain(Unit.resolution(units))),
+         {:ok, {start, _stop}} <- extent(whole) do
+      {:ok, whole, start}
+    end
+  end
+
+  defp holds?({start, stop}, position) when is_integer(start) and is_integer(stop) do
+    start <= position and position < stop
+  end
+
+  defp holds?(_open, _position) do
+    false
+  end
 
   # The end of a placed span is the first reading of its end at or after its
   # start, within one turn of the cycle they differ on: the Tuesday after a

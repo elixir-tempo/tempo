@@ -96,6 +96,43 @@ defmodule Tempo.SetOperationOperandsTest do
       assert Tempo.difference(~o"12M/2M", june, within: june) == {:ok, ~o"{}"}
     end
 
+    test "an open end is placed where the window ends or begins, as a span with a year's is" do
+      for {undated, dated, window} <- [
+            {~o"6M/..", ~o"2026-06/..", ~o"2026"},
+            {~o"T10H/..", ~o"2026-06-15T10/..", ~o"2026-06-15"},
+            {~o"../6M", ~o"../2026-06", ~o"2026"},
+            {~o"../T10H", ~o"../2026-06-15T10", ~o"2026-06-15"}
+          ] do
+        assert Tempo.to_interval(undated, within: window) ==
+                 Tempo.to_interval(dated, within: window)
+
+        assert Tempo.complement(undated, within: window) ==
+                 Tempo.complement(dated, within: window)
+
+        assert Tempo.intersection(window, undated, within: window) ==
+                 Tempo.intersection(window, dated, within: window)
+      end
+
+      assert Tempo.complement(~o"6M/..", within: ~o"2026") == {:ok, ~o"{2026Y/5M}"}
+    end
+
+    test "a window finer than a span's start places the start whole, where the window holds its first instant" do
+      first_days = ~o"2026-06-01T00/2026-06-03T00"
+      mid_june = ~o"2026-06-10T00/2026-06-12T00"
+      saturday_morning = ~o"2026-06-06T10/2026-06-06T12"
+
+      assert Tempo.to_interval(~o"6M/8M", within: first_days) == {:ok, ~o"2026Y6M/8M"}
+      assert Tempo.to_interval(~o"6M/8M", within: mid_june) == {:ok, ~o"{}"}
+      assert Tempo.to_interval(~o"6M/8M", within: saturday_morning) == {:ok, ~o"{}"}
+      assert Tempo.to_interval(~o"6K/2K", within: saturday_morning) == {:ok, ~o"{}"}
+      assert Tempo.to_interval(~o"T09/T17", within: saturday_morning) == {:ok, ~o"{}"}
+
+      assert Tempo.intersection(first_days, ~o"6M/8M", within: first_days) ==
+               {:ok, ~o"{2026Y6M1DT0H/3DT0H}"}
+
+      assert Tempo.intersection(mid_june, ~o"6M/8M", within: mid_june) == {:ok, ~o"{}"}
+    end
+
     test "with no window, an intersection places it on the other operand, in either order" do
       fortnight = ~o"2026-06-01/2026-06-14"
       weekend = ~o"{6,7}K"

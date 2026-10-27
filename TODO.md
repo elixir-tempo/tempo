@@ -6,7 +6,9 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **A span with no year placed by a window** — two defects with one cause, `Spans.each_placed_span/3` taking a placed start as a value where a window finer than its unit gives the part of it inside the window: a span placed finer than its unit raises (`to_interval(~o"6M/8M", within: ~o"2026-06-01T00/2026-06-03T00")`, and since `5ed8df8` a set operation with a range window), and a placed open end is not cut at the window's edge (`complement(~o"6M/..", within: ~o"2026")` is `:open` since `5ed8df8`, January to May before it). Place the whole start, kept where the window holds its first instant (decision 72).
+* [ ] **A value with no year placed by a window inside one day** — `to_interval(~o"6M", within: ~o"2026-06-06T10/2026-06-06T12")` is the whole of 6 June, where a window over several days gives the part of June within it (`2026-06-01T00/2026-06-03T00`) and the set operations guide says what is placed is inside the window. Found 2026-10-28.
+
+* [ ] **An open end placed at a window edge finer than its span** — `to_interval(~o"2026-06/..", within: ~o"2026-06-01T00/2026-06-03T00")` is placed to 3 June but written `2026Y6M/2026Y6M`, which reads back as all of June, so an operation on the written span differs from one on the span (an end is written at its start's resolution, `model_of/2`). Found 2026-10-28.
 
 * [ ] **Companions on 2.0.** `agenda`, `tempo_sql` and `tempo_holidays` move to `{:ex_tempo, "~> 2.0"}` now that 2.0.0 is on hex (2026-10-27); all three passed their gates against `2b04789`. `agenda` is ported (2026-10-15) under decisions 64 to 69. `tempo_holidays` is ported (2026-10-14) against a path dependency: its rules are built from parts, its conformance unchanged (168,186 matched, 0 mismatched), all 223 of its tests passing. `tempo_sql` is ported (2026-10-14) against a path dependency, under decisions 43 and 44: all 280 of its tests pass against Postgres, its version 1 and 2 composite rows read as 1.x meant them.
 
@@ -59,6 +61,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **A span with no year placed by a window** — a span's start, or an open start's end, is placed whole where the window holds its first instant (decision 72), so a window finer than its unit no longer raises (`to_interval(~o"6M/8M", within: ~o"2026-06-01T00/2026-06-03T00")`), and an open end is cut at the window's edge (`complement(~o"6M/..", within: ~o"2026")` is January to May again). 2026-10-28.
 
 * [x] **An operand with no year and no window** — an intersection, and a difference from an operand with a year, place an operand with no year on that operand's stretch, as `:within` would (decision 87). 2026-10-28.
 
