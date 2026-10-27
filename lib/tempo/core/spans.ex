@@ -1168,11 +1168,54 @@ defmodule Tempo.Spans do
   defp placed_end(:from, {nil, _wstop}, _ends, _window, _span), do: {:ok, :open, nil}
   defp placed_end(:to, {_wstart, nil}, _ends, _window, _span), do: {:ok, :open, nil}
 
-  defp placed_end(:from, {wstart, _wstop}, {_from, to}, window, span),
-    do: {:ok, value_at(wstart, model_of(to, window), :start, span), wstart}
+  defp placed_end(:from, {wstart, _wstop}, {_from, to}, window, span) do
+    value = written_at(wstart, model_of(to, window), edge_of(window, :from), :start, span)
+    {:ok, value, wstart}
+  end
 
-  defp placed_end(:to, {_wstart, wstop}, {from, _to}, window, span),
-    do: {:ok, value_at(wstop, model_of(from, window), :end, span), wstop}
+  defp placed_end(:to, {_wstart, wstop}, {from, _to}, window, span) do
+    value = written_at(wstop, model_of(from, window), edge_of(window, :to), :end, span)
+    {:ok, value, wstop}
+  end
+
+  # An end placed at the window's edge is written to the other end's unit
+  # where that reads back to the edge, and else to the unit of the edge, in
+  # the span's calendar.
+  defp written_at(position, model, edge, kind, span) do
+    value = value_at(position, model, kind, span)
+
+    if reads_back?(value, position, kind) do
+      value
+    else
+      value_at(position, %{edge | calendar: span.calendar}, kind, span)
+    end
+  end
+
+  defp reads_back?(value, position, :start) do
+    start_position(value) == position
+  end
+
+  defp reads_back?(value, position, :end) do
+    end_position(value) == {:ok, position}
+  end
+
+  # The value a window's edge is written in: the window, or the end of it
+  # that is the edge.
+  defp edge_of(%Tempo{form: {:value, _}} = window, _side) do
+    window
+  end
+
+  defp edge_of(%Tempo{form: {:span, %Tempo{form: {:value, _}} = from, _to}}, :from) do
+    from
+  end
+
+  defp edge_of(%Tempo{form: {:span, _from, %Tempo{form: {:value, _}} = to}}, :to) do
+    to
+  end
+
+  defp edge_of(%Tempo{form: {:span, from, to}}, _side) do
+    first_value([from, to])
+  end
 
   defp placeable(span) do
     case frame(span) do

@@ -133,6 +133,28 @@ defmodule Tempo.SetOperationOperandsTest do
       assert Tempo.intersection(mid_june, ~o"6M/8M", within: mid_june) == {:ok, ~o"{}"}
     end
 
+    test "an open end placed at a window edge finer than its span is written to read back to the edge" do
+      first_days = ~o"2026-06-01T00/2026-06-03T00"
+
+      for open <- [~o"2026-06/..", ~o"6M/.."] do
+        {:ok, placed} = Tempo.to_interval(open, within: first_days)
+
+        assert placed == ~o"2026Y6M/3DT0H"
+
+        assert Tempo.intersection(first_days, placed) ==
+                 Tempo.intersection(first_days, open, within: first_days)
+      end
+
+      assert Tempo.to_interval(~o"../2026-06", within: ~o"2026-06-10T12/2026-06-20") ==
+               {:ok, ~o"2026Y6M10DT12H/2026Y6M"}
+
+      assert Tempo.to_interval(~o"2026-06/..", within: ~o"2026") == {:ok, ~o"2026Y6M/12M"}
+
+      # Written in the span's calendar: 20 October 2026 is 9 Heshvan 5787.
+      assert Tempo.to_interval(~o"5787Y/..[u-ca=hebrew]", within: ~o"2026-10-01/2026-10-20") ==
+               {:ok, ~o"5787Y/2M9D[u-ca=hebrew]"}
+    end
+
     test "with no window, an intersection places it on the other operand, in either order" do
       fortnight = ~o"2026-06-01/2026-06-14"
       weekend = ~o"{6,7}K"
