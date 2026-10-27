@@ -25,9 +25,12 @@ defmodule Tempo.DateRule do
 
   """
 
-  alias Tempo.ParseError
+  alias Tempo.{Options, ParseError}
   alias Tempo.Reader.DateRule
   alias Tempo.Reader.DateRule.{Expression, Plan}
+
+  @options [:falls_on, :observed]
+  @observed [:as_written, :moved, :none]
 
   @doc """
   Reads a date rule into the Tempo recurrence it means.
@@ -45,6 +48,12 @@ defmodule Tempo.DateRule do
     then next monday`): a map the metadata of another member of a set holds.
     The default is `%{type: type}`, the type the rule names, `:public` where
     it names none.
+
+  * `:observed` is how a rule's observed days are read: `:as_written` (the
+    default); `:moved`, each clause moving the date, so that `and if sunday
+    then next monday` gives the Monday in place of a Sunday rather than
+    beside it; or `:none`, the date with no observed day, which for a rule
+    that begins `substitutes` is the date on the weekdays it substitutes for.
 
   ### Returns
 
@@ -69,16 +78,22 @@ defmodule Tempo.DateRule do
       iex> Tempo.to_iso8601(rule)
       {:ok, "R/../P1Y/FL6M1K2IN"}
 
+      iex> {:ok, new_years_day} = Tempo.DateRule.parse("01-01 and if sunday then next monday", observed: :none)
+      iex> Tempo.to_iso8601(new_years_day)
+      {:ok, "R/../P1Y/FL1M1DN"}
+
       iex> {:error, %Tempo.ParseError{rest: "a full moon"}} = Tempo.DateRule.parse("12-25 on a full moon")
 
   """
   @spec parse(String.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
   def parse(rule, options \\ [])
 
-  def parse(rule, options) when is_binary(rule) and is_list(options) do
-    with {:ok, tokens} <- tokens(rule),
+  def parse(rule, options) when is_binary(rule) do
+    with :ok <- Options.check(options, @options, "Tempo.DateRule.parse/2"),
+         {:ok, observed} <- observed(options),
+         {:ok, tokens} <- tokens(rule),
          {:ok, plan} <- part(Plan.plan(tokens), rule) do
-      part(Expression.build(plan, options), rule)
+      part(Expression.build(Plan.observed(plan, observed), options), rule)
     end
   end
 
@@ -111,6 +126,17 @@ defmodule Tempo.DateRule do
     case parse(rule, options) do
       {:ok, expression} -> expression
       {:error, exception} -> raise exception
+    end
+  end
+
+  defp observed(options) do
+    observed = Keyword.get(options, :observed, :as_written)
+
+    if observed in @observed do
+      {:ok, observed}
+    else
+      message = ":observed is :as_written, :moved or :none, not #{inspect(observed)}"
+      {:error, ArgumentError.exception(message)}
     end
   end
 

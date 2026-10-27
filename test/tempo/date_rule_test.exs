@@ -228,6 +228,40 @@ defmodule Tempo.DateRuleTest do
     end
   end
 
+  describe "the :observed option" do
+    test ":moved makes each clause move the date, an and adding nothing" do
+      {:ok, moved} = DateRule.parse("01-01 and if sunday then next monday", observed: :moved)
+
+      assert members(moved) == ["R/../P1Y/FL1M1D{1..6}KN", "R/../P1Y/FLL1M1D7KN/P8D1K-1IN"]
+    end
+
+    test ":none reads the date alone" do
+      assert {:ok, alone} =
+               DateRule.parse("01-01 and if sunday then next monday", observed: :none)
+
+      assert Tempo.to_iso8601!(alone) == "R/../P1Y/FL1M1DN"
+    end
+
+    test ":none on a substitutes rule is the date on the weekdays it substitutes for" do
+      {:ok, substituted} =
+        DateRule.parse("substitutes 01-01 if saturday, sunday then next monday", observed: :none)
+
+      {:ok, gated} =
+        DateRule.parse("substitutes 12-26 if sunday then next monday not on Saturday",
+          observed: :none
+        )
+
+      assert Tempo.to_iso8601!(substituted) == "R/../P1Y/FL1M1D{6..7}KN"
+      assert Tempo.to_iso8601!(gated) == "R/../P1Y/FL12M26D7KN"
+    end
+
+    test "is one of three, and parse/2 takes no other option" do
+      assert {:error, %ArgumentError{}} = DateRule.parse("12-25", observed: :maybe)
+      assert {:error, %ArgumentError{}} = DateRule.parse("12-25", obseved: :none)
+      assert {:error, %ArgumentError{}} = DateRule.parse("12-25", :none)
+    end
+  end
+
   describe "a rule decided by other dates" do
     test "a bridge keeps its day when the dates beside it are holidays of its type" do
       {:ok, bridge} = DateRule.parse("09-22 if 09-21 and 09-23 is public holiday")
