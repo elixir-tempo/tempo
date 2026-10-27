@@ -14,7 +14,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## In progress
 
-* [ ] **Date rules** — `Tempo.DateRule`, a reader for the date-holidays rule grammar (`2nd Monday in June`, `easter -2`, `15 Nisan`) into Tempo expressions, beside `Tempo.RRule` and `Tempo.Cron`, moved from tempo_holidays (user, 2026-10-27); Tempo 2.1. Plan in [plans/date-rule.md](plans/date-rule.md). Landed: the tokenizer, `parse/2`, the census gaps (every rule of the dataset read but the Bengali, which is deferred) and the docs and guide; next the options a holiday dataset needs (`:observed`, `:replaced_by`, `:active`, `:disable`, `:enable`, decisions D6 to D8), then tempo_holidays on it.
+* [ ] **Date rules** — `Tempo.DateRule`, a reader for the date-holidays rule grammar (`2nd Monday in June`, `easter -2`, `15 Nisan`) into Tempo expressions, beside `Tempo.RRule` and `Tempo.Cron`, moved from tempo_holidays (user, 2026-10-27); Tempo 2.1. Plan in [plans/date-rule.md](plans/date-rule.md). Landed: the tokenizer, `parse/2`, the census gaps (every rule of the dataset read but the Bengali, which is deferred) and the docs and guide, and the options a holiday dataset needs (`:observed`, `:active`, `:disable`, `:enable`, `:replaced_by`, decisions D6 to D8); next tempo_holidays on it.
 
 ## Blocked
 

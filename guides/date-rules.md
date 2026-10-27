@@ -259,6 +259,49 @@ iex> Tempo.IntervalSet.map(spring, &{Tempo.month(&1), Tempo.day(&1)})
 
 A conditional member reads the other members of its set, so it has no ISO 8601 text of its own.
 
+## Reading a holiday dataset
+
+date-holidays keeps beside each rule the holiday around it: the years it was held, a date it was moved from and to, and the `substitutes` entries that stand in for it on a weekend. `Tempo.DateRule.parse/2` takes each as an option, so a rule of the dataset reads to the dates its parser gives.
+
+| Option | Reads |
+|---|---|
+| `observed: :moved` | each observed-day clause moving the date, an `and` adding nothing |
+| `observed: :none` | the date alone, with no observed day |
+| `active: [{from, to}]` | the years whose date is in one of the windows, `to` not included |
+| `disable: dates`, `enable: dates` | a date moved from one day to another in its year |
+| `replaced_by: [entry]` | a `substitutes` entry taking its weekdays from the date it stands in for |
+
+```elixir
+iex> {:ok, new_years_day} = Tempo.DateRule.parse("01-01 and if sunday then next monday", observed: :moved)
+iex> Tempo.to_interval(new_years_day, within: ~o"2023")
+{:ok, ~o"{2023Y1M2D/2023Y1M2D}"}
+```
+
+> *"New Year's Day, **moved** to the Monday when it is a Sunday: in 2023, the 2nd of January in its place."*
+
+```elixir
+iex> {:ok, early_may} =
+...>   Tempo.DateRule.parse("1st monday in May", disable: [~D[2020-05-04]], enable: [~D[2020-05-08]])
+iex> {:ok, three_years} = Tempo.to_interval(early_may, within: ~o"2019/2021")
+iex> Tempo.IntervalSet.map(three_years, &{Tempo.month(&1), Tempo.day(&1)})
+[{5, 6}, {5, 8}, {5, 3}]
+```
+
+> *"The early May bank holiday is the **first Monday in May**, but in 2020 it was **moved** from the 4th to the 8th, the 75th anniversary of VE Day."*
+
+```elixir
+iex> substitute = "substitutes 12-25 if saturday, sunday then next monday"
+iex> {:ok, christmas} = Tempo.DateRule.parse("12-25", replaced_by: [substitute])
+iex> {:ok, holidays} = Tempo.RecurrenceSet.new([christmas, Tempo.DateRule.parse!(substitute)])
+iex> {:ok, three_years} = Tempo.to_interval(holidays, within: ~o"2021/2023")
+iex> Tempo.IntervalSet.map(three_years, &{Tempo.year(&1), Tempo.day(&1)})
+[{2021, 27}, {2022, 26}, {2023, 25}]
+```
+
+> *"Christmas Day, with a **substitute** day on the Monday when it falls on a weekend: the substitute **stands in for** it in 2021 and 2022, and in 2023 it is on the 25th."*
+
+An entry in `replaced_by` stands in for the date only where it is a `substitutes` rule of the same date, gated by its years alone, and the date has no observed day of its own; any other is passed over. So the `substitutes` entries of a dataset can be given to each of its rules, and each takes those that are its own.
+
 ## What is not read
 
 A rule that cannot be read returns a `Tempo.ParseError` naming where reading stopped, or which part is not read:

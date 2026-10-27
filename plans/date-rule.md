@@ -120,8 +120,6 @@ Taken by the user on 2026-10-27, for tempo_holidays to compile its dataset with 
 
 ## Tasks
 
-* [ ] **The options for a holiday dataset** — `:observed` (D6), `:replaced_by` (D7), `:active`, `:disable` and `:enable` (D8), each documented in `parse/2` and the guide, each tested against what tempo_holidays' `Rule` gives for the dataset's entries.
-
 * [ ] **tempo_holidays on Tempo.DateRule** — its dataset compiled with it; its conformance corpus unchanged.
 
 ### Blocked
@@ -137,6 +135,8 @@ Taken by the user on 2026-10-27, for tempo_holidays to compile its dataset with 
 * [ ] **`if equal`** — `2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01`: the date replaced when it falls on another rule's date, a primitive `Tempo.RecurrenceSet` does not have; no rule of the dataset needs one.
 
 ### Done
+
+* [x] **The options for a holiday dataset** — `:observed` (D6), `:active`, `:disable` and `:enable` (D8) and `:replaced_by` (D7), in `parse/2` and the guide's "Reading a holiday dataset"; `parse/2` refuses an option it does not take. Against tempo_holidays' `Rule` over 2000–2035: 773 readings of the dataset's observed-day rules the same; 269 of 270 entries with `active`, `disable` or `enable`; and in its `:substitute` reading 1,949 of 1,954 holidays, all 386 with `substitutes` entries among them, the five others spans `Rule` read as one day. A disabled date takes out its year of the rule's own calendar, where `Rule` took the Gregorian year and added back the rest. 2026-10-27.
 
 * [x] **`Tempo.DateRule.parse/2` documented** — the guide (`guides/date-rules.md`), each part of the grammar with the dates it falls on, its examples run; the moduledoc, the README, the holiday cookbook and the CHANGELOG. Two defects found writing it and fixed: a rule's directions were made atoms by the atom table, so a rule read before the modules naming them were loaded raised; a span was counted from midnight and dropped on a weekday step or an observed day, where the parser counts it from the time of day on every date (four dataset rules, `1st saturday in October P2D` among them, now span their days). 2026-10-27.
 
