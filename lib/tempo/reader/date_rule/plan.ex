@@ -133,6 +133,18 @@ defmodule Tempo.Reader.DateRule.Plan do
     plan
   end
 
+  # A plan with the windows a dataset says the rule is active in, beside its
+  # own (a date counts in any of them, as the parser counts it), and the
+  # dates an occurrence is moved from and to.
+  @doc false
+  @spec dated(map(), map()) :: map()
+  def dated(plan, %{active: active, disable: disable, enable: enable}) do
+    plan
+    |> with_windows(active)
+    |> with_dates(:disable, disable)
+    |> with_dates(:enable, enable)
+  end
+
   # ── the base date and its weekday steps ────────────────────────────────
 
   # A fixed date's steps are a named kind where one says them (a weekday
@@ -608,6 +620,22 @@ defmodule Tempo.Reader.DateRule.Plan do
 
   defp clause_span({triggers, direction, target, mode, hours}) do
     {triggers, direction, target, mode, days_reached(hours)}
+  end
+
+  defp with_windows(plan, []) do
+    plan
+  end
+
+  defp with_windows(plan, windows) do
+    Map.update(plan, :active, windows, &(&1 ++ windows))
+  end
+
+  defp with_dates(plan, _key, []) do
+    plan
+  end
+
+  defp with_dates(plan, key, dates) do
+    Map.put(plan, key, dates)
   end
 
   defp moved_clause({triggers, direction, target, :add, span}) do

@@ -262,6 +262,52 @@ defmodule Tempo.DateRuleTest do
     end
   end
 
+  describe "the :active, :disable and :enable options" do
+    test ":active keeps the years whose date is in any of its windows, within since and prior to" do
+      {:ok, windows} =
+        DateRule.parse("12-25", active: [{~D[2010-01-01], ~D[2012-01-01]}, {~D[2020-12-26], nil}])
+
+      {:ok, bounded} =
+        DateRule.parse("12-25 since 2015", active: [{~D[2010-01-01], ~D[2020-01-01]}])
+
+      assert Tempo.to_iso8601!(windows) == "R/{2010Y..2011Y,2021Y/..}/P1Y/FL12M25DN"
+      assert Tempo.to_iso8601!(bounded) == "R/{2015Y..2019Y}/P1Y/FL12M25DN"
+    end
+
+    test ":disable moves the date of its year to the :enable dates of that year" do
+      {:ok, moved} = DateRule.parse("05-08", disable: [~D[2020-05-08]], enable: [~D[2020-05-11]])
+      {:ok, days} = Tempo.to_interval(moved, within: ~o"2019/2021")
+
+      assert members(moved) == ["R/{../2019Y,2021Y/..}/P1Y/FL5M8DN", "R/{2020Y}/P1Y/FL5M11DN"]
+      assert IntervalSet.map(days, &{Tempo.month(&1), Tempo.day(&1)}) == [{5, 8}, {5, 11}, {5, 8}]
+    end
+
+    test "a disabled date takes out its year of the rule's calendar, not the Gregorian year" do
+      # Mawlid fell twice in 2015, on the 3rd of January (1436) and the 23rd
+      # of December (1437); only the second is moved.
+      {:ok, mawlid} =
+        DateRule.parse("12 Rabi al-awwal", disable: [~D[2015-12-23]], enable: [~D[2015-12-24]])
+
+      {:ok, days} = Tempo.to_interval(mawlid, within: ~o"2015")
+      gregorian = IntervalSet.map(days, &Tempo.to_calendar!(&1, Calendar.ISO))
+
+      assert Enum.map(gregorian, &{Tempo.month(&1), Tempo.day(&1)}) == [{1, 3}, {12, 24}]
+    end
+
+    test "a disabled date the rule does not fall on moves nothing" do
+      {:ok, unmoved} =
+        DateRule.parse("05-08", disable: [~D[2020-05-09]], enable: [~D[2020-05-11]])
+
+      assert Tempo.to_iso8601!(unmoved) == "R/../P1Y/FL5M8DN"
+    end
+
+    test "are windows of dates and lists of dates" do
+      assert {:error, %ArgumentError{}} = DateRule.parse("12-25", active: [{2020, 2025}])
+      assert {:error, %ArgumentError{}} = DateRule.parse("12-25", disable: ["2020-12-25"])
+      assert {:error, %ArgumentError{}} = DateRule.parse("12-25", enable: :never)
+    end
+  end
+
   describe "a rule decided by other dates" do
     test "a bridge keeps its day when the dates beside it are holidays of its type" do
       {:ok, bridge} = DateRule.parse("09-22 if 09-21 and 09-23 is public holiday")

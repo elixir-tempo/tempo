@@ -37,7 +37,8 @@ defmodule Tempo.Reader.DateRule.Expression do
   def build(plan, _options) do
     with {:ok, shapes} <- occurrence_shapes(plan),
          {:ok, domain} <- year_domain(plan),
-         {:ok, recurrences} <- reduce_ok(shapes, &member_recurrence(&1, domain, plan)) do
+         {:ok, members} <- moved(planned_members(shapes, domain, plan), plan),
+         {:ok, recurrences} <- reduce_ok(members, &member_recurrence/1) do
       assembled(Enum.reject(recurrences, &is_nil/1))
     end
   end
@@ -648,16 +649,24 @@ defmodule Tempo.Reader.DateRule.Expression do
 
   # `since` and `prior to` are an inclusive range of years (`to_year` is
   # exclusive). A date-precise window keeps the years whose occurrence is in
-  # it, found by asking for the occurrence in its first and last years.
-  defp active_ranges(%{active: [{from, to}]} = plan) do
-    with {:ok, first} <- first_active_year(plan, from),
-         {:ok, last} <- last_active_year(plan, to) do
-      {:ok, List.wrap(intersect_ranges({first, last}, since_until(plan)))}
+  # it, found by asking for the occurrence in its first and last years; a
+  # rule is in the years of any of its windows, each within `since` and
+  # `prior to`.
+  defp active_ranges(%{active: [_ | _] = windows} = plan) do
+    with {:ok, ranges} <- reduce_ok(windows, &window_years(plan, &1)) do
+      {:ok, Enum.flat_map(ranges, &List.wrap(intersect_ranges(&1, since_until(plan))))}
     end
   end
 
   defp active_ranges(plan) do
     {:ok, [since_until(plan)]}
+  end
+
+  defp window_years(plan, {from, to}) do
+    with {:ok, first} <- first_active_year(plan, from),
+         {:ok, last} <- last_active_year(plan, to) do
+      {:ok, {first, last}}
+    end
   end
 
   defp since_until(plan) do
@@ -702,7 +711,16 @@ defmodule Tempo.Reader.DateRule.Expression do
 
   # The Gregorian day numbers of the rule's occurrences in a Gregorian year.
   defp base_days_in(plan, year) do
-    base = Map.drop(plan, [:active, :from_year, :to_year, :substitute, :weekday_gate])
+    base =
+      Map.drop(plan, [
+        :active,
+        :from_year,
+        :to_year,
+        :substitute,
+        :weekday_gate,
+        :disable,
+        :enable
+      ])
 
     with {:ok, recurrence} <- build(base, []),
          {:ok, within} <- Tempo.new(year: year),
@@ -755,10 +773,143 @@ defmodule Tempo.Reader.DateRule.Expression do
     min(year_1, year_2)
   end
 
+  # ── a disabled date moved to the enabled ones ─────────────────────────
+
+  # date-holidays' `disable` and `enable` move an occurrence: where a
+  # disabled date is one of the rule's occurrences in its year, it is
+  # dropped and that year's enabled dates are added in its place. The
+  # member that gives the disabled date leaves out the year of its own
+  # calendar the date is in, so its other occurrences in that Gregorian year
+  # stay, and each enabled date is a member of that one year. A disabled date
+  # the rule does not fall on moves nothing, and an enabled date is added
+  # only for a disabled one.
+  defp moved(members, %{disable: disable} = plan) do
+    blocked = MapSet.new(disable, &Date.to_gregorian_days/1)
+    years = Enum.uniq(Enum.map(disable, & &1.year))
+
+    moved_years(years, members, blocked, Map.get(plan, :enable, []))
+  end
+
+  defp moved(members, _plan) do
+    {:ok, members}
+  end
+
+  defp moved_years([], members, _blocked, _enable) do
+    {:ok, members}
+  end
+
+  defp moved_years([year | years], members, blocked, enable) do
+    with {:ok, matches} <- reduce_ok(members, &member_match(&1, year, blocked)) do
+      members
+      |> moved_in(matches, year, enable)
+      |> then(&moved_years(years, &1, blocked, enable))
+    end
+  end
+
+  defp moved_in(members, matches, year, enable) do
+    if Enum.any?(matches, &match?({:matched, _date}, &1)) do
+      moved =
+        members
+        |> Enum.zip(matches)
+        |> Enum.map(&moved_member/1)
+
+      moved ++ enabled_members(enable, year)
+    else
+      members
+    end
+  end
+
+  # Whether one of a member's occurrences in a Gregorian year is a disabled
+  # date, and which.
+  defp member_match(member, year, blocked) do
+    with {:ok, days} <- member_days_in(member, year) do
+      {:ok, matched(Enum.find(days, &MapSet.member?(blocked, &1)))}
+    end
+  end
+
+  defp matched(nil) do
+    :none
+  end
+
+  defp matched(disabled) do
+    {:matched, Date.from_gregorian_days(disabled)}
+  end
+
+  defp member_days_in(%{shape: shape, domain: domain}, year) do
+    case built_member(shape, domain) do
+      {:ok, recurrence} -> days_in(recurrence, year)
+      :never -> {:ok, []}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp days_in(recurrence, year) do
+    with {:ok, within} <- Tempo.new(year: year),
+         {:ok, occurrences} <- Tempo.to_interval(recurrence, within: within) do
+      occurrences
+      |> IntervalSet.members()
+      |> reduce_ok(&first_day/1)
+    end
+  end
+
+  defp moved_member({member, :none}) do
+    member
+  end
+
+  defp moved_member({%{domain: domain} = member, {:matched, disabled}}) do
+    %{member | domain: Map.update(domain, :exclusions, [disabled], &[disabled | &1])}
+  end
+
+  defp enabled_members(enable, year) do
+    for %Date{year: ^year} = date <- enable do
+      enabled_member(date)
+    end
+  end
+
+  defp enabled_member(%Date{year: year, month: month, day: day}) do
+    domain = %{ranges: [{year, year}], filter: nil, cadence: 1}
+    %{role: :enabled, shape: shape(month: month, day: day), domain: domain}
+  end
+
+  # A member's domain less the years of its disabled dates, each the year of
+  # the member's calendar the date is in.
+  defp without_excluded(%{exclusions: [_ | _] = disabled} = domain, %{calendar: calendar}) do
+    with {:ok, years} <- reduce_ok(disabled, &year_in_calendar(&1, calendar)) do
+      {:ok, %{domain | ranges: Enum.reduce(years, domain.ranges, &without_year/2)}}
+    end
+  end
+
+  defp without_excluded(domain, _shape) do
+    {:ok, domain}
+  end
+
+  defp without_year(year, ranges) do
+    Enum.flat_map(ranges, &range_without(&1, year))
+  end
+
+  defp range_without({from, to} = range, year) do
+    if in_range?(range, year) do
+      Enum.reject([{from, year - 1}, {year + 1, to}], &empty_range?/1)
+    else
+      [range]
+    end
+  end
+
+  defp in_range?({from, to}, year) do
+    (is_nil(from) or from <= year) and (is_nil(to) or year <= to)
+  end
+
   # ── members ───────────────────────────────────────────────────────────
 
-  defp member_recurrence({role, shape}, domain, plan) do
-    case built_member(role_shape(role, shape, plan), domain) do
+  # Each shape a member in its role, over the rule's years.
+  defp planned_members(shapes, domain, plan) do
+    for {role, shape} <- shapes do
+      %{role: role, shape: role_shape(role, shape, plan), domain: domain}
+    end
+  end
+
+  defp member_recurrence(%{role: role, shape: shape, domain: domain}) do
+    case built_member(shape, domain) do
       {:ok, recurrence} -> {:ok, role_metadata(recurrence, role)}
       :never -> {:ok, nil}
       {:error, _reason} = error -> error
@@ -797,7 +948,8 @@ defmodule Tempo.Reader.DateRule.Expression do
   end
 
   defp built_member(shape, domain) do
-    with {:ok, domain} <- domain_in_calendar(domain, shape) do
+    with {:ok, domain} <- domain_in_calendar(domain, shape),
+         {:ok, domain} <- without_excluded(domain, shape) do
       every_year(domain, shape)
     end
   end

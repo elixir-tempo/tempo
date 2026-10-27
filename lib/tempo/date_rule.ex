@@ -29,7 +29,7 @@ defmodule Tempo.DateRule do
   alias Tempo.Reader.DateRule
   alias Tempo.Reader.DateRule.{Expression, Plan}
 
-  @options [:falls_on, :observed]
+  @options [:falls_on, :observed, :active, :disable, :enable]
   @observed [:as_written, :moved, :none]
 
   @doc """
@@ -54,6 +54,17 @@ defmodule Tempo.DateRule do
     then next monday` gives the Monday in place of a Sunday rather than
     beside it; or `:none`, the date with no observed day, which for a rule
     that begins `substitutes` is the date on the weekdays it substitutes for.
+
+  * `:active` is a list of `{from, to}` windows of `t:Date.t/0`, `from`
+    included and `to` not, either `nil` for an open end: the rule falls in
+    the years whose date is in one of them, and within its own `since` and
+    `prior to`, as date-holidays' `active` periods say.
+
+  * `:disable` is a list of `t:Date.t/0` the rule's date is moved from:
+    where one is the rule's date in its year, that year's date is left out.
+
+  * `:enable` is a list of `t:Date.t/0` added in the year of a disabled
+    date, the day a holiday is moved to.
 
   ### Returns
 
@@ -91,9 +102,15 @@ defmodule Tempo.DateRule do
   def parse(rule, options) when is_binary(rule) do
     with :ok <- Options.check(options, @options, "Tempo.DateRule.parse/2"),
          {:ok, observed} <- observed(options),
+         {:ok, dated} <- dated(options),
          {:ok, tokens} <- tokens(rule),
          {:ok, plan} <- part(Plan.plan(tokens), rule) do
-      part(Expression.build(Plan.observed(plan, observed), options), rule)
+      plan =
+        plan
+        |> Plan.observed(observed)
+        |> Plan.dated(dated)
+
+      part(Expression.build(plan, options), rule)
     end
   end
 
@@ -138,6 +155,97 @@ defmodule Tempo.DateRule do
       message = ":observed is :as_written, :moved or :none, not #{inspect(observed)}"
       {:error, ArgumentError.exception(message)}
     end
+  end
+
+  # The windows a rule is active in and the dates it is moved from and to,
+  # each date in the ISO calendar.
+  defp dated(options) do
+    with {:ok, active} <- windows(Keyword.get(options, :active, [])),
+         {:ok, disable} <- dates(:disable, Keyword.get(options, :disable, [])),
+         {:ok, enable} <- dates(:enable, Keyword.get(options, :enable, [])) do
+      {:ok, %{active: active, disable: disable, enable: enable}}
+    end
+  end
+
+  defp windows(windows) when is_list(windows) do
+    reduce_ok(windows, &window/1)
+  end
+
+  defp windows(other) do
+    {:error, ArgumentError.exception(":active is a list of windows, not #{inspect(other)}")}
+  end
+
+  defp window({from, to} = window) do
+    with {:ok, from} <- bound(from, window),
+         {:ok, to} <- bound(to, window) do
+      {:ok, {from, to}}
+    end
+  end
+
+  defp window(other) do
+    {:error, ArgumentError.exception(":active takes {from, to} windows, not #{inspect(other)}")}
+  end
+
+  defp bound(nil, _window) do
+    {:ok, nil}
+  end
+
+  defp bound(%Date{} = date, window) do
+    iso_date(date, window)
+  end
+
+  defp bound(_other, window) do
+    message = "an :active window's ends are dates or nil, not #{inspect(window)}"
+    {:error, ArgumentError.exception(message)}
+  end
+
+  defp dates(option, dates) when is_list(dates) do
+    reduce_ok(dates, &option_date(option, &1))
+  end
+
+  defp dates(option, other) do
+    {:error,
+     ArgumentError.exception("#{inspect(option)} is a list of dates, not #{inspect(other)}")}
+  end
+
+  defp option_date(_option, %Date{} = date) do
+    iso_date(date, date)
+  end
+
+  defp option_date(option, other) do
+    {:error, ArgumentError.exception("#{inspect(option)} takes dates, not #{inspect(other)}")}
+  end
+
+  defp iso_date(date, given) do
+    case Date.convert(date, Calendar.ISO) do
+      {:ok, iso} ->
+        {:ok, iso}
+
+      {:error, _reason} ->
+        {:error, ArgumentError.exception("#{inspect(given)} has no ISO date")}
+    end
+  end
+
+  defp reduce_ok(items, fun) do
+    items
+    |> Enum.reduce_while({:ok, []}, &collected(fun.(&1), &2))
+    |> reversed()
+  end
+
+  defp collected({:ok, item}, {:ok, items}) do
+    {:cont, {:ok, [item | items]}}
+  end
+
+  defp collected({:error, _exception} = error, _acc) do
+    {:halt, error}
+  end
+
+  defp reversed({:ok, items}) do
+    {:ok, Enum.reverse(items)}
+  end
+
+  defp reversed(error) do
+    error
   end
 
   defp tokens(rule) do
