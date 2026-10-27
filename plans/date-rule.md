@@ -1,6 +1,6 @@
 # Date rules
 
-**Status:** planning, 2026-10-27
+**Status:** in progress, 2026-10-27
 
 A reader for the date-holidays rule grammar in Tempo, `Tempo.DateRule`, beside `Tempo.RRule` and `Tempo.Cron`: a rule written for people, `2nd Monday in June`, `Friday after 4th Thursday in November`, `easter -2`, `15 Nisan`, `chinese 01-0-01`, `march equinox in Asia/Tokyo`, read into the Tempo expression it means. ISO 8601-2 can say all of these, but it was written for machines to exchange; RRULE says cadences well and has no Easter and few calendars. The grammar is date-holidays' (https://github.com/commenthol/date-holidays), read as its parser, date-holidays-parser, reads it, so the rules of its dataset of some 200 territories, and any written for it, read here.
 
@@ -110,8 +110,6 @@ The first three were taken in tempo_holidays and carry here; D4, holidays an app
 
 ## Tasks
 
-* [ ] **The tokenizer** — tempo_holidays' `Tempo.Holidays.Grammar` (every rule of the parser's fixture reads to its tokens) moved here, with the fixture and its ISC notice.
-
 * [ ] **Reading tokens into expressions** — each part to its Tempo form, tempo_holidays' recurrence builders moved here; every rule of the parser's fixture and of the 3.38.0 dataset read, but Bengali.
 
 * [ ] **The census gaps** — the productions above that tempo_holidays did not compile.
@@ -119,3 +117,7 @@ The first three were taken in tempo_holidays and carry here; D4, holidays an app
 * [ ] **`Tempo.DateRule.parse/2`** — the API, its options and errors, and the guide: each production with examples that run.
 
 * [ ] **tempo_holidays on Tempo.DateRule** — its dataset compiled with it; its conformance corpus unchanged.
+
+### Done
+
+* [x] **The tokenizer** — `Tempo.Reader.DateRule` (`tokens/1`, `tokenize/1`), tempo_holidays' `Grammar` moved here; every one of the 119 rules of date-holidays-parser's fixture (`test/fixtures/date_holidays_parser_tokens.json`, its ISC notice in `NOTICE`) reads to the parser's tokens. 2026-10-27.

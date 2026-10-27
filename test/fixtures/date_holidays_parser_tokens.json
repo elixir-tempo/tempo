@@ -1,0 +1,1525 @@
+{
+  "source": "https://github.com/commenthol/date-holidays-parser/blob/v3.4.7/test/fixtures/parser.cjs",
+  "licence": "ISC, Copyright (c) 2015-present, commenthol; see NOTICE",
+  "rules": {
+    "03-12": [
+      {
+        "fn": "gregorian",
+        "month": 3,
+        "day": 12
+      }
+    ],
+    "03-12T16": [
+      {
+        "fn": "gregorian",
+        "month": 3,
+        "day": 12
+      },
+      {
+        "rule": "time",
+        "hour": 16,
+        "minute": 0
+      }
+    ],
+    "2015-10-09": [
+      {
+        "fn": "gregorian",
+        "year": 2015,
+        "month": 10,
+        "day": 9
+      }
+    ],
+    "#1111": [],
+    "03-12 #22": [
+      {
+        "fn": "gregorian",
+        "month": 3,
+        "day": 12
+      }
+    ],
+    "August": [
+      {
+        "fn": "gregorian",
+        "day": 1,
+        "month": 8
+      }
+    ],
+    "November": [
+      {
+        "fn": "gregorian",
+        "day": 1,
+        "month": 11
+      }
+    ],
+    "julian 2015-01-09": [
+      {
+        "fn": "julian",
+        "year": 2015,
+        "month": 1,
+        "day": 9
+      }
+    ],
+    "easter -3": [
+      {
+        "fn": "easter",
+        "type": "easter",
+        "offset": -3
+      }
+    ],
+    "orthodox 50": [
+      {
+        "fn": "easter",
+        "type": "orthodox",
+        "offset": 50
+      }
+    ],
+    "10 Muharram": [
+      {
+        "fn": "islamic",
+        "day": 10,
+        "month": 1
+      }
+    ],
+    "1 Safar": [
+      {
+        "fn": "islamic",
+        "day": 1,
+        "month": 2
+      }
+    ],
+    "12 Rabi al-awwal": [
+      {
+        "fn": "islamic",
+        "day": 12,
+        "month": 3
+      }
+    ],
+    "13 Rabi al-thani": [
+      {
+        "fn": "islamic",
+        "day": 13,
+        "month": 4
+      }
+    ],
+    "14 Jumada al-awwal": [
+      {
+        "fn": "islamic",
+        "day": 14,
+        "month": 5
+      }
+    ],
+    "25 Jumada al-thani": [
+      {
+        "fn": "islamic",
+        "day": 25,
+        "month": 6
+      }
+    ],
+    "15 Rajab": [
+      {
+        "fn": "islamic",
+        "day": 15,
+        "month": 7
+      }
+    ],
+    "1 Shaban": [
+      {
+        "fn": "islamic",
+        "day": 1,
+        "month": 8
+      }
+    ],
+    "2 Ramadan": [
+      {
+        "fn": "islamic",
+        "day": 2,
+        "month": 9
+      }
+    ],
+    "1 Shawwal P3D": [
+      {
+        "fn": "islamic",
+        "day": 1,
+        "month": 10
+      },
+      {
+        "rule": "duration",
+        "duration": 72
+      }
+    ],
+    "3 Shawwal": [
+      {
+        "fn": "islamic",
+        "day": 3,
+        "month": 10
+      }
+    ],
+    "4 Dhu al-Qidah": [
+      {
+        "fn": "islamic",
+        "day": 4,
+        "month": 11
+      }
+    ],
+    "5 Dhu al-Hijjah": [
+      {
+        "fn": "islamic",
+        "day": 5,
+        "month": 12
+      }
+    ],
+    "15 Nisan": [
+      {
+        "fn": "hebrew",
+        "day": 15,
+        "month": 1
+      }
+    ],
+    "2 Iyyar": [
+      {
+        "fn": "hebrew",
+        "day": 2,
+        "month": 2
+      }
+    ],
+    "3 Sivan": [
+      {
+        "fn": "hebrew",
+        "day": 3,
+        "month": 3
+      }
+    ],
+    "4 Tamuz": [
+      {
+        "fn": "hebrew",
+        "day": 4,
+        "month": 4
+      }
+    ],
+    "5 Av": [
+      {
+        "fn": "hebrew",
+        "day": 5,
+        "month": 5
+      }
+    ],
+    "6 Elul": [
+      {
+        "fn": "hebrew",
+        "day": 6,
+        "month": 6
+      }
+    ],
+    "1 Tishrei": [
+      {
+        "fn": "hebrew",
+        "day": 1,
+        "month": 7
+      }
+    ],
+    "10 Tishrei": [
+      {
+        "fn": "hebrew",
+        "day": 10,
+        "month": 7
+      }
+    ],
+    "7 Cheshvan": [
+      {
+        "fn": "hebrew",
+        "day": 7,
+        "month": 8
+      }
+    ],
+    "18 Kislev": [
+      {
+        "fn": "hebrew",
+        "day": 18,
+        "month": 9
+      }
+    ],
+    "18 Tevet": [
+      {
+        "fn": "hebrew",
+        "day": 18,
+        "month": 10
+      }
+    ],
+    "22 Shvat": [
+      {
+        "fn": "hebrew",
+        "day": 22,
+        "month": 11
+      }
+    ],
+    "25 Adar": [
+      {
+        "fn": "hebrew",
+        "day": 25,
+        "month": 12
+      }
+    ],
+    "13 Adar": [
+      {
+        "fn": "hebrew",
+        "day": 13,
+        "month": 12
+      }
+    ],
+    "13 AdarII": [
+      {
+        "fn": "hebrew",
+        "day": 13,
+        "month": 13
+      }
+    ],
+    "1 Farvardin": [
+      {
+        "day": 1,
+        "fn": "jalaali",
+        "month": 1
+      }
+    ],
+    "31 Shahrivar 1401": [
+      {
+        "day": 31,
+        "fn": "jalaali",
+        "month": 6,
+        "year": 1401
+      }
+    ],
+    "29 Esfand 1401": [
+      {
+        "day": 29,
+        "fn": "jalaali",
+        "month": 12,
+        "year": 1401
+      }
+    ],
+    "chinese 01-0-01": [
+      {
+        "fn": "chinese",
+        "day": 1,
+        "month": 1,
+        "leapMonth": false
+      }
+    ],
+    "chinese 8-1-15": [
+      {
+        "fn": "chinese",
+        "day": 15,
+        "month": 8,
+        "leapMonth": true
+      }
+    ],
+    "chinese 8-1-16": [
+      {
+        "fn": "chinese",
+        "day": 16,
+        "month": 8,
+        "leapMonth": true
+      }
+    ],
+    "chinese 8-15 solarterm": [
+      {
+        "fn": "chinese",
+        "day": 15,
+        "solarterm": 8
+      }
+    ],
+    "chinese 78-32-8-15 solarterm": [
+      {
+        "fn": "chinese",
+        "day": 15,
+        "solarterm": 8,
+        "year": 32,
+        "cycle": 78
+      }
+    ],
+    "korean 01-0-01": [
+      {
+        "fn": "korean",
+        "day": 1,
+        "month": 1,
+        "leapMonth": false
+      }
+    ],
+    "bengali-revised 1425-1-1": [
+      {
+        "fn": "bengali-revised",
+        "day": 1,
+        "month": 1,
+        "year": 1425
+      }
+    ],
+    "bengali-revised 1-1": [
+      {
+        "fn": "bengali-revised",
+        "day": 1,
+        "month": 1
+      }
+    ],
+    "1 day before vietnamese 01-0-01": [
+      {
+        "fn": "vietnamese",
+        "day": 1,
+        "month": 1,
+        "leapMonth": false
+      },
+      {
+        "count": 1,
+        "direction": "before",
+        "rule": "dateDir",
+        "weekday": "day"
+      }
+    ],
+    "friday before chinese 78-32-8-15 solarterm": [
+      {
+        "fn": "chinese",
+        "day": 15,
+        "solarterm": 8,
+        "year": 32,
+        "cycle": 78
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "friday",
+        "direction": "before"
+      }
+    ],
+    "march equinox": [
+      {
+        "fn": "equinox",
+        "season": "march",
+        "timezone": "GMT"
+      }
+    ],
+    "4 days before march equinox in Europe/Vienna": [
+      {
+        "fn": "equinox",
+        "season": "march",
+        "timezone": "Europe/Vienna"
+      },
+      {
+        "count": 4,
+        "direction": "before",
+        "rule": "dateDir",
+        "weekday": "day"
+      }
+    ],
+    "march equinox in Asia/Tokyo": [
+      {
+        "fn": "equinox",
+        "season": "march",
+        "timezone": "Asia/Tokyo"
+      }
+    ],
+    "March equinox in +09:00": [
+      {
+        "fn": "equinox",
+        "season": "march",
+        "timezone": "+09:00"
+      }
+    ],
+    "march equinox in Asia/Tokyo if sunday then next monday": [
+      {
+        "fn": "equinox",
+        "season": "march",
+        "timezone": "Asia/Tokyo"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      }
+    ],
+    "3 days after september equinox": [
+      {
+        "fn": "equinox",
+        "season": "september",
+        "timezone": "GMT"
+      },
+      {
+        "count": 3,
+        "direction": "after",
+        "rule": "dateDir",
+        "weekday": "day"
+      }
+    ],
+    "1 day before june solstice": [
+      {
+        "fn": "equinox",
+        "season": "june",
+        "timezone": "GMT"
+      },
+      {
+        "count": 1,
+        "direction": "before",
+        "rule": "dateDir",
+        "weekday": "day"
+      }
+    ],
+    "1 day after december solstice": [
+      {
+        "fn": "equinox",
+        "season": "december",
+        "timezone": "GMT"
+      },
+      {
+        "count": 1,
+        "direction": "after",
+        "rule": "dateDir",
+        "weekday": "day"
+      }
+    ],
+    "3rd monday before December solstice": [
+      {
+        "fn": "equinox",
+        "season": "december",
+        "timezone": "GMT"
+      },
+      {
+        "rule": "dateDir",
+        "count": 3,
+        "weekday": "monday",
+        "direction": "before"
+      }
+    ],
+    "01-01 14:00": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "rule": "time",
+        "hour": 14,
+        "minute": 0
+      }
+    ],
+    "easter -3 14:00": [
+      {
+        "fn": "easter",
+        "type": "easter",
+        "offset": -3
+      },
+      {
+        "rule": "time",
+        "hour": 14,
+        "minute": 0
+      }
+    ],
+    "easter -6 P5D": [
+      {
+        "fn": "easter",
+        "type": "easter",
+        "offset": -6
+      },
+      {
+        "rule": "duration",
+        "duration": 120
+      }
+    ],
+    "09-04 08:00 PT14H": [
+      {
+        "fn": "gregorian",
+        "month": 9,
+        "day": 4
+      },
+      {
+        "rule": "time",
+        "hour": 8,
+        "minute": 0
+      },
+      {
+        "rule": "duration",
+        "duration": 14
+      }
+    ],
+    "09-04 08:00 PT321H30M": [
+      {
+        "fn": "gregorian",
+        "month": 9,
+        "day": 4
+      },
+      {
+        "rule": "time",
+        "hour": 8,
+        "minute": 0
+      },
+      {
+        "rule": "duration",
+        "duration": 321.5
+      }
+    ],
+    "easter -3 14:00 PT4H": [
+      {
+        "fn": "easter",
+        "type": "easter",
+        "offset": -3
+      },
+      {
+        "rule": "time",
+        "hour": 14,
+        "minute": 0
+      },
+      {
+        "rule": "duration",
+        "duration": 4
+      }
+    ],
+    "easter -3 14:00 P3D": [
+      {
+        "fn": "easter",
+        "type": "easter",
+        "offset": -3
+      },
+      {
+        "rule": "time",
+        "hour": 14,
+        "minute": 0
+      },
+      {
+        "rule": "duration",
+        "duration": 72
+      }
+    ],
+    "05-01 14:00 if sunday then 00:00": [
+      {
+        "fn": "gregorian",
+        "month": 5,
+        "day": 1
+      },
+      {
+        "rule": "time",
+        "hour": 14,
+        "minute": 0
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "rules": [
+          {
+            "rule": "time",
+            "hour": 0,
+            "minute": 0
+          }
+        ]
+      }
+    ],
+    "05-01 14:00 if sunday then next sunday 00:00": [
+      {
+        "fn": "gregorian",
+        "month": 5,
+        "day": 1
+      },
+      {
+        "rule": "time",
+        "hour": 14,
+        "minute": 0
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "sunday",
+        "rules": [
+          {
+            "rule": "time",
+            "hour": 0,
+            "minute": 0
+          }
+        ]
+      }
+    ],
+    "01-01 if sunday then next monday 14:10 if sunday then 01:59": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "monday",
+        "rules": [
+          {
+            "rule": "time",
+            "hour": 14,
+            "minute": 10
+          }
+        ]
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "rules": [
+          {
+            "rule": "time",
+            "hour": 1,
+            "minute": 59
+          }
+        ]
+      }
+    ],
+    "12-31 14:00 if sunday then 00:00": [
+      {
+        "fn": "gregorian",
+        "month": 12,
+        "day": 31
+      },
+      {
+        "rule": "time",
+        "hour": 14,
+        "minute": 0
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "rules": [
+          {
+            "rule": "time",
+            "hour": 0,
+            "minute": 0
+          }
+        ]
+      }
+    ],
+    "wednesday before 11-23": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 23
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "wednesday",
+        "direction": "before"
+      }
+    ],
+    "4 days before 11-23": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 23
+      },
+      {
+        "rule": "dateDir",
+        "count": 4,
+        "weekday": "day",
+        "direction": "before"
+      }
+    ],
+    "4 days after 11-27": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 27
+      },
+      {
+        "rule": "dateDir",
+        "count": 4,
+        "weekday": "day",
+        "direction": "after"
+      }
+    ],
+    "1st wednesday in October": [
+      {
+        "fn": "gregorian",
+        "day": 1,
+        "month": 10
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "wednesday",
+        "direction": "after"
+      }
+    ],
+    "2nd sunday after 11-01": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "dateDir",
+        "count": 2,
+        "weekday": "sunday",
+        "direction": "after"
+      }
+    ],
+    "2nd Sunday before 11-01": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "dateDir",
+        "count": 2,
+        "weekday": "sunday",
+        "direction": "before"
+      }
+    ],
+    "tuesday before 4th thursday after 11-01": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "dateDir",
+        "count": 4,
+        "weekday": "thursday",
+        "direction": "after"
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "tuesday",
+        "direction": "before"
+      }
+    ],
+    "Tuesday before 2nd tuesday after 11-01": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "dateDir",
+        "count": 2,
+        "weekday": "tuesday",
+        "direction": "after"
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "tuesday",
+        "direction": "before"
+      }
+    ],
+    "sunday after 4th thursday after 11-01": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "dateDir",
+        "count": 4,
+        "weekday": "thursday",
+        "direction": "after"
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "sunday",
+        "direction": "after"
+      }
+    ],
+    "Monday after 2nd Saturday in September 13:00": [
+      {
+        "day": 1,
+        "fn": "gregorian",
+        "month": 9
+      },
+      {
+        "count": 2,
+        "direction": "after",
+        "rule": "dateDir",
+        "weekday": "saturday"
+      },
+      {
+        "count": 1,
+        "direction": "after",
+        "rule": "dateDir",
+        "weekday": "monday"
+      },
+      {
+        "hour": 13,
+        "minute": 0,
+        "rule": "time"
+      }
+    ],
+    "2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01": [
+      {
+        "fn": "gregorian",
+        "month": 5,
+        "day": 1
+      },
+      {
+        "rule": "dateDir",
+        "count": 2,
+        "weekday": "sunday",
+        "direction": "after"
+      },
+      {
+        "modifier": "if equal"
+      },
+      {
+        "fn": "easter",
+        "type": "easter",
+        "offset": 49
+      },
+      {
+        "modifier": "then"
+      },
+      {
+        "fn": "gregorian",
+        "month": 5,
+        "day": 1
+      },
+      {
+        "rule": "dateDir",
+        "count": 3,
+        "weekday": "sunday",
+        "direction": "after"
+      }
+    ],
+    "01-01 if monday then next monday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "monday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      }
+    ],
+    "01-01 if Monday then next Monday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "monday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      }
+    ],
+    "01-01 if sunday then previous monday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "direction": "previous",
+        "then": "monday"
+      }
+    ],
+    "01-01 if Sunday then next Sunday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "sunday"
+      }
+    ],
+    "01-01 if sunday then previous sunday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "direction": "previous",
+        "then": "sunday"
+      }
+    ],
+    "01-01 and if monday then next monday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "modifier": "and"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "monday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      }
+    ],
+    "01-01 and if Monday then next Monday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "modifier": "and"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "monday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      }
+    ],
+    "substitutes 01-01 if sunday then next tuesday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "modifier": "substitutes"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "tuesday"
+      }
+    ],
+    "substitutes 01-01 if Sunday then next Tuesday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 1
+      },
+      {
+        "modifier": "substitutes"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "tuesday"
+      }
+    ],
+    "substitutes 1 Shawwal if wednesday,saturday,sunday then next monday": [
+      {
+        "fn": "islamic",
+        "day": 1,
+        "month": 10
+      },
+      {
+        "modifier": "substitutes"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "wednesday",
+          "saturday",
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      }
+    ],
+    "substitutes 1 Shawwal if Wednesday,Saturday,Sunday then next Monday": [
+      {
+        "fn": "islamic",
+        "day": 1,
+        "month": 10
+      },
+      {
+        "modifier": "substitutes"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "wednesday",
+          "saturday",
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      }
+    ],
+    "4 Shawwal and if saturday then next monday": [
+      {
+        "fn": "islamic",
+        "day": 4,
+        "month": 10
+      },
+      {
+        "modifier": "and"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "saturday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      }
+    ],
+    "10-12 if tuesday,wednesday then previous monday if thursday,friday,saturday,sunday then next monday": [
+      {
+        "fn": "gregorian",
+        "month": 10,
+        "day": 12
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "tuesday",
+          "wednesday"
+        ],
+        "direction": "previous",
+        "then": "monday"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "thursday",
+          "friday",
+          "saturday",
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      }
+    ],
+    "01-10 if saturday,sunday then next monday if tuesday then previous monday if wednesday,thursday then next friday": [
+      {
+        "fn": "gregorian",
+        "month": 1,
+        "day": 10
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "saturday",
+          "sunday"
+        ],
+        "direction": "next",
+        "then": "monday"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "tuesday"
+        ],
+        "direction": "previous",
+        "then": "monday"
+      },
+      {
+        "rule": "dateIfThen",
+        "if": [
+          "wednesday",
+          "thursday"
+        ],
+        "direction": "next",
+        "then": "friday"
+      }
+    ],
+    "11-01 in even years": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "year",
+        "cardinality": "even"
+      }
+    ],
+    "11-01 in odd years": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "year",
+        "cardinality": "odd"
+      }
+    ],
+    "11-01 in leap years": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "year",
+        "cardinality": "leap"
+      }
+    ],
+    "11-01 in non-leap years": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "year",
+        "cardinality": "non-leap"
+      }
+    ],
+    "tuesday after 1st monday after 11-01 in even years": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "monday",
+        "direction": "after"
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "tuesday",
+        "direction": "after"
+      },
+      {
+        "rule": "year",
+        "cardinality": "even"
+      }
+    ],
+    "Tuesday after 1st monday after 11-01 in odd years": [
+      {
+        "fn": "gregorian",
+        "month": 11,
+        "day": 1
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "monday",
+        "direction": "after"
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "weekday": "tuesday",
+        "direction": "after"
+      },
+      {
+        "rule": "year",
+        "cardinality": "odd"
+      }
+    ],
+    "12-01 every 6 years since 1934": [
+      {
+        "fn": "gregorian",
+        "month": 12,
+        "day": 1
+      },
+      {
+        "rule": "year",
+        "every": 6,
+        "since": 1934
+      }
+    ],
+    "09-21": [
+      {
+        "fn": "gregorian",
+        "month": 9,
+        "day": 21
+      }
+    ],
+    "09-23": [
+      {
+        "fn": "gregorian",
+        "month": 9,
+        "day": 23
+      }
+    ],
+    "09-22 if 09-21 and 09-23 is public holiday": [
+      {
+        "fn": "gregorian",
+        "month": 9,
+        "day": 22
+      },
+      {
+        "modifier": "if"
+      },
+      {
+        "fn": "gregorian",
+        "month": 9,
+        "day": 21
+      },
+      {
+        "modifier": "and"
+      },
+      {
+        "fn": "gregorian",
+        "month": 9,
+        "day": 23
+      },
+      {
+        "rule": "bridge",
+        "type": "public"
+      }
+    ],
+    "09-22 if 09-21 is holiday": [
+      {
+        "fn": "gregorian",
+        "month": 9,
+        "day": 22
+      },
+      {
+        "modifier": "if"
+      },
+      {
+        "fn": "gregorian",
+        "month": 9,
+        "day": 21
+      },
+      {
+        "rule": "bridge"
+      }
+    ],
+    "Thursday after 04-02 if is holiday then next Thursday": [
+      {
+        "day": 2,
+        "fn": "gregorian",
+        "month": 4
+      },
+      {
+        "rule": "dateDir",
+        "count": 1,
+        "direction": "after",
+        "weekday": "thursday"
+      },
+      {
+        "rule": "ruleIfHoliday",
+        "count": 1,
+        "direction": "next",
+        "weekday": "thursday",
+        "omit": []
+      }
+    ],
+    "03-01 and if Saturday, Sunday then next Monday if is holiday then 2nd next Tuesday since 2022": [
+      {
+        "day": 1,
+        "fn": "gregorian",
+        "month": 3
+      },
+      {
+        "modifier": "and"
+      },
+      {
+        "direction": "next",
+        "if": [
+          "saturday",
+          "sunday"
+        ],
+        "rule": "dateIfThen",
+        "then": "monday"
+      },
+      {
+        "rule": "ruleIfHoliday",
+        "count": 2,
+        "direction": "next",
+        "weekday": "tuesday",
+        "omit": []
+      },
+      {
+        "day": 1,
+        "month": 1,
+        "rule": "activeFrom",
+        "year": 2022
+      }
+    ],
+    "05-01 if is holiday then next day omit Sunday": [
+      {
+        "day": 1,
+        "fn": "gregorian",
+        "month": 5
+      },
+      {
+        "rule": "ruleIfHoliday",
+        "count": 1,
+        "direction": "next",
+        "weekday": "day",
+        "omit": [
+          "sunday"
+        ]
+      }
+    ],
+    "05-01 if is holiday then next day omit Sunday, Saturday": [
+      {
+        "day": 1,
+        "fn": "gregorian",
+        "month": 5
+      },
+      {
+        "rule": "ruleIfHoliday",
+        "weekday": "day",
+        "count": 1,
+        "direction": "next",
+        "omit": [
+          "sunday",
+          "saturday"
+        ]
+      }
+    ],
+    "09-22 on sunday, saturday": [
+      {
+        "day": 22,
+        "fn": "gregorian",
+        "month": 9
+      },
+      {
+        "if": [
+          "sunday",
+          "saturday"
+        ],
+        "not": false,
+        "rule": "weekday"
+      }
+    ],
+    "09-22 on Sunday, Saturday": [
+      {
+        "day": 22,
+        "fn": "gregorian",
+        "month": 9
+      },
+      {
+        "if": [
+          "sunday",
+          "saturday"
+        ],
+        "not": false,
+        "rule": "weekday"
+      }
+    ],
+    "12-26 not on friday, monday": [
+      {
+        "day": 26,
+        "fn": "gregorian",
+        "month": 12
+      },
+      {
+        "if": [
+          "friday",
+          "monday"
+        ],
+        "not": true,
+        "rule": "weekday"
+      }
+    ],
+    "09-21 prior to 2020": [
+      {
+        "day": 21,
+        "fn": "gregorian",
+        "month": 9
+      },
+      {
+        "rule": "activeTo",
+        "year": 2020,
+        "month": 1,
+        "day": 1
+      }
+    ],
+    "09-21 prior to 2020-11": [
+      {
+        "day": 21,
+        "fn": "gregorian",
+        "month": 9
+      },
+      {
+        "rule": "activeTo",
+        "year": 2020,
+        "month": 11,
+        "day": 1
+      }
+    ],
+    "09-21 prior to 2020-03-02": [
+      {
+        "day": 21,
+        "fn": "gregorian",
+        "month": 9
+      },
+      {
+        "rule": "activeTo",
+        "year": 2020,
+        "month": 3,
+        "day": 2
+      }
+    ],
+    "09-21 since 2012 and prior to 2020-03-02": [
+      {
+        "day": 21,
+        "fn": "gregorian",
+        "month": 9
+      },
+      {
+        "rule": "activeFrom",
+        "year": 2012,
+        "month": 1,
+        "day": 1
+      },
+      {
+        "rule": "activeTo",
+        "year": 2020,
+        "month": 3,
+        "day": 2
+      }
+    ],
+    "09-21 since 2012": [
+      {
+        "day": 21,
+        "fn": "gregorian",
+        "month": 9
+      },
+      {
+        "rule": "activeFrom",
+        "year": 2012,
+        "month": 1,
+        "day": 1
+      }
+    ]
+  }
+}
