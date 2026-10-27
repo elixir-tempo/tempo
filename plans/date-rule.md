@@ -110,14 +110,14 @@ The first three were taken in tempo_holidays and carry here; D4, holidays an app
 
 ## Tasks
 
-* [ ] **Reading tokens into expressions** — each part to its Tempo form, tempo_holidays' recurrence builders moved here; every rule of the parser's fixture and of the 3.38.0 dataset read, but Bengali.
-
-* [ ] **The census gaps** — the productions above that tempo_holidays did not compile.
+* [ ] **The census gaps** — the 20 rules of the parser's fixture not read yet (`test/tempo/date_rule_test.exs`, `@not_read_yet`): a day count from a fixed date, an equinox or a solstice; a weekday step from a solstice or a solar term; a solar term's later day; a year of the Persian, Julian or Chinese calendar; `if is holiday` with a count, `next day` or `omit`; `if equal`; Bengali stays an error until Calendrical has the calendar. Several tempo_holidays compiled but only ever computed against a window, which Tempo has no path for.
 
 * [ ] **`Tempo.DateRule.parse/2`** — the API, its options and errors, and the guide: each production with examples that run.
 
 * [ ] **tempo_holidays on Tempo.DateRule** — its dataset compiled with it; its conformance corpus unchanged.
 
 ### Done
+
+* [x] **Reading tokens into expressions** — `Tempo.DateRule.parse/2` (`Tempo.Reader.DateRule.Plan`, `.Expression`), tempo_holidays' recurrence builders moved here without its dataset metadata, a week's days asked of the calendar and the grammar's calendar words in `Tempo.Calendar`. Checked against tempo_holidays on every distinct rule of its 3.38.0 fixtures: 1,534 of 1,564 build the same expression, 20 another of the same dates (the nth weekday after the first of a month as a weekday-in-month, a solar term in the default calendar, the fifth Monday's window), and the 10 that fail both are the known gaps. A span in hours is the days it reaches into (`PT90H` four), where tempo_holidays reads one. 2026-10-27.
 
 * [x] **The tokenizer** — `Tempo.Reader.DateRule` (`tokens/1`, `tokenize/1`), tempo_holidays' `Grammar` moved here; every one of the 119 rules of date-holidays-parser's fixture (`test/fixtures/date_holidays_parser_tokens.json`, its ISC notice in `NOTICE`) reads to the parser's tokens. 2026-10-27.

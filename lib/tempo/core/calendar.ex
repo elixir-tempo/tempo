@@ -56,6 +56,21 @@ defmodule Tempo.Calendar do
   # (2000-01-01, a day number, not a calendar's answer).
   @any_day 730_485
 
+  # The calendars date-holidays' rule grammar names by a word (`Tempo.DateRule`):
+  # `10 Dhu al-Hijjah` is Islamic, `15 Nisan` Hebrew, `1 Farvardin` Persian
+  # (`jalaali`), `julian 12-25` Julian, `chinese 01-0-01`, `korean …` and
+  # `vietnamese …` lunisolar. date-holidays reckons the Islamic months by the
+  # Umm al-Qura table.
+  @date_rule_calendars %{
+    "islamic" => Calendrical.Islamic.UmmAlQura,
+    "hebrew" => Calendrical.Hebrew,
+    "jalaali" => Calendrical.Persian,
+    "julian" => Calendrical.Julian,
+    "chinese" => Calendrical.Chinese,
+    "korean" => Calendrical.Korean,
+    "vietnamese" => Calendrical.Vietnamese
+  }
+
   @typedoc "A half-open span of days: the first day and the day after the last, as ISO day numbers."
   @type span :: {first :: integer(), after_last :: integer()}
 
@@ -83,6 +98,12 @@ defmodule Tempo.Calendar do
   @doc "The calendar of a value that names none."
   @spec default() :: Calendar.ISO
   def default, do: Calendar.ISO
+
+  @doc "The calendar a word of the date rule grammar names: `:error` for a word that names none."
+  @spec date_rule_calendar(String.t()) :: {:ok, module()} | :error
+  def date_rule_calendar(word) do
+    Map.fetch(@date_rule_calendars, word)
+  end
 
   @doc """
   Whether a calendar is the Gregorian: the default, the one CLDR's

@@ -116,7 +116,7 @@ defmodule Tempo.MixProject do
     [
       Core: ~r/^Tempo(?:\.(Interval|IntervalSet|RecurrenceSet|Duration|Sigils|Builder))?$/,
       "Relations and selection": ~r/^Tempo\.(Allen|Workdays|Territory|Event|Event\.Resolver)$/,
-      "Recurrence rules and calendar formats": ~r/^Tempo\.(RRule|Cron|ICal|JSCalendar)$/,
+      "Recurrence rules and calendar formats": ~r/^Tempo\.(RRule|Cron|DateRule|ICal|JSCalendar)$/,
       "Clock, leap seconds and explanation":
         ~r/^Tempo\.(Clock|Clock\.System|LeapSeconds|Explain)$/,
       Exceptions: ~r/^Tempo\.\w+Error$/
