@@ -170,7 +170,17 @@ iex> Tempo.union(~o"2026-01-04", ~o"T10:30", within: ~o"2026-01-04")
 {:ok, ~o"{2026Y1M4D/2026Y1M4D,2026Y1M4DT10H30M/T10H31M}"}
 ```
 
-A window places a time of day on each day it touches, and what is placed is inside the window: on a window from noon on Monday to noon on Wednesday, nine to five is noon to five on Monday, nine to five on Tuesday and nine to noon on Wednesday, for every operation alike. The other operand is not cut by the window. A dated window places every operand that has no year, whatever the other operand is, so the working hours of a week with no meetings in it are still that week's hours, and each placed span keeps the metadata of the time of day it is.
+A window places a value with no year on each of its periods, and what is placed is inside the window: June placed by a window from the 10th of June to the 5th of July is the 10th to the 30th. A span with no year is placed whole from each start the window holds (decision 72): on a window from noon on Monday to noon on Wednesday, nine to five is nine to five on Tuesday and on Wednesday, the second running past the window's end, and none on Monday, whose nine o'clock comes before the window. The same holds for every operation, and the other operand is not cut by the window.
+
+```elixir
+iex> Tempo.to_interval(~o"6M", within: ~o"2026-06-10/2026-07-05")
+{:ok, ~o"2026Y6M10D/2026Y6M"}
+
+iex> Tempo.to_interval(~o"T09/T17", within: ~o"2026-06-15T12/2026-06-17T12")
+{:ok, ~o"{2026Y6M16DT9H/T17H,2026Y6M17DT9H/T17H}"}
+```
+
+A dated window places every operand that has no year, whatever the other operand is, so the working hours of a week with no meetings in it are still that week's hours, and each placed span keeps the metadata of the time of day it is.
 
 The `:within` option is also required on `complement/2` — for the same reason. An unbounded complement is infinite; Tempo refuses to pick a universe.
 

@@ -14,6 +14,8 @@
 
 ### Fixed
 
+* A value with no year a window places is the part of each occurrence within the window (`Tempo.to_interval(~o"6M", within: ~o"2026-06-10/2026-07-05")` is the 10th to the 30th), where a window holding part of one placed none, one within a day placed the whole day, and a day of the month could be placed outside the window.
+
 * An open end a window places at an edge finer than the span is written to that edge (`2026Y6M/3DT0H`), where it was written to the span's own unit and read back longer (`2026Y6M/2026Y6M`).
 
 * A span with no year placed by a window is placed from each start the window holds (decision 72) whole, where a window finer than its unit raised (`to_interval(~o"6M/8M", within: ~o"2026-06-01T00/2026-06-03T00")`), and its open end is cut at the window's edge, as a span with a year's is (`complement(~o"6M/..", within: ~o"2026")`).

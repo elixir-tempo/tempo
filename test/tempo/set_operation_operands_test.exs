@@ -11,6 +11,16 @@ defmodule Tempo.SetOperationOperandsTest do
 
   @workday ~o"2026-06-15T09/2026-06-15T17"
 
+  # The members of a set as written, sorted, to compare two sets whatever
+  # order their members come in.
+  defp in_order(set) do
+    {:ok, members} = Tempo.members(set, within: ~o"2026")
+
+    members
+    |> Enum.map(&Tempo.to_iso8601!/1)
+    |> Enum.sort()
+  end
+
   test "a list is taken one operand after another" do
     alice = ~o"2026-06-15T10/2026-06-15T15"
     bob = ~o"2026-06-15T13/2026-06-15T18"
@@ -153,6 +163,51 @@ defmodule Tempo.SetOperationOperandsTest do
       # Written in the span's calendar: 20 October 2026 is 9 Heshvan 5787.
       assert Tempo.to_interval(~o"5787Y/..[u-ca=hebrew]", within: ~o"2026-10-01/2026-10-20") ==
                {:ok, ~o"5787Y/2M9D[u-ca=hebrew]"}
+    end
+
+    test "a value is placed as the part of each occurrence within the window" do
+      assert Tempo.to_interval(~o"15D", within: ~o"2026-06-06") == {:ok, ~o"{}"}
+
+      assert Tempo.to_interval(~o"6M{6,20}D", within: ~o"2026-06-06") ==
+               {:ok, ~o"{2026Y6M6D/2026Y6M6D}"}
+
+      assert Tempo.to_interval(~o"6M", within: ~o"2026-06-10/2026-07-05") ==
+               {:ok, ~o"2026Y6M10D/2026Y6M"}
+
+      assert Tempo.to_interval(~o"6M", within: ~o"2026-05-31T12/2026-06-02T12") ==
+               {:ok, ~o"2026Y6M/2DT12H"}
+
+      assert Tempo.to_interval(~o"6K", within: ~o"2026-06-06T10/2026-06-07T12") ==
+               {:ok, ~o"2026Y6M6DT10H/2026Y6M6D"}
+
+      assert Tempo.to_interval(~o"6M", within: ~o"2026-06-06T10/2026-06-06T12") ==
+               {:ok, ~o"2026Y6M6DT10H/T12H"}
+
+      assert Tempo.members(~o"6K", within: ~o"2026-06-06T10/2026-06-07T12") ==
+               {:ok, [~o"2026Y6M6DT10H/2026Y6M6D"]}
+
+      assert Tempo.members(~o"15D", within: ~o"2026-06-06") == {:ok, []}
+    end
+
+    test "a value is placed as it is everywhere, cut to the window" do
+      values = [~o"6M", ~o"15D", ~o"6M6D", ~o"6K", ~o"{6,7}K", ~o"T10H", ~o"T10:30"]
+
+      windows = [
+        ~o"2026-06-06",
+        ~o"2026-06-06T10/2026-06-06T12",
+        ~o"2026-06-06T10/2026-06-07T12",
+        ~o"2026-05-31T12/2026-06-02T12",
+        ~o"2026-06-10/2026-07-05"
+      ]
+
+      for value <- values, window <- windows do
+        {:ok, placed} = Tempo.to_interval(value, within: window)
+        {:ok, everywhere} = Tempo.to_interval(value, within: ~o"2026")
+        {:ok, cut} = Tempo.intersection(everywhere, window)
+
+        assert in_order(placed) == in_order(cut),
+               "#{inspect(value)} within #{inspect(window)}"
+      end
     end
 
     test "with no window, an intersection places it on the other operand, in either order" do

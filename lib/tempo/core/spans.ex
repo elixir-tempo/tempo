@@ -713,19 +713,109 @@ defmodule Tempo.Spans do
   defp with_metadata(%Placed{} = placed, metadata),
     do: Placed.update_span(placed, &%{&1 | metadata: metadata})
 
-  # A value with no year placed by a window: in it, where the window is one
-  # value it fits under, and else on each of the window's periods, as
-  # `Tempo.select/3` selects it there (`4M` in `2026/2027`, each April).
+  # A value with no year placed by a window on the line is the part of each
+  # of its occurrences within the window (the set operations guide): placed
+  # in the window's one value it fits under, or selected in the whole units
+  # of its own resolution each of the window's periods touches, then cut to
+  # the window's periods. A window with no year places it on its cycle.
   defp placed_value_spans(value, window, options) do
+    if on_the_line?(window) do
+      with {:ok, periods} <- window_periods(window),
+           {:ok, spans} <- whole_spans_in(value, window, periods, options) do
+        {:ok, cut_to(spans, periods)}
+      end
+    else
+      placed(placed_in(value, window), options)
+    end
+  end
+
+  defp whole_spans_in(value, window, periods, options) do
     placed = placed_in(value, window)
 
-    if on_the_line?(window) and not Unit.anchored?(elem(placed.form, 1)),
-      do:
-        with(
-          {:ok, values} <- in_each_period(value, window, options),
-          do: each_spans_of(values, [])
-        ),
-      else: placed(placed, options)
+    if Unit.anchored?(elem(placed.form, 1)) do
+      placed(placed, options)
+    else
+      with {:ok, values} <- in_each_cover(value, periods, options) do
+        each_spans_of(values, [])
+      end
+    end
+  end
+
+  defp window_periods(window) do
+    with {:ok, periods} <- placed(window, []),
+         {:ok, periods} <- Limit.take(periods, window) do
+      {:ok, Enum.to_list(periods)}
+    end
+  end
+
+  # The values a value with no year selects in the whole units of its own
+  # resolution that each period touches: a unit the period holds only part
+  # of is selected whole, to be cut to the period.
+  defp in_each_cover(%Tempo{form: {:value, units}} = value, periods, options) do
+    grain = Unit.grain(Unit.resolution(units))
+    covers = Enum.map(periods, &covering(&1, grain))
+
+    with {:ok, picked} <- each_selected(covers, Unit.cyclic(units), options) do
+      {:ok, picked |> Enum.uniq() |> Enum.map(&%{&1 | metadata: value.metadata})}
+    end
+  end
+
+  defp covering(%Placed{start: start, stop: stop, span: span} = period, grain)
+       when is_integer(start) and is_integer(stop) and stop > start do
+    model = %{span | form: {:value, [{grain, 1}]}, qualifications: nil}
+    first_unit = extent(value_at(start, model, :start, span))
+    last_unit = extent(value_at(stop - 1, model, :start, span))
+    covered(period, first_unit, last_unit)
+  end
+
+  defp covering(period, _grain) do
+    period
+  end
+
+  defp covered(period, {:ok, {first, _}}, {:ok, {_, last}}) do
+    %{period | start: first, stop: last}
+  end
+
+  defp covered(period, _first_unit, _last_unit) do
+    period
+  end
+
+  # Each placed span cut to the periods of the window: whole where a period
+  # holds it, the part within a period where it runs past one, and nothing
+  # where it lies in none.
+  defp cut_to(spans, periods) do
+    Enum.flat_map(spans, fn placed -> Enum.flat_map(periods, &cut(placed, &1)) end)
+  end
+
+  defp cut(%Placed{start: start, stop: stop} = placed, %Placed{start: from, stop: to} = period)
+       when is_integer(start) and is_integer(stop) and is_integer(from) and is_integer(to) do
+    cond do
+      start >= from and stop <= to -> [placed]
+      start < to and from < stop -> [cut_part(placed, period, max(start, from), min(stop, to))]
+      true -> []
+    end
+  end
+
+  defp cut(_placed, _period) do
+    []
+  end
+
+  defp cut_part(%Placed{span: span}, %Placed{span: period}, start, stop) do
+    first = written_at(start, first_of(span), edge_of(period, :from), :start, span)
+    last = written_at(stop, last_of(span), edge_of(period, :to), :end, span)
+    Placed.new(%{span | form: {:span, first, last}}, {start, stop})
+  end
+
+  defp last_of(%Tempo{form: {:span, _first, %Tempo{form: {:value, _}} = last}}) do
+    last
+  end
+
+  defp last_of(%Tempo{form: {:span, first, _last}}) do
+    first
+  end
+
+  defp last_of(value) do
+    value
   end
 
   defp on_the_line?(%Tempo{} = window), do: not match?({:cycle, _}, frame(window))
@@ -1499,14 +1589,40 @@ defmodule Tempo.Spans do
   def members(%Duration{} = duration, _options),
     do: {:error, conversion(duration, :bare_duration)}
 
-  # A value with no year placed by a window, as `placed_spans/3` places it:
-  # in the window's one value, or on each of the window's periods.
+  # A value with no year placed by a window, as `placed_value_spans/3`
+  # places it: each part of it within the window, a value where the window
+  # holds the whole of it.
   defp placed_members(value, window, options) do
+    if on_the_line?(window) do
+      with {:ok, periods} <- window_periods(window),
+           {:ok, values} <- whole_values_in(value, window, periods, options) do
+        {:ok, Enum.flat_map(values, &cut_value(&1, periods))}
+      end
+    else
+      members(placed_in(value, window), options)
+    end
+  end
+
+  defp whole_values_in(value, window, periods, options) do
     placed = placed_in(value, window)
 
-    if on_the_line?(window) and not Unit.anchored?(elem(placed.form, 1)),
-      do: in_each_period(value, window, options),
-      else: members(placed, options)
+    if Unit.anchored?(elem(placed.form, 1)) do
+      members(placed, options)
+    else
+      in_each_cover(value, periods, options)
+    end
+  end
+
+  defp cut_value(value, periods) do
+    case extent(value) do
+      {:ok, extent} ->
+        [Placed.new(value, extent)]
+        |> cut_to(periods)
+        |> Enum.map(& &1.span)
+
+      {:error, _exception} ->
+        []
+    end
   end
 
   defp expanded_values(%Tempo{form: {:value, units}} = value) do
