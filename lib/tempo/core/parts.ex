@@ -179,20 +179,71 @@ defmodule Tempo.Parts do
     not is_nil(zone) or not is_nil(shift)
   end
 
-  @doc "Whether every end an expression has is written: no open end, no sequence without one."
+  @doc """
+  Whether every end an expression has is written: no open end, no sequence
+  without one. A recurrence over a domain of years ends with them, and a
+  conditional member is as bounded as what it holds.
+  """
   @spec bounded?(Tempo.t() | Duration.t()) :: boolean()
   def bounded?(%Tempo{form: {:span, from, to}}), do: from != :open and to != :open
-  def bounded?(%Tempo{form: {:every, _, bound, _}}), do: bound != :infinity
+
+  def bounded?(%Tempo{form: {:every, first, :infinity, _rule}}) do
+    bounded_domain?(first)
+  end
+
+  def bounded?(%Tempo{form: {:every, _first, _bound, _rule}}) do
+    true
+  end
 
   def bounded?(%Tempo{form: {kind, members}}) when kind in [:all, :one] and is_list(members),
     do: Enum.all?(members, &bounded?/1)
 
   # A set whose members are a stream has no end that is written.
   def bounded?(%Tempo{form: {kind, _stream}}) when kind in [:all, :one], do: false
+
+  def bounded?(%Tempo{form: {:when, member, _conditions}}) do
+    bounded?(member)
+  end
+
   def bounded?(%Tempo{}), do: true
 
   # A duration, as a member of a set of them, has no end to leave open.
   def bounded?(%Duration{}), do: true
+
+  @doc """
+  Whether the start of a recurrence is a domain whose years all end
+  (`R/{2020Y..2024Y}/…`): one with a range that runs on (`{1973Y/..}`), or no
+  domain at all, does not bound it.
+  """
+  @spec bounded_domain?(Tempo.t() | :open) :: boolean()
+  def bounded_domain?(%Tempo{form: {:span, %Tempo{form: form} = domain, _cadence}})
+      when elem(form, 0) in [:all, :when] do
+    not open_domain?(domain)
+  end
+
+  def bounded_domain?(_first) do
+    false
+  end
+
+  defp open_domain?(%Tempo{form: {:all, members}}) do
+    Enum.any?(members, &open_range?/1)
+  end
+
+  defp open_domain?(%Tempo{form: {:when, member, _conditions}}) do
+    open_domain?(member)
+  end
+
+  defp open_domain?(_domain) do
+    false
+  end
+
+  defp open_range?(%Tempo{form: {:span, from, to}}) do
+    :open in [from, to]
+  end
+
+  defp open_range?(_member) do
+    false
+  end
 
   @doc "Whether an expression covers no time: a set with no members, a span of no length."
   @spec empty?(Tempo.t()) :: boolean()

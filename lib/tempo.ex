@@ -1309,17 +1309,7 @@ defmodule Tempo do
   # A recurrence over a domain (`R/{2020Y..2024Y}/P1Y/F…`) is bounded by it,
   # unless a range of the domain runs on with no end (`{1973Y/..}`), which is
   # no more bounded than a rule with no start.
-  defp domain?(%__MODULE__{form: {:span, %__MODULE__{form: form} = domain, _}}),
-    do: elem(form, 0) in [:all, :when] and not open_domain?(domain)
-
-  defp domain?(_first), do: false
-
-  defp open_domain?(%__MODULE__{form: {:all, members}}), do: Enum.any?(members, &open_range?/1)
-  defp open_domain?(%__MODULE__{form: {:when, member, _conditions}}), do: open_domain?(member)
-  defp open_domain?(_domain), do: false
-
-  defp open_range?(%__MODULE__{form: {:span, from, to}}), do: :open in [from, to]
-  defp open_range?(_member), do: false
+  defp domain?(first), do: Parts.bounded_domain?(first)
 
   defp in_frame(%__MODULE__{calendar: calendar} = span, %{calendar: calendar}), do: span
 

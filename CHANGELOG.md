@@ -10,6 +10,12 @@
 
 * Requires Calendrical 2.2, whose lunisolar calendars give the year a sexagenary cycle and its year name, as a date rule written with them (`chinese 78-32-08-0-15`) is read.
 
+### Fixed
+
+* `Tempo.to_interval/2` with no window refuses at once a rule over years with no end (`R/{1973Y/..}/…`), or a set holding one, where it walked to a limit for seconds and listed an equinox to the end of the ephemeris.
+
+* `Tempo.bounded?/1` is true of a rule over years that end (`R/{2020Y..2024Y}/…`), which `to_interval/2` lists with no window, and asks a conditional member about what it holds.
+
 ## [v2.0.0] — 2026-10-26
 
 Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migration guide](https://hexdocs.pm/ex_tempo/migration.html) takes each change below with its 1.6 form and its 2.0 form.
