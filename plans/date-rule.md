@@ -108,7 +108,19 @@ The first three were taken in tempo_holidays and carry here; D4, holidays an app
 
 * **D5 — the home and the name.** Tempo, as `Tempo.DateRule` (user, 2026-10-27).
 
+Taken by the user on 2026-10-27, for tempo_holidays to compile its dataset with `Tempo.DateRule` (a census of its 5,154 entries counts each):
+
+* **D6 — observed days.** `parse(rule, observed: :as_written | :moved | :none)`: as written (the default); each clause moving the date, an `and` adding nothing (tempo_holidays' `dates: :substitute`, 333 `and if` entries); or no observed day (`:gazetted`), which for a `substitutes` rule is the dates it substitutes for.
+
+* **D7 — substitute entries.** `parse(rule, replaced_by: [entry])`: the date read as not on the entry's trigger weekdays in the entry's years, a recurrence with its ISO 8601 text (229 `substitutes …` entries stand in for a holiday of their type).
+
+* **D8 — the dataset's metadata.** `parse(rule, active: windows, disable: dates, enable: dates)`, folded into the domain as tempo_holidays folds them now: a disabled date takes its year out of the member that gives it, an enabled date is a one-year member (253, 51 and 45 entries).
+
+* **D9 — a period split at the year end** (tempo_holidays). One member, the union of the two dated spans coalesced into the one period (Victoria's term 4 holidays, five pairs).
+
 ## Tasks
+
+* [ ] **The options for a holiday dataset** — `:observed` (D6), `:replaced_by` (D7), `:active`, `:disable` and `:enable` (D8), each documented in `parse/2` and the guide, each tested against what tempo_holidays' `Rule` gives for the dataset's entries.
 
 * [ ] **tempo_holidays on Tempo.DateRule** — its dataset compiled with it; its conformance corpus unchanged.
 
