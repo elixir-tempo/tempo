@@ -3,7 +3,7 @@ defmodule Tempo.DateRuleTest do
 
   import Tempo.Sigils
 
-  alias Tempo.{DateRule, IntervalSet, ParseError, RecurrenceSet}
+  alias Tempo.{DateRule, Interval, IntervalSet, ParseError, RecurrenceSet}
 
   doctest DateRule
 
@@ -15,31 +15,31 @@ defmodule Tempo.DateRuleTest do
                  |> Map.fetch!("rules")
                  |> Map.keys()
 
+  @dates_fixture Path.expand("../fixtures/date_holidays_parser_dates.json", __DIR__)
+  @external_resource @dates_fixture
+  @parser_dates @dates_fixture
+                |> File.read!()
+                |> :json.decode()
+                |> Map.fetch!("cases")
+
   # The rules of date-holidays-parser's fixture not read yet, each a part of
-  # the grammar still to be built (plans/date-rule.md); none is a rule of the
-  # date-holidays dataset but the Bengali ones.
+  # the grammar still to be built (plans/date-rule.md): a rule that is not a
+  # date, an `if is holiday` move by more than one, `if equal`, and the
+  # Bengali calendar and the years of the sexagenary cycle, which Calendrical
+  # does not have. None is a rule of the date-holidays dataset but the
+  # Bengali ones.
   @not_read_yet [
     "#1111",
     "03-01 and if Saturday, Sunday then next Monday if is holiday then 2nd next Tuesday since 2022",
-    "05-01 if is holiday then next day omit Sunday",
-    "05-01 if is holiday then next day omit Sunday, Saturday",
-    "1 day after december solstice",
-    "1 day before june solstice",
-    "29 Esfand 1401",
     "2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01",
-    "3 days after september equinox",
-    "31 Shahrivar 1401",
-    "3rd monday before December solstice",
-    "4 days after 11-27",
-    "4 days before 11-23",
-    "4 days before march equinox in Europe/Vienna",
     "bengali-revised 1-1",
     "bengali-revised 1425-1-1",
     "chinese 78-32-8-15 solarterm",
-    "chinese 8-15 solarterm",
-    "friday before chinese 78-32-8-15 solarterm",
-    "julian 2015-01-09"
+    "friday before chinese 78-32-8-15 solarterm"
   ]
+
+  # The rules of the parser's own tests not read yet.
+  @dates_not_read_yet ["bengali-revised 1-1", "bengali-revised 12-1"]
 
   defp written(rule) do
     {:ok, expression} = DateRule.parse(rule)
@@ -53,6 +53,19 @@ defmodule Tempo.DateRuleTest do
       end
 
     assert Enum.sort(not_read) == Enum.sort(@not_read_yet)
+  end
+
+  test "every rule of the parser's own tests falls on the dates they expect" do
+    differ =
+      for %{"rule" => rule, "year" => year, "dates" => expected} <- @parser_dates,
+          rule not in @dates_not_read_yet,
+          found = dates_in(rule, year),
+          found != {:ok, Enum.sort(expected)} do
+        {rule, year, expected, found}
+      end
+
+    assert [] = differ
+    assert Enum.all?(@dates_not_read_yet, &match?({:error, _}, DateRule.parse(&1)))
   end
 
   describe "a date" do
@@ -94,6 +107,37 @@ defmodule Tempo.DateRuleTest do
       assert written("julian 12-25") == "R/../P1Y/FL12M25DN[u-ca=julian]"
       assert written("chinese 01-0-01") == "R/../P1Y/FL1m1DN[u-ca=chinese]"
       assert written("korean 01-0-01") == "R/../P1Y/FL1m1DN[u-ca=dangi]"
+    end
+
+    test "a count of days or a weekday from any date, step by step" do
+      assert written("4 days after 11-27") == "R/../P1Y/FLL11M27DN/P5D{1..7}K-1IN"
+
+      assert written("4 days before march equinox in Europe/Vienna") ==
+               "R/../P1Y/FLL(march-equinox@Europe/Vienna)eN/P-4D{1..7}K1IN"
+
+      assert written("3rd monday before December solstice") ==
+               "R/../P1Y/FLL(december-solstice)eN/P-21D1K1IN"
+
+      # Fat Thursday, the Thursday before Ash Wednesday.
+      assert written("Thursday before easter -46") ==
+               "R/../P1Y/FLLL(easter)eN/P-47D3K1IN/P-7D4K1IN"
+
+      assert written("friday before 1st monday before 06-01") ==
+               "R/../P1Y/FLLL6M1DN/P-7D1K1IN/P-7D5K1IN"
+    end
+
+    test "a later day of a solar term is days from it" do
+      assert written("chinese 8-15 solarterm") == "R/../P1Y/FLL(xiaoman)eN/P15D{1..7}K-1IN"
+    end
+
+    test "a date of another calendar with its year is in that year of it" do
+      assert written("31 Shahrivar 1401") == "R/{1401Y}/P1Y/FL6M31DN[u-ca=persian]"
+      assert written("julian 2015-01-09") == "R/{2015Y}/P1Y/FL1M9DN[u-ca=julian]"
+    end
+
+    test "Adar is the sixth month in order, Adar I in a leap year; AdarII is Purim's" do
+      assert written("6 Adar") == "R/../P1Y/FL6M6DN[u-ca=hebrew]"
+      assert written("14 AdarII") == "R/../P1Y/FL6m14DN[u-ca=hebrew]"
     end
 
     test "the eve of a lunisolar month is the day before its first" do
@@ -180,6 +224,16 @@ defmodule Tempo.DateRuleTest do
       assert %Tempo{form: {:when, _member, [move: [falls_on: %{type: :observance}, to_next: _]]}} =
                move
     end
+
+    test "an if is holiday move to the next day skips the weekdays it omits" do
+      {:ok, may_day} = DateRule.parse("05-01 if is holiday then next day omit Sunday, Saturday")
+      {:ok, holidays} = RecurrenceSet.new([public(~o"2026-05-01"), may_day])
+      {:ok, days} = Tempo.to_interval(holidays, within: ~o"2026")
+
+      # 1 May 2026 is a Friday, so the day after it that is no weekend day is
+      # Monday 4 May.
+      assert IntervalSet.map(days, &Tempo.day/1) == [1, 4]
+    end
   end
 
   describe "an error" do
@@ -189,12 +243,36 @@ defmodule Tempo.DateRuleTest do
 
       assert {:error, %ParseError{reason: "the Bengali calendar is not one Calendrical has"}} =
                DateRule.parse("bengali-revised 1-1")
+
+      assert {:error, %ParseError{reason: "a year of the sexagenary cycle is not read yet" <> _}} =
+               DateRule.parse("chinese 78-32-8-15 solarterm")
     end
 
     test "is returned for what is no text" do
       assert {:error, %ParseError{}} = DateRule.parse(:christmas)
       assert_raise ParseError, fn -> DateRule.parse!("12-25 tomorrow") end
     end
+  end
+
+  # The Gregorian dates a rule falls on in a Gregorian year, as the parser's
+  # tests write them.
+  defp dates_in(rule, year) do
+    with {:ok, expression} <- DateRule.parse(rule),
+         {:ok, within} <- Tempo.new(year: year),
+         {:ok, occurrences} <- Tempo.to_interval(expression, within: within) do
+      dates =
+        occurrences
+        |> IntervalSet.members()
+        |> Enum.map(&gregorian_date/1)
+
+      {:ok, Enum.sort(dates)}
+    end
+  end
+
+  defp gregorian_date(occurrence) do
+    {:ok, date} = Tempo.to_date(Interval.from(occurrence))
+    {:ok, gregorian} = Date.convert(date, Calendar.ISO)
+    Date.to_iso8601(gregorian)
   end
 
   defp members(set) do

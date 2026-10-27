@@ -6,13 +6,15 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **Date rules** — `Tempo.DateRule`, a reader for the date-holidays rule grammar (`2nd Monday in June`, `easter -2`, `15 Nisan`) into Tempo expressions, beside `Tempo.RRule` and `Tempo.Cron`, moved from tempo_holidays (user, 2026-10-27); Tempo 2.1. Plan in [plans/date-rule.md](plans/date-rule.md).
-
 * [ ] **Companions on 2.0.** `agenda`, `tempo_sql` and `tempo_holidays` move to `{:ex_tempo, "~> 2.0"}` now that 2.0.0 is on hex (2026-10-27); all three passed their gates against `2b04789`. `agenda` is ported (2026-10-15) under decisions 64 to 69. `tempo_holidays` is ported (2026-10-14) against a path dependency: its rules are built from parts, its conformance unchanged (168,186 matched, 0 mismatched), all 223 of its tests passing. `tempo_sql` is ported (2026-10-14) against a path dependency, under decisions 43 and 44: all 280 of its tests pass against Postgres, its version 1 and 2 composite rows read as 1.x meant them.
 
 * [ ] **Every calendar call a callback, the rest of it** — the user, 2026-10-10: "all calendar calls in Tempo should be `calendar.some_callback`". Calendrical's side is done: every callback of its behaviour is required, with a default, since Calendrical `e3e8688` (2026-10-16), and Tempo probes no calendar and asks none its kind. Three places in Tempo still know Calendrical rather than ask a calendar. (1) Three calls of Calendrical's own functions, `Calendrical.parse`, `Calendrical.calendar_from_cldr_calendar_type` and `Calendrical.additional_calendars`, which the task "Calendrical an optional dependency" in [plans/calendar-surface.md](plans/calendar-surface.md) is to make callbacks, questions of Localize or modules the caller gives. (2) `lib/tempo/core/calendar/weeks_from.ex` builds six calendars with `use Calendrical.Base.Month`, a module internal to Calendrical (`@moduledoc false`): to build them through Calendrical's public `Calendrical.new/3`, or, where Tempo needs them at compile time, through a public way to define such a calendar that Calendrical would have to add. (3) `lib/tempo/core/calendar.ex:173` answers a solar term of `Calendar.ISO` as `Calendrical.Gregorian`'s itself, where the calendar would be asked: `Calendar.ISO` answers no solar term, so it is to ask Localize's `Localize.Calendar.ISO`, or Calendrical's Gregorian calendar through a callback. Moved from Calendrical's TODO, where the item is closed, 2026-10-16.
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
+
+## In progress
+
+* [ ] **Date rules** — `Tempo.DateRule`, a reader for the date-holidays rule grammar (`2nd Monday in June`, `easter -2`, `15 Nisan`) into Tempo expressions, beside `Tempo.RRule` and `Tempo.Cron`, moved from tempo_holidays (user, 2026-10-27); Tempo 2.1. Plan in [plans/date-rule.md](plans/date-rule.md). Landed: the tokenizer, `parse/2` and the census gaps, every rule of the dataset read but the Bengali; next the docs and guide, then tempo_holidays on it.
 
 ## Blocked
 

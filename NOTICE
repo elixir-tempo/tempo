@@ -5,15 +5,17 @@ The code of Tempo is licensed under the Apache License 2.0 (LICENSE.md).
 
 It includes the work of others, under their own licences:
 
-1. The date rule parser's test fixture
+1. The date rule parser's test fixtures
 
    test/fixtures/date_holidays_parser_tokens.json is the test fixture
    test/fixtures/parser.cjs of date-holidays-parser v3.4.7,
    https://github.com/commenthol/date-holidays-parser, converted to JSON.
-   Tempo.DateRule reads the rule grammar of date-holidays
+   test/fixtures/date_holidays_parser_dates.json holds the rules, years and
+   dates of that version's test/DateFn.mocha.js, each test that reads a
+   rule alone. Tempo.DateRule reads the rule grammar of date-holidays
    (https://github.com/commenthol/date-holidays) as that parser does, and
-   the fixture tests that it does. It is used only by the tests and is not
-   in the package.
+   the fixtures test that it does. They are used only by the tests and are
+   not in the package.
 
    ISC License (ISC)
 

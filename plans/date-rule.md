@@ -110,13 +110,25 @@ The first three were taken in tempo_holidays and carry here; D4, holidays an app
 
 ## Tasks
 
-* [ ] **The census gaps** — the 20 rules of the parser's fixture not read yet (`test/tempo/date_rule_test.exs`, `@not_read_yet`): a day count from a fixed date, an equinox or a solstice; a weekday step from a solstice or a solar term; a solar term's later day; a year of the Persian, Julian or Chinese calendar; `if is holiday` with a count, `next day` or `omit`; `if equal`; Bengali stays an error until Calendrical has the calendar. Several tempo_holidays compiled but only ever computed against a window, which Tempo has no path for.
-
 * [ ] **`Tempo.DateRule.parse/2`** — the API, its options and errors, and the guide: each production with examples that run.
 
 * [ ] **tempo_holidays on Tempo.DateRule** — its dataset compiled with it; its conformance corpus unchanged.
 
+### Blocked
+
+* [ ] **The Bengali calendar** — eight rules of the dataset (`bengali-revised 1-1` …) and two of the parser's tests. Blocked on a Bengali (revised) calendar in Calendrical.
+
+* [ ] **A year of the sexagenary cycle** — `chinese 78-32-8-15 solarterm`, a Chinese date in the 32nd year of the 78th cycle. The parser drops the cycle and year (date-chinese's `toJDE/1` is given the Gregorian year), so it reads the date in every year; Tempo reads it in that one year or not at all, a named error until then. Blocked on a public Calendrical function that gives the year of a cycle and its year; `Calendrical.Chinese.elapsed_years/2` is `@doc false`.
+
+### Deferred
+
+* [ ] **An `if is holiday` move by more than one, or back** — `if is holiday then 2nd next Tuesday`. `Tempo.RecurrenceSet.move_when/2` moves to the first span its selector gives after the occurrence and takes no count; no rule of the dataset needs one.
+
+* [ ] **`if equal`** — `2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01`: the date replaced when it falls on another rule's date, a primitive `Tempo.RecurrenceSet` does not have; no rule of the dataset needs one.
+
 ### Done
+
+* [x] **The census gaps** — a count of days or a weekday step from any date, chained as windows (an equinox, a solstice, Easter, a solar term, a weekday step before a weekday step); a solar term's later day; a date of another calendar in a year of its own (`31 Shahrivar 1401`, `julian 2015-01-09`); `if is holiday then next day omit …`. The parser's `Adar` is the sixth month in order, Adar I in a leap year, where it was read as Adar II. 1,556 of the dataset's 1,564 rules read, all but the Bengali, with only the two new ones written differently; the 97 rules of the parser's own tests that read a rule alone (`test/fixtures/date_holidays_parser_dates.json`) fall on the dates they expect, but the two Bengali. 2026-10-27.
 
 * [x] **Reading tokens into expressions** — `Tempo.DateRule.parse/2` (`Tempo.Reader.DateRule.Plan`, `.Expression`), tempo_holidays' recurrence builders moved here without its dataset metadata, a week's days asked of the calendar and the grammar's calendar words in `Tempo.Calendar`. Checked against tempo_holidays on every distinct rule of its 3.38.0 fixtures: 1,534 of 1,564 build the same expression, 20 another of the same dates (the nth weekday after the first of a month as a weekday-in-month, a solar term in the default calendar, the fifth Monday's window), and the 10 that fail both are the known gaps. A span in hours is the days it reaches into (`PT90H` four), where tempo_holidays reads one. 2026-10-27.
 

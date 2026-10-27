@@ -102,11 +102,38 @@ defmodule Tempo.Reader.DateRule.Expression do
     end
   end
 
+  # `if is holiday then next day omit sunday`: to the next day that is not
+  # one of the omitted weekdays.
+  defp conditional(
+         base,
+         %{kind: :if_holiday, move: %{count: 1, direction: :next, target: :day, omit: omit}},
+         _plan,
+         falls_on
+       ) do
+    allowed = Enum.reject(@all_weekdays, &(&1 in omit))
+
+    with {:ok, selector} <- Tempo.new(day_of_week: weekday_names(allowed)) do
+      {:ok, RecurrenceSet.move_when(base, falls_on: falls_on, to_next: selector)}
+    end
+  end
+
   defp conditional(_base, _conditional, _plan, _falls_on) do
     {:error, "this if is holiday move is not read yet"}
   end
 
   # ── occurrence shapes ─────────────────────────────────────────────────
+
+  # A date stepped from another is a window off it for each step, the one
+  # nearest the date first.
+  defp occurrence_shapes(%{steps: steps} = plan) do
+    if gated?(plan) do
+      {:error, "an observed day or weekday gate on a stepped date is not read yet"}
+    else
+      with {:ok, anchor} <- unstepped_shape(Map.delete(plan, :steps)) do
+        {:ok, [{:base, Enum.reduce(steps, anchor, &stepped_shape/2)}]}
+      end
+    end
+  end
 
   defp occurrence_shapes(%{kind: kind} = plan) when kind in [:easter, :orthodox] do
     {:ok, easter_gated_shapes(plan)}
@@ -124,6 +151,42 @@ defmodule Tempo.Reader.DateRule.Expression do
 
   defp gated?(plan) do
     match?([_ | _], Map.get(plan, :substitute)) or Map.has_key?(plan, :weekday_gate)
+  end
+
+  defp unstepped_shape(%{kind: kind, offset: offset}) when kind in [:easter, :orthodox] do
+    {:ok, easter_shape(kind, offset)}
+  end
+
+  defp unstepped_shape(plan) do
+    base_shape(plan)
+  end
+
+  defp stepped_shape(step, %{parts: parts, calendar: calendar}) do
+    shape([selection: parts] ++ step_window(step, calendar), calendar)
+  end
+
+  # date-holidays steps a count of days either way; a weekday after a date is
+  # on or after it, one next after it is strictly after, and one before or
+  # previous to it is strictly before.
+  defp step_window(%{days: count, direction: direction}, _calendar)
+       when direction in [:after, :next] do
+    [window: days(count + 1), day_of_week: @all_weekdays, instance: -1]
+  end
+
+  defp step_window(%{days: count}, _calendar) do
+    [window: days(-count), day_of_week: @all_weekdays, instance: 1]
+  end
+
+  defp step_window(%{weekday: weekday, count: count, direction: :after}, calendar) do
+    [window: days(week(calendar) * count), day_of_week: weekday, instance: -1]
+  end
+
+  defp step_window(%{weekday: weekday, count: count, direction: :next}, calendar) do
+    [window: days(week(calendar) * count + 1), day_of_week: weekday, instance: -1]
+  end
+
+  defp step_window(%{weekday: weekday, count: count}, calendar) do
+    [window: days(-week(calendar) * count), day_of_week: weekday, instance: 1]
   end
 
   defp shape(parts, calendar \\ Tempo.Calendar.default()) do
@@ -167,19 +230,8 @@ defmodule Tempo.Reader.DateRule.Expression do
     end
   end
 
-  # The nth weekday of a month; a fifth one runs on into the next month, as
-  # date-holidays counts it, so it is a window off the first of the month.
-  defp weekday_shape(%{month: month, count: count, weekday: weekday}) when count >= 5 do
-    calendar = Tempo.Calendar.default()
-
-    shape(
-      selection: [month: month, day: 1],
-      window: days(week(calendar) * count),
-      day_of_week: weekday,
-      instance: count
-    )
-  end
-
+  # The nth weekday of a month, the first to the fourth (a fifth is a window
+  # from the first of the month, which runs on into the next).
   defp weekday_shape(%{month: month, count: count, weekday: weekday}) do
     shape(month: month, day_of_week: weekday, instance: count)
   end
@@ -219,8 +271,8 @@ defmodule Tempo.Reader.DateRule.Expression do
     {:ok, [month: month, day: day], Tempo.Calendar.default()}
   end
 
-  defp plain_anchor(%{kind: :hebrew, calendar: calendar, day: day} = plan) do
-    {:ok, [traditional_month: traditional_month(plan), day: day], calendar}
+  defp plain_anchor(%{kind: :hebrew, calendar: calendar, month_part: month_part, day: day}) do
+    {:ok, [month_part, day: day], calendar}
   end
 
   defp plain_anchor(%{kind: kind, calendar: calendar, month: month, day: day})
@@ -365,7 +417,7 @@ defmodule Tempo.Reader.DateRule.Expression do
       end
 
     windows =
-      for {weekdays, direction, target} <- observed, weekdays != [] do
+      for {weekdays, direction, target} <- observed, match?([_ | _], weekdays) do
         {:observed, observed_shape(anchor, calendar, weekdays, direction, target)}
       end
 
@@ -542,6 +594,19 @@ defmodule Tempo.Reader.DateRule.Expression do
   end
 
   # ── the years a rule is kept in ───────────────────────────────────────
+
+  # A date written in a year of its own calendar (`31 Shahrivar 1401`) is in
+  # that one year of it.
+  defp year_domain(%{calendar_year: year} = plan) do
+    if Enum.any?(
+         [:from_year, :to_year, :active, :year_parity, :leap, :every_years],
+         &is_map_key(plan, &1)
+       ) do
+      {:error, "a date in a year of its own calendar is in no other years"}
+    else
+      {:ok, %{ranges: [{year, year}], filter: nil, cadence: 1, own_years: true}}
+    end
+  end
 
   defp year_domain(plan) do
     with {:ok, filter} <- domain_filter(plan),
@@ -796,6 +861,10 @@ defmodule Tempo.Reader.DateRule.Expression do
   # recurrence in another calendar has its domain in that calendar's years,
   # the years whose occurrence starts in the Gregorian ones.
   defp domain_in_calendar(%{ranges: [{nil, nil}], filter: nil, cadence: 1} = domain, _shape) do
+    {:ok, domain}
+  end
+
+  defp domain_in_calendar(%{own_years: true} = domain, _shape) do
     {:ok, domain}
   end
 

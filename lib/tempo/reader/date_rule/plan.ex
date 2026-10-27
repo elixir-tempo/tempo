@@ -11,14 +11,18 @@ defmodule Tempo.Reader.DateRule.Plan do
   # `:weekday` `:direction` the `:count`-th `:inner_weekday` of a month or
   # after a date), `:easter` and `:orthodox` (`:offset` days from it),
   # `:equinox` and `:solstice` (`:month`, `:offset`, `:timezone`),
-  # `:islamic`, `:hebrew`, `:persian` and `:julian` (`:calendar`, `:month`,
-  # `:day`, `:leap_month`), `:lunisolar` (`:calendar`, `:month`, `:day`,
-  # `:leap_month`, `:offset`) and `:solar_term` (`:calendar`, the term as
-  # `:count`, `:day`). Around it: `:span` (days), `:substitute` (the clauses
-  # of an observed day, as `{trigger_weekdays, direction, target, mode}`),
-  # `:weekday_gate`, `:from_year` and `:to_year` (exclusive), `:active`
-  # (date windows), `:year_parity`, `:leap`, `:every_years` and
-  # `:conditional` (a bridge or an `if is holiday` move).
+  # `:islamic`, `:persian` and `:julian` (`:calendar`, `:month`, `:day`),
+  # `:hebrew` (`:calendar`, the `:month_part` that selects its month, `:day`),
+  # `:lunisolar` (`:calendar`, `:month`, `:day`, `:leap_month`, `:offset`)
+  # and `:solar_term` (`:calendar`, the term as `:count`, `:day`). A date of
+  # another calendar written with its year has `:calendar_year`. `:steps` are
+  # the steps from the base date no kind names, the nearest first, each a
+  # count of `:days` or the `:count`-th `:weekday`, with its `:direction`.
+  # Around it: `:span` (days), `:substitute` (the clauses of an observed day,
+  # as `{trigger_weekdays, direction, target, mode}`), `:weekday_gate`,
+  # `:from_year` and `:to_year` (exclusive), `:active` (date windows),
+  # `:year_parity`, `:leap`, `:every_years` and `:conditional` (a bridge or
+  # an `if is holiday` move).
   #
   # A part the reading does not take yet is `{:error, reason}`, the reason a
   # phrase saying which.
@@ -36,24 +40,26 @@ defmodule Tempo.Reader.DateRule.Plan do
   @lunisolar_words ["chinese", "korean", "vietnamese"]
 
   # The parser numbers the Hebrew months by its list (Nisan 1 … Shvat 11,
-  # Adar 12, AdarII 13); a plan holds the traditional numbers, which name the
-  # same month in every year (Tishrei 1 … Elul 12). The Adar of Purim is 6,
-  # Adar in an ordinary year and Adar II in a leap year, and date-holidays
-  # writes it Adar or AdarII.
-  @hebrew_traditional %{
-    1 => 7,
-    2 => 8,
-    3 => 9,
-    4 => 10,
-    5 => 11,
-    6 => 12,
-    7 => 1,
-    8 => 2,
-    9 => 3,
-    10 => 4,
-    11 => 5,
-    12 => 6,
-    13 => 6
+  # Adar 12, AdarII 13); a plan holds the part that selects the same month.
+  # Most are traditional months, which name the same month in every year
+  # (Tishrei 1 … Elul 12). The parser's Adar is Adar I in a leap year and Adar
+  # in an ordinary one: the sixth month of the year from Tishrei, in order.
+  # Its AdarII is the Adar of Purim, traditional 6: Adar in an ordinary year
+  # and Adar II in a leap year.
+  @hebrew_months %{
+    1 => {:traditional_month, 7},
+    2 => {:traditional_month, 8},
+    3 => {:traditional_month, 9},
+    4 => {:traditional_month, 10},
+    5 => {:traditional_month, 11},
+    6 => {:traditional_month, 12},
+    7 => {:traditional_month, 1},
+    8 => {:traditional_month, 2},
+    9 => {:traditional_month, 3},
+    10 => {:traditional_month, 4},
+    11 => {:traditional_month, 5},
+    12 => {:month, 6},
+    13 => {:traditional_month, 6}
   }
 
   @types %{
@@ -84,103 +90,153 @@ defmodule Tempo.Reader.DateRule.Plan do
 
   # ── the base date and its weekday steps ────────────────────────────────
 
-  defp base_plan(%{fn: "gregorian", year: year} = base, []) do
-    {:ok, %{kind: :fixed, month: base.month, day: base.day, from_year: year, to_year: year + 1}}
+  # A fixed date's steps are a named kind where one says them (a weekday
+  # before or after it, the nth weekday of a month, a weekday from the nth
+  # weekday after it); any other chain is kept as steps, applied in turn.
+  defp base_plan(%{fn: "gregorian", year: year} = base, steps) do
+    with {:ok, plan} <- base_plan(Map.delete(base, :year), steps) do
+      {:ok, Map.merge(plan, %{from_year: year, to_year: year + 1})}
+    end
   end
 
   defp base_plan(%{fn: "gregorian", month: month, day: day}, []) do
     {:ok, %{kind: :fixed, month: month, day: day}}
   end
 
-  defp base_plan(%{fn: "gregorian", year: _year}, _steps) do
-    {:error, "a weekday step from a date in one year is not read yet"}
-  end
-
   defp base_plan(%{fn: "gregorian", month: month, day: day}, steps) do
-    weekday_steps(month, day, steps)
+    case weekday_steps(month, day, steps) do
+      {:ok, plan} -> {:ok, plan}
+      :steps -> stepped(%{kind: :fixed, month: month, day: day}, steps)
+    end
   end
 
-  defp base_plan(%{fn: "julian", year: _year}, _steps) do
-    {:error, "a Julian date in one year is not read yet"}
+  defp base_plan(%{fn: "julian", month: month, day: day} = base, steps) do
+    plan = %{kind: :julian, calendar: calendar_of("julian"), month: month, day: day}
+    stepped(in_own_year(plan, base), steps)
   end
 
-  defp base_plan(%{fn: "julian", month: month, day: day}, []) do
-    {:ok, %{kind: :julian, calendar: calendar_of("julian"), month: month, day: day}}
-  end
-
-  defp base_plan(%{fn: "easter", type: type, offset: offset}, []) do
-    {:ok, %{kind: easter_kind(type), offset: offset}}
+  defp base_plan(%{fn: "easter", type: type, offset: offset}, steps) do
+    stepped(%{kind: easter_kind(type), offset: offset}, steps)
   end
 
   defp base_plan(%{fn: "equinox", season: season, timezone: timezone}, steps) do
-    with {:ok, offset} <- day_offset(steps) do
-      {kind, month} = solar_event(season)
-      {:ok, %{kind: kind, month: month, offset: offset, timezone: event_zone(timezone)}}
-    end
+    {kind, month} = solar_event(season)
+    stepped(%{kind: kind, month: month, offset: 0, timezone: event_zone(timezone)}, steps)
   end
 
-  defp base_plan(%{fn: calendar, year: _year}, _steps)
-       when calendar in ["islamic", "hebrew", "jalaali"] do
-    {:error, "a date in one year of another calendar is not read yet"}
+  defp base_plan(%{fn: "islamic", month: month, day: day} = base, steps) do
+    plan = %{kind: :islamic, calendar: calendar_of("islamic"), month: month, day: day}
+    stepped(in_own_year(plan, base), steps)
   end
 
-  defp base_plan(%{fn: "islamic", month: month, day: day}, []) do
-    {:ok, %{kind: :islamic, calendar: calendar_of("islamic"), month: month, day: day}}
+  defp base_plan(%{fn: "hebrew", month: month, day: day} = base, steps) do
+    month_part = Map.fetch!(@hebrew_months, month)
+    plan = %{kind: :hebrew, calendar: calendar_of("hebrew"), month_part: month_part, day: day}
+    stepped(in_own_year(plan, base), steps)
   end
 
-  defp base_plan(%{fn: "hebrew", month: month, day: day}, []) do
-    traditional = Map.fetch!(@hebrew_traditional, month)
-    {:ok, %{kind: :hebrew, calendar: calendar_of("hebrew"), month: traditional, day: day}}
+  defp base_plan(%{fn: "jalaali", month: month, day: day} = base, steps) do
+    plan = %{kind: :persian, calendar: calendar_of("jalaali"), month: month, day: day}
+    stepped(in_own_year(plan, base), steps)
   end
 
-  defp base_plan(%{fn: "jalaali", month: month, day: day}, []) do
-    {:ok, %{kind: :persian, calendar: calendar_of("jalaali"), month: month, day: day}}
+  defp base_plan(%{fn: calendar, cycle: _cycle}, _steps) when calendar in @lunisolar_words do
+    {:error,
+     "a year of the sexagenary cycle is not read yet: Calendrical has no public reckoning of one"}
   end
 
-  defp base_plan(%{fn: calendar, solarterm: _term, cycle: _cycle}, _steps)
-       when calendar in @lunisolar_words do
-    {:error, "a solar term in one year of the cycle is not read yet"}
+  # A solar term's later day is a step of days from the term.
+  defp base_plan(%{fn: "chinese", solarterm: term, day: day}, steps) do
+    plan = %{kind: :solar_term, calendar: calendar_of("chinese"), count: term, day: 1}
+    stepped(plan, later_day(day) ++ steps)
   end
 
-  defp base_plan(%{fn: "chinese", solarterm: term, day: day}, []) do
-    {:ok, %{kind: :solar_term, calendar: calendar_of("chinese"), count: term, day: day}}
+  defp base_plan(%{fn: calendar, solarterm: _term}, _steps) when calendar in @lunisolar_words do
+    {:error, "a solar term of this calendar is not read yet"}
   end
 
-  defp base_plan(%{fn: calendar, solarterm: _term}, _steps)
-       when calendar in @lunisolar_words do
-    {:error, "a solar term of this calendar, or a step from one, is not read yet"}
-  end
-
-  defp base_plan(%{fn: calendar, cycle: _cycle}, _steps)
-       when calendar in @lunisolar_words do
-    {:error, "a lunisolar date in one year of the cycle is not read yet"}
-  end
-
+  # A lunisolar date folds a count of days into its day; a weekday step
+  # from one is a step.
   defp base_plan(%{fn: calendar} = base, steps) when calendar in @lunisolar_words do
-    with {:ok, offset} <- day_offset(steps) do
-      {:ok,
-       %{
-         kind: :lunisolar,
-         calendar: calendar_of(calendar),
-         month: base.month,
-         day: base.day,
-         leap_month: base.leap_month,
-         offset: offset
-       }}
-    end
+    {offset, steps} = folded_days(steps)
+
+    plan = %{
+      kind: :lunisolar,
+      calendar: calendar_of(calendar),
+      month: base.month,
+      day: base.day,
+      leap_month: base.leap_month,
+      offset: offset
+    }
+
+    stepped(plan, steps)
   end
 
   defp base_plan(%{fn: "bengali-revised"}, _steps) do
     {:error, "the Bengali calendar is not one Calendrical has"}
   end
 
-  defp base_plan(_base, _steps) do
-    {:error, "a weekday step from this date is not read yet"}
+  # The steps of a plan, the one nearest its date first; none is none.
+  defp stepped(plan, []) do
+    {:ok, plan}
   end
 
-  # A weekday step from a fixed date: one is a relative weekday, after the
-  # first of a month a weekday in it; two step from the nth weekday after a
-  # date to the weekday before or after it.
+  defp stepped(plan, steps) do
+    with {:ok, steps} <- reduce_ok(steps, &step/1) do
+      {:ok, Map.put(plan, :steps, steps)}
+    end
+  end
+
+  defp step(%{weekday: "day", count: count, direction: direction}) do
+    {:ok, %{days: count, direction: step_direction(direction)}}
+  end
+
+  defp step(%{weekday: weekday, count: count, direction: direction})
+       when is_map_key(@weekdays, weekday) do
+    {:ok, %{weekday: weekday_number(weekday), count: count, direction: step_direction(direction)}}
+  end
+
+  defp step(_step) do
+    {:error, "this weekday step is not read yet"}
+  end
+
+  defp step_direction(direction) when direction in ["before", "after", "next", "previous"] do
+    String.to_existing_atom(direction)
+  end
+
+  # A date in a year of its own calendar (`31 Shahrivar 1401`).
+  defp in_own_year(plan, %{year: year}) do
+    Map.put(plan, :calendar_year, year)
+  end
+
+  defp in_own_year(plan, _base) do
+    plan
+  end
+
+  defp later_day(1) do
+    []
+  end
+
+  defp later_day(day) do
+    [%{weekday: "day", count: day - 1, direction: "after"}]
+  end
+
+  # A lunisolar date's leading count of days, before or after, is folded
+  # into its day.
+  defp folded_days([%{weekday: "day", count: count, direction: "before"} | rest]) do
+    {-count, rest}
+  end
+
+  defp folded_days([%{weekday: "day", count: count, direction: "after"} | rest]) do
+    {count, rest}
+  end
+
+  defp folded_days(steps) do
+    {0, steps}
+  end
+
+  # A weekday step from a fixed date that a kind names; `:steps` for any
+  # other chain.
   defp weekday_steps(month, 1, [%{direction: "after", count: count, weekday: weekday}])
        when count in @in_month_instances and is_map_key(@weekdays, weekday) do
     {:ok, %{kind: :weekday, month: month, count: count, weekday: weekday_number(weekday)}}
@@ -218,7 +274,7 @@ defmodule Tempo.Reader.DateRule.Plan do
   end
 
   defp weekday_steps(_month, _day, _steps) do
-    {:error, "this chain of weekday steps is not read yet"}
+    :steps
   end
 
   defp nested_kind(1, count) when count in @in_month_instances do
@@ -229,22 +285,26 @@ defmodule Tempo.Reader.DateRule.Plan do
     :nested_after_date
   end
 
-  # A count of days before or after a date (`5 days before september
-  # equinox`) is its offset; no step is none.
-  defp day_offset([]) do
-    {:ok, 0}
+  defp reduce_ok(items, fun) do
+    items
+    |> Enum.reduce_while([], &collect_ok(fun.(&1), &2))
+    |> finish_ok()
   end
 
-  defp day_offset([%{weekday: "day", count: count, direction: "before"}]) do
-    {:ok, -count}
+  defp collect_ok({:ok, value}, acc) do
+    {:cont, [value | acc]}
   end
 
-  defp day_offset([%{weekday: "day", count: count, direction: "after"}]) do
-    {:ok, count}
+  defp collect_ok({:error, _reason} = error, _acc) do
+    {:halt, error}
   end
 
-  defp day_offset(_steps) do
-    {:error, "a weekday step from this date is not read yet"}
+  defp finish_ok({:error, _reason} = error) do
+    error
+  end
+
+  defp finish_ok(acc) when is_list(acc) do
+    {:ok, Enum.reverse(acc)}
   end
 
   # The grammar's calendar words are a fixed set, each of which names one.

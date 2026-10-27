@@ -1,0 +1,657 @@
+{
+  "source": "date-holidays-parser v3.4.7, test/DateFn.mocha.js: each test that reads a rule alone (no other holidays, no disable or enable), its year and the dates it expects",
+  "cases": [
+    {
+      "rule": "01-01 14:00",
+      "year": 2015,
+      "dates": [
+        "2015-01-01"
+      ]
+    },
+    {
+      "rule": "01-01 and if monday then next monday",
+      "year": 2017,
+      "dates": [
+        "2017-01-01"
+      ]
+    },
+    {
+      "rule": "01-01 and if monday then next monday",
+      "year": 2018,
+      "dates": [
+        "2018-01-01",
+        "2018-01-08"
+      ]
+    },
+    {
+      "rule": "01-01 if friday then previous monday",
+      "year": 2016,
+      "dates": []
+    },
+    {
+      "rule": "01-01 if monday then next monday",
+      "year": 2015,
+      "dates": [
+        "2015-01-01"
+      ]
+    },
+    {
+      "rule": "01-01 if monday then next monday",
+      "year": 2018,
+      "dates": [
+        "2018-01-08"
+      ]
+    },
+    {
+      "rule": "01-01 if sunday then next monday 14:12 if friday then 15:23",
+      "year": 2016,
+      "dates": [
+        "2016-01-01"
+      ]
+    },
+    {
+      "rule": "01-01 if sunday then next monday 14:12 if friday then 15:23",
+      "year": 2017,
+      "dates": [
+        "2017-01-02"
+      ]
+    },
+    {
+      "rule": "01-01 if sunday then next sunday",
+      "year": 2017,
+      "dates": [
+        "2017-01-08"
+      ]
+    },
+    {
+      "rule": "01-01 if sunday then previous monday",
+      "year": 2016,
+      "dates": [
+        "2016-01-01",
+        "2016-12-26"
+      ]
+    },
+    {
+      "rule": "02-06 14:00 and if saturday then previous friday 16:45 if sunday then next monday PT12H",
+      "year": 2016,
+      "dates": [
+        "2016-02-06",
+        "2016-02-05"
+      ]
+    },
+    {
+      "rule": "02-07 and if saturday then previous friday 16:45 if sunday then next monday PT12H",
+      "year": 2016,
+      "dates": [
+        "2016-02-07",
+        "2016-02-08"
+      ]
+    },
+    {
+      "rule": "03-06 if sunday then previous sunday",
+      "year": 2016,
+      "dates": [
+        "2016-02-28"
+      ]
+    },
+    {
+      "rule": "03-12",
+      "year": 2016,
+      "dates": [
+        "2016-03-12"
+      ]
+    },
+    {
+      "rule": "03-12T16",
+      "year": 2016,
+      "dates": [
+        "2016-03-12"
+      ]
+    },
+    {
+      "rule": "05-01 14:00 if sunday then 00:00",
+      "year": 2015,
+      "dates": [
+        "2015-05-01"
+      ]
+    },
+    {
+      "rule": "05-01 14:00 if sunday then 00:00",
+      "year": 2016,
+      "dates": [
+        "2016-05-01"
+      ]
+    },
+    {
+      "rule": "09-04 08:00 PT14H",
+      "year": 2015,
+      "dates": [
+        "2015-09-04"
+      ]
+    },
+    {
+      "rule": "09-04 08:00 PT321H",
+      "year": 2015,
+      "dates": [
+        "2015-09-04"
+      ]
+    },
+    {
+      "rule": "09-22 on sunday, saturday",
+      "year": 2013,
+      "dates": [
+        "2013-09-22"
+      ]
+    },
+    {
+      "rule": "09-22 on sunday, saturday",
+      "year": 2015,
+      "dates": []
+    },
+    {
+      "rule": "1 Farvardin",
+      "year": 2022,
+      "dates": [
+        "2022-03-21"
+      ]
+    },
+    {
+      "rule": "1 Muharram 1443",
+      "year": 2021,
+      "dates": [
+        "2021-08-09"
+      ]
+    },
+    {
+      "rule": "1 Tevet",
+      "year": 2024,
+      "dates": []
+    },
+    {
+      "rule": "1 Tevet",
+      "year": 2025,
+      "dates": [
+        "2025-01-01",
+        "2025-12-21"
+      ]
+    },
+    {
+      "rule": "1 day before 11-23",
+      "year": 2015,
+      "dates": [
+        "2015-11-22"
+      ]
+    },
+    {
+      "rule": "1 day before june solstice",
+      "year": 2015,
+      "dates": [
+        "2015-06-20"
+      ]
+    },
+    {
+      "rule": "10-12 if tuesday,wednesday then previous monday if thursday,friday,saturday,sunday then next monday",
+      "year": 2015,
+      "dates": [
+        "2015-10-12"
+      ]
+    },
+    {
+      "rule": "10-12 if tuesday,wednesday then previous monday if thursday,friday,saturday,sunday then next monday",
+      "year": 2016,
+      "dates": [
+        "2016-10-10"
+      ]
+    },
+    {
+      "rule": "10-12 if tuesday,wednesday then previous monday if thursday,friday,saturday,sunday then next monday",
+      "year": 2017,
+      "dates": [
+        "2017-10-16"
+      ]
+    },
+    {
+      "rule": "11 Tevet",
+      "year": 2025,
+      "dates": [
+        "2025-01-11",
+        "2025-12-31"
+      ]
+    },
+    {
+      "rule": "11-01 in even years",
+      "year": 2014,
+      "dates": [
+        "2014-11-01"
+      ]
+    },
+    {
+      "rule": "11-01 in even years",
+      "year": 2015,
+      "dates": []
+    },
+    {
+      "rule": "11-01 in leap years",
+      "year": 2000,
+      "dates": [
+        "2000-11-01"
+      ]
+    },
+    {
+      "rule": "11-01 in leap years",
+      "year": 2012,
+      "dates": [
+        "2012-11-01"
+      ]
+    },
+    {
+      "rule": "11-01 in leap years",
+      "year": 2014,
+      "dates": []
+    },
+    {
+      "rule": "11-01 in non-leap years",
+      "year": 2011,
+      "dates": [
+        "2011-11-01"
+      ]
+    },
+    {
+      "rule": "11-01 in non-leap years",
+      "year": 2012,
+      "dates": []
+    },
+    {
+      "rule": "11-01 in odd years",
+      "year": 2014,
+      "dates": []
+    },
+    {
+      "rule": "11-01 in odd years",
+      "year": 2015,
+      "dates": [
+        "2015-11-01"
+      ]
+    },
+    {
+      "rule": "12 Tevet",
+      "year": 2025,
+      "dates": [
+        "2025-01-12"
+      ]
+    },
+    {
+      "rule": "12-01 every 6 years since 1934",
+      "year": 2011,
+      "dates": []
+    },
+    {
+      "rule": "12-01 every 6 years since 1934",
+      "year": 2012,
+      "dates": [
+        "2012-12-01"
+      ]
+    },
+    {
+      "rule": "12-26 not on friday, monday",
+      "year": 2014,
+      "dates": []
+    },
+    {
+      "rule": "12-26 not on friday, monday",
+      "year": 2015,
+      "dates": [
+        "2015-12-26"
+      ]
+    },
+    {
+      "rule": "12-26 not on friday, monday",
+      "year": 2016,
+      "dates": []
+    },
+    {
+      "rule": "12-31 14:00 if sunday then 00:00",
+      "year": 2015,
+      "dates": [
+        "2015-12-31"
+      ]
+    },
+    {
+      "rule": "12-31 14:00 if sunday then 00:00",
+      "year": 2017,
+      "dates": [
+        "2017-12-31"
+      ]
+    },
+    {
+      "rule": "13 Rabi al-thani",
+      "year": 2017,
+      "dates": [
+        "2017-01-11",
+        "2017-12-31"
+      ]
+    },
+    {
+      "rule": "14 AdarII",
+      "year": 2014,
+      "dates": [
+        "2014-03-16"
+      ]
+    },
+    {
+      "rule": "15 Nisan",
+      "year": 2015,
+      "dates": [
+        "2015-04-04"
+      ]
+    },
+    {
+      "rule": "15 Nisan",
+      "year": 2016,
+      "dates": [
+        "2016-04-23"
+      ]
+    },
+    {
+      "rule": "18 Tevet",
+      "year": 2015,
+      "dates": [
+        "2015-01-09",
+        "2015-12-30"
+      ]
+    },
+    {
+      "rule": "19 Tevet",
+      "year": 2024,
+      "dates": []
+    },
+    {
+      "rule": "20 Tevet",
+      "year": 2024,
+      "dates": [
+        "2024-01-01"
+      ]
+    },
+    {
+      "rule": "2015-10-09",
+      "year": 2015,
+      "dates": [
+        "2015-10-09"
+      ]
+    },
+    {
+      "rule": "2015-10-09",
+      "year": 2016,
+      "dates": []
+    },
+    {
+      "rule": "29 Dhu al-Hijjah 1442",
+      "year": 2021,
+      "dates": [
+        "2021-08-08"
+      ]
+    },
+    {
+      "rule": "29 Esfand 1400",
+      "year": 2022,
+      "dates": [
+        "2022-03-20"
+      ]
+    },
+    {
+      "rule": "2nd sunday after 11-01",
+      "year": 2015,
+      "dates": [
+        "2015-11-08"
+      ]
+    },
+    {
+      "rule": "2nd sunday before 11-01",
+      "year": 2015,
+      "dates": [
+        "2015-10-18"
+      ]
+    },
+    {
+      "rule": "3 Shawwal",
+      "year": 2015,
+      "dates": [
+        "2015-07-19"
+      ]
+    },
+    {
+      "rule": "3 days after september equinox",
+      "year": 2015,
+      "dates": [
+        "2015-09-26"
+      ]
+    },
+    {
+      "rule": "3rd monday before december solstice",
+      "year": 2015,
+      "dates": [
+        "2015-12-07"
+      ]
+    },
+    {
+      "rule": "4 Shawwal and if saturday then next monday",
+      "year": 2016,
+      "dates": [
+        "2016-07-09",
+        "2016-07-11"
+      ]
+    },
+    {
+      "rule": "4 Shawwal and if saturday then next monday",
+      "year": 2017,
+      "dates": [
+        "2017-06-28"
+      ]
+    },
+    {
+      "rule": "6 Adar 5779",
+      "year": 2019,
+      "dates": [
+        "2019-02-11"
+      ]
+    },
+    {
+      "rule": "bengali-revised 1-1",
+      "year": 2015,
+      "dates": [
+        "2015-04-14"
+      ]
+    },
+    {
+      "rule": "bengali-revised 12-1",
+      "year": 2015,
+      "dates": [
+        "2015-03-15"
+      ]
+    },
+    {
+      "rule": "chinese 01-0-01",
+      "year": 2015,
+      "dates": [
+        "2015-02-19"
+      ]
+    },
+    {
+      "rule": "chinese 8-15 solarterm",
+      "year": 2015,
+      "dates": [
+        "2015-06-04"
+      ]
+    },
+    {
+      "rule": "easter -3",
+      "year": 2015,
+      "dates": [
+        "2015-04-02"
+      ]
+    },
+    {
+      "rule": "easter -3 14:00 P3D",
+      "year": 2015,
+      "dates": [
+        "2015-04-02"
+      ]
+    },
+    {
+      "rule": "easter -3 14:00 PT4H",
+      "year": 2015,
+      "dates": [
+        "2015-04-02"
+      ]
+    },
+    {
+      "rule": "easter -3 16:00",
+      "year": 2015,
+      "dates": [
+        "2015-04-02"
+      ]
+    },
+    {
+      "rule": "julian 12-25",
+      "year": 2016,
+      "dates": [
+        "2016-01-07"
+      ]
+    },
+    {
+      "rule": "julian 2016-12-25",
+      "year": 2017,
+      "dates": [
+        "2017-01-07"
+      ]
+    },
+    {
+      "rule": "julian 2016-12-25",
+      "year": 2018,
+      "dates": []
+    },
+    {
+      "rule": "korean 1-0-1",
+      "year": 2015,
+      "dates": [
+        "2015-02-19"
+      ]
+    },
+    {
+      "rule": "march equinox",
+      "year": 2015,
+      "dates": [
+        "2015-03-20"
+      ]
+    },
+    {
+      "rule": "march equinox in Asia/Tokyo",
+      "year": 2015,
+      "dates": [
+        "2015-03-21"
+      ]
+    },
+    {
+      "rule": "orthodox 50",
+      "year": 2015,
+      "dates": [
+        "2015-06-01"
+      ]
+    },
+    {
+      "rule": "substitutes 01-01 if sunday then next tuesday",
+      "year": 2016,
+      "dates": []
+    },
+    {
+      "rule": "substitutes 01-01 if sunday then next tuesday",
+      "year": 2017,
+      "dates": [
+        "2017-01-03"
+      ]
+    },
+    {
+      "rule": "substitutes 04-02 if tuesday then previous monday if thursday then next friday",
+      "year": 2015,
+      "dates": [
+        "2015-04-03"
+      ]
+    },
+    {
+      "rule": "substitutes 04-02 if tuesday then previous monday if thursday then next friday",
+      "year": 2016,
+      "dates": []
+    },
+    {
+      "rule": "substitutes 1 Shawwal if wednesday,saturday,sunday then next monday",
+      "year": 2016,
+      "dates": [
+        "2016-07-11"
+      ]
+    },
+    {
+      "rule": "substitutes 1 Shawwal if wednesday,saturday,sunday then next monday",
+      "year": 2018,
+      "dates": []
+    },
+    {
+      "rule": "sunday after 4th thursday after 11-01",
+      "year": 2015,
+      "dates": [
+        "2015-11-29"
+      ]
+    },
+    {
+      "rule": "tuesday after 1st monday after 11-01 in even years",
+      "year": 2014,
+      "dates": [
+        "2014-11-04"
+      ]
+    },
+    {
+      "rule": "tuesday after 1st monday after 11-01 in even years",
+      "year": 2015,
+      "dates": []
+    },
+    {
+      "rule": "tuesday after 1st monday after 11-01 in odd years",
+      "year": 2014,
+      "dates": []
+    },
+    {
+      "rule": "tuesday after 1st monday after 11-01 in odd years",
+      "year": 2015,
+      "dates": [
+        "2015-11-03"
+      ]
+    },
+    {
+      "rule": "tuesday before 2nd tuesday after 11-01",
+      "year": 2015,
+      "dates": [
+        "2015-11-03"
+      ]
+    },
+    {
+      "rule": "tuesday before 4th thursday after 11-01",
+      "year": 2015,
+      "dates": [
+        "2015-11-24"
+      ]
+    },
+    {
+      "rule": "vietnamese 1-0-1",
+      "year": 2015,
+      "dates": [
+        "2015-02-19"
+      ]
+    },
+    {
+      "rule": "wednesday before 11-23",
+      "year": 2015,
+      "dates": [
+        "2015-11-18"
+      ]
+    }
+  ]
+}
