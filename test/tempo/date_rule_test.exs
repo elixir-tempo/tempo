@@ -158,6 +158,29 @@ defmodule Tempo.DateRuleTest do
       assert written("1 Shawwal PT90H") == "R/../P1Y/FLL10M1DN/P4DN[u-ca=islamic-umalqura]"
       assert written("easter -50 PT48H") == "R/../P1Y/FLLL(easter)eN/P-51D6K1IN/P2DN"
     end
+
+    test "from the time of day it starts at, which alone lasts to midnight" do
+      assert written("12-31 14:00") == "R/../P1Y/FL12M31DN"
+      assert written("12-31 14:00 PT12H") == "R/../P1Y/FLL12M31DN/P2DN"
+      assert written("easter -3 14:00 P3D") == "R/../P1Y/FLLL(easter)eN/P-4D4K1IN/P4DN"
+    end
+
+    test "of a weekday step" do
+      assert written("1st saturday in October P2D") == "R/../P1Y/FLL10M6K1IN/P2DN"
+      assert written("1st Friday after 07-10 P4D") == "R/../P1Y/FLLL7M10DN/P7D5K-1IN/P4DN"
+    end
+
+    test "of an observed day, its date's or its clause's" do
+      {:ok, before_clause} = DateRule.parse("01-01 P2D and if sunday then next monday")
+      {:ok, in_clause} = DateRule.parse("01-01 and if sunday then next monday P2D")
+
+      assert members(before_clause) == [
+               "R/../P1Y/FLL1M1DN/P2DN",
+               "R/../P1Y/FLLL1M1D7KN/P8D1K-1IN/P2DN"
+             ]
+
+      assert members(in_clause) == ["R/../P1Y/FL1M1DN", "R/../P1Y/FLLL1M1D7KN/P8D1K-1IN/P2DN"]
+    end
   end
 
   describe "the years and days a rule is kept in" do
@@ -246,6 +269,9 @@ defmodule Tempo.DateRuleTest do
 
       assert {:error, %ParseError{reason: "a year of the sexagenary cycle is not read yet" <> _}} =
                DateRule.parse("chinese 78-32-8-15 solarterm")
+
+      assert {:error, %ParseError{reason: "a clause that changes the time of a date" <> _}} =
+               DateRule.parse("12-31 14:00 PT12H if Sunday then 00:00")
     end
 
     test "is returned for what is no text" do

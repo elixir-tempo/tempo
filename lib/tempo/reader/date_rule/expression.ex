@@ -24,20 +24,6 @@ defmodule Tempo.Reader.DateRule.Expression do
   @weekday_names [:monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday]
   @all_weekdays 1..7
 
-  # The kinds whose occurrence a span extends over several days.
-  @span_kinds [
-    :fixed,
-    :easter,
-    :orthodox,
-    :equinox,
-    :solstice,
-    :hebrew,
-    :persian,
-    :julian,
-    :islamic,
-    :lunisolar
-  ]
-
   @doc false
   @spec build(map(), keyword()) :: {:ok, Tempo.t()} | {:error, String.t()}
   def build(%{conditional: conditional} = plan, options) do
@@ -417,8 +403,8 @@ defmodule Tempo.Reader.DateRule.Expression do
       end
 
     windows =
-      for {weekdays, direction, target} <- observed, match?([_ | _], weekdays) do
-        {:observed, observed_shape(anchor, calendar, weekdays, direction, target)}
+      for {weekdays, direction, target, span} <- observed, match?([_ | _], weekdays) do
+        {:observed, spanned(observed_shape(anchor, calendar, weekdays, direction, target), span)}
       end
 
     base ++ windows
@@ -438,13 +424,14 @@ defmodule Tempo.Reader.DateRule.Expression do
 
   # The clauses in order: each fires on the allowed weekdays no earlier
   # clause claimed. The weekdays that keep the date, and each clause's
-  # `{weekdays, direction, target}`.
+  # `{weekdays, direction, target, span}`.
   defp substitution_plan(clauses, allowed) do
     {observed, claimed, added} =
-      Enum.reduce(clauses, {[], [], []}, fn {triggers, direction, target, mode},
+      Enum.reduce(clauses, {[], [], []}, fn {triggers, direction, target, mode, span},
                                             {observed, claimed, added} ->
         fires = Enum.filter(allowed, &(&1 in triggers and &1 not in claimed))
-        {observed ++ [{fires, direction, target}], claimed ++ triggers, added(added, fires, mode)}
+        observed = observed ++ [{fires, direction, target, span}]
+        {observed, claimed ++ triggers, added(added, fires, mode)}
       end)
 
     untriggered = untriggered(clauses, allowed, claimed)
@@ -549,7 +536,7 @@ defmodule Tempo.Reader.DateRule.Expression do
 
     if weekday in gate_weekdays(Map.get(plan, :weekday_gate)) do
       clauses
-      |> Enum.find(fn {triggers, _direction, _target, _mode} -> weekday in triggers end)
+      |> Enum.find(fn {triggers, _direction, _target, _mode, _span} -> weekday in triggers end)
       |> easter_observed(kind, offset, weekday, clauses)
     else
       []
@@ -564,9 +551,15 @@ defmodule Tempo.Reader.DateRule.Expression do
     end
   end
 
-  defp easter_observed({_triggers, direction, target, mode}, kind, offset, weekday, _clauses) do
-    observed =
-      {:observed, easter_shape(kind, offset + observed_shift(weekday, direction, target))}
+  defp easter_observed(
+         {_triggers, direction, target, mode, span},
+         kind,
+         offset,
+         weekday,
+         _clauses
+       ) do
+    shift = observed_shift(weekday, direction, target)
+    observed = {:observed, spanned(easter_shape(kind, offset + shift), span)}
 
     if mode == :add do
       [{:base, easter_shape(kind, offset)}, observed]
@@ -772,13 +765,22 @@ defmodule Tempo.Reader.DateRule.Expression do
     end
   end
 
-  # The base carries the rule's span; an observed day is marked.
-  defp role_shape(:base, %{parts: parts} = shape, %{kind: kind, span: span})
-       when kind in @span_kinds and span > 1 do
-    %{shape | parts: [selection: parts, window: days(span)]}
+  # The base carries the rule's span, an observed day its clause's (given it
+  # where it is made); an observed day is marked.
+  defp role_shape(:base, shape, %{span: span}) do
+    spanned(shape, span)
   end
 
   defp role_shape(_role, shape, _plan) do
+    shape
+  end
+
+  # A date that lasts more than a day is a window of its days from it.
+  defp spanned(%{parts: parts} = shape, span) when span > 1 do
+    %{shape | parts: [selection: parts, window: days(span)]}
+  end
+
+  defp spanned(shape, _span) do
     shape
   end
 

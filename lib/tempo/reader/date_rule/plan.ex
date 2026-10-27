@@ -18,8 +18,9 @@ defmodule Tempo.Reader.DateRule.Plan do
   # another calendar written with its year has `:calendar_year`. `:steps` are
   # the steps from the base date no kind names, the nearest first, each a
   # count of `:days` or the `:count`-th `:weekday`, with its `:direction`.
-  # Around it: `:span` (days), `:substitute` (the clauses of an observed day,
-  # as `{trigger_weekdays, direction, target, mode}`), `:weekday_gate`,
+  # Around it: `:span` (the days the date reaches into), `:substitute` (the
+  # clauses of an observed day, as `{trigger_weekdays, direction, target,
+  # mode, span}`), `:weekday_gate`,
   # `:from_year` and `:to_year` (exclusive), `:active` (date windows),
   # `:year_parity`, `:leap`, `:every_years` and `:conditional` (a bridge or
   # an `if is holiday` move).
@@ -83,14 +84,18 @@ defmodule Tempo.Reader.DateRule.Plan do
   # The weekday steps a weekday-in-month can be without overflowing its month.
   @in_month_instances 1..4
 
+  # date-holidays measures a holiday in minutes from the time it starts, a
+  # day being 24 hours: a date alone lasts a day, a time of day lasts to the
+  # midnight after it, and a duration lasts as long as it says from the time.
+  @day_minutes 24 * 60
+
   @doc false
   @spec plan([map()]) :: {:ok, map()} | {:error, String.t()}
   def plan([%{fn: _} = base | rest]) do
     {steps, rest} = Enum.split_while(rest, &match?(%{rule: "dateDir"}, &1))
 
-    with {:ok, plan} <- base_plan(base, steps),
-         {:ok, plan} <- around(rest, plan, initial_state(rest)) do
-      {:ok, finished(plan)}
+    with {:ok, plan} <- base_plan(base, steps) do
+      around(rest, plan, initial_state(rest))
     end
   end
 
@@ -364,9 +369,18 @@ defmodule Tempo.Reader.DateRule.Plan do
 
   # A `substitutes` anywhere makes every clause give the observed day alone;
   # an `and` before a clause makes it, and every later one, add the observed
-  # day to the date rather than move it.
+  # day to the date rather than move it. `:hours` is the date's start and
+  # length in minutes, as the parser keeps them; each clause keeps its own,
+  # and `:retimed` holds those of the clauses that change only the time.
   defp initial_state(tokens) do
-    %{mode: initial_mode(tokens), pending_and: false, dates: [], clauses: []}
+    %{
+      mode: initial_mode(tokens),
+      pending_and: false,
+      dates: [],
+      clauses: [],
+      hours: {0, @day_minutes},
+      retimed: []
+    }
   end
 
   defp initial_mode(tokens) do
@@ -377,8 +391,18 @@ defmodule Tempo.Reader.DateRule.Plan do
     end
   end
 
-  defp around([], plan, state) do
-    {:ok, with_clauses(plan, state.clauses)}
+  # The date and each observed day span the days their hours reach into. A
+  # clause that changes only the time is no change of the days unless it
+  # moves the end into another day, which is not read yet.
+  defp around([], plan, %{hours: hours} = state) do
+    span = days_reached(hours)
+
+    if Enum.all?(state.retimed, &(days_reached(&1) == span)) do
+      clauses = Enum.map(state.clauses, &clause_span/1)
+      {:ok, with_clauses(Map.put(plan, :span, span), clauses)}
+    else
+      {:error, "a clause that changes the time of a date into another day is not read yet"}
+    end
   end
 
   defp around([token | rest], plan, state) do
@@ -404,32 +428,32 @@ defmodule Tempo.Reader.DateRule.Plan do
     {:error, "if equal is not read yet"}
   end
 
-  defp part(%{rule: "time"}, plan, state) do
-    {:ok, plan, state}
+  # A time or a duration written after the date is that of every date the
+  # rule has made so far, as the parser sets it on each.
+  defp part(%{rule: rule} = token, plan, state) when rule in ["time", "duration"] do
+    {:ok, plan, timed(state, token)}
   end
 
-  # A duration is in hours from the start of the day: the days it reaches
-  # into are the span, `PT90H` four.
-  defp part(%{rule: "duration", duration: hours}, plan, state) do
-    days =
-      (hours / 24)
-      |> Float.ceil()
-      |> trunc()
-
-    {:ok, Map.put(plan, :span, max(days, 1)), state}
-  end
-
-  defp part(%{rule: "dateIfThen", if: triggers, direction: direction, then: target}, plan, state)
+  defp part(
+         %{rule: "dateIfThen", if: triggers, direction: direction, then: target} = token,
+         plan,
+         state
+       )
        when direction in ["next", "previous"] and is_map_key(@weekdays, target) do
     mode = clause_mode(state)
-    clause = {weekday_numbers(triggers), step_direction(direction), weekday_number(target), mode}
+    hours = clause_hours(state.hours, token)
+
+    clause =
+      {weekday_numbers(triggers), step_direction(direction), weekday_number(target), mode, hours}
+
     {:ok, plan, %{state | mode: mode, pending_and: false, clauses: state.clauses ++ [clause]}}
   end
 
   # A clause that changes only the time a holiday starts at.
   defp part(%{rule: "dateIfThen", rules: _times} = token, plan, state)
        when not is_map_key(token, :direction) do
-    {:ok, plan, %{state | pending_and: false}}
+    retimed = state.retimed ++ [clause_hours(state.hours, token)]
+    {:ok, plan, %{state | pending_and: false, retimed: retimed}}
   end
 
   defp part(%{rule: "dateIfThen"}, _plan, _state) do
@@ -516,6 +540,51 @@ defmodule Tempo.Reader.DateRule.Plan do
     Map.put(plan, :substitute, clauses)
   end
 
+  # The start and length a time or a duration gives a date: a time lasts to
+  # the midnight after it, a duration as long as it says from the time.
+  defp hours_after({_start, _length}, %{rule: "time", hour: hour, minute: minute}) do
+    start = hour * 60 + minute
+    {start, @day_minutes - start}
+  end
+
+  defp hours_after({start, _length}, %{rule: "duration", duration: hours}) do
+    {start, trunc(hours * 60)}
+  end
+
+  defp hours_after(hours, _token) do
+    hours
+  end
+
+  defp timed(state, token) do
+    %{
+      state
+      | hours: hours_after(state.hours, token),
+        clauses: Enum.map(state.clauses, &clause_timed(&1, token)),
+        retimed: Enum.map(state.retimed, &hours_after(&1, token))
+    }
+  end
+
+  defp clause_timed({triggers, direction, target, mode, hours}, token) do
+    {triggers, direction, target, mode, hours_after(hours, token)}
+  end
+
+  # An observed day starts as a copy of the date, its time and length with
+  # it, and takes the time and the duration its clause writes.
+  defp clause_hours(hours, token) do
+    token
+    |> Map.get(:rules, [])
+    |> Enum.reduce(hours, &hours_after(&2, &1))
+  end
+
+  defp clause_span({triggers, direction, target, mode, hours}) do
+    {triggers, direction, target, mode, days_reached(hours)}
+  end
+
+  # The days from the date's start to the last minute before its end.
+  defp days_reached({start, length}) do
+    max(div(start + length + @day_minutes - 1, @day_minutes), 1)
+  end
+
   defp year_filter("even") do
     %{year_parity: :even}
   end
@@ -593,11 +662,5 @@ defmodule Tempo.Reader.DateRule.Plan do
 
   defp weekday_numbers(weekdays) do
     for weekday <- weekdays, is_map_key(@weekdays, weekday), do: weekday_number(weekday)
-  end
-
-  # A span is a count of days for a date that has one; a weekday step's
-  # count is its ordinal, and a span is not read on it.
-  defp finished(plan) do
-    Map.put_new(plan, :span, 1)
   end
 end
