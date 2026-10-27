@@ -42,6 +42,10 @@ defmodule Tempo.Reader.DateRule.Expression do
     :replacements
   ]
 
+  # The parts of a plan that name the years a date falls in, which a date
+  # written in one year of its calendar has none of.
+  @year_gates [:from_year, :to_year, :active, :year_parity, :leap, :every_years]
+
   # The gates a `substitutes` entry may have and still stand in for a date:
   # those of its years alone.
   @entry_gates [
@@ -633,14 +637,18 @@ defmodule Tempo.Reader.DateRule.Expression do
   # ── the years a rule is kept in ───────────────────────────────────────
 
   # A date written in a year of its own calendar (`31 Shahrivar 1401`) is in
-  # that one year of it.
+  # that one year of it, and a solar term in a lunisolar year named by its
+  # cycle (`chinese 78-32-8-15 solarterm`) in the Gregorian year that year
+  # begins in.
+  defp year_domain(%{lunisolar_year: {calendar, year}} = plan) do
+    with :ok <- one_year_only(plan),
+         {:ok, gregorian} <- gregorian_year_begun(calendar, year) do
+      {:ok, %{ranges: [{gregorian, gregorian}], filter: nil, cadence: 1}}
+    end
+  end
+
   defp year_domain(%{calendar_year: year} = plan) do
-    if Enum.any?(
-         [:from_year, :to_year, :active, :year_parity, :leap, :every_years],
-         &is_map_key(plan, &1)
-       ) do
-      {:error, "a date in a year of its own calendar is in no other years"}
-    else
+    with :ok <- one_year_only(plan) do
       {:ok, %{ranges: [{year, year}], filter: nil, cadence: 1, own_years: true}}
     end
   end
@@ -650,6 +658,21 @@ defmodule Tempo.Reader.DateRule.Expression do
          {:ok, ranges} <- active_ranges(plan),
          {:ok, cadence} <- domain_cadence(plan, ranges) do
       {:ok, %{ranges: ranges, filter: filter, cadence: cadence}}
+    end
+  end
+
+  defp one_year_only(plan) do
+    if Enum.any?(@year_gates, &is_map_key(plan, &1)) do
+      {:error, "a date in a year of its own calendar is in no other years"}
+    else
+      :ok
+    end
+  end
+
+  defp gregorian_year_begun(calendar, year) do
+    with {:ok, new_year} <- Tempo.new(year: year, month: 1, day: 1, calendar: calendar),
+         {:ok, there} <- Tempo.to_calendar(new_year, Tempo.Calendar.default()) do
+      {:ok, Tempo.year(there)}
     end
   end
 

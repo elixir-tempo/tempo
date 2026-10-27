@@ -25,17 +25,14 @@ defmodule Tempo.DateRuleTest do
   # The rules of date-holidays-parser's fixture not read yet, each a part of
   # the grammar still to be built (plans/date-rule.md): a rule that is not a
   # date, an `if is holiday` move by more than one, `if equal`, and the
-  # Bengali calendar and the years of the sexagenary cycle, which Calendrical
-  # does not have. None is a rule of the date-holidays dataset but the
-  # Bengali ones.
+  # Bengali calendar, which Calendrical does not have. None is a rule of the
+  # date-holidays dataset but the Bengali ones.
   @not_read_yet [
     "#1111",
     "03-01 and if Saturday, Sunday then next Monday if is holiday then 2nd next Tuesday since 2022",
     "2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01",
     "bengali-revised 1-1",
-    "bengali-revised 1425-1-1",
-    "chinese 78-32-8-15 solarterm",
-    "friday before chinese 78-32-8-15 solarterm"
+    "bengali-revised 1425-1-1"
   ]
 
   # The rules of the parser's own tests not read yet.
@@ -133,6 +130,27 @@ defmodule Tempo.DateRuleTest do
     test "a date of another calendar with its year is in that year of it" do
       assert written("31 Shahrivar 1401") == "R/{1401Y}/P1Y/FL6M31DN[u-ca=persian]"
       assert written("julian 2015-01-09") == "R/{2015Y}/P1Y/FL1M9DN[u-ca=julian]"
+    end
+
+    test "a cycle and its year name one year: a date in it, a solar term in the Gregorian year it begins in" do
+      # The 32nd year of the 78th cycle began on the 19th of February 2015.
+      assert written("chinese 78-32-08-0-15") == "R/{4652Y}/P1Y/FL8m15DN[u-ca=chinese]"
+
+      assert written("chinese 78-32-8-15 solarterm") ==
+               "R/{2015Y}/P1Y/FLL(xiaoman)eN/P15D{1..7}K-1IN"
+
+      assert dates_in("chinese 78-32-08-0-15", 2015) == {:ok, ["2015-09-27"]}
+      assert dates_in("chinese 78-32-8-15 solarterm", 2015) == {:ok, ["2015-06-04"]}
+      assert dates_in("chinese 78-32-8-15 solarterm", 2016) == {:ok, []}
+      assert dates_in("friday before chinese 78-32-8-15 solarterm", 2015) == {:ok, ["2015-05-29"]}
+    end
+
+    test "a year the cycle does not have is an error, as are other years beside it" do
+      assert {:error, %ParseError{reason: "[cycle: 78, cyclic_year: 61]" <> _}} =
+               DateRule.parse("chinese 78-61-8-15 solarterm")
+
+      assert {:error, %ParseError{reason: "a date in a year of its own calendar" <> _}} =
+               DateRule.parse("chinese 78-32-08-0-15 since 2010")
     end
 
     test "Adar is the sixth month in order, Adar I in a leap year; AdarII is Purim's" do
@@ -415,8 +433,8 @@ defmodule Tempo.DateRuleTest do
       assert {:error, %ParseError{reason: "the Bengali calendar is not one Calendrical has"}} =
                DateRule.parse("bengali-revised 1-1")
 
-      assert {:error, %ParseError{reason: "a year of the sexagenary cycle is not read yet" <> _}} =
-               DateRule.parse("chinese 78-32-8-15 solarterm")
+      assert {:error, %ParseError{reason: "a solar term of this calendar is not read yet"}} =
+               DateRule.parse("korean 78-32-5-01 solarterm")
 
       assert {:error, %ParseError{reason: "a clause that changes the time of a date" <> _}} =
                DateRule.parse("12-31 14:00 PT12H if Sunday then 00:00")

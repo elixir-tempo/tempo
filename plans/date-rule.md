@@ -122,10 +122,6 @@ Taken by the user on 2026-10-27, for tempo_holidays to compile its dataset with 
 
 * [ ] **tempo_holidays on Tempo.DateRule** — its dataset compiled with it; its conformance corpus unchanged.
 
-### Blocked
-
-* [ ] **A year of the sexagenary cycle** — `chinese 78-32-8-15 solarterm`, a Chinese date in the 32nd year of the 78th cycle. The parser drops the cycle and year (date-chinese's `toJDE/1` is given the Gregorian year), so it reads the date in every year; Tempo reads it in that one year or not at all, a named error until then. Blocked on Calendrical 2.2, whose lunisolar calendars give the year a cycle and its year name (`elapsed_years/2`, counted from 2637 BCE whatever the calendar's epoch; on Calendrical's main, unreleased, 2026-10-27).
-
 ### Deferred
 
 * [ ] **The Bengali calendar** — eight rules of the dataset (`bengali-revised 1-1` …) and two of the parser's tests, read as a named error. Set aside by the user (2026-10-27); it needs a Bengali (revised) calendar in Calendrical, which has none.
@@ -135,6 +131,8 @@ Taken by the user on 2026-10-27, for tempo_holidays to compile its dataset with 
 * [ ] **`if equal`** — `2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01`: the date replaced when it falls on another rule's date, a primitive `Tempo.RecurrenceSet` does not have; no rule of the dataset needs one.
 
 ### Done
+
+* [x] **A year of the sexagenary cycle** — on Calendrical 2.2's `elapsed_years/2` (`Tempo.Calendar.year_of_cycle/3`): a lunisolar date written with its cycle and year falls in that year of its calendar (`chinese 78-32-08-0-15`, 2015-09-27), and a solar term in the Gregorian year that year begins in (`chinese 78-32-8-15 solarterm`, 2015-06-04). The parser drops the cycle and reads the date in every year. 2026-10-27.
 
 * [x] **The options for a holiday dataset** — `:observed` (D6), `:active`, `:disable` and `:enable` (D8) and `:replaced_by` (D7), in `parse/2` and the guide's "Reading a holiday dataset"; `parse/2` refuses an option it does not take. Against tempo_holidays' `Rule` over 2000–2035: 773 readings of the dataset's observed-day rules the same; 269 of 270 entries with `active`, `disable` or `enable`; and in its `:substitute` reading 1,949 of 1,954 holidays, all 386 with `substitutes` entries among them, the five others spans `Rule` read as one day. A disabled date takes out its year of the rule's own calendar, where `Rule` took the Gregorian year and added back the rest. 2026-10-27.
 

@@ -109,7 +109,7 @@ iex> Tempo.to_interval(autumnal_equinox_day, within: ~o"2026")
 
 ## Dates in other calendars
 
-A date in the Islamic, Hebrew, Persian, Julian, Chinese, Korean or Vietnamese calendar is a recurrence in that calendar, so each year of the rule is a year of that calendar and the date moves against the Gregorian year as the holiday does. An Islamic date is read in the Umm al-Qura calendar. A lunisolar date is written month, leap and day: `chinese 01-0-01` is the first day of the first month, which is not a leap month.
+A date in the Islamic, Hebrew, Persian, Julian, Chinese, Korean or Vietnamese calendar is a recurrence in that calendar, so each year of the rule is a year of that calendar and the date moves against the Gregorian year as the holiday does. An Islamic date is read in the Umm al-Qura calendar. A lunisolar date is written month, leap and day: `chinese 01-0-01` is the first day of the first month, which is not a leap month. Written with its sexagenary cycle and year before it, it falls in that year alone: `chinese 78-32-08-0-15` is the Mid-Autumn Festival of the 32nd year of the 78th cycle, the 27th of September 2015. date-holidays-parser drops the cycle and its year and reads such a date in every year; Tempo reads it in the year it names.
 
 | Rule | Reads as | ISO 8601 | In 2026 |
 |---|---|---|---|
@@ -318,7 +318,7 @@ These parts of the grammar return an error that names them:
 
 * **The Bengali calendar** — `bengali-revised 1-1`, which needs a Bengali calendar in Calendrical.
 
-* **A year of the sexagenary cycle** — `chinese 78-32-8-15 solarterm`, the 32nd year of the 78th cycle. The parser drops the cycle and its year and reads the date in every year; Tempo reads it in that year or not at all.
+* **A solar term of the Korean or Vietnamese calendar** — `korean 5-01 solarterm`; a Chinese solar term is read at the Chinese meridian.
 
 * **`if equal`** — a date replaced when it falls on another rule's date.
 

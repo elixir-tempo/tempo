@@ -15,7 +15,9 @@ defmodule Tempo.Reader.DateRule.Plan do
   # `:hebrew` (`:calendar`, the `:month_part` that selects its month, `:day`),
   # `:lunisolar` (`:calendar`, `:month`, `:day`, `:leap_month`, `:offset`)
   # and `:solar_term` (`:calendar`, the term as `:count`, `:day`). A date of
-  # another calendar written with its year has `:calendar_year`. `:steps` are
+  # another calendar written with its year, or with a cycle and its year, has
+  # `:calendar_year`, and a solar term so written `:lunisolar_year`, the
+  # `{calendar, year}` it is in. `:steps` are
   # the steps from the base date no kind names, the nearest first, each a
   # count of `:days` or the `:count`-th `:weekday`, with its `:direction`.
   # Around it: `:span` (the days the date reaches into), `:substitute` (the
@@ -209,9 +211,17 @@ defmodule Tempo.Reader.DateRule.Plan do
     stepped(in_own_year(plan, base), steps)
   end
 
-  defp base_plan(%{fn: calendar, cycle: _cycle}, _steps) when calendar in @lunisolar_words do
-    {:error,
-     "a year of the sexagenary cycle is not read yet: Calendrical has no public reckoning of one"}
+  # A cycle and a year of it name one year of the calendar: a date of the
+  # calendar falls in that year, and a solar term, reckoned in Gregorian
+  # years, in the Gregorian year it begins in.
+  defp base_plan(%{fn: calendar, cycle: cycle, year: year} = base, steps)
+       when calendar in @lunisolar_words do
+    lunisolar = calendar_of(calendar)
+
+    with {:ok, own_year} <- year_of_cycle(lunisolar, cycle, year),
+         {:ok, plan} <- base_plan(Map.drop(base, [:cycle, :year]), steps) do
+      {:ok, in_cycle_year(plan, base, lunisolar, own_year)}
+    end
   end
 
   # A solar term's later day is a step of days from the term.
@@ -280,6 +290,21 @@ defmodule Tempo.Reader.DateRule.Plan do
 
   defp in_own_year(plan, _base) do
     plan
+  end
+
+  defp year_of_cycle(calendar, cycle, year) do
+    case Tempo.Calendar.year_of_cycle(calendar, cycle, year) do
+      {:ok, own_year} -> {:ok, own_year}
+      {:error, exception} -> {:error, Exception.message(exception)}
+    end
+  end
+
+  defp in_cycle_year(plan, %{solarterm: _term}, calendar, year) do
+    Map.put(plan, :lunisolar_year, {calendar, year})
+  end
+
+  defp in_cycle_year(plan, _base, _calendar, year) do
+    Map.put(plan, :calendar_year, year)
   end
 
   defp later_day(1) do

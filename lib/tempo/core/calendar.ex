@@ -106,6 +106,20 @@ defmodule Tempo.Calendar do
   end
 
   @doc """
+  The year of a lunisolar calendar that a sexagenary cycle and a year of it
+  name, as the calendar counts them: `{:error, exception}` for a cycle or a
+  year it does not have.
+  """
+  @spec year_of_cycle(module(), integer(), integer()) ::
+          {:ok, integer()} | {:error, Exception.t()}
+  def year_of_cycle(calendar, cycle, year) do
+    case calendar.elapsed_years(cycle, year) do
+      {:error, exception} -> {:error, exception}
+      own_year -> {:ok, own_year}
+    end
+  end
+
+  @doc """
   Whether a calendar is the Gregorian: the default, the one CLDR's
   `gregorian` names, or either with its weeks begun on another day.
   """

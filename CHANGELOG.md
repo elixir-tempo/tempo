@@ -6,6 +6,10 @@
 
 * `Tempo.DateRule.parse/2` reads a yearly date written in date-holidays' rule grammar (`4th Thursday in November`, `easter -2`, `15 Nisan`, `chinese 01-0-01`) into the Tempo recurrence it means. Observed days, bridges and `if is holiday` moves read to members of a `Tempo.RecurrenceSet`; the [date rules guide](https://hexdocs.pm/ex_tempo/date-rules.html) takes the grammar part by part.
 
+### Changed
+
+* Requires Calendrical 2.2, whose lunisolar calendars give the year a sexagenary cycle and its year name, as a date rule written with them (`chinese 78-32-08-0-15`) is read.
+
 ## [v2.0.0] — 2026-10-26
 
 Tempo 2.0 is a new implementation on one struct and nine stated laws. The [migration guide](https://hexdocs.pm/ex_tempo/migration.html) takes each change below with its 1.6 form and its 2.0 form.

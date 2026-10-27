@@ -21,8 +21,9 @@ defmodule Tempo.DateRule do
   is the reference for every part a rule may have.
 
   A part of the grammar the reading does not take returns an error naming
-  it: the Bengali calendar, a year of the sexagenary cycle, `if equal`, and
-  an `if is holiday` move by more than one or back.
+  it: the Bengali calendar, a solar term of the Korean or Vietnamese
+  calendar, `if equal`, and an `if is holiday` move by more than one or
+  back.
 
   """
 

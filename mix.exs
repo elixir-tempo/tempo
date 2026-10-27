@@ -185,7 +185,7 @@ defmodule Tempo.MixProject do
   defp deps do
     [
       {:localize, "~> 1.4"},
-      {:calendrical, "~> 2.1"},
+      {:calendrical, "~> 2.2"},
       {:astro, "~> 2.9"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},

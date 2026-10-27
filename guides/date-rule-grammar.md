@@ -104,7 +104,7 @@ term        = 1*2DIGIT                        ; 1 to 24, the solar terms from li
 | 5 | qingming | 11 | xiaoshu | 17 | hanlu | 23 | xiaohan |
 | 6 | guyu | 12 | dashu | 18 | shuangjiang | 24 | dahan |
 
-A date is read in `Calendrical.Chinese`, `Calendrical.Korean` or `Calendrical.Vietnamese`, and a solar term at the Chinese meridian. A cycle and year (`chinese 78-32-8-15 solarterm`), and a solar term of the Korean or Vietnamese calendar, are not read yet (section 9).
+A date is read in `Calendrical.Chinese`, `Calendrical.Korean` or `Calendrical.Vietnamese`, and a solar term at the Chinese meridian. A cycle and a year of it name one year of the calendar, as its `elapsed_years/2` counts it: a date written with them falls in that year alone (`chinese 78-32-08-0-15`, the 27th of September 2015), and a solar term in the Gregorian year that year begins in (`chinese 78-32-8-15 solarterm`, the 4th of June 2015). date-holidays-parser drops the cycle and its year and reads the date in every year. A solar term of the Korean or Vietnamese calendar is not read yet (section 9).
 
 ### 2.6 A date in the revised Bengali calendar
 
@@ -231,8 +231,6 @@ The holiday around a rule in date-holidays' dataset, which is not part of the ru
 These are well formed and return a `Tempo.ParseError` that names them:
 
 * **The Bengali calendar** — `bengali-revised 1-1`: Calendrical has no Bengali calendar.
-
-* **A year of the sexagenary cycle** — `chinese 78-32-8-15 solarterm`. date-holidays-parser drops the cycle and its year and reads the date in every year; Tempo reads it in that year or not at all.
 
 * **A solar term of the Korean or Vietnamese calendar** — `korean 5-01 solarterm`.
 
