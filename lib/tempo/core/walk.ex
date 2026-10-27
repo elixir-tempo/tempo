@@ -27,8 +27,8 @@ defmodule Tempo.Walk do
   @doc """
   The values of a unit a span holds, lazily and in order, half-open: for a
   calendar unit the periods its days fall in (`2026-02-15/2026-03-15` is
-  February and March), for a clock unit
-  the readings one unit apart from its start to its end.
+  February and March), for a clock unit each reading of the clock it
+  touches (`T10:30/T12:30` is ten, eleven and twelve o'clock).
   """
   @spec steps({Scale.position(), Scale.position() | nil}, Unit.t(), frame()) ::
           {:ok, Enumerable.t()} | {:error, term()}
@@ -223,13 +223,18 @@ defmodule Tempo.Walk do
     |> Stream.map(fn tick -> reading(tick, written_unit(unit), calendar, frame) end)
   end
 
-  # The next reading is where the clock leaves this one: one unit on, except
-  # where a zone's clock changes within the unit (`Tempo.Zone.unit_end/4`).
-  # A part of a second is below any change of a clock.
+  # The next reading is where the clock leaves this one: the next whole unit,
+  # except where a zone's clock changes within the unit
+  # (`Tempo.Zone.unit_end/4`). A part of a second is below any change of a
+  # clock, and of any offset.
   defp next_tick(tick, step, %{zone: zone, shift: shift}) when step >= @second,
     do: Zone.unit_end(zone, shift, tick, step)
 
-  defp next_tick(tick, step, _frame), do: tick + step
+  defp next_tick(tick, step, _frame), do: next_whole(tick, step)
+
+  defp next_whole(tick, step) do
+    Integer.floor_div(tick, step) * step + step
+  end
 
   # A reading a named zone's clock shows twice is given with the offset it
   # had, `{:shifted, units, shift}`, so the two are two values; any other is
@@ -265,7 +270,7 @@ defmodule Tempo.Walk do
     stop = if stop <= start, do: stop + @day, else: stop
 
     start
-    |> Stream.iterate(&(&1 + step))
+    |> Stream.iterate(&next_whole(&1, step))
     |> Stream.take_while(&(&1 < stop))
     |> Stream.map(&clock_at(rem(&1, @day), written_unit(unit)))
   end

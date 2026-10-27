@@ -399,8 +399,20 @@ defmodule Tempo.Zone do
     end
   end
 
-  def unit_end(_zone, _shift, utc, step) when is_integer(utc) and is_integer(step),
-    do: utc + step
+  # A floating or fixed clock's unit ends at the next whole unit of its
+  # wall reading.
+  def unit_end(_zone, shift, utc, step) when is_integer(utc) and is_integer(step) do
+    offset = fixed_offset(shift)
+    Integer.floor_div(utc + offset, step) * step + step - offset
+  end
+
+  defp fixed_offset(nil) do
+    0
+  end
+
+  defp fixed_offset(shift) do
+    shift_ticks(shift)
+  end
 
   @doc """
   The offset a named zone's clock keeps through a span, where it keeps one:

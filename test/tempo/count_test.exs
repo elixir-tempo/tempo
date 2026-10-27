@@ -24,10 +24,11 @@ defmodule Tempo.CountTest do
     assert Tempo.count(IntervalSet.new!([]), :day) == {:ok, 0}
   end
 
-  test "counts what walk/3 walks: calendar periods touched, clock readings from the start" do
+  test "counts what walk/3 walks: each unit touched, calendar or clock" do
     assert Tempo.count(~o"2026-06-01T12/2026-06-03T12", :day) == {:ok, 3}
     assert Tempo.count(~o"2026-07", :week) == {:ok, 5}
-    assert Tempo.count(~o"2026-06-15T10:30/2026-06-15T12:30", :hour) == {:ok, 2}
+    assert Tempo.count(~o"2026-06-15T10:30/2026-06-15T12:30", :hour) == {:ok, 3}
+    assert Tempo.count(~o"2026-06-15T10:00/2026-06-15T12:00", :hour) == {:ok, 2}
     assert Tempo.count(~o"2026-06-06T10:15/2026-06-06T10:45", :hour) == {:ok, 1}
 
     for {expression, unit} <- [

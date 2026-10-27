@@ -83,6 +83,47 @@ defmodule Tempo.WalkTest do
     end
   end
 
+  describe "a span is walked at each unit it touches" do
+    defp walked(expression, unit) do
+      {:ok, steps} = Tempo.walk(expression, unit)
+      Enum.map(steps, &Tempo.to_iso8601!/1)
+    end
+
+    test "a clock unit the span begins or ends within is walked, as a calendar unit is" do
+      assert walked(~o"2026-06-15T10:30/2026-06-15T12:30", :hour) ==
+               ["2026Y6M15DT10H", "2026Y6M15DT11H", "2026Y6M15DT12H"]
+
+      assert walked(~o"2026-06-15T10:00/2026-06-15T12:00", :hour) ==
+               ["2026Y6M15DT10H", "2026Y6M15DT11H"]
+
+      assert walked(~o"2026-06-01T12/2026-06-03T12", :day) ==
+               ["2026Y6M1D", "2026Y6M2D", "2026Y6M3D"]
+    end
+
+    test "on the wall clock of a fixed offset or a zone" do
+      assert walked(~o"2026-06-15T10:30+05:30/2026-06-15T12:30+05:30", :hour) ==
+               ["2026Y6M15DT10HZ5H30M", "2026Y6M15DT11HZ5H30M", "2026Y6M15DT12HZ5H30M"]
+
+      assert walked(~o"2026-06-15T10:30/2026-06-15T12:30[Asia/Kolkata]", :hour) ==
+               [
+                 "2026Y6M15DT10H[Asia/Kolkata]",
+                 "2026Y6M15DT11H[Asia/Kolkata]",
+                 "2026Y6M15DT12H[Asia/Kolkata]"
+               ]
+    end
+
+    test "with no year, and in parts of a second" do
+      assert walked(~o"T10:30/T12:30", :hour) == ["T10H", "T11H", "T12H"]
+      assert walked(~o"T22:30/T01:15", :hour) == ["T22H", "T23H", "T0H", "T1H"]
+
+      assert walked(~o"2026-06-15T10:00:00.250/2026-06-15T10:00:01.750", :second) ==
+               ["2026Y6M15DT10H0M0S", "2026Y6M15DT10H0M1S"]
+
+      assert walked(~o"2026-06-15T10:00:00.250/2026-06-15T10:00:00.400", {:microsecond, 1}) ==
+               ["2026Y6M15DT10H0M0.2S", "2026Y6M15DT10H0M0.3S"]
+    end
+  end
+
   describe "what cannot be walked" do
     test "a set with a member that cannot be walked is the member's error, before any step" do
       assert {:error, %Tempo.ConversionError{value: ~o"12M/2M", reason: :needs_a_year}} =

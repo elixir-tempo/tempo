@@ -10,6 +10,8 @@
 
 ### Changed
 
+* `Tempo.walk/3` and `Tempo.count/3` at a clock unit give each unit the span touches, as at a calendar unit: half past ten to half past twelve is ten, eleven and twelve o'clock, where a clock with no named zone stepped one unit from the start and stopped at eleven.
+
 * The values of a set in a unit come in the order of time, each once (decision 88): `2026Y6M{6,7}K` is each weekend day in turn and `2026Y6M{15,1}D` the 1st before the 15th, where they came member by member in the order written.
 
 * `Tempo.intersection/3`, and `Tempo.difference/3` from an operand with a year, place an operand with no year on the other operand's stretch when no `:within` is given (`Tempo.difference(fortnight, ~o"{6,7}K")`), where it was a `Tempo.FrameError`.

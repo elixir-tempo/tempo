@@ -1205,10 +1205,9 @@ defmodule Tempo do
 
   @doc """
   How many values of a unit an expression holds: the values `walk/3` gives,
-  counted. A calendar unit is counted for each period the expression
-  touches, the first and last in part; a clock unit for each reading one
-  unit apart from its start. A plural expression's members are counted in
-  turn.
+  counted: each unit the expression touches, the first and the last in
+  part where it begins or ends within them. A plural expression's members
+  are counted in turn.
 
   ### Arguments
 
@@ -1246,7 +1245,7 @@ defmodule Tempo do
       {:ok, 3}
 
       iex> Tempo.count(~o"2026-06-15T10:30/2026-06-15T12:30", :hour)
-      {:ok, 2}
+      {:ok, 3}
 
   """
   @spec count(t(), unit() | {:microsecond, 1..6}, keyword()) ::

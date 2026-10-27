@@ -60,6 +60,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 
 ## Done
 
+* [x] **A clock unit walked as each unit touched** — `walk/3` and `count/3` give every clock unit a span begins, ends or lies within, as for a calendar unit and as a named zone already did; a floating or fixed clock's unit now ends at its next whole unit (`Zone.unit_end/4`), and parts of a second and spans with no year step the same way (the user, 2026-10-28). 2026-10-28.
+
 * [x] **`Tempo.count/3`** — how many values of a unit an expression holds, the values `walk/3` gives counted, with the unit always named (the user, 2026-10-28, over a `count/1` that would count a member's children). 2026-10-28.
 
 * [x] **A set in a unit in the order of time** — `2026Y6M{6,7}K` is 6, 7, 13, 14, … and `{15,1}D` the 1st before the 15th, where a set expanded member by member in the order written (decision 88). 2026-10-28.

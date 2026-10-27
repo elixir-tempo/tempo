@@ -143,7 +143,7 @@ iex> Tempo.count(months, :day)
 
 > *"The weeks of June. The minutes of the fifteenth. The days of January and of March, walked and then counted."*
 
-A calendar unit gives each period the span touches, the first and the last in part where the span begins or ends within them: July walked by week begins with the week of the 29th of June. A clock unit gives the readings one unit apart from its start to its end. `Tempo.count/3` counts what a walk gives, without the stream.
+A unit gives each period the span touches, the first and the last in part where the span begins or ends within them: July walked by week begins with the week of the 29th of June, and half past ten to half past twelve walked by hour is ten, eleven and twelve o'clock. `Tempo.count/3` counts what a walk gives, without the stream.
 
 ## 5. Membership is cover
 
