@@ -3,7 +3,7 @@ defmodule Tempo.EndlessOperandsTest do
 
   import Tempo.Sigils
 
-  alias Tempo.{Algebra, ConversionError, IntervalSet, RecurrenceSet}
+  alias Tempo.{Algebra, ConversionError, DateRule, IntervalSet, RecurrenceSet}
 
   # A set operation with an operand that has no end, a recurrence or a set
   # read from a stream, is as bounded as the operation makes it
@@ -237,7 +237,7 @@ defmodule Tempo.EndlessOperandsTest do
     test "a rule over years that end is bounded by them, as to_interval/2 lists it" do
       assert Tempo.bounded?(~o"R/{2020Y..2022Y}/P1Y/FL5M5DN")
       refute Tempo.bounded?(~o"R/{1973Y/..}/P1Y/FL5M5DN")
-      refute Tempo.bounded?(Tempo.DateRule.parse!("09-22 if 09-21 and 09-23 is public holiday"))
+      refute Tempo.bounded?(DateRule.parse!("09-22 if 09-21 and 09-23 is public holiday"))
     end
 
     test "a set has no end where one of its members has none" do
