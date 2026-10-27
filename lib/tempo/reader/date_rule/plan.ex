@@ -145,6 +145,18 @@ defmodule Tempo.Reader.DateRule.Plan do
     |> with_dates(:enable, enable)
   end
 
+  # A plan with the plans of the `substitutes` entries that may stand in for
+  # its date, which the expression takes where one does.
+  @doc false
+  @spec replaced_by(map(), [map()]) :: map()
+  def replaced_by(plan, []) do
+    plan
+  end
+
+  def replaced_by(plan, entries) do
+    Map.put(plan, :replaced_by, entries)
+  end
+
   # ── the base date and its weekday steps ────────────────────────────────
 
   # A fixed date's steps are a named kind where one says them (a weekday

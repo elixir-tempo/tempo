@@ -308,6 +308,74 @@ defmodule Tempo.DateRuleTest do
     end
   end
 
+  describe "the :replaced_by option" do
+    test "a substitutes entry takes its weekdays from the date it stands in for" do
+      entry = "substitutes 12-25 if saturday then next monday if sunday then next tuesday"
+      {:ok, christmas} = DateRule.parse("12-25", replaced_by: [entry])
+
+      assert Tempo.to_iso8601!(christmas) == "R/../P1Y/FL12M25D{1..5}KN"
+    end
+
+    test "in the years it is in force, its own or its windows'" do
+      {:ok, since} =
+        DateRule.parse("12-25",
+          replaced_by: ["substitutes 12-25 if sunday then next tuesday since 2010"]
+        )
+
+      windowed =
+        {"substitutes 12-25 if sunday then next tuesday",
+         active: [{~D[2010-01-01], ~D[2020-01-01]}]}
+
+      {:ok, active} = DateRule.parse("12-25", replaced_by: [windowed])
+
+      assert members(since) == ["R/{../2009Y}/P1Y/FL12M25DN", "R/{2010Y/..}/P1Y/FL12M25D{1..6}KN"]
+
+      assert members(active) == [
+               "R/{../2009Y}/P1Y/FL12M25DN",
+               "R/{2010Y..2019Y}/P1Y/FL12M25D{1..6}KN",
+               "R/{2020Y/..}/P1Y/FL12M25DN"
+             ]
+    end
+
+    test "beside its entry in a set, the date falls on the entry's day in its place" do
+      entry = "substitutes 12-25 if saturday, sunday then next monday"
+      {:ok, christmas} = DateRule.parse("12-25", replaced_by: [entry])
+      {:ok, holidays} = RecurrenceSet.new([christmas, DateRule.parse!(entry)])
+      {:ok, days} = Tempo.to_interval(holidays, within: ~o"2021/2023")
+
+      assert IntervalSet.map(days, &{Tempo.year(&1), Tempo.day(&1)}) == [
+               {2021, 27},
+               {2022, 26},
+               {2023, 25}
+             ]
+    end
+
+    test "an entry for another date, or a rule with observed days of its own, is passed over" do
+      {:ok, other_date} =
+        DateRule.parse("12-25",
+          replaced_by: ["substitutes 12-26 if sunday then next monday", "12-26"]
+        )
+
+      {:ok, own_clauses} =
+        DateRule.parse("12-25 and if sunday then next monday",
+          replaced_by: ["substitutes 12-25 if sunday then next tuesday"]
+        )
+
+      assert Tempo.to_iso8601!(other_date) == "R/../P1Y/FL12M25DN"
+      assert members(own_clauses) == ["R/../P1Y/FL12M25DN", "R/../P1Y/FLL12M25D7KN/P8D1K-1IN"]
+    end
+
+    test "is a list of rules or of a rule with its windows" do
+      assert {:error, %ArgumentError{}} = DateRule.parse("12-25", replaced_by: "12-26")
+      assert {:error, %ArgumentError{}} = DateRule.parse("12-25", replaced_by: [:boxing_day])
+
+      assert {:error, %ArgumentError{}} =
+               DateRule.parse("12-25", replaced_by: [{"12-26", since: 2010}])
+
+      assert {:error, %ParseError{}} = DateRule.parse("12-25", replaced_by: ["12-26 tomorrow"])
+    end
+  end
+
   describe "a rule decided by other dates" do
     test "a bridge keeps its day when the dates beside it are holidays of its type" do
       {:ok, bridge} = DateRule.parse("09-22 if 09-21 and 09-23 is public holiday")

@@ -24,6 +24,38 @@ defmodule Tempo.Reader.DateRule.Expression do
   @weekday_names [:monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday]
   @all_weekdays 1..7
 
+  # The parts of a plan that say which years and days a date is kept in or
+  # moved from, rather than which date it is.
+  @gate_keys [
+    :substitute,
+    :weekday_gate,
+    :from_year,
+    :to_year,
+    :active,
+    :year_parity,
+    :leap,
+    :every_years,
+    :conditional,
+    :disable,
+    :enable,
+    :replaced_by,
+    :replacements
+  ]
+
+  # The gates a `substitutes` entry may have and still stand in for a date:
+  # those of its years alone.
+  @entry_gates [
+    :year_parity,
+    :leap,
+    :every_years,
+    :weekday_gate,
+    :conditional,
+    :disable,
+    :enable,
+    :steps,
+    :calendar_year
+  ]
+
   @doc false
   @spec build(map(), keyword()) :: {:ok, Tempo.t()} | {:error, String.t() | Exception.t()}
   def build(%{conditional: conditional} = plan, options) do
@@ -35,6 +67,8 @@ defmodule Tempo.Reader.DateRule.Expression do
   end
 
   def build(plan, _options) do
+    plan = replacing(plan)
+
     with {:ok, shapes} <- occurrence_shapes(plan),
          {:ok, domain} <- year_domain(plan),
          {:ok, members} <- moved(planned_members(shapes, domain, plan), plan),
@@ -137,7 +171,8 @@ defmodule Tempo.Reader.DateRule.Expression do
   end
 
   defp gated?(plan) do
-    match?([_ | _], Map.get(plan, :substitute)) or Map.has_key?(plan, :weekday_gate)
+    match?([_ | _], Map.get(plan, :substitute)) or Map.has_key?(plan, :weekday_gate) or
+      Map.has_key?(plan, :replacements)
   end
 
   defp unstepped_shape(%{kind: kind, offset: offset}) when kind in [:easter, :orthodox] do
@@ -387,20 +422,28 @@ defmodule Tempo.Reader.DateRule.Expression do
   # a window off the date, limited to its weekdays.
   defp gated_shapes(plan) do
     case plain_anchor(plan) do
-      {:ok, anchor, calendar} -> {:ok, gated_shapes(plan, anchor, calendar)}
+      {:ok, anchor, calendar} -> gated_pieces(plan, anchor, calendar)
       :none -> {:error, "an observed day or weekday gate on this date is not read yet"}
     end
   end
 
-  defp gated_shapes(plan, anchor, calendar) do
+  defp gated_pieces(plan, anchor, calendar) do
+    with {:ok, pieces} <- replacement_pieces(plan) do
+      {:ok, gated_shapes(plan, anchor, calendar, pieces)}
+    end
+  end
+
+  # The date is a member for each run of years that keeps the same weekdays,
+  # a substitute entry taking its weekdays away in the years it stands in.
+  defp gated_shapes(plan, anchor, calendar, pieces) do
     gate = gate_weekdays(Map.get(plan, :weekday_gate))
     {kept, observed} = substitution_plan(Map.get(plan, :substitute, []), gate)
 
     base =
-      if match?([_ | _], kept) do
-        [{:base, limited_shape(anchor, calendar, kept)}]
-      else
-        []
+      for {ranges, replaced} <- pieces,
+          weekdays = kept -- replaced,
+          match?([_ | _], weekdays) do
+        {:base, limited_shape(anchor, calendar, weekdays), ranges}
       end
 
     windows =
@@ -719,7 +762,8 @@ defmodule Tempo.Reader.DateRule.Expression do
         :substitute,
         :weekday_gate,
         :disable,
-        :enable
+        :enable,
+        :replacements
       ])
 
     with {:ok, recurrence} <- build(base, []),
@@ -771,6 +815,183 @@ defmodule Tempo.Reader.DateRule.Expression do
 
   defp earlier(year_1, year_2) do
     min(year_1, year_2)
+  end
+
+  # ── substitute entries ────────────────────────────────────────────────
+
+  # The `substitutes` entries that stand in for the rule's date: those of
+  # the same date, gated by their years alone, for a rule that is a plain
+  # date with no observed day of its own. Each takes its trigger weekdays
+  # from the date in the years it is in force; the others are passed over.
+  defp replacing(%{replaced_by: entries} = plan) do
+    plan = Map.delete(plan, :replaced_by)
+    replacements = for entry <- entries, substitutes?(entry, plan), do: replacement(entry)
+    with_replacements(plan, replacements)
+  end
+
+  defp replacing(plan) do
+    plan
+  end
+
+  defp with_replacements(plan, []) do
+    plan
+  end
+
+  defp with_replacements(plan, [_ | _] = replacements) do
+    Map.put(plan, :replacements, replacements)
+  end
+
+  defp substitutes?(entry, plan) do
+    substitute_entry?(entry) and plain_date?(plan) and years_only?(entry) and
+      date_of(entry) == date_of(plan)
+  end
+
+  defp substitute_entry?(%{substitute: [_ | _] = clauses}) do
+    Enum.all?(clauses, &(elem(&1, 3) == :substitute_only))
+  end
+
+  defp substitute_entry?(_plan) do
+    false
+  end
+
+  defp plain_date?(plan) do
+    not Enum.any?([:substitute, :conditional, :steps], &is_map_key(plan, &1)) and
+      match?({:ok, _anchor, _calendar}, plain_anchor(plan))
+  end
+
+  defp years_only?(entry) do
+    not Enum.any?(@entry_gates, &is_map_key(entry, &1))
+  end
+
+  defp date_of(plan) do
+    plan
+    |> Map.drop(@gate_keys)
+    |> Map.put(:one_year, one_year?(plan))
+  end
+
+  defp one_year?(%{from_year: from, to_year: to}) do
+    is_integer(from) and to == from + 1
+  end
+
+  defp one_year?(_plan) do
+    false
+  end
+
+  defp replacement(%{substitute: clauses} = entry) do
+    triggers =
+      clauses
+      |> Enum.flat_map(&elem(&1, 0))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    %{
+      triggers: triggers,
+      from_year: Map.get(entry, :from_year),
+      to_year: Map.get(entry, :to_year),
+      active: Map.get(entry, :active, [])
+    }
+  end
+
+  # The runs of years the date keeps different weekdays in, each with the
+  # weekdays taken from it, the entries' years decided on the rule's own
+  # date as its `active` windows are. With no entry, every year keeps every
+  # weekday.
+  defp replacement_pieces(%{replacements: replacements} = plan) do
+    with {:ok, spans} <- reduce_ok(replacements, &replacement_span(plan, &1)) do
+      pieces =
+        spans
+        |> year_runs()
+        |> Enum.map(&{&1, replaced_in(&1, spans)})
+        |> Enum.chunk_by(&elem(&1, 1))
+        |> Enum.map(&joined_runs/1)
+
+      {:ok, pieces}
+    end
+  end
+
+  defp replacement_pieces(_plan) do
+    {:ok, [{[{nil, nil}], []}]}
+  end
+
+  defp replacement_span(plan, %{triggers: triggers} = entry) do
+    in_force =
+      plan
+      |> Map.drop([:from_year, :to_year, :active])
+      |> put_present(:from_year, entry.from_year)
+      |> put_present(:to_year, entry.to_year)
+      |> put_present(:active, entry.active)
+
+    with {:ok, ranges} <- active_ranges(in_force) do
+      {:ok, {ranges, triggers}}
+    end
+  end
+
+  defp put_present(plan, _key, value) when value in [nil, []] do
+    plan
+  end
+
+  defp put_present(plan, key, value) do
+    Map.put(plan, key, value)
+  end
+
+  # The runs of years between every bound the entries' years name.
+  defp year_runs(spans) do
+    bounds =
+      spans
+      |> Enum.flat_map(fn {ranges, _triggers} -> Enum.flat_map(ranges, &range_bounds/1) end)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    Enum.zip([nil | bounds], Enum.map(bounds, &(&1 - 1)) ++ [nil])
+  end
+
+  defp range_bounds({from, to}) do
+    Enum.reject([from, year_after(to)], &is_nil/1)
+  end
+
+  # The weekdays the entries in force through a run take from it. The runs
+  # split at every bound, so each lies wholly inside an entry's years or
+  # wholly outside them.
+  defp replaced_in(run, spans) do
+    spans
+    |> Enum.filter(fn {ranges, _triggers} -> Enum.any?(ranges, &covers?(&1, run)) end)
+    |> Enum.flat_map(fn {_ranges, triggers} -> triggers end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  # Consecutive runs that keep the same weekdays are one run of years.
+  defp joined_runs([{{from, _to}, weekdays} | _rest] = runs) do
+    {{_from, to}, _weekdays} = List.last(runs)
+    {[{from, to}], weekdays}
+  end
+
+  defp covers?({from, to}, {run_from, run_to}) do
+    not_before?(run_from, from) and not_after?(run_to, to)
+  end
+
+  defp not_before?(_year, nil) do
+    true
+  end
+
+  defp not_before?(nil, _from) do
+    false
+  end
+
+  defp not_before?(year, from) do
+    year >= from
+  end
+
+  defp not_after?(_year, nil) do
+    true
+  end
+
+  defp not_after?(nil, _to) do
+    false
+  end
+
+  defp not_after?(year, to) do
+    year <= to
   end
 
   # ── a disabled date moved to the enabled ones ─────────────────────────
@@ -901,10 +1122,29 @@ defmodule Tempo.Reader.DateRule.Expression do
 
   # ── members ───────────────────────────────────────────────────────────
 
-  # Each shape a member in its role, over the rule's years.
+  # Each shape a member in its role, over the rule's years or those of them
+  # its run of years has.
   defp planned_members(shapes, domain, plan) do
-    for {role, shape} <- shapes do
-      %{role: role, shape: role_shape(role, shape, plan), domain: domain}
+    for shape <- shapes do
+      planned_member(shape, domain, plan)
+    end
+  end
+
+  defp planned_member({role, shape}, domain, plan) do
+    %{role: role, shape: role_shape(role, shape, plan), domain: domain}
+  end
+
+  defp planned_member({role, shape, ranges}, %{ranges: domain_ranges} = domain, plan) do
+    domain = %{domain | ranges: intersect_range_lists(domain_ranges, ranges)}
+    %{role: role, shape: role_shape(role, shape, plan), domain: domain}
+  end
+
+  defp intersect_range_lists(ranges, others) do
+    for range <- ranges,
+        other <- others,
+        overlap = intersect_ranges(range, other),
+        not is_nil(overlap) do
+      overlap
     end
   end
 

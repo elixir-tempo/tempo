@@ -29,7 +29,7 @@ defmodule Tempo.DateRule do
   alias Tempo.Reader.DateRule
   alias Tempo.Reader.DateRule.{Expression, Plan}
 
-  @options [:falls_on, :observed, :active, :disable, :enable]
+  @options [:falls_on, :observed, :active, :disable, :enable, :replaced_by]
   @observed [:as_written, :moved, :none]
 
   @doc """
@@ -65,6 +65,13 @@ defmodule Tempo.DateRule do
 
   * `:enable` is a list of `t:Date.t/0` added in the year of a disabled
     date, the day a holiday is moved to.
+
+  * `:replaced_by` is a list of rules that begin `substitutes`, each alone
+    or as `{rule, active: windows}`, that may stand in for the rule's date:
+    one of the same date, gated by its years alone, takes its trigger
+    weekdays from a rule that is a plain date with no observed day of its
+    own, in the years it is in force. The others are passed over, so the
+    `substitutes` entries of a dataset may be given to each of its rules.
 
   ### Returns
 
@@ -103,12 +110,14 @@ defmodule Tempo.DateRule do
     with :ok <- Options.check(options, @options, "Tempo.DateRule.parse/2"),
          {:ok, observed} <- observed(options),
          {:ok, dated} <- dated(options),
+         {:ok, replaced_by} <- replaced_by(Keyword.get(options, :replaced_by, [])),
          {:ok, tokens} <- tokens(rule),
          {:ok, plan} <- part(Plan.plan(tokens), rule) do
       plan =
         plan
         |> Plan.observed(observed)
         |> Plan.dated(dated)
+        |> Plan.replaced_by(replaced_by)
 
       part(Expression.build(plan, options), rule)
     end
@@ -165,6 +174,34 @@ defmodule Tempo.DateRule do
          {:ok, enable} <- dates(:enable, Keyword.get(options, :enable, [])) do
       {:ok, %{active: active, disable: disable, enable: enable}}
     end
+  end
+
+  # The plans of the `substitutes` entries that may stand in for the rule,
+  # each with the windows it is active in.
+  defp replaced_by(entries) when is_list(entries) do
+    reduce_ok(entries, &replacing_entry/1)
+  end
+
+  defp replaced_by(other) do
+    {:error, ArgumentError.exception(":replaced_by is a list of rules, not #{inspect(other)}")}
+  end
+
+  defp replacing_entry(entry) when is_binary(entry) do
+    replacing_entry({entry, []})
+  end
+
+  defp replacing_entry({entry, entry_options}) when is_binary(entry) do
+    with :ok <- Options.check(entry_options, [:active], "a :replaced_by entry"),
+         {:ok, active} <- windows(Keyword.get(entry_options, :active, [])),
+         {:ok, tokens} <- tokens(entry),
+         {:ok, plan} <- part(Plan.plan(tokens), entry) do
+      {:ok, Plan.dated(plan, %{active: active, disable: [], enable: []})}
+    end
+  end
+
+  defp replacing_entry(other) do
+    message = ":replaced_by takes rules, or {rule, active: windows}, not #{inspect(other)}"
+    {:error, ArgumentError.exception(message)}
   end
 
   defp windows(windows) when is_list(windows) do
