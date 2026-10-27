@@ -319,6 +319,8 @@ Further reading:
 
 * [Date rules](https://hexdocs.pm/ex_tempo/date-rules.html) — yearly dates written in words (`4th Thursday in November`, `easter -2`, `15 Nisan`) read into Tempo recurrences.
 
+* [The date rule grammar](https://hexdocs.pm/ex_tempo/date-rule-grammar.html) — the reference for every part of a date rule and what it reads to.
+
 * [Enumeration semantics](https://hexdocs.pm/ex_tempo/enumeration-semantics.html) — iterating across Tempo values and interval sets.
 
 * [Interop](https://hexdocs.pm/ex_tempo/interop.html) — anchored and unanchored values, and bridging native Elixir types.

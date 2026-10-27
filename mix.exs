@@ -163,6 +163,7 @@ defmodule Tempo.MixProject do
         "guides/glossary.md",
         "guides/iso8601-conformance.md",
         "guides/iso8601-grammar.md",
+        "guides/date-rule-grammar.md",
         "guides/rfc5545_rrule_conformance.md",
         "guides/shared-ast-iso8601-and-rrule.md"
       ],

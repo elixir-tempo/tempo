@@ -16,8 +16,9 @@ defmodule Tempo.DateRule do
   for machines to exchange; a date rule is the form people write.
 
   `parse/2` reads a rule, and `parse!/2` raises its error. The
-  [date rules guide](date-rules.md) takes the grammar part by part, with the
-  dates each part falls on.
+  [date rules guide](date-rules.md) shows how to write and use rules, with
+  the dates each part falls on, and [the date rule grammar](date-rule-grammar.md)
+  is the reference for every part a rule may have.
 
   A part of the grammar the reading does not take returns an error naming
   it: the Bengali calendar, a year of the sexagenary cycle, `if equal`, and

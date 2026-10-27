@@ -4,6 +4,8 @@ A date rule is a yearly date written the way people write one: `4th Thursday in 
 
 The grammar is the one [date-holidays](https://github.com/commenthol/date-holidays) writes the holidays of some two hundred territories in, read as its parser, [date-holidays-parser](https://github.com/commenthol/date-holidays-parser), reads it. A rule from its dataset, or one written for it, reads here to the same dates. ISO 8601-2 and RFC 5545's `RRULE` can say the same things, but they are written for machines to exchange; a date rule is written for people to read.
 
+This guide shows how to write and use rules, a part at a time. The [date rule grammar](./date-rule-grammar.md) is the reference: every part a rule may have, the words each takes, and the order they are read in.
+
 ## Setup — required for every example
 
 ```elixir
@@ -325,6 +327,8 @@ These parts of the grammar return an error that names them:
 * **A clause that changes the time into another day** — `12-31 14:00 PT12H if Sunday then 00:00`, where the time moves the end of a holiday that runs past midnight.
 
 ## Related reading
+
+* [The date rule grammar](./date-rule-grammar.md) — the reference for every part of a rule and what it reads to.
 
 * [Holiday cookbook](./holiday-cookbook.md) — each family of holiday rule written as a Tempo expression by hand, with its RRULE where there is one.
 
