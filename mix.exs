@@ -6,7 +6,7 @@ defmodule Tempo.MixProject do
     Mix.raise("ex_tempo requires Erlang/OTP 27 or later: OTP #{System.otp_release()} detected.")
   end
 
-  @version "2.1.0"
+  @version "2.1.1"
 
   def project do
     [

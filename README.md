@@ -345,4 +345,4 @@ The full documentation, every module and function with the guides above, is on [
 
 ## License
 
-Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.1.0/LICENSE.md). Copyright © Kip Cole.
+Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.1.1/LICENSE.md). Copyright © Kip Cole.
