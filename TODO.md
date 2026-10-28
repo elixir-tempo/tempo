@@ -6,8 +6,6 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **The test clock holds its time in the process dictionary.** `Tempo.Clock.Test` pins the time with `Process.put/2` and `Tempo.Clock` reads it with `Process.get/1`, which the house rules forbid outside the current locale. A replacement keeps a pinned time per test process without it (an ETS table owned by a supervised process, keyed by the pinning process). Found 2026-10-28; a decision for the user.
-
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
 ## Blocked
@@ -51,6 +49,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **The test clock's process dictionary** — kept: `Tempo.Clock.Test` holds each test's pinned time in its own process so `async: true` tests keep their own clocks, and the house rule names it an exception beside the locale (user). 2026-10-28.
 
 * [x] **Companions on 2.x** — tempo_sql 0.3.0 and agenda 0.2.0 on hex, both on `ex_tempo ~> 2.1`, reviewed for release with the house code style. 2026-10-28.
 
