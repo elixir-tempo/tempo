@@ -6,7 +6,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **Companions on 2.x.** `agenda` and `tempo_sql` move to `{:ex_tempo, "~> 2.1"}` now that 2.1.0 is on hex; both passed their gates against `2b04789` (2.0). `tempo_holidays` takes `~> 2.1` (2026-10-28). `agenda` is ported (2026-10-15) under decisions 64 to 69. `tempo_sql` is ported (2026-10-14) against a path dependency, under decisions 43 and 44: all 280 of its tests pass against Postgres, its version 1 and 2 composite rows read as 1.x meant them.
+* [ ] **The test clock holds its time in the process dictionary.** `Tempo.Clock.Test` pins the time with `Process.put/2` and `Tempo.Clock` reads it with `Process.get/1`, which the house rules forbid outside the current locale. A replacement keeps a pinned time per test process without it (an ETS table owned by a supervised process, keyed by the pinning process). Found 2026-10-28; a decision for the user.
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
@@ -51,6 +51,10 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **Companions on 2.x** — tempo_sql 0.3.0 and agenda 0.2.0 on hex, both on `ex_tempo ~> 2.1`, reviewed for release with the house code style. 2026-10-28.
+
+* [x] **A zone's DateTime with no database configured** — the conversions to `DateTime` (`Tempo.to_elixir/1`, `Tempo.Interval.instants/1`, `Tempo.now/1`, an event in a zone) ask `Tempo.time_zone_database/0`, where they asked Elixir's UTC-only default and failed; found reviewing tempo_sql. 2026-10-28, v2.1.1.
 
 * [x] **Date rules** — `Tempo.DateRule`, a reader for the date-holidays rule grammar (`2nd Monday in June`, `easter -2`, `15 Nisan`), with the options a holiday dataset needs; published in 2.1.0, and tempo_holidays reads its dataset with it ([plans/date-rule.md](plans/date-rule.md)). 2026-10-28, v2.1.0.
 

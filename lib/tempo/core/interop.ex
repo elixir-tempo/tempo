@@ -178,7 +178,7 @@ defmodule Tempo.Interop do
     with {:ok, moment} <- to_datetime(%{value | zone: nil}) do
       moment
       |> DateTime.add(seconds_to_its_start(value), :second)
-      |> DateTime.shift_zone(name)
+      |> DateTime.shift_zone(name, Zone.database())
       |> named(value)
     end
   end
@@ -218,7 +218,10 @@ defmodule Tempo.Interop do
   defp at_tick(tick, {_microseconds, precision}, zone) do
     seconds = Integer.floor_div(tick, 1_000_000)
     microsecond = {Integer.mod(tick, 1_000_000), precision}
-    seconds |> DateTime.from_gregorian_seconds(microsecond) |> DateTime.shift_zone(zone)
+
+    seconds
+    |> DateTime.from_gregorian_seconds(microsecond)
+    |> DateTime.shift_zone(zone, Zone.database())
   end
 
   # The seconds from the moment a value's reading and shift name to where
@@ -267,7 +270,7 @@ defmodule Tempo.Interop do
   end
 
   defp shifted(utc, zone) do
-    case DateTime.shift_zone(utc, zone) do
+    case DateTime.shift_zone(utc, zone, Zone.database()) do
       {:ok, local} -> {:ok, local}
       {:error, reason} -> {:error, ConversionError.exception(value: zone, reason: reason)}
     end

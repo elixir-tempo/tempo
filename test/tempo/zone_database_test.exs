@@ -8,6 +8,9 @@ defmodule Tempo.ZoneDatabaseTest do
 
   import Tempo.Sigils
 
+  alias Tempo.Event
+  alias Tempo.Interval
+
   describe "with no database configured" do
     setup do
       elixirs = Application.fetch_env(:elixir, :time_zone_database)
@@ -35,6 +38,31 @@ defmodule Tempo.ZoneDatabaseTest do
       Application.put_env(:elixir, :time_zone_database, Calendar.UTCOnlyTimeZoneDatabase)
       assert Tempo.time_zone_database() == Tz.TimeZoneDatabase
       assert {:ok, _paris} = Tempo.in_zone(~o"2026-06-15T09", "Europe/Paris")
+    end
+
+    test "a value in a named zone is the DateTime of its zone, read by tz" do
+      Application.put_env(:elixir, :time_zone_database, Calendar.UTCOnlyTimeZoneDatabase)
+      paris = DateTime.new!(~D[2026-06-15], ~T[09:00:00], "Europe/Paris", Tz.TimeZoneDatabase)
+
+      assert Tempo.to_elixir(~o"2026-06-15T09:00:00[Europe/Paris]") == {:ok, paris}
+      assert Tempo.to_elixir(~o"2026-06-15T09:00:00+02:00[Europe/Paris]") == {:ok, paris}
+    end
+
+    test "the instants of an interval in a named zone are read by tz" do
+      Application.put_env(:elixir, :time_zone_database, Calendar.UTCOnlyTimeZoneDatabase)
+
+      assert {:ok, {from, to}} =
+               Interval.instants(~o"2026-06-15T09:00/2026-06-15T10:00[America/New_York]")
+
+      assert DateTime.to_iso8601(from) == "2026-06-15T09:00:00-04:00"
+      assert DateTime.to_iso8601(to) == "2026-06-15T10:00:00-04:00"
+    end
+
+    test "the time now and an event's date in a named zone are read by tz" do
+      Application.put_env(:elixir, :time_zone_database, Calendar.UTCOnlyTimeZoneDatabase)
+
+      assert {:ok, %Tempo{}} = Tempo.now("Europe/Paris")
+      assert Event.date("march-equinox@Asia/Tokyo", 2026) == {:ok, ~D[2026-03-20]}
     end
   end
 

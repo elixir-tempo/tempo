@@ -18,6 +18,7 @@ defmodule Tempo.Event do
 
   alias Tempo.Calendar, as: Calendars
   alias Tempo.InvalidDateError
+  alias Tempo.Zone
   alias Tempo.ZoneError
 
   # The solar terms by name, each with the number Calendrical counts it by,
@@ -214,7 +215,7 @@ defmodule Tempo.Event do
   end
 
   defp in_zone(%DateTime{} = instant, zone) do
-    case DateTime.shift_zone(instant, zone) do
+    case DateTime.shift_zone(instant, zone, Zone.database()) do
       {:ok, %DateTime{} = local} -> {:ok, local}
       {:error, _reason} -> {:error, {:invalid_zone, zone}}
     end

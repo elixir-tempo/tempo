@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2.1.1] — Unreleased
+
+### Fixed
+
+* A value in a named zone converts to a `DateTime` (`Tempo.to_elixir/1`, `Tempo.Interval.instants/1`, `Tempo.now/1`, an event `@` a zone) with the database `Tempo.time_zone_database/0` names, where with none configured it asked Elixir's UTC-only default and was an error.
+
 ## [v2.1.0] — 2026-10-28
 
 ### Added
