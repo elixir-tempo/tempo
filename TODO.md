@@ -6,13 +6,9 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **Companions on 2.0.** `agenda`, `tempo_sql` and `tempo_holidays` move to `{:ex_tempo, "~> 2.0"}` now that 2.0.0 is on hex (2026-10-27); all three passed their gates against `2b04789`. `agenda` is ported (2026-10-15) under decisions 64 to 69. `tempo_holidays` is ported (2026-10-14) against a path dependency: its rules are built from parts, its conformance unchanged (168,186 matched, 0 mismatched), all 223 of its tests passing. `tempo_sql` is ported (2026-10-14) against a path dependency, under decisions 43 and 44: all 280 of its tests pass against Postgres, its version 1 and 2 composite rows read as 1.x meant them.
+* [ ] **Companions on 2.x.** `agenda` and `tempo_sql` move to `{:ex_tempo, "~> 2.1"}` now that 2.1.0 is on hex; both passed their gates against `2b04789` (2.0). `tempo_holidays` takes `~> 2.1` (2026-10-28). `agenda` is ported (2026-10-15) under decisions 64 to 69. `tempo_sql` is ported (2026-10-14) against a path dependency, under decisions 43 and 44: all 280 of its tests pass against Postgres, its version 1 and 2 composite rows read as 1.x meant them.
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
-
-## In progress
-
-* [ ] **Date rules** — `Tempo.DateRule`, a reader for the date-holidays rule grammar (`2nd Monday in June`, `easter -2`, `15 Nisan`) into Tempo expressions, beside `Tempo.RRule` and `Tempo.Cron`, moved from tempo_holidays (user, 2026-10-27); Tempo 2.1. Plan in [plans/date-rule.md](plans/date-rule.md). Landed: the tokenizer, `parse/2`, the census gaps (every rule of the dataset read but the Bengali, which is deferred) and the docs and guide, and the options a holiday dataset needs (`:observed`, `:active`, `:disable`, `:enable`, `:replaced_by`, decisions D6 to D8); next tempo_holidays on it.
 
 ## Blocked
 
@@ -55,6 +51,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **Date rules** — `Tempo.DateRule`, a reader for the date-holidays rule grammar (`2nd Monday in June`, `easter -2`, `15 Nisan`), with the options a holiday dataset needs; published in 2.1.0, and tempo_holidays reads its dataset with it ([plans/date-rule.md](plans/date-rule.md)). 2026-10-28, v2.1.0.
 
 * [x] **Every calendar call a callback** — Tempo asks the calendar a value holds every question a calendar answers; the five calls into Calendrical left (a calendar resolved from its name, the Easter event, the grammar's solar term words) are listed with their reasons in `test/tempo/calendar_surface_test.exs`, which fails on any other (decision 89). A locale's words are read by Localize's parser; the six week-start calendars are built with Calendrical's public `Calendar.Shifted`. 2026-10-28.
 

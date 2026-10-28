@@ -1,6 +1,6 @@
 # Date rules
 
-**Status:** in progress, 2026-10-27
+**Status:** implemented (v2.1.0), 2026-10-28
 
 A reader for the date-holidays rule grammar in Tempo, `Tempo.DateRule`, beside `Tempo.RRule` and `Tempo.Cron`: a rule written for people, `2nd Monday in June`, `Friday after 4th Thursday in November`, `easter -2`, `15 Nisan`, `chinese 01-0-01`, `march equinox in Asia/Tokyo`, read into the Tempo expression it means. ISO 8601-2 can say all of these, but it was written for machines to exchange; RRULE says cadences well and has no Easter and few calendars. The grammar is date-holidays' (https://github.com/commenthol/date-holidays), read as its parser, date-holidays-parser, reads it, so the rules of its dataset of some 200 territories, and any written for it, read here.
 
