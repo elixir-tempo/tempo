@@ -35,7 +35,7 @@ Tempo supports **Elixir 1.17** and later on **Erlang/OTP 27** and later; OTP 26 
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 2.1"},
+    {:ex_tempo, "~> 2.2"},
     # Optional but recommended - needed for iCalendar import.
     {:ical, "~> 3.2"}
   ]
@@ -345,4 +345,4 @@ The full documentation, every module and function with the guides above, is on [
 
 ## License
 
-Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.1.1/LICENSE.md). Copyright © Kip Cole.
+Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.2.0/LICENSE.md). Copyright © Kip Cole.
