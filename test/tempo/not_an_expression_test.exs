@@ -8,7 +8,7 @@ defmodule Tempo.NotAnExpressionTest do
 
   import Tempo.Sigils
 
-  alias Tempo.{IntervalSet, LeapSeconds, RecurrenceSet}
+  alias Tempo.{IntervalSet, RecurrenceSet}
 
   # What each argument answers with when it is wrong: a named error,
   # returned by a function that returns errors and raised by one that answers
@@ -31,11 +31,10 @@ defmodule Tempo.NotAnExpressionTest do
   ]
 
   # Functions that answer anything they are given: `explain/1` describes
-  # what it is given, and three integers are a date to `on_date?/3`.
+  # what it is given.
   @answer_anything [
     {Tempo, :explain, 1},
-    {Tempo.Explain, :lines, 1},
-    {Tempo.LeapSeconds, :on_date?, 3}
+    {Tempo.Explain, :lines, 1}
   ]
 
   # A first argument of each kind the public functions take.
@@ -140,7 +139,6 @@ defmodule Tempo.NotAnExpressionTest do
     assert {:error, %ArgumentError{}} = Tempo.try_map(42, &Function.identity/1)
     assert {:error, %ArgumentError{}} = Tempo.try_map([~o"2026"], :identity)
     assert_raise ArgumentError, fn -> Tempo.map(42, &Function.identity/1) end
-    assert {:error, %Tempo.ConversionError{}} = LeapSeconds.spanned(42)
   end
 
   test "a value extended to the microsecond is one the writer writes" do

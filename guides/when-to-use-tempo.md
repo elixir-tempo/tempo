@@ -66,10 +66,6 @@ iex> Tempo.to_string(~o"2026-06-15", locale: "de", format: :long)
 {:ok, "15. Juni 2026"}
 ```
 
-### You need leap-second awareness
-
-`Tempo.Interval.spans_leap_second?/1`, `Tempo.LeapSeconds.spanned/1` and `Tempo.duration(span, leap_seconds: true)`. There have been 27 leap seconds since 1972, and POSIX time hides them. No stdlib equivalent.
-
 ### You want wall-clock + zone preservation for future events
 
 `~o"2030-03-01T08:00:00[Europe/Paris]"` holds the wall time and the zone, and finds the UTC instant when it is asked for — so the event survives a change of DST rules between now and 2030. Stdlib's `DateTime` holds a UTC offset fixed when it was built, which is stale the moment the zone data changes.
@@ -152,7 +148,7 @@ Convert at the edges; stay in Tempo wherever the business logic is interval-shap
 
 * [Scheduling](./scheduling.md) — bounded enumeration, wall-clock authority, floating vs zoned events.
 
-* [Falsehoods programmers believe about time](./falsehoods.md) — eleven wrong assumptions with the largest bug-surface, with the Tempo idiom for each.
+* [Falsehoods programmers believe about time](./falsehoods.md) — ten wrong assumptions with the largest bug-surface, with the Tempo idiom for each.
 
 * [Set operations](./set-operations.md) — union, intersection, difference, and the operators that keep members.
 

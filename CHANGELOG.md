@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2.2.0] — Unreleased
+
+### Breaking changes
+
+* Tempo has no leap seconds, past or future, as [CGPM Resolution 5 (2026)](https://www.bipm.org/en/cgpm-2026/resolution-5) ends them in UTC: every minute is sixty seconds (decision 90). `Tempo.LeapSeconds`, the `:leap_seconds` option of `Tempo.duration/2`, and `Tempo.Interval.spans_leap_second?/1` and `leap_seconds_spanned/1` are removed.
+
 ## [v2.1.1] — 2026-10-28
 
 ### Fixed

@@ -6,7 +6,7 @@ What the two amendments to ISO 8601 ask of Tempo: ISO 8601-1:2019/Amd 1:2022 (te
 
 ## Part 1, Amendment 1 (2022)
 
-* **3.1.1.24 and 4.2.3 — leap seconds.** A positive leap second is written `23:59:60Z`; a negative one omits `23:59:59`, so the minute ends at `23:59:58`. This restates 2019's §4.3.10. Tempo refuses a second numbered 60 (`InvalidDateError`) by design: its clock has 60-second minutes, which Part 2's amendment calls a nominal duration rule (§14.6, below). Decision D6.
+* **3.1.1.24 and 4.2.3 — leap seconds.** A positive leap second is written `23:59:60Z`; a negative one omits `23:59:59`, so the minute ends at `23:59:58`. This restates 2019's §4.3.10. Tempo refuses a second numbered 60 (`InvalidDateError`) by design: its clock has 60-second minutes, which Part 2's amendment calls a nominal duration rule (§14.6, below), and UTC inserts no more leap seconds by CGPM Resolution 5 (2026), decision 90. Decision D6.
 
 * **3.1.2.15 — a week as a length.** A note on the term. No change.
 

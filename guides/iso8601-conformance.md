@@ -106,7 +106,7 @@ iex> Enum.count(~o"2026-06T17")
 
 * **A fraction of a second is kept, with its precision.** `T10:30:00.120` is a millisecond and `T10:30:00.12` a hundredth of a second, two spans of different lengths. Six digits are kept, as Elixir's own types keep them, and more are cut.
 
-* **A second numbered 60 is no value**, on any date, as it is none in Elixir's types. Tempo's clock has 60 seconds in every minute: the nominal duration rule ISO 8601-2's Amendment 1 (§14.6) allows, where the standard writes the leap second inserted at the end of a minute as `23:59:60Z`. A leap second is a fact about a span: see `Tempo.LeapSeconds`.
+* **A second numbered 60 is no value**, on any date, as it is none in Elixir's types. Tempo's clock has 60 seconds in every minute, past and future: UTC inserts no more leap seconds by [Resolution 5 of the 28th CGPM (2026)](https://www.bipm.org/en/cgpm-2026/resolution-5), and Tempo counts none of the ones inserted before it. This is the nominal duration rule ISO 8601-2's Amendment 1 (§14.6) allows.
 
 * **Truncated forms** (`--06-15`, a two-digit year) were removed from the standard in 2019 and are not read.
 

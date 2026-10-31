@@ -40,7 +40,6 @@ defmodule Tempo do
   alias Tempo.FrameError
   alias Tempo.Interop
   alias Tempo.InvalidCalendarError
-  alias Tempo.LeapSeconds
   alias Tempo.Limit
   alias Tempo.Measure
   alias Tempo.Options
@@ -3244,29 +3243,14 @@ defmodule Tempo do
   times. Unlike an interval written between them, which runs through its
   last date, this measures start to start.
 
-  Given an expression and options, it is `duration/1` of the expression
-  with the options applied.
-
   ### Arguments
 
   * `from` and `to` are each a `t:t/0` with one span, on one frame, `to`
     after `from`.
 
-  * Or `expression`, a `t:t/0`, and `options`, a keyword list.
-
-  ### Options
-
-  * `:leap_seconds` is `true` to count the leap seconds the expression
-    spans (`Tempo.LeapSeconds.spanned/1`) into its length, a second for
-    each. The default is `false`: a length on the clock, in which every
-    minute is sixty seconds.
-
   ### Returns
 
-  * `{:ok, duration}` for two values.
-
-  * A `t:Tempo.Duration.t/0`, `:infinity` or `{:error, exception}` for an
-    expression and options, as `duration/1` returns them.
+  * `{:ok, duration}`, a `t:Tempo.Duration.t/0`.
 
   * `{:error, %Tempo.IntervalEndpointsError{}}` when `to` is not after
     `from`, and `{:error, %Tempo.FrameError{}}` when the two share no frame.
@@ -3279,39 +3263,9 @@ defmodule Tempo do
       iex> Tempo.duration(~o"2026-09-28T10", ~o"2026-09-29")
       {:ok, ~o"PT14H"}
 
-      iex> new_year = ~o"2016-12-31T23:59:00Z/2017-01-01T00:01:00Z"
-      iex> Tempo.duration(new_year)
-      ~o"PT120S"
-      iex> Tempo.duration(new_year, leap_seconds: true)
-      ~o"PT121S"
-
   """
   @spec duration(t(), t()) :: {:ok, Duration.t()} | {:error, error()}
-  @spec duration(t(), keyword()) :: Duration.t() | :infinity | {:error, error()}
-  def duration(expression, options) when is_list(options) do
-    case Keyword.validate(options, leap_seconds: false) do
-      {:ok, [leap_seconds: true]} ->
-        with_leap_seconds(expression)
-
-      {:ok, [leap_seconds: false]} ->
-        Measure.duration(expression)
-
-      _other ->
-        {:error,
-         ArgumentError.exception(":leap_seconds, true or false, is the one option of duration/2")}
-    end
-  end
-
   def duration(from, to), do: Measure.between(from, to)
-
-  defp with_leap_seconds(expression) do
-    case {Measure.duration(expression), LeapSeconds.count(expression)} do
-      {%Duration{} = duration, {:ok, 0}} -> duration
-      {%Duration{} = duration, {:ok, n}} -> Duration.add(duration, %Duration{units: [second: n]})
-      {%Duration{}, {:error, _} = error} -> error
-      {other, _count} -> other
-    end
-  end
 
   for {name, comparison, phrase} <- [
         {:at_least?, :at_least, "at least as long as"},

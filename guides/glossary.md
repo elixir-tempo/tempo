@@ -112,7 +112,6 @@ The tables are grouped by subject, and within a table the terms a later one buil
 | union, intersection, difference, complement | The set operations, over the time spans cover. | `Tempo.union/2` |
 | refuse | Return a named error rather than a guess. | `{:error, exception}` |
 | not built | What Tempo knows it does not answer yet, refused by name. | `Tempo.ConversionError` |
-| leap second | A second the IERS has added at the end of a UTC day. No value, and a fact about a span. | `Tempo.LeapSeconds` |
 
 ## Errors
 

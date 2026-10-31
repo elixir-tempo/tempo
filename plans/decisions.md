@@ -954,3 +954,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-28, the user).** No new callbacks for now. Easter is a question of the Gregorian and Julian churches, not of every calendar, and stays the event `(easter)e` that Calendrical computes; a solar term is asked of the calendar a value holds, and the default calendar's of the Gregorian, as decided on 2026-10-14; a question a calendar does not answer is an error. A locale's words for a date are read by Localize's parser, which Calendrical's only called. The grammar's words for the solar terms and a calendar named by an IXDTF `u-ca` value are resolved where they are read (global rule 10).
 
 * **State.** Built 2026-10-28: `Tempo.Calendar.words/2` calls `Localize.DateTime.Parser.parse/2`; `test/tempo/calendar_surface_test.exs` reads the remote calls of every compiled module and holds Tempo to five calls into Calendrical, each with its reason, failing on any other and on any listed call no longer made.
+
+## 90. No leap seconds
+
+* **Question.** Whether Tempo keeps a table of UTC's leap seconds, counts them into a length (`Tempo.duration/2` with `leap_seconds: true`) and reports the ones a span holds (`Tempo.LeapSeconds`, `Tempo.Interval.spans_leap_second?/1` and `leap_seconds_spanned/1`).
+
+* **Context.** [Resolution 5 of the 28th CGPM (2026)](https://www.bipm.org/en/cgpm-2026/resolution-5), adopted on 15 October 2026, makes UTC continuous from 20 May 2027: the difference from UT1 may grow to an hour, so no leap second is inserted again. The user, 2026-10-31: remove every reference to leap seconds, and ignore the 27 inserted from 1972 to 2016, "even though thats technically a breaking change".
+
+* **Decision (2026-10-31, the user).** Tempo has no leap seconds, past or future. Every minute is sixty seconds, a second numbered 60 stays refused, and a length is the length on the clock, as POSIX time counts it.
+
+* **State.** Built 2026-10-31: `Tempo.LeapSeconds`, `Tempo.duration/2` with options, `Tempo.Interval.spans_leap_second?/1` and `leap_seconds_spanned/1` removed; the guides' leap-second recipes removed; the conformance guide cites the resolution.

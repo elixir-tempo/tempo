@@ -359,6 +359,21 @@ iex> Tempo.to_interval(holidays, within: ~o"2026")
 
 **Why.** The rule stays whole: every span the set gives is in the set's calendar, so one calendar to an expression holds where it matters, in the spans a caller sees. Converting an endless rule had been refused, since its occurrences cannot all be listed; read this way it needs none listed, and every rule converts. What such a set cannot have is ISO 8601 text, since a member's own calendar would be written inside the expression, and the writer says so.
 
+### No leap seconds (decision 90)
+
+**The question.** Whether a span's length counts the leap seconds UTC has inserted.
+
+**The alternatives.** Keep the table of the 27 leap seconds inserted from 1972 to 2016 and count them on request; count none.
+
+**The choice.** Count none. Every minute is sixty seconds, past and future.
+
+```elixir
+iex> Tempo.duration(~o"2016-12-31T23:59:00Z/2017-01-01T00:01:00Z")
+~o"PT120S"
+```
+
+**Why.** [Resolution 5 of the 28th CGPM (2026)](https://www.bipm.org/en/cgpm-2026/resolution-5) makes UTC continuous from 20 May 2027, so no leap second is inserted again. A length on the clock is what POSIX time and Elixir's own types count, and a table that would never grow is not worth the elapsed-time answer it gave for the years before.
+
 ## Seasons
 
 ISO 8601-2 numbers seasons: 21 to 24 are spring, summer, autumn and winter, and 25 to 32 the same seasons of the northern and southern hemispheres. Spring is March to May in the north and September to November in the south.

@@ -33,7 +33,7 @@ dayk       = DIGIT                            ; [dayk], 1 to 7 from Monday
 dayo       = 3DIGIT                           ; [dayo], 001 to 366
 hour       = 2DIGIT                           ; [hour], 00 to 23; 24 is refused (§5.3.2)
 minute     = 2DIGIT                           ; [min]
-second     = 2DIGIT                           ; [sec]; 60 is a leap second and is refused by Tempo (see the conformance guide)
+second     = 2DIGIT                           ; [sec]; 60 is refused by Tempo (see the conformance guide)
 dec        = 3DIGIT                           ; [dec], a decade, §5.2.2.2 c)
 cent       = 2DIGIT                           ; [cent], a century, §5.2.2.2 d)
 

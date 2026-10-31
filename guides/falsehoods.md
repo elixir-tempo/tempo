@@ -130,34 +130,7 @@ No UTC is stored on the value. Comparison and conversion consult the configured 
 
 ---
 
-## 5. "A minute has 60 seconds"
-
-Occasionally it has 61. The IERS has inserted 27 leap seconds since 1972; the most recent was on 31 December 2016 at 23:59:60 UTC. Code that counts across that boundary and assumes 60-second minutes is off by one.
-
-**Tempo — a leap second is a fact about a span:**
-
-```elixir
-iex> new_year = ~o"2016-12-31T23:59:00Z/2017-01-01T00:01:00Z"
-iex> Tempo.Interval.spans_leap_second?(new_year)
-true
-
-iex> Tempo.duration(new_year)
-~o"PT120S"
-
-iex> Tempo.duration(new_year, leap_seconds: true)
-~o"PT121S"
-
-iex> Tempo.LeapSeconds.spanned(~o"2015/2017")
-{:ok, [{2015, 6, 30}, {2016, 12, 31}]}
-```
-
-> *"The two minutes around New Year 2017 **span a leap second**: a hundred and twenty seconds on the clock, a hundred and twenty-one elapsed."*
-
-`duration/1` returns the length on the clock, as POSIX time counts it. `duration/2` with `leap_seconds: true` returns the physical elapsed time. Both are correct for their purpose, and `spans_leap_second?/1` lets downstream code branch explicitly rather than drop the second. A second numbered 60 is itself no value, as it is none in Elixir's own types.
-
----
-
-## 6. "1582-01-01 means the same thing everywhere"
+## 5. "1582-01-01 means the same thing everywhere"
 
 The Gregorian calendar was adopted at different times in different countries. In England, the Julian calendar was used until 1752. In France, the switch happened in 1582. A date written as `1582-01-01` in a French historical record and the same date in an English record are different days — ten days apart.
 
@@ -179,7 +152,7 @@ iex> Tempo.to_calendar(julian, Calendrical.Gregorian)
 
 ---
 
-## 7. "There is no year 0"
+## 6. "There is no year 0"
 
 In the proleptic Gregorian calendar used by ISO 8601 and most programming environments, year 0 exists and is 1 BCE. Year -1 is 2 BCE. Code that converts a signed year to a historical "n BCE" label by negating it is off by one for every year before 1.
 
@@ -200,7 +173,7 @@ iex> Tempo.duration(~o"-0001-12-31", ~o"0000-01-01")
 
 ---
 
-## 8. "February always has 28 or 29 days"
+## 7. "February always has 28 or 29 days"
 
 In the Hebrew calendar the second month, Cheshvan, has 29 days in some years and 30 in others. So a thirtieth of the second month is no date in the Gregorian calendar and a date in some Hebrew years. Month lengths are the calendar's and cannot be hard-coded.
 
@@ -224,7 +197,7 @@ The calendar supplies the length of each of its months. Tempo asks it rather tha
 
 ---
 
-## 9. "Every location follows a 24-hour offset from UTC"
+## 8. "Every location follows a 24-hour offset from UTC"
 
 Samoa skipped 30 December 2011 entirely when it moved across the International Date Line, from UTC−11 to UTC+13, to align its calendar with Australia and New Zealand. The day after Thursday 29 December was Saturday 31 December: the calendar day between them never existed there.
 
@@ -264,7 +237,7 @@ Nothing gives the day that is not there: a step that lands on it is the day afte
 
 ---
 
-## 10. "Two timestamps represent the same instant if they show the same time"
+## 9. "Two timestamps represent the same instant if they show the same time"
 
 `2026-04-15T10:30+05:30` and `2026-04-15T10:30+09:00` show the same wall-clock reading and are three and a half hours apart. "Same time, different zone" is not "same instant."
 
@@ -292,7 +265,7 @@ Place the floating value in a zone first with `Tempo.in_zone/2`, or write a shif
 
 ---
 
-## 11. "A duration is a number of seconds"
+## 10. "A duration is a number of seconds"
 
 `DateTime.diff/3` answers in seconds, and so do most date libraries. But a month has no fixed number of seconds, and neither does a day — the day a clock change shortens is 82 800 seconds long and still one day — while a count of whole seconds drops the fraction of a second a timestamp was written with.
 

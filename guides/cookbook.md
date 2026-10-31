@@ -1199,24 +1199,6 @@ iex> Enum.map(~o"156X", &Tempo.year/1)
 
 `~o"156X"` is ISO 8601-2's year with an unspecified digit. Archaeological records and historical citations use the form routinely.
 
-### A leap second — spanned, never a value
-
-```elixir
-iex> new_year = ~o"2016-12-31T23:59:00Z/2017-01-01T00:01:00Z"
-iex> Tempo.Interval.spans_leap_second?(new_year)
-true
-
-iex> Tempo.duration(new_year)
-~o"PT120S"
-
-iex> Tempo.duration(new_year, leap_seconds: true)
-~o"PT121S"
-```
-
-> *"The two minutes around New Year 2017 **span a leap second**: 120 seconds on the clock, 121 elapsed."*
-
-At the end of 2016 UTC a leap second was inserted — the minute 23:59 had 61 seconds, numbered 00 to 60. Tempo reads no `23:59:60` as a *value*, as Elixir's `Time`, `DateTime` and `Calendar.ISO` read none. A leap second is instead a fact about a span: `Tempo.Interval.spans_leap_second?/1`, `Tempo.LeapSeconds.spanned/1`, and the `leap_seconds: true` option of `Tempo.duration/2`. `Tempo.LeapSeconds.dates/0` lists the 27 the IERS has announced.
-
 ### A daylight-saving gap — the hour that never was
 
 ```elixir
@@ -1311,7 +1293,7 @@ Two intervals stand in exactly one of thirteen relations — [Allen's interval a
 
 * [Holidays — planning with a real holiday calendar](./holidays.md) — fetch an ICS holiday feed, parse it with `Tempo.ICal.parse/1`, and compose it with `Tempo.workdays/1` for territory-aware scheduling.
 
-* [Falsehoods programmers believe about time](./falsehoods.md) — eleven wrong assumptions with the largest bug-surface, each with the Tempo idiom that makes the right behaviour automatic.
+* [Falsehoods programmers believe about time](./falsehoods.md) — ten wrong assumptions with the largest bug-surface, each with the Tempo idiom that makes the right behaviour automatic.
 
 * [ISO 8601 conformance](./iso8601-conformance.md) — what's supported from the standard.
 
