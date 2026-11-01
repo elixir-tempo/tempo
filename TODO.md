@@ -18,7 +18,7 @@ Every item here is upstream: Tempo follows each library as it is, and the item i
 
 * [ ] **`tz` has no public list of a zone's periods.** `Tempo.Zone.Transitions.Tz` reads `Tz.PeriodsProvider.periods/1`, which `tz` generates and marks `@moduledoc false`, guarded so that a `tz` without it falls back to sampling. A public function in `tz` (and one in `tzdata`, whose `Tzdata.periods/1` is public and could be adapted next) would make the table exact by contract. The same gap in Elixir's `Calendar.TimeZoneDatabase`, which answers at a point and gives no period's bounds, is the reason the table exists at all. Requested as [mathieuprog/tz#45](https://github.com/mathieuprog/tz/issues/45), 2026-11-01.
 
-* [ ] **Text that is no calendar is read as a calendar of no events**: `Tempo.ICal.parse("hello, world")` is `{:ok, ~o"{}"}`. The `ical` library returns no error for text it cannot read. Rechecked against `ical` 3.2.1 and reported as [expothecary/ical#56](https://github.com/expothecary/ical/issues/56), 2026-11-01.
+* [ ] **Text that is no calendar is read as a calendar of no events**: `Tempo.ICal.parse("hello, world")` is `{:ok, ~o"{}"}`. The `ical` library returns no error for text it cannot read. Rechecked against `ical` 3.2.1 and reported as [expothecary/ical#56](https://github.com/expothecary/ical/issues/56), 2026-11-01. Fix proposed in [expothecary/ical#57](https://github.com/expothecary/ical/pull/57) (`ICal.from_binary/1`), 2026-11-02.
 
 ## Deferred
 
