@@ -905,12 +905,26 @@ defmodule Tempo.ICal.Test do
       assert Tempo.metadata(interval).summary == "Normal event"
     end
 
-    test "malformed ics returns an empty result without raising" do
-      # The underlying `ical` library is tolerant: non-iCalendar
-      # input parses to an empty calendar, not a raise. We pass
-      # that through — the caller sees zero intervals.
-      assert {:ok, set} = ICal.parse("not valid ical")
-      assert [] = IntervalSet.members(set)
+    test "text that is not a calendar is an error" do
+      assert {:error, %Tempo.ParseError{reason: "it does not begin with BEGIN:VCALENDAR"}} =
+               ICal.parse("not valid ical")
+
+      assert {:error, %Tempo.ParseError{}} = ICal.parse("")
+      assert {:error, %Tempo.ParseError{}} = ICal.available("not valid ical", within: ~o"2026")
+    end
+
+    test "a calendar cut short is an error" do
+      cut_short = """
+      BEGIN:VCALENDAR
+      VERSION:2.0
+      BEGIN:VEVENT
+      UID:half
+      DTSTART:20260615T100000Z
+      SUMMARY:Half a meeting
+      """
+
+      assert {:error, %Tempo.ParseError{as: "iCalendar"}} = ICal.parse(cut_short)
+      assert_raise Tempo.ParseError, fn -> ICal.parse!(cut_short) end
     end
   end
 
@@ -1022,8 +1036,7 @@ defmodule Tempo.ICal.Test do
 
   describe "parse/2 — public fixtures (borrowed from ical library)" do
     test "one_event.ics parses and carries full metadata" do
-      path = Path.join(@fixtures_dir, "one_event.ics")
-      {:ok, set} = ICal.parse_file(path)
+      {:ok, set} = read_leniently("one_event.ics")
       [iv] = IntervalSet.members(set)
 
       assert iv.metadata.uid == "1001"
@@ -1043,15 +1056,18 @@ defmodule Tempo.ICal.Test do
       # DTSTART — Tempo.ICal skips DTSTART-less events (since they
       # can't be placed on the time line). The test exists mainly
       # to prove we don't crash on incomplete events.
-      path = Path.join(@fixtures_dir, "attendees.ics")
-      {:ok, set} = ICal.parse_file(path)
+      {:ok, set} = read_leniently("attendees.ics")
       assert [] = IntervalSet.members(set)
     end
 
     test "timezone_event.ics parses (zoned events)" do
-      path = Path.join(@fixtures_dir, "timezone_event.ics")
-      assert {:ok, set} = ICal.parse_file(path)
+      assert {:ok, set} = read_leniently("timezone_event.ics")
       assert [_ | _] = IntervalSet.members(set)
+    end
+
+    test "a bare component is not a calendar to parse_file/2" do
+      path = Path.join(@fixtures_dir, "one_event.ics")
+      assert {:error, %Tempo.ParseError{}} = ICal.parse_file(path)
     end
 
     test "calendar_name.ics surfaces X-WR-CALNAME on the set's metadata" do
@@ -1115,5 +1131,15 @@ defmodule Tempo.ICal.Test do
         end
       end
     end
+  end
+
+  # Some of the `ical` library's fixtures are a bare component, not a whole
+  # calendar, so they are read leniently, by the library's `ICal.from_ics/1`.
+  defp read_leniently(name) do
+    @fixtures_dir
+    |> Path.join(name)
+    |> File.read!()
+    |> Elixir.ICal.from_ics()
+    |> ICal.from_ical()
   end
 end

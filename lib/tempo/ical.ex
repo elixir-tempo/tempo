@@ -32,6 +32,7 @@ if Code.ensure_loaded?(ICal) do
       IntervalSet,
       Occurrences,
       Options,
+      ParseError,
       Spans
     }
 
@@ -58,6 +59,12 @@ if Code.ensure_loaded?(ICal) do
     Reads iCalendar text into a set of intervals, one for each event or
     occurrence of an event, in order of start.
 
+    The text is a whole calendar, from `BEGIN:VCALENDAR` to `END:VCALENDAR`,
+    so text that is not iCalendar, or a calendar cut short, is an error
+    rather than a calendar of no events or fewer. To read such text as
+    leniently as the `ical` library can, read it with `ICal.from_ics/1` and
+    give the `%ICal{}` to `from_ical/2`.
+
     ### Arguments
 
     * `ics` is iCalendar text.
@@ -77,8 +84,10 @@ if Code.ensure_loaded?(ICal) do
       each member's its event's (`:uid`, `:summary`, `:description`,
       `:location`, `:status`, and so on).
 
-    * `{:error, exception}` when a recurring event has no end and no window
-      is given, or a value cannot be read.
+    * `{:error, exception}`, a `Tempo.ParseError` when the text does not
+      begin with `BEGIN:VCALENDAR` or ends before `END:VCALENDAR`, or
+      another exception when a recurring event has no end and no window is
+      given, or a value cannot be read.
 
     ### Examples
 
@@ -101,10 +110,18 @@ if Code.ensure_loaded?(ICal) do
         iex> {Tempo.metadata(meeting).summary, Tempo.duration(meeting)}
         {"Test meeting", ~o"PT3600S"}
 
+        iex> {:error, error} = Tempo.ICal.parse("hello, world")
+        iex> Exception.message(error)
+        ~s|Cannot read "hello, world" as iCalendar: it does not begin with BEGIN:VCALENDAR|
+
     """
     @spec parse(binary(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
     def parse(ics, options \\ [])
-    def parse(ics, options) when is_binary(ics), do: from_ical(ICal.from_ics(ics), options)
+
+    def parse(ics, options) when is_binary(ics) do
+      with {:ok, calendar} <- read(ics), do: from_ical(calendar, options)
+    end
+
     def parse(other, _options), do: {:error, not_text(other)}
 
     @doc """
@@ -162,7 +179,7 @@ if Code.ensure_loaded?(ICal) do
     ### Returns
 
     * `{:ok, set}`, or `{:error, exception}`, a `File.Error` when the file
-      cannot be read.
+      cannot be read, or as for `parse/2`.
 
     ### Examples
 
@@ -358,7 +375,10 @@ if Code.ensure_loaded?(ICal) do
     """
     @spec available(binary() | ICal.t(), keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
     def available(ics, options \\ [])
-    def available(ics, options) when is_binary(ics), do: available(ICal.from_ics(ics), options)
+
+    def available(ics, options) when is_binary(ics) do
+      with {:ok, calendar} <- read(ics), do: available(calendar, options)
+    end
 
     def available(%ICal{availabilities: availabilities}, options) do
       with :ok <- Options.check(options, [:within], "Tempo.ICal.available/2"),
@@ -420,6 +440,24 @@ if Code.ensure_loaded?(ICal) do
         ArgumentError.exception(
           "a calendar is iCalendar text or an %ICal{}, not #{inspect(other)}"
         )
+
+    defp read(ics) do
+      case ICal.from_binary(ics) do
+        {:ok, calendar} ->
+          {:ok, calendar}
+
+        {:error, reason} ->
+          {:error, ParseError.exception(text: ics, reason: unreadable(reason), as: "iCalendar")}
+      end
+    end
+
+    defp unreadable(:not_a_calendar) do
+      "it does not begin with BEGIN:VCALENDAR"
+    end
+
+    defp unreadable(:incomplete_calendar) do
+      "it ends before END:VCALENDAR, so it is cut short or a component in it is not closed"
+    end
 
     defp available_in(availabilities, %Tempo{} = window, options) do
       window = Spans.window_in(window, on_the_clock_of(availabilities, options))

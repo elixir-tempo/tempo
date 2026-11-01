@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2.4.1] — Unreleased
+
+### Fixed
+
+* `Tempo.ICal.parse/2`, `parse_file/2` and `available/2` return a `Tempo.ParseError` for text that is not a whole calendar, where they read it as a calendar of no events or fewer. Requires `ical` 3.2.2, whose `ICal.from_binary/1` they read with.
+
 ## [v2.4.0] — 2026-11-01
 
 ### Added

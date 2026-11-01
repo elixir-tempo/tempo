@@ -186,7 +186,7 @@ defmodule Tempo.MixProject do
       {:localize, "~> 1.6"},
       {:calendrical, "~> 2.5"},
       {:astro, "~> 2.10"},
-      {:ical, "~> 3.2", optional: true},
+      {:ical, "~> 3.2 and >= 3.2.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},
       {:ex_doc, "~> 0.38", only: [:dev, :test, :release], optional: true, runtime: false},
       {:benchee, "~> 1.3", only: :dev, runtime: false},
