@@ -10,7 +10,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Blocked
 
-* [ ] **`Tempo.day_start/3`** — a day of a calendar that begins in the evening placed on the UTC line, from its start to its stop (decision 91, [plans/day-start.md](plans/day-start.md)). Blocked on Calendrical's `day_bounds/2`, `:time_zone` and Islamic `:location`.
+* [ ] **`Tempo.day_start/1`** — a day of a calendar that begins at sunset placed on the UTC line, from its start to its stop, calendar-relative (decision 91, [plans/day-start.md](plans/day-start.md)). Blocked on a Calendrical release with `day_bounds/1`.
 
 ### Upstream
 
