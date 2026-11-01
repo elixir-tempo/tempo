@@ -397,6 +397,43 @@ defmodule Tempo.Calendar do
   def month_from_traditional(calendar, year, named),
     do: impl(calendar).month_from_traditional(year, named)
 
+  # ── When a day begins ─────────────────────────────────────────────────
+
+  @doc """
+  The UTC instants a day of a calendar begins and ends at, where the
+  calendar's day begins in the evening (decision 91): the calendar names its
+  boundary and its place. `:midnight` for a calendar whose day begins at
+  midnight.
+  """
+  @spec day_bounds(module(), Date.t()) ::
+          {:ok, {DateTime.t(), DateTime.t()}} | :midnight | {:error, Exception.t()}
+  def day_bounds(calendar, date) do
+    module = impl(calendar)
+
+    if evening_day?(module) do
+      module.day_bounds(date)
+    else
+      :midnight
+    end
+  end
+
+  @doc "The zone of the place a calendar's day begins at, where it begins in the evening; `:midnight` otherwise."
+  @spec day_zone(module()) :: {:ok, String.t()} | :midnight
+  def day_zone(calendar) do
+    module = impl(calendar)
+
+    if evening_day?(module) do
+      {:ok, module.time_zone()}
+    else
+      :midnight
+    end
+  end
+
+  defp evening_day?(module) do
+    Code.ensure_loaded?(module) and function_exported?(module, :day_bounds, 1) and
+      function_exported?(module, :time_zone, 0)
+  end
+
   # ── Arithmetic the calendar owns ──────────────────────────────────────
 
   @doc "A date moved by a duration of years, months, weeks and days: years, then months, then the day clamped, then days."

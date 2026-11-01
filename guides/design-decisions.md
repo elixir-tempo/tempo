@@ -374,6 +374,22 @@ iex> Tempo.duration(~o"2016-12-31T23:59:00Z/2017-01-01T00:01:00Z")
 
 **Why.** [Resolution 5 of the 28th CGPM (2026)](https://www.bipm.org/en/cgpm-2026/resolution-5) makes UTC continuous from 20 May 2027, so no leap second is inserted again. A length on the clock is what POSIX time and Elixir's own types count, and a table that would never grow is not worth the elapsed-time answer it gave for the years before.
 
+### When a day begins (decision 91)
+
+**The question.** A day of the Hebrew or an Islamic calendar begins at sunset, the evening before. Where is that worked out, and what does a caller name to have such a day placed on the UTC line?
+
+**The alternatives.** Work it out in Tempo; let the caller name a place, a zone and a boundary (sunset, nightfall, an 18:00 evening); let the calendar name them.
+
+**The choice.** The calendar names them, and Calendrical works them out. `Tempo.day_start/1` places each day from the sunset it begins at to the sunset it ends at, at the calendar's own place: Jerusalem for the Hebrew calendar, Mecca for Umm al-Qura and RGSA, Cairo for the observational calendar.
+
+```elixir
+iex> {:ok, passover} = Tempo.day_start(~o"5786Y7m15D[u-ca=hebrew]")
+iex> Tempo.to_iso8601(passover)
+{:ok, "5786Y7M14DT18H58M30S/15DT18H59M10S[Asia/Jerusalem][u-ca=hebrew]"}
+```
+
+**Why.** When a day begins is calendar maths, which is Calendrical's, with the sunset Astro's. A day start is calendar-relative, as everything else is: the caller names the calendar, and its place and boundary come with it. A day that begins at another place's sunset is a day of a calendar defined for that place.
+
 ## Seasons
 
 ISO 8601-2 numbers seasons: 21 to 24 are spring, summer, autumn and winter, and 25 to 32 the same seasons of the northern and southern hemispheres. Spring is March to May in the north and September to November in the south.

@@ -33,6 +33,7 @@ defmodule Tempo do
   alias Tempo.Build
   alias Tempo.Children
   alias Tempo.ConversionError
+  alias Tempo.DayStart
   alias Tempo.Duration
   alias Tempo.Expand
   alias Tempo.Explain
@@ -2854,6 +2855,54 @@ defmodule Tempo do
   """
   @spec on(t(), t()) :: {:ok, t()} | {:error, error()}
   def on(value, other), do: at(other, value)
+
+  # ── Day starts ────────────────────────────────────────────────────────
+
+  @doc """
+  Places the days of an expression on the UTC line by when its calendar's
+  day begins (decision 91).
+
+  A day of the Hebrew or an Islamic calendar begins at sunset, the evening
+  before. Tempo reads such a day as a day; this gives it as the span from the
+  sunset it begins at to the sunset it ends at, on the clock of the
+  calendar's own place: Jerusalem for the Hebrew calendar, Mecca for Umm
+  al-Qura and RGSA, Cairo for the observational Islamic calendar.
+  Calendrical computes the bounds (`day_bounds/1`), so the day start is the
+  calendar's: no place, zone or boundary is given. A run of days is from the
+  sunset before its first to the sunset of its last, and the days of a set
+  or a recurrence are each placed so. An expression of a calendar whose day
+  begins at midnight is returned as it is.
+
+  ### Arguments
+
+  * `expression` is a `t:t/0` of days: a day, an interval of days, a set or
+    a recurrence of them.
+
+  ### Returns
+
+  * `{:ok, expression}`, its days placed, each end to the second; a set or a
+    recurrence with no end is placed as it is walked.
+
+  * `{:error, %Tempo.ConversionError{reason: :not_days}}` for a value with a
+    time of day or coarser than a day, in a calendar whose day begins at
+    sunset, and for a duration.
+
+  * `{:error, exception}` for a day the calendar cannot place, such as one
+    outside its range.
+
+  ### Examples
+
+      iex> {:ok, passover} = Tempo.day_start(~o"5786Y7m15D[u-ca=hebrew]")
+      iex> Tempo.to_iso8601(passover)
+      {:ok, "5786Y7M14DT18H58M30S/15DT18H59M10S[Asia/Jerusalem][u-ca=hebrew]"}
+
+      iex> Tempo.day_start(~o"2026-04-02")
+      {:ok, ~o"2026-04-02"}
+
+  """
+  @spec day_start(t() | Duration.t()) :: {:ok, t()} | {:error, error()}
+  def day_start(expression) when is_expression(expression), do: DayStart.project(expression)
+  def day_start(other), do: not_an_expression(other)
 
   # ── Arithmetic ────────────────────────────────────────────────────────
 

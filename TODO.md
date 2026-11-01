@@ -8,9 +8,11 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
-## Blocked
+## In progress
 
-* [ ] **`Tempo.day_start/1`** — a day of a calendar that begins at sunset placed on the UTC line, from its start to its stop, calendar-relative (decision 91, [plans/day-start.md](plans/day-start.md)). Blocked on a Calendrical release with `day_bounds/1`.
+* [ ] **`Tempo.day_start/1`** — built against Calendrical on a path dependency (decision 91, [plans/day-start.md](plans/day-start.md)): `mix.exs` names `../../localize/calendrical`, to be restored to `{:calendrical, "~> 2.4"}` once Calendrical 2.4.0 is published, before any Tempo release.
+
+## Blocked
 
 ### Upstream
 

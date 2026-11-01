@@ -31,7 +31,7 @@ Decision 91 of `plans/decisions.md`, the user's, 2026-11-01:
 
 ### Calendrical
 
-* `day_bounds/1` beside `date_at/2` on each of the four calendars, through `Calendrical.DayStart`, from Astro's sunset at the calendar's place.
+* `day_bounds/1` beside `date_at/2` on each of the four calendars, through `Calendrical.DayStart`, from Astro's sunset at the calendar's place, and `time_zone/0`, the zone of that place.
 
 * A date of another calendar is a `Calendrical.IncompatibleCalendarError`; a date outside the calendar's range, or a day with no sunset at the place, is the error `date_at/2` gives for it.
 
@@ -41,7 +41,7 @@ Decision 91 of `plans/decisions.md`, the user's, 2026-11-01:
 
 * `Tempo.day_start/1`: a value of a day, an interval of days, a set or a recurrence. A day of a calendar with `day_bounds/1` is the span from its start to its stop, on the UTC line; a run of days is from the start of the first to the stop of the last.
 
-* A day of another calendar beside them is the civil day in the zone of the sunset days' place (decision 41), so the result lies on one line (law 4); beside sunset days of two places, it is a `Tempo.FrameError`.
+* An expression is in one calendar (law 5), so its days are all of one day start: those of a calendar with `day_bounds/1` are all placed, each in the calendar's zone (`time_zone/0`) and its own calendar, and an expression of any other calendar is returned as it is. Which of a set's members are civil days is not Tempo's to know; `tempo_holidays`, which records each holiday's own calendar, decides it (decision 41).
 
 * A value with a time of day, or coarser than a day, is an error that names it.
 
@@ -53,7 +53,7 @@ Decision 91 of `plans/decisions.md`, the user's, 2026-11-01:
 
 * [x] **Calendrical `day_bounds/1`** — on the four calendars, the inverse of `date_at/2` with `day_start: :sunset`, tested against it; in Calendrical 2.4.0, unreleased. 2026-11-01.
 
-* [ ] **`Tempo.day_start/1`** — on Calendrical's `day_bounds/1`. Blocked on a Calendrical release with it.
+* [x] **`Tempo.day_start/1`** — on Calendrical's `day_bounds/1` and `time_zone/0`, against Calendrical on a path dependency until 2.4.0 is published. 2026-11-01.
 
 * [ ] **tempo_holidays on `Tempo.day_start/1`** — `day_start/2` reduced to the holiday-set logic. Blocked on `Tempo.day_start/1`.
 

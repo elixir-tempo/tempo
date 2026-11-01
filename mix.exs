@@ -184,7 +184,10 @@ defmodule Tempo.MixProject do
   defp deps do
     [
       {:localize, "~> 1.4"},
-      {:calendrical, "~> 2.2"},
+      # Development against the local Calendrical, for its day_bounds/1 and
+      # time_zone/0 (decision 91): restore {:calendrical, "~> 2.4"} once 2.4.0
+      # is published, before any Tempo release.
+      {:calendrical, path: "../../localize/calendrical"},
       {:astro, "~> 2.10"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},

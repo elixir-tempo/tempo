@@ -1,6 +1,10 @@
 # Changelog
 
-## [v2.2.1] — Unreleased
+## [v2.3.0] — Unreleased
+
+### Added
+
+* `Tempo.day_start/1` places the days of a calendar whose day begins at sunset (Hebrew, Islamic) on the UTC line, from sunset to sunset at the calendar's own place, through Calendrical's `day_bounds/1` (decision 91). Requires Calendrical 2.4.
 
 ### Fixed
 

@@ -34,6 +34,7 @@ defmodule Tempo.ConversionError do
           | {:no_walk, atom()}
           | :not_an_interval
           | {:not_written_in, :season | :traditional_month}
+          | :not_days
           | term()
 
   @type t :: %__MODULE__{value: term(), reason: reason()}
@@ -131,6 +132,9 @@ defmodule Tempo.ConversionError do
   defp describe({:no_walk, unit}),
     do:
       "cannot be walked by the #{unit}, which is not a unit a span steps through: walk it by a calendar or a clock unit"
+
+  defp describe(:not_days),
+    do: "is not a day or a run of days, so has no day start to place it by; write it to the day"
 
   defp describe(:nothing_finer),
     do: "is written to the microsecond, and has nothing finer to walk or enumerate"
