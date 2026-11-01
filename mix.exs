@@ -6,7 +6,7 @@ defmodule Tempo.MixProject do
     Mix.raise("ex_tempo requires Erlang/OTP 27 or later: OTP #{System.otp_release()} detected.")
   end
 
-  @version "2.2.0"
+  @version "2.3.0"
 
   def project do
     [
@@ -184,10 +184,7 @@ defmodule Tempo.MixProject do
   defp deps do
     [
       {:localize, "~> 1.4"},
-      # Development against the local Calendrical, for its day_bounds/1 and
-      # time_zone/0 (decision 91): restore {:calendrical, "~> 2.4"} once 2.4.0
-      # is published, before any Tempo release.
-      {:calendrical, path: "../../localize/calendrical"},
+      {:calendrical, "~> 2.4"},
       {:astro, "~> 2.10"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},

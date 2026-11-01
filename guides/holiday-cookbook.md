@@ -152,6 +152,19 @@ iex> Tempo.IntervalSet.map(rosh_hashanah, &Tempo.to_calendar!(&1, Calendrical.Gr
 
 > **A holiday is a rule, not a start and a cadence.** A recurrence with no rule is as long as it steps: `~o"R/5787Y1M1D/P1Y[u-ca=hebrew]"` is the whole year from 1 Tishrei, and then the next, where the rule `FL1M1DN` is the one day of each. Left out of the workdays (`Tempo.workdays(:US, except: holiday)`), the first leaves no working day after it starts and the second leaves out Rosh Hashanah.
 
+### When the day begins
+
+A Hebrew or Islamic day begins at sunset, the evening before. `Tempo.day_start/1` places such a day from the sunset it begins at to the sunset it ends at, on the clock of its calendar's own place — Jerusalem for a Hebrew holiday, Mecca for an Umm al-Qura one — so nothing but the holiday is given (decision 91).
+
+```elixir
+iex> {:ok, rosh_hashanah} = Tempo.to_interval(~o"R/../P1Y/FL1M1DN[u-ca=hebrew]", within: ~o"2026")
+iex> {:ok, from_the_evening} = Tempo.day_start(rosh_hashanah)
+iex> Tempo.IntervalSet.map(from_the_evening, &Tempo.to_calendar!(&1, Calendrical.Gregorian))
+[~o"2026Y9M11DT18H50M27S/12DT18H49M8S[Asia/Jerusalem][u-ca=gregorian]"]
+```
+
+> *"Rosh Hashanah 2026 **begins at sunset** in Jerusalem on the 11th of September and ends at sunset on the 12th."*
+
 ## Observed-date substitution (a transform over a holiday)
 
 Many holidays are *observed* on a nearby workday when they land on a weekend — "if January 1 is a Saturday or Sunday, it is observed the following Monday". This is not a new selection but a **map** over the base recurrence, using the territory-aware workday helpers:

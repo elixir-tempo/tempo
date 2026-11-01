@@ -8,10 +8,6 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
-## In progress
-
-* [ ] **`Tempo.day_start/1`** — built against Calendrical on a path dependency (decision 91, [plans/day-start.md](plans/day-start.md)): `mix.exs` names `../../localize/calendrical`, to be restored to `{:calendrical, "~> 2.4"}` once Calendrical 2.4.0 is published, before any Tempo release.
-
 ## Blocked
 
 ### Upstream
@@ -53,6 +49,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **`Tempo.day_start/1`** — a day of a calendar that begins at sunset placed from sunset to sunset at its own place, through Calendrical 2.4's `day_bounds/1` (decision 91). 2026-11-01, v2.3.0.
 
 * [x] **`to_elixir/1` of an interval of traditional months** — a day however written (calendar, ordinal, week, traditional month) is its `Date`, an interval of them a `Date.Range`, and a time of an ordinal or week date keeps its date. 2026-11-01.
 

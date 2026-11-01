@@ -53,7 +53,7 @@ Decision 91 of `plans/decisions.md`, the user's, 2026-11-01:
 
 * [x] **Calendrical `day_bounds/1`** — on the four calendars, the inverse of `date_at/2` with `day_start: :sunset`, tested against it; in Calendrical 2.4.0, unreleased. 2026-11-01.
 
-* [x] **`Tempo.day_start/1`** — on Calendrical's `day_bounds/1` and `time_zone/0`, against Calendrical on a path dependency until 2.4.0 is published. 2026-11-01.
+* [x] **`Tempo.day_start/1`** — on Calendrical's `day_bounds/1` and `time_zone/0`, on Calendrical 2.4.0. 2026-11-01, v2.3.0.
 
 * [ ] **tempo_holidays on `Tempo.day_start/1`** — `day_start/2` reduced to the holiday-set logic. Blocked on `Tempo.day_start/1`.
 
