@@ -6,6 +6,8 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
+* [ ] **`to_elixir/1` of an interval of traditional months** — `Tempo.to_elixir(~o"5786Y7m15D/7m15D[u-ca=hebrew]")` and `Tempo.to_elixir(~o"4723Y8m15D/8m15D[u-ca=chinese]")` are `{:error, %Tempo.ConversionError{reason: :not_an_elixir_value}}`, where one value of a traditional month (`5786Y7m15D`) and an interval of ordinal months convert, and `Tempo.Interval.instants/1` answers all of them. tempo_holidays projects every Hebrew holiday through it, so none written with a traditional month is projected by `day_start/2`. Found 2026-11-01.
+
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
 ## Blocked
