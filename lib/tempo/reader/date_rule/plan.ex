@@ -11,7 +11,8 @@ defmodule Tempo.Reader.DateRule.Plan do
   # `:weekday` `:direction` the `:count`-th `:inner_weekday` of a month or
   # after a date), `:easter` and `:orthodox` (`:offset` days from it),
   # `:equinox` and `:solstice` (`:month`, `:offset`, `:timezone`),
-  # `:islamic`, `:persian` and `:julian` (`:calendar`, `:month`, `:day`),
+  # `:islamic`, `:persian`, `:julian` and `:bangla` (`:calendar`, `:month`,
+  # `:day`),
   # `:hebrew` (`:calendar`, the `:month_part` that selects its month, `:day`),
   # `:lunisolar` (`:calendar`, `:month`, `:day`, `:leap_month`, `:offset`)
   # and `:solar_term` (`:calendar`, the term as `:count`, `:day`). A date of
@@ -247,8 +248,9 @@ defmodule Tempo.Reader.DateRule.Plan do
     stepped(plan, steps)
   end
 
-  defp base_plan(%{fn: "bengali-revised"}, _steps) do
-    {:error, "the Bengali calendar is not one Calendrical has"}
+  defp base_plan(%{fn: "bengali-revised", month: month, day: day} = base, steps) do
+    plan = %{kind: :bangla, calendar: calendar_of("bengali-revised"), month: month, day: day}
+    stepped(in_own_year(plan, base), steps)
   end
 
   # The steps of a plan, the one nearest its date first; none is none.

@@ -60,8 +60,10 @@ defmodule Tempo.Calendar do
   # The calendars date-holidays' rule grammar names by a word (`Tempo.DateRule`):
   # `10 Dhu al-Hijjah` is Islamic, `15 Nisan` Hebrew, `1 Farvardin` Persian
   # (`jalaali`), `julian 12-25` Julian, `chinese 01-0-01`, `korean …` and
-  # `vietnamese …` lunisolar. date-holidays reckons the Islamic months by the
-  # Umm al-Qura table.
+  # `vietnamese …` lunisolar, and `bengali-revised 9-2` Bangla. date-holidays
+  # reckons the Islamic months by the Umm al-Qura table, and the Bangla dates
+  # by the Bangla Academy's 1987 rules: Bangladesh's national days fall on
+  # their Gregorian days in those rules, not in the 2019 revision's.
   @date_rule_calendars %{
     "islamic" => Calendrical.Islamic.UmmAlQura,
     "hebrew" => Calendrical.Hebrew,
@@ -69,7 +71,8 @@ defmodule Tempo.Calendar do
     "julian" => Calendrical.Julian,
     "chinese" => Calendrical.Chinese,
     "korean" => Calendrical.Korean,
-    "vietnamese" => Calendrical.Vietnamese
+    "vietnamese" => Calendrical.Vietnamese,
+    "bengali-revised" => Calendrical.Bangla.Revised1987
   }
 
   @typedoc "A half-open span of days: the first day and the day after the last, as ISO day numbers."

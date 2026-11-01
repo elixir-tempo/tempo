@@ -306,7 +306,7 @@ defmodule Tempo.Reader.DateRule.Expression do
   end
 
   defp plain_anchor(%{kind: kind, calendar: calendar, month: month, day: day})
-       when kind in [:persian, :julian] do
+       when kind in [:persian, :julian, :bangla] do
     {:ok, [month: month, day: day], calendar}
   end
 

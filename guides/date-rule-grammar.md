@@ -112,7 +112,7 @@ A date is read in `Calendrical.Chinese`, `Calendrical.Korean` or `Calendrical.Vi
 bengali     = "bengali-revised " [["-"] year "-"] month "-" day
 ```
 
-Not read yet: Calendrical has no Bengali calendar (section 9).
+A date in the Bangla calendar of Bangladesh as the Bangla Academy revised it in 1987, `Calendrical.Bangla.Revised1987`: date-holidays writes Bangladesh's national days in those rules, where each falls on the Gregorian day it is kept on (`bengali-revised 9-2`, Victory Day, the 16th of December). The 2019 revision moved them a day (Victory Day is 1 Poush in it), so a rule is not read in `Calendrical.Bangla`, which follows the 2019 revision from 16 October 2019. A year written with the date is a Bangla year, and the rule falls in it alone.
 
 ## 3. Steps from a date
 
@@ -230,8 +230,6 @@ The holiday around a rule in date-holidays' dataset, which is not part of the ru
 
 These are well formed and return a `Tempo.ParseError` that names them:
 
-* **The Bengali calendar** — `bengali-revised 1-1`: Calendrical has no Bengali calendar.
-
 * **A solar term of the Korean or Vietnamese calendar** — `korean 5-01 solarterm`.
 
 * **`if equal`** — `2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01`.
@@ -244,4 +242,4 @@ These are well formed and return a `Tempo.ParseError` that names them:
 
 ## 10. How the grammar is tested
 
-The reader's tokens are held to date-holidays-parser's own: its fixture of 119 rules (`test/fixtures/date_holidays_parser_tokens.json`, ISC licence, in `NOTICE`) records the tokens it makes of each, and every one reads to them. What the rules read to is held to the dates the parser's own tests expect (`test/fixtures/date_holidays_parser_dates.json`, 97 rules), and every rule of the date-holidays dataset reads but the Bengali.
+The reader's tokens are held to date-holidays-parser's own: its fixture of 119 rules (`test/fixtures/date_holidays_parser_tokens.json`, ISC licence, in `LICENSE.md`) records the tokens it makes of each, and every one reads to them. What the rules read to is held to the dates the parser's own tests expect (`test/fixtures/date_holidays_parser_dates.json`, 97 rules), and every rule of the date-holidays dataset reads.

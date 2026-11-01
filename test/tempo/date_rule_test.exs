@@ -24,19 +24,13 @@ defmodule Tempo.DateRuleTest do
 
   # The rules of date-holidays-parser's fixture not read yet, each a part of
   # the grammar still to be built (plans/date-rule.md): a rule that is not a
-  # date, an `if is holiday` move by more than one, `if equal`, and the
-  # Bengali calendar, which Calendrical does not have. None is a rule of the
-  # date-holidays dataset but the Bengali ones.
+  # date, an `if is holiday` move by more than one, and `if equal`. None is a
+  # rule of the date-holidays dataset.
   @not_read_yet [
     "#1111",
     "03-01 and if Saturday, Sunday then next Monday if is holiday then 2nd next Tuesday since 2022",
-    "2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01",
-    "bengali-revised 1-1",
-    "bengali-revised 1425-1-1"
+    "2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01"
   ]
-
-  # The rules of the parser's own tests not read yet.
-  @dates_not_read_yet ["bengali-revised 1-1", "bengali-revised 12-1"]
 
   defp written(rule) do
     {:ok, expression} = DateRule.parse(rule)
@@ -55,14 +49,31 @@ defmodule Tempo.DateRuleTest do
   test "every rule of the parser's own tests falls on the dates they expect" do
     differ =
       for %{"rule" => rule, "year" => year, "dates" => expected} <- @parser_dates,
-          rule not in @dates_not_read_yet,
           found = dates_in(rule, year),
           found != {:ok, Enum.sort(expected)} do
         {rule, year, expected, found}
       end
 
     assert [] = differ
-    assert Enum.all?(@dates_not_read_yet, &match?({:error, _}, DateRule.parse(&1)))
+  end
+
+  describe "a date of the Bangla calendar" do
+    test "is a date of the 1987 rules, in which date-holidays writes Bangladesh's days" do
+      assert written("bengali-revised 9-2") == "R/../P1Y/FL9M2DN[u-ca=bangla-1987]"
+      assert written("bengali-revised 1425-1-1") == "R/{1425Y}/P1Y/FL1M1DN[u-ca=bangla-1987]"
+    end
+
+    test "falls on the Gregorian day the holiday is kept on, every year" do
+      for {rule, month, day} <- [
+            {"bengali-revised 11-9", 2, 21},
+            {"bengali-revised 12-12", 3, 26},
+            {"bengali-revised 1-1", 4, 14},
+            {"bengali-revised 9-2", 12, 16}
+          ],
+          year <- [2018, 2019, 2020, 2024, 2025] do
+        assert dates_in(rule, year) == {:ok, [Date.to_iso8601(Date.new!(year, month, day))]}
+      end
+    end
   end
 
   describe "a date" do
@@ -424,9 +435,6 @@ defmodule Tempo.DateRuleTest do
     test "names the text not read, or the part not read yet" do
       assert {:error, %ParseError{rest: "tomorrow", as: "a date rule"}} =
                DateRule.parse("12-25 tomorrow")
-
-      assert {:error, %ParseError{reason: "the Bengali calendar is not one Calendrical has"}} =
-               DateRule.parse("bengali-revised 1-1")
 
       assert {:error, %ParseError{reason: "a solar term of this calendar is not read yet"}} =
                DateRule.parse("korean 78-32-5-01 solarterm")

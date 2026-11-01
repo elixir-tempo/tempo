@@ -109,7 +109,7 @@ iex> Tempo.to_interval(autumnal_equinox_day, within: ~o"2026")
 
 ## Dates in other calendars
 
-A date in the Islamic, Hebrew, Persian, Julian, Chinese, Korean or Vietnamese calendar is a recurrence in that calendar, so each year of the rule is a year of that calendar and the date moves against the Gregorian year as the holiday does. An Islamic date is read in the Umm al-Qura calendar. A lunisolar date is written month, leap and day: `chinese 01-0-01` is the first day of the first month, which is not a leap month. Written with its sexagenary cycle and year before it, it falls in that year alone: `chinese 78-32-08-0-15` is the Mid-Autumn Festival of the 32nd year of the 78th cycle, the 27th of September 2015. date-holidays-parser drops the cycle and its year and reads such a date in every year; Tempo reads it in the year it names.
+A date in the Islamic, Hebrew, Persian, Julian, Chinese, Korean, Vietnamese or Bangla calendar is a recurrence in that calendar, so each year of the rule is a year of that calendar and the date moves against the Gregorian year as the holiday does. An Islamic date is read in the Umm al-Qura calendar, and a `bengali-revised` date in the Bangla Academy's 1987 rules (`Calendrical.Bangla.Revised1987`), in which Bangladesh's national days fall on the Gregorian days they are kept on. A lunisolar date is written month, leap and day: `chinese 01-0-01` is the first day of the first month, which is not a leap month. Written with its sexagenary cycle and year before it, it falls in that year alone: `chinese 78-32-08-0-15` is the Mid-Autumn Festival of the 32nd year of the 78th cycle, the 27th of September 2015. date-holidays-parser drops the cycle and its year and reads such a date in every year; Tempo reads it in the year it names.
 
 | Rule | Reads as | ISO 8601 | In 2026 |
 |---|---|---|---|
@@ -121,6 +121,7 @@ A date in the Islamic, Hebrew, Persian, Julian, Chinese, Korean or Vietnamese ca
 | `chinese 01-0-01` | Lunar New Year | `R/../P1Y/FL1m1DN[u-ca=chinese]` | 2026-02-17 |
 | `korean 08-0-15` | Chuseok | `R/../P1Y/FL8m15DN[u-ca=dangi]` | 2026-09-25 |
 | `vietnamese 01-0-01` | Tết | `R/../P1Y/FL1m1DN[u-ca=vietnamese]` | 2026-02-17 |
+| `bengali-revised 9-2` | Victory Day | `R/../P1Y/FL9M2DN[u-ca=bangla-1987]` | 2026-12-16 |
 
 ```elixir
 iex> {:ok, passover} = Tempo.DateRule.parse("15 Nisan")
@@ -315,8 +316,6 @@ iex> Exception.message(error)
 ```
 
 These parts of the grammar return an error that names them:
-
-* **The Bengali calendar** — `bengali-revised 1-1`, which needs a Bengali calendar in Calendrical.
 
 * **A solar term of the Korean or Vietnamese calendar** — `korean 5-01 solarterm`; a Chinese solar term is read at the Chinese meridian.
 

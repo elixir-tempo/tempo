@@ -126,13 +126,13 @@ Taken by the user on 2026-10-27, for tempo_holidays to compile its dataset with 
 
 ### Deferred
 
-* [ ] **The Bengali calendar** — eight rules of the dataset (`bengali-revised 1-1` …) and two of the parser's tests, read as a named error. Set aside by the user (2026-10-27); it needs a Bengali (revised) calendar in Calendrical, which has none.
-
 * [ ] **An `if is holiday` move by more than one, or back** — `if is holiday then 2nd next Tuesday`. `Tempo.RecurrenceSet.move_when/2` moves to the first span its selector gives after the occurrence and takes no count; no rule of the dataset needs one.
 
 * [ ] **`if equal`** — `2nd sunday after 05-01 if equal easter 49 then 3rd sunday after 05-01`: the date replaced when it falls on another rule's date, a primitive `Tempo.RecurrenceSet` does not have; no rule of the dataset needs one.
 
 ### Done
+
+* [x] **The Bengali calendar** — `bengali-revised` dates read in `Calendrical.Bangla.Revised1987`, the 1987 rules date-holidays writes Bangladesh's days in; the parser's two tests fall on their dates. 2026-11-01, on Calendrical 2.5.
 
 * [x] **A year of the sexagenary cycle** — on Calendrical 2.2's `elapsed_years/2` (`Tempo.Calendar.year_of_cycle/3`): a lunisolar date written with its cycle and year falls in that year of its calendar (`chinese 78-32-08-0-15`, 2015-09-27), and a solar term in the Gregorian year that year begins in (`chinese 78-32-8-15 solarterm`, 2015-06-04). The parser drops the cycle and reads the date in every year. 2026-10-27.
 

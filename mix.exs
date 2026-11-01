@@ -183,8 +183,8 @@ defmodule Tempo.MixProject do
 
   defp deps do
     [
-      {:localize, "~> 1.4"},
-      {:calendrical, "~> 2.4"},
+      {:localize, path: "../../localize/localize", override: true},
+      {:calendrical, path: "../../localize/calendrical"},
       {:astro, "~> 2.10"},
       {:ical, "~> 3.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},
