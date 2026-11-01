@@ -4436,10 +4436,11 @@ defmodule Tempo do
   @doc """
   The Elixir struct a value fills: a `Date` for a day, a `Time` for a time
   of day, a `NaiveDateTime` for a floating date and time, a `DateTime` for
-  one with a zone or a shift, and an Elixir `Duration` for a duration. An
-  interval of two dates is the `Date.Range` of them, which holds its last
-  day as the interval does; one with a duration for an end is the range of
-  the dates it runs between.
+  one with a zone or a shift, and an Elixir `Duration` for a duration. A
+  day is a day however it is written: a calendar date, an ordinal date, a
+  week date, or a date of a traditional month. An interval of two dates is
+  the `Date.Range` of them, which holds its last day as the interval does;
+  one with a duration for an end is the range of the dates it runs between.
 
   ### Arguments
 
@@ -4473,6 +4474,9 @@ defmodule Tempo do
 
       iex> Tempo.to_elixir(~o"2026-06-15/P6D")
       {:ok, Date.range(~D[2026-06-15], ~D[2026-06-20])}
+
+      iex> Tempo.to_elixir(~o"2026-W23-4T10:30")
+      {:ok, ~N[2026-06-04 10:30:00]}
 
       iex> {:error, %Tempo.ConversionError{}} = Tempo.to_elixir(~o"2026-06")
 

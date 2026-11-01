@@ -92,19 +92,23 @@ defmodule Tempo.Interop do
   @spec to(Tempo.t() | Duration.t()) :: {:ok, struct()} | {:error, Exception.t()}
   def to(%Duration{units: units}), do: {:ok, Elixir.Duration.new!(units)}
 
+  # A value names a date when its year, month and day each read as one
+  # number: a calendar date, an ordinal date, a week date or a date of a
+  # traditional month, read through its calendar.
   def to(%Tempo{form: {:value, units}} = value) do
-    date? = Keyword.has_key?(units, :day) and Keyword.has_key?(units, :year)
     zoned? = not is_nil(value.zone) or not is_nil(value.shift)
-    filled(value, date?, Keyword.has_key?(units, :hour), zoned?)
+    filled(value, a_day?(value), Keyword.has_key?(units, :hour), zoned?)
   end
 
   # An interval of two dates is the range of them: both hold their last day,
   # the interval by how an end written to a date is read and the range by
   # what a `Date.Range` is.
   def to(%Tempo{form: {:span, %Tempo{} = from, %Tempo{} = to}} = interval) do
+    {from, to} = {placed(from, interval), placed(to, interval)}
+
     with true <- a_date?(from) and a_date?(to),
-         {:ok, %Date{} = first} <- to_date(placed(from, interval)),
-         {:ok, %Date{} = last} <- to_date(placed(to, interval)) do
+         {:ok, %Date{} = first} <- to_date(from),
+         {:ok, %Date{} = last} <- to_date(to) do
       {:ok, Date.range(first, last)}
     end
     |> a_range(interval)
@@ -113,8 +117,18 @@ defmodule Tempo.Interop do
   def to(other),
     do: {:error, ConversionError.exception(value: other, reason: :not_an_elixir_value)}
 
-  defp a_date?(%Tempo{form: {:value, units}}), do: Keyword.keys(units) == [:year, :month, :day]
-  defp a_date?(_end), do: false
+  # An end is a date when it names a day and no time of day.
+  defp a_date?(%Tempo{form: {:value, units}} = an_end) do
+    not Keyword.has_key?(units, :hour) and a_day?(an_end)
+  end
+
+  defp a_date?(_end) do
+    false
+  end
+
+  defp a_day?(value) do
+    match?({:ok, _year, _month, _day}, date_parts(value))
+  end
 
   defp placed(%Tempo{} = an_end, %Tempo{calendar: calendar}), do: %{an_end | calendar: calendar}
 

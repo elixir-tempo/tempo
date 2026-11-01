@@ -125,6 +125,55 @@ defmodule Tempo.InteropTest do
     end
   end
 
+  describe "a day however it is written" do
+    test "an ordinal date and a week date are the Date they name" do
+      assert Tempo.to_elixir(~o"2026-181") == {:ok, ~D[2026-06-30]}
+      assert Tempo.to_elixir(~o"2026-W23-4") == {:ok, ~D[2026-06-04]}
+    end
+
+    test "a time of one is on its date, where the date was once dropped" do
+      assert Tempo.to_elixir(~o"2026-181T10:30") == {:ok, ~N[2026-06-30 10:30:00]}
+      assert Tempo.to_elixir(~o"2026-W23-4T10:30") == {:ok, ~N[2026-06-04 10:30:00]}
+      assert Tempo.to_elixir(~o"2026-181T10:30Z") == {:ok, ~U[2026-06-30 10:30:00Z]}
+
+      assert {:ok, %DateTime{time_zone: "Europe/Paris"} = paris} =
+               Tempo.to_elixir(~o"2026-181T10[Europe/Paris]")
+
+      assert DateTime.to_naive(paris) == ~N[2026-06-30 10:00:00]
+    end
+
+    test "an interval of ordinal or week dates is the range of them" do
+      assert Tempo.to_elixir(~o"2026-181/2026-185") ==
+               {:ok, Date.range(~D[2026-06-30], ~D[2026-07-04])}
+
+      assert Tempo.to_elixir(~o"2026-W23-4/2026-W24-1") ==
+               {:ok, Date.range(~D[2026-06-04], ~D[2026-06-08])}
+    end
+
+    test "an interval of traditional months is the range of the dates they name" do
+      # 5787 has a leap month after the fifth, so its seventh traditional
+      # month is its eighth month.
+      {:ok, first} = Date.new(5787, 8, 15, Calendrical.Hebrew)
+      {:ok, last} = Date.new(5787, 8, 22, Calendrical.Hebrew)
+
+      assert Tempo.to_elixir(Tempo.from_iso8601!("5787Y7m15D/7m22D[u-ca=hebrew]")) ==
+               {:ok, Date.range(first, last)}
+
+      {:ok, first} = Date.new(4722, 5, 1, Calendrical.Chinese)
+      {:ok, last} = Date.new(4722, 5, 3, Calendrical.Chinese)
+
+      assert Tempo.to_elixir(Tempo.from_iso8601!("4722Y5m1D/5m3D[u-ca=chinese]")) ==
+               {:ok, Date.range(first, last)}
+    end
+
+    test "a week, a month and a set of days in a month are no one date" do
+      for value <- [~o"2026-W23", ~o"2026-06", ~o"2026Y6M2K"] do
+        assert {:error, %Tempo.ConversionError{reason: :not_an_elixir_value}} =
+                 Tempo.to_elixir(value)
+      end
+    end
+  end
+
   describe "what has no Elixir value" do
     test "is an error that says so, for each conversion" do
       for result <- [

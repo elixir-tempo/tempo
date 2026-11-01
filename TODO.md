@@ -6,8 +6,6 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **`to_elixir/1` of an interval of traditional months** — `Tempo.to_elixir(~o"5786Y7m15D/7m15D[u-ca=hebrew]")` and `Tempo.to_elixir(~o"4723Y8m15D/8m15D[u-ca=chinese]")` are `{:error, %Tempo.ConversionError{reason: :not_an_elixir_value}}`, where one value of a traditional month (`5786Y7m15D`) and an interval of ordinal months convert, and `Tempo.Interval.instants/1` answers all of them. tempo_holidays projects every Hebrew holiday through it, so none written with a traditional month is projected by `day_start/2`. Found 2026-11-01.
-
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
 ## Blocked
@@ -51,6 +49,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **`to_elixir/1` of an interval of traditional months** — a day however written (calendar, ordinal, week, traditional month) is its `Date`, an interval of them a `Date.Range`, and a time of an ordinal or week date keeps its date. 2026-11-01.
 
 * [x] **`zoned?/1` of a set or a recurrence at a time shift** — `zoned?/1`, `floating?/1` and `explain/1` read the clock of an expression's ends, first value and members. 2026-11-01.
 

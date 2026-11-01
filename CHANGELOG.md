@@ -4,6 +4,8 @@
 
 ### Fixed
 
+* `Tempo.to_elixir/1` gives the `Date` of an ordinal date, a week date and an interval of traditional months (a `Date.Range`), and keeps the date of a time on an ordinal or week date, where it refused them or returned only the `Time`.
+
 * `Tempo.zoned?/1` and `floating?/1` read the shift of a set's members and a recurrence's first value, and `Tempo.explain/1` names it and a fixed-offset zone, where all three called them floating.
 
 * A set of a floating member and one at a time shift is a `Tempo.FrameError` (law 4), from `Tempo.IntervalSet.new/2`, the reader, `Tempo.one_of/1` and `Tempo.RecurrenceSet.new/2`, where it was made.
