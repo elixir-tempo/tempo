@@ -132,7 +132,7 @@ Taken by the user on 2026-10-27, for tempo_holidays to compile its dataset with 
 
 ### Done
 
-* [x] **The Bengali calendar** — `bengali-revised` dates read in `Calendrical.Bangla.Revised1987`, the 1987 rules date-holidays writes Bangladesh's days in; the parser's two tests fall on their dates. 2026-11-01, on Calendrical 2.5.
+* [x] **The Bengali calendar** — `bengali-revised` dates read in `Calendrical.Bangla.Revised1987`, the 1987 rules date-holidays writes Bangladesh's days in; the parser's two tests fall on their dates. 2026-11-01, v2.4.0, on Calendrical 2.5.
 
 * [x] **A year of the sexagenary cycle** — on Calendrical 2.2's `elapsed_years/2` (`Tempo.Calendar.year_of_cycle/3`): a lunisolar date written with its cycle and year falls in that year of its calendar (`chinese 78-32-08-0-15`, 2015-09-27), and a solar term in the Gregorian year that year begins in (`chinese 78-32-8-15 solarterm`, 2015-06-04). The parser drops the cycle and reads the date in every year. 2026-10-27.
 

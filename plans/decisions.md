@@ -974,3 +974,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-01, the user).** A day start is calendar-relative, as everything else is: "The user specifies the calendar … and the location is already implied", and the boundary is the calendar's too. (1) Calendrical gives `day_bounds/1` on each calendar that has `date_at/2`: `{:ok, {start, stop}}`, the UTC instants of the sunsets the day begins and ends at, at the calendar's own place (Jerusalem; Mecca for Umm al-Qura and RGSA; Cairo for the observational calendar, where it predicts each month's crescent), the inverse of `date_at/2` with `day_start: :sunset`. It takes no location, zone or boundary. (2) Tempo projects with `Tempo.day_start/1`, over it. (3) A day start of another place is another calendar, defined with its place (Deferred). This replaces the first form of the decision, the same day: `day_bounds/2` with `date_at/2`'s options, a `:time_zone` for an 18:00 evening, and a `:location` on the Islamic calendars.
 
 * **State.** Planned 2026-11-01 (`plans/day-start.md`); Calendrical's `day_bounds/1` is built first, and Tempo's and `tempo_holidays`' wait on its release.
+
+## 92. The Bengali date rules, in the 1987 Bangla calendar
+
+* **Question.** Which calendar a `bengali-revised` date of date-holidays' grammar is read in, now that Calendrical has the Bangla calendar of Bangladesh.
+
+* **Context.** The user, 2026-11-01, chose to build the Bangla Academy's 1987 rules, the 2019 revision and the composite of the two (`Calendrical.Bangla.Revised1987`, `Calendrical.Bangla.Revised2019`, `Calendrical.Bangla`), named `bangla`. date-holidays computes the rules with `date-bengali-revised`, which keeps the 1987 rules, and writes Bangladesh's national days in them: Victory Day, 16 December, is `bengali-revised 9-2`, 2 Poush. The 2019 revision moved it to 1 Poush, so the same rule in the composite falls on 17 December from 16 October 2019.
+
+* **Decision (2026-11-01).** `bengali-revised` names `Calendrical.Bangla.Revised1987`, written `[u-ca=bangla-1987]`: the rules are dates of the calendar their dataset writes them in, and each national day falls on the Gregorian day it is kept on in every year.
+
+* **State.** Implemented in v2.4.0, on Calendrical 2.5.

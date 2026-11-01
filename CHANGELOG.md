@@ -1,10 +1,10 @@
 # Changelog
 
-## [v2.4.0] — Unreleased
+## [v2.4.0] — 2026-11-01
 
 ### Added
 
-* `Tempo.DateRule` reads `bengali-revised` dates in the Bangla calendar of Bangladesh as the Bangla Academy revised it in 1987 (`[u-ca=bangla-1987]`), the rules date-holidays writes Bangladesh's national days in. Requires Calendrical 2.5.
+* `Tempo.DateRule` reads `bengali-revised` dates in the Bangla calendar of Bangladesh as the Bangla Academy revised it in 1987 (`[u-ca=bangla-1987]`), the rules date-holidays writes Bangladesh's national days in (decision 92). Requires Calendrical 2.5 and Localize 1.6.
 
 ## [v2.3.0] — 2026-11-01
 

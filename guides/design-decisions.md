@@ -390,6 +390,23 @@ iex> Tempo.to_iso8601(passover)
 
 **Why.** When a day begins is calendar maths, which is Calendrical's, with the sunset Astro's. A day start is calendar-relative, as everything else is: the caller names the calendar, and its place and boundary come with it. A day that begins at another place's sunset is a day of a calendar defined for that place.
 
+### The Bengali date rules (decision 92)
+
+**The question.** Bangladesh revised its Bangla calendar in 1987 and again in 2019. Which of them is a `bengali-revised` date of date-holidays' grammar read in?
+
+**The alternatives.** The 2019 revision, the calendar as it is kept now; the composite of the two, each in its own time (`Calendrical.Bangla`); the 1987 rules.
+
+**The choice.** The 1987 rules, `Calendrical.Bangla.Revised1987`.
+
+```elixir
+iex> {:ok, victory_day} = Tempo.DateRule.parse("bengali-revised 9-2")
+iex> {:ok, in_2026} = Tempo.to_interval(victory_day, within: ~o"2026")
+iex> Tempo.IntervalSet.map(in_2026, &Tempo.to_calendar!(&1, Calendar.ISO))
+[~o"2026Y12M16D/2026Y12M16D"]
+```
+
+**Why.** date-holidays writes Bangladesh's national days in the 1987 rules, in which each falls on the Gregorian day it is kept on: Victory Day, the 16th of December, is 2 Poush. The 2019 revision made it 1 Poush, so in either of the others the rule would fall a day late from 2019. A rule is a date of the calendar its dataset writes it in.
+
 ## Seasons
 
 ISO 8601-2 numbers seasons: 21 to 24 are spring, summer, autumn and winter, and 25 to 32 the same seasons of the northern and southern hemispheres. Spring is March to May in the north and September to November in the south.
