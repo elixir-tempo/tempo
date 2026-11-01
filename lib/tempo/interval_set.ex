@@ -48,8 +48,9 @@ defmodule Tempo.IntervalSet do
     than the first's is converted to it, and where a member is in a named
     zone every zoned member is moved to the first such zone.
 
-  * `{:error, %Tempo.FrameError{}}` when one member is zoned and another has
-    no zone: place it with `Tempo.in_zone/2`.
+  * `{:error, %Tempo.FrameError{}}` when one member is in a zone or at a
+    time shift and another, with a year, has neither: a set lies on one
+    line. Place the floating member with `Tempo.in_zone/2`.
 
   * `{:error, %Tempo.ConversionError{reason: :not_an_expression}}` for a
     member that is no `t:Tempo.t/0`, and `{:error, %ArgumentError{}}` for
@@ -70,6 +71,9 @@ defmodule Tempo.IntervalSet do
 
       iex> Tempo.IntervalSet.new([~o"2026-06-01T09/2026-06-01T10[Europe/London]", ~o"2026-06-01T09/2026-06-01T10[America/New_York]"])
       {:ok, ~o"{2026-06-01T09/2026-06-01T10,2026-06-01T14/2026-06-01T15}[Europe/London]"}
+
+      iex> {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+      ...>   Tempo.IntervalSet.new([~o"2026-06-15", ~o"2026-06-16T10Z"])
 
   """
   @spec new([Tempo.t()], keyword()) :: {:ok, Tempo.t()} | {:error, Exception.t()}

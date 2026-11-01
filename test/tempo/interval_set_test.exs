@@ -109,4 +109,61 @@ defmodule Tempo.IntervalSetTest do
       assert_raise ArgumentError, fn -> IntervalSet.new!([~o"2026"], except: ["2026-06"]) end
     end
   end
+
+  # Law 4 and decision 41: a set is of one frame. A floating member beside one
+  # in a zone or at a time shift is refused by every way a set is made.
+  describe "a set of one frame" do
+    test "a floating member beside one at a time shift is refused, in either order" do
+      assert {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+               IntervalSet.new([~o"2026-06-15", ~o"2026-06-16T10Z"])
+
+      assert {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+               IntervalSet.new([~o"2026-06-16T10Z", ~o"2026-06-15"])
+
+      assert_raise Tempo.FrameError, fn ->
+        IntervalSet.new!([~o"2026-06-15", ~o"2026-06-16T10+02:00"])
+      end
+    end
+
+    test "a floating member beside one in a named zone is refused" do
+      assert {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+               IntervalSet.new([~o"2026-06-15", ~o"2026-06-17T10[Europe/Paris]"])
+    end
+
+    test "a floating exception from a zoned set is refused" do
+      assert {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+               IntervalSet.new([~o"2026-06-15"], except: [~o"2026-06-16T10Z"])
+    end
+
+    test "a set written with members of two frames is refused by the reader" do
+      assert {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+               Tempo.from_iso8601("{2026-06-15,2026-06-16T10Z}")
+    end
+
+    test "a one-of set and a set of rules of two frames are refused" do
+      assert {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+               Tempo.one_of([~o"2026-06-15", ~o"2026-06-16T10Z"])
+
+      daily_floating = Tempo.every!(~o"P1D", from: ~o"2026-06-15")
+      daily_at_utc = Tempo.every!(~o"P1D", from: ~o"2026-06-16T10Z")
+
+      assert {:error, %Tempo.FrameError{reason: :floating_and_zoned}} =
+               RecurrenceSet.new([daily_floating, daily_at_utc])
+    end
+
+    test "members on the UTC line of different shifts and zones are one set" do
+      assert {:ok, _set} = IntervalSet.new([~o"2026-06-16T10Z", ~o"2026-06-17T10[Europe/Paris]"])
+      assert {:ok, _set} = Tempo.from_iso8601("{2026-06-15T09+02:00,2026-06-16T10Z}")
+    end
+
+    test "members a zone written after the set places are one set" do
+      assert {:ok, _set} = Tempo.from_iso8601("{2026-06-15,2026-06-16T10}[Europe/Paris]")
+    end
+
+    test "a member with no year, or a rule with no start, lies beside either line" do
+      assert {:ok, _set} = IntervalSet.new([~o"2026-06-15", ~o"12M25D"])
+      assert {:ok, _set} = IntervalSet.new([~o"2026-06-16T10Z", ~o"12M25D"])
+      assert {:ok, _set} = Tempo.from_iso8601("{R/../P1Y,2026-06-16T10Z}")
+    end
+  end
 end

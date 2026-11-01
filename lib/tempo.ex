@@ -911,6 +911,9 @@ defmodule Tempo do
   * `{:error, %ArgumentError{}}` for no members, or members in two
     calendars or two zones.
 
+  * `{:error, %Tempo.FrameError{}}` for a floating member beside one at a
+    time shift: a set lies on one line.
+
   ### Examples
 
       iex> Tempo.one_of([~o"1984", ~o"1986", ~o"1988"])

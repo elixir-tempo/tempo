@@ -21,6 +21,7 @@ defmodule Tempo.Spans do
   alias Tempo.Duration
   alias Tempo.Exclusions
   alias Tempo.Expand
+  alias Tempo.FrameError
   alias Tempo.Limit
   alias Tempo.Placed
   alias Tempo.Recurrence
@@ -87,6 +88,30 @@ defmodule Tempo.Spans do
   def first_value(ends), do: Enum.find(ends, &match?(%Tempo{}, &1)) || %Tempo{form: {:value, []}}
   defp member_value({:except, member}), do: member
   defp member_value(member), do: member
+
+  @doc """
+  Whether the members of a set with no zone of its own lie on one line
+  (law 4): a member on the UTC line, in a zone or at a time shift, beside a
+  floating one is a `Tempo.FrameError`. A member with no place of its own
+  takes the set's, and one with no year lies on a cycle beside either.
+  """
+  @spec one_line([Tempo.t() | Duration.t() | {:except, Tempo.t()}]) ::
+          :ok | {:error, Exception.t()}
+  def one_line(members) do
+    placed =
+      members
+      |> Enum.map(&member_value/1)
+      |> Enum.filter(&(is_struct(&1, Tempo) and placed?(&1)))
+
+    zoned = Enum.find(placed, &(frame(&1) == :utc))
+    floating = Enum.find(placed, &(frame(&1) == :floating))
+
+    if is_nil(zoned) or is_nil(floating) do
+      :ok
+    else
+      {:error, FrameError.exception(a: zoned, b: floating, reason: :floating_and_zoned)}
+    end
+  end
 
   @doc """
   A window as an expression's occurrences are looked for in it. A floating

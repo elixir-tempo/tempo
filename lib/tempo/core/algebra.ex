@@ -448,7 +448,8 @@ defmodule Tempo.Algebra do
     zoned = Enum.find(members, &(Spans.frame(&1) == :utc))
     floating = {options[:floating], zoned}
 
-    with {:ok, members} <- each_member(members, &in_calendar(&1, calendar)),
+    with :ok <- one_line(members, zone),
+         {:ok, members} <- each_member(members, &in_calendar(&1, calendar)),
          {:ok, members} <- each_member(members, &in_zone(&1, zone, floating)) do
       {:ok,
        %Tempo{
@@ -458,6 +459,15 @@ defmodule Tempo.Algebra do
          metadata: options[:metadata] || %{}
        }}
     end
+  end
+
+  # Members brought to no zone keep their own: they must lie on one line.
+  defp one_line(members, nil) do
+    Spans.one_line(members)
+  end
+
+  defp one_line(_members, _zone) do
+    :ok
   end
 
   # Members are sorted once they share a frame to be ordered on.

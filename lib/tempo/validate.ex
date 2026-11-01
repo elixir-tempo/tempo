@@ -17,6 +17,7 @@ defmodule Tempo.Validate do
   alias Tempo.InvalidDateError
   alias Tempo.Scale
   alias Tempo.Season
+  alias Tempo.Spans
   alias Tempo.Unit
   alias Tempo.Zone
   alias Tempo.ZoneError
@@ -81,16 +82,28 @@ defmodule Tempo.Validate do
     end
   end
 
-  defp form({kind, members}, _expression) when kind in [:all, :one] do
-    Enum.reduce_while(members, :ok, fn member, :ok ->
+  defp form({kind, members}, expression) when kind in [:all, :one] do
+    members
+    |> Enum.reduce_while(:ok, fn member, :ok ->
       case member(member) do
         :ok -> {:cont, :ok}
         error -> {:halt, error}
       end
     end)
+    |> one_line(members, expression)
   end
 
   defp form({:when, member, _conditions}, _expression), do: form(member.form, member)
+
+  # The members of a set lie on one line (law 4). A zone written after the
+  # set is every member's, so only a set with none can hold two.
+  defp one_line(:ok, members, %Tempo{zone: nil}) do
+    Spans.one_line(members)
+  end
+
+  defp one_line(result, _members, _expression) do
+    result
+  end
 
   # No span has zero extent (law 2): an end given as a duration of nothing
   # makes none, and a recurrence stepped by it would not move.

@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2.2.1] — Unreleased
+
+### Fixed
+
+* A set of a floating member and one at a time shift is a `Tempo.FrameError` (law 4), from `Tempo.IntervalSet.new/2`, the reader, `Tempo.one_of/1` and `Tempo.RecurrenceSet.new/2`, where it was made.
+
 ## [v2.2.0] — 2026-11-01
 
 ### Breaking changes

@@ -38,7 +38,9 @@ defmodule Tempo.RecurrenceSet do
 
   * `{:ok, set}`, a `t:Tempo.t/0` of the `:all` form.
 
-  * `{:error, exception}` when the members are of several calendars.
+  * `{:error, exception}` when the members are of several calendars, and
+    `{:error, %Tempo.FrameError{}}` when a floating member is beside one in
+    a zone or at a time shift.
 
   ### Examples
 
