@@ -964,3 +964,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-10-31, the user).** Tempo has no leap seconds, past or future. Every minute is sixty seconds, a second numbered 60 stays refused, and a length is the length on the clock, as POSIX time counts it.
 
 * **State.** Built 2026-10-31: `Tempo.LeapSeconds`, `Tempo.duration/2` with options, `Tempo.Interval.spans_leap_second?/1` and `leap_seconds_spanned/1` removed; the guides' leap-second recipes removed; the conformance guide cites the resolution.
+
+## 91. Day starts, in Calendrical
+
+* **Question.** Where the maths of when a calendar day begins lives, and how Tempo and `tempo_holidays` reach it: a Hebrew or Islamic day placed on the UTC line, from the evening before to the evening of the day.
+
+* **Context.** `tempo_holidays` projects such a day itself (`Tempo.Holidays.DayStart.project/3`), with Astro for sunset and its own evening clock, and the TODO item asked for it in Tempo. The user, 2026-11-01: "Calendar maths goes only in Calendrical. Astro maths goes only in Astro." Calendrical's `date_at/2` answers the other direction, an instant to its date, and disagrees with `tempo_holidays` on the evening's clock (a fixed offset against a zone's wall clock) and on where an Islamic day begins (Mecca alone against any place). `plans/day-start.md` sets it out.
+
+* **Decision (2026-11-01, the user).** (1) Calendrical gives `day_bounds/2`, the inverse of `date_at/2` with its options, on each calendar that has `date_at/2`: `{:ok, {start, stop}}`, the UTC instants the day and the next begin. (2) An evening is 18:00 on a zone's wall clock, through a `:time_zone` option of `date_at/2` and `day_bounds/2`, the fixed offset of today without one. (3) Every Islamic calendar takes a `:location`, as the Hebrew calendar does, Mecca by default. (4) Tempo projects with `Tempo.day_start/3`, over Calendrical's `day_bounds/2`; `tempo_holidays` calls it.
+
+* **State.** Planned 2026-11-01 (`plans/day-start.md`); the Calendrical work is in its `TODO.md`, and Tempo's and `tempo_holidays`' wait on it.
