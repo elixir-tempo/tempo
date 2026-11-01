@@ -283,12 +283,24 @@ defmodule Tempo.Explain do
   end
 
   defp frame(%Tempo{} = expression) do
-    case Spans.frame_of(expression) do
-      %{zone: %{name: name}} when is_binary(name) -> "It is in the zone #{name}."
-      %{shift: [hour: 0]} -> "It is in UTC (`Z`)."
-      %{shift: [hour: 0, minute: 0]} -> "It is at no offset from UTC."
-      %{shift: shift} when is_list(shift) -> "It is at a fixed shift from UTC."
-      _floating -> "It is floating: a reading of a clock in no zone."
+    case Parts.clock(expression) do
+      {%{name: name}, _shift} when is_binary(name) ->
+        "It is in the zone #{name}."
+
+      {%{offset: offset}, _shift} when is_integer(offset) ->
+        "It is in a zone at a fixed offset from UTC."
+
+      {_zone, [hour: 0]} ->
+        "It is in UTC (`Z`)."
+
+      {_zone, [hour: 0, minute: 0]} ->
+        "It is at no offset from UTC."
+
+      {_zone, shift} when is_list(shift) ->
+        "It is at a fixed shift from UTC."
+
+      _floating ->
+        "It is floating: a reading of a clock in no zone."
     end
   end
 

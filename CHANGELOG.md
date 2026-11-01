@@ -4,6 +4,8 @@
 
 ### Fixed
 
+* `Tempo.zoned?/1` and `floating?/1` read the shift of a set's members and a recurrence's first value, and `Tempo.explain/1` names it and a fixed-offset zone, where all three called them floating.
+
 * A set of a floating member and one at a time shift is a `Tempo.FrameError` (law 4), from `Tempo.IntervalSet.new/2`, the reader, `Tempo.one_of/1` and `Tempo.RecurrenceSet.new/2`, where it was made.
 
 ## [v2.2.0] — 2026-11-01

@@ -133,6 +133,17 @@ defmodule Tempo.ExplainTest do
       assert "It is floating: a reading of a clock in no zone." in lines(~o"2026-06-15T10")
     end
 
+    test "a zone at a fixed offset" do
+      assert "It is in a zone at a fixed offset from UTC." in lines(
+               Tempo.from_iso8601!("2026-06-15T10[+02:00]")
+             )
+    end
+
+    test "the clock of a set's members or a recurrence's first value" do
+      assert "It is in UTC (`Z`)." in lines(~o"{2026-06-15T09Z,2026-06-16T09Z}")
+      assert "It is at a fixed shift from UTC." in lines(~o"R3/2026-06-15T09+02:00/P1D")
+    end
+
     test "what is uncertain, approximate or both" do
       assert "Its year is uncertain." in lines(~o"2026?-06-15")
       assert "Its month is approximate." in lines(~o"2026Y6~M15D")

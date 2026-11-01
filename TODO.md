@@ -6,8 +6,6 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **`zoned?/1` of a set or a recurrence at a time shift** — `Tempo.zoned?(~o"{2027-06-15T09Z/2027-06-15T10Z,2027-06-15T14Z/2027-06-15T15Z}")` and `Tempo.zoned?(~o"R3/2027-06-15T09Z/P1D")` are `false`, and `floating?/1` `true`, though their members carry a shift; an interval at a shift answers `true`. `Tempo.Parts.zoned?/1` reads `Spans.frame_of/1`, which looks at the expression's own zone and shift, not its members'. Found by tempo_sql's frame check, 2026-11-01.
-
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
 ## Blocked
@@ -51,6 +49,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **`zoned?/1` of a set or a recurrence at a time shift** — `zoned?/1`, `floating?/1` and `explain/1` read the clock of an expression's ends, first value and members. 2026-11-01.
 
 * [x] **The test clock's process dictionary** — kept: `Tempo.Clock.Test` holds each test's pinned time in its own process so `async: true` tests keep their own clocks, and the house rule names it an exception beside the locale (user). 2026-10-28.
 

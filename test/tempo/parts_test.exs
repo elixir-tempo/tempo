@@ -53,6 +53,39 @@ defmodule Tempo.PartsTest do
     refute Tempo.empty?(~o"{2026-01}")
   end
 
+  describe "zoned?/1 and floating?/1 read the clock an expression is read on" do
+    test "a set whose members carry a time shift is zoned" do
+      set = ~o"{2027-06-15T09Z/2027-06-15T10Z,2027-06-15T14Z/2027-06-15T15Z}"
+
+      assert Tempo.zoned?(set)
+      refute Tempo.floating?(set)
+      assert Tempo.zoned?(~o"{2027-06-15T09+02:00,2027-06-16T09+02:00}")
+    end
+
+    test "a recurrence from a value at a time shift is zoned" do
+      assert Tempo.zoned?(~o"R3/2027-06-15T09Z/P1D")
+      assert Tempo.zoned?(~o"R/2027-06-15T09+02:00/P1D")
+    end
+
+    test "an interval with an open start takes the shift of its end" do
+      assert Tempo.zoned?(~o"../2027-06-15T09Z")
+    end
+
+    test "a set with a rule of no start takes the clock of the member that has one" do
+      assert Tempo.zoned?(Tempo.from_iso8601!("{R/../P1Y,2027-06-16T10Z}"))
+    end
+
+    test "a zone written after the set, or a fixed-offset zone, is the expression's" do
+      assert Tempo.zoned?(~o"{2027-06-15,2027-06-16}[Europe/Paris]")
+      assert Tempo.zoned?(Tempo.from_iso8601!("2027-06-15T10[+02:00]"))
+    end
+
+    test "a set of floating members, or of floating members and cycles, is floating" do
+      assert Tempo.floating?(~o"{2027-06-15,2027-06-16}")
+      assert Tempo.floating?(~o"{2027-06-15,12M25D}")
+    end
+  end
+
   test "days in the month and leap years want a year" do
     assert Tempo.days_in_month(~o"2026-04") == {:ok, 30}
     assert {:error, %ConversionError{reason: :needs_a_month}} = Tempo.days_in_month(~o"2026")

@@ -3618,6 +3618,10 @@ defmodule Tempo do
   Whether an expression carries a zone or a time shift, so a place on the
   universal time line. The complement of `floating?/1`.
 
+  A zone written after the expression is its own; an expression with
+  none carries the shift its ends, its first value or its members are
+  written with.
+
   ### Arguments
 
   * `expression` is a `t:t/0`.
@@ -3633,6 +3637,12 @@ defmodule Tempo do
 
       iex> Tempo.zoned?(~o"2024-01-01")
       false
+
+      iex> Tempo.zoned?(~o"{2024-01-01T09Z,2024-01-02T09Z}")
+      true
+
+      iex> Tempo.zoned?(~o"R3/2024-01-01T09+02:00/P1D")
+      true
 
   """
   @spec zoned?(t()) :: boolean()

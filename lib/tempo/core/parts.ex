@@ -172,11 +172,83 @@ defmodule Tempo.Parts do
   @spec anchored?(Tempo.t()) :: boolean()
   def anchored?(%Tempo{} = expression), do: not match?({:cycle, _}, Spans.frame(expression))
 
-  @doc "Whether an expression carries a zone or a time shift."
+  @doc "Whether an expression carries a zone or a time shift, its own or its ends' or members'."
   @spec zoned?(Tempo.t()) :: boolean()
   def zoned?(%Tempo{} = expression) do
-    %{zone: zone, shift: shift} = Spans.frame_of(expression)
+    {zone, shift} = clock(expression)
     not is_nil(zone) or not is_nil(shift)
+  end
+
+  @doc """
+  The zone and the time shift an expression is read on: its own, written
+  after it, or else those of its ends, its first value or its members.
+  A set's members lie on one line (law 4), so the first that carries one
+  carries the set's.
+  """
+  @spec clock(Tempo.t()) :: {Tempo.zone() | nil, Tempo.shift() | nil}
+  def clock(%Tempo{zone: nil, shift: nil} = expression) do
+    inner_clock(expression)
+  end
+
+  def clock(%Tempo{zone: zone, shift: shift}) do
+    {zone, shift}
+  end
+
+  defp inner_clock(%Tempo{form: {:span, from, to}}) do
+    first_clock([from, to])
+  end
+
+  defp inner_clock(%Tempo{form: {:every, first, _bound, _rule}}) do
+    clock(first)
+  end
+
+  defp inner_clock(%Tempo{form: {:when, member, _conditions}}) do
+    clock(member)
+  end
+
+  defp inner_clock(%Tempo{form: {kind, members}})
+       when kind in [:all, :one] and is_list(members) do
+    members
+    |> Enum.map(&member_value/1)
+    |> first_clock()
+  end
+
+  defp inner_clock(%Tempo{form: {:all, members}}) do
+    members
+    |> Enum.take(1)
+    |> first_clock()
+  end
+
+  defp inner_clock(%Tempo{}) do
+    {nil, nil}
+  end
+
+  defp first_clock(parts) do
+    Enum.find_value(parts, {nil, nil}, &carried_clock/1)
+  end
+
+  # The clock a part carries, or nil for one with none: an open end or a
+  # duration, or a value read on no clock.
+  defp carried_clock(%Tempo{} = part) do
+    clock = clock(part)
+
+    if clock == {nil, nil} do
+      nil
+    else
+      clock
+    end
+  end
+
+  defp carried_clock(_open_or_duration) do
+    nil
+  end
+
+  defp member_value({:except, member}) do
+    member
+  end
+
+  defp member_value(member) do
+    member
   end
 
   @doc """
