@@ -253,4 +253,26 @@ defmodule Tempo.CalendarsTest do
                {:ok, ~o"2026-07-01/2026-09-30[u-ca=gregorian]"}
     end
   end
+
+  describe "to_calendar/2 keeps what an expression carries" do
+    test "an interval's metadata, and each member's of a set" do
+      interval = Tempo.put_metadata(~o"2026-03-19/2026-03-22", %{name: "Eid al-Fitr"})
+      {:ok, converted} = Tempo.to_calendar(interval, Calendrical.Islamic.UmmAlQura)
+
+      assert Tempo.metadata(converted) == %{name: "Eid al-Fitr"}
+
+      members = [
+        Tempo.put_metadata(~o"2026-03-19/2026-03-20", %{name: "first"}),
+        Tempo.put_metadata(~o"2026-04-01/2026-04-02", %{name: "second"})
+      ]
+
+      {:ok, set} = IntervalSet.new(members, metadata: %{territory: "SA"})
+      {:ok, converted} = Tempo.to_calendar(set, Calendrical.Islamic.UmmAlQura)
+
+      assert Tempo.metadata(converted) == %{territory: "SA"}
+
+      assert Enum.map(IntervalSet.members(converted), &Tempo.metadata/1) ==
+               [%{name: "first"}, %{name: "second"}]
+    end
+  end
 end

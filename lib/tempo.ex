@@ -2369,7 +2369,7 @@ defmodule Tempo do
 
   # A span's ends written in the calendar at day resolution, or at the clock's where they have one.
   defp converted_span(
-         %{start: start, stop: stop, span: %__MODULE__{form: {:span, from, to}}},
+         %{start: start, stop: stop, span: %__MODULE__{form: {:span, from, to}} = span},
          frame
        ) do
     %__MODULE__{
@@ -2377,7 +2377,8 @@ defmodule Tempo do
         {:span, Spans.at_position(start, from, :start, frame.calendar, frame.zone),
          Spans.at_position(stop, to, :end, frame.calendar, frame.zone)},
       calendar: frame.calendar,
-      zone: frame.zone
+      zone: frame.zone,
+      metadata: span.metadata
     }
   end
 
