@@ -994,3 +994,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-05).** `Tempo.compare/3` asks `Tempo.Order` first. It orders two values of `Calendar.ISO` with no zone, no qualification and one time shift (or none), each written in units from the year to the second, by those units; anything else (a zone, another calendar, a week or ordinal date, a mask, a fraction of a second, a span or a set) is placed as before. A property test holds the two to the same answer for every pair it draws, by start and by start and end. The order of a calendar's months is the calendar's to answer, and is assumed only of `Calendar.ISO`; every other calendar is placed through its own module.
 
 * **State.** Implemented. Comparing a month and a day is 136 ns, from 2.1 µs; two zoned days are placed, about 5.3 µs.
+
+## 94. Occurrences stay a lazy stream
+
+* **Question.** Whether a recurrence's occurrences, made one at a time by `Stream.unfold/2` and a pipeline of `Stream` stages, should be made by a loop into a list where the caller takes a bounded number.
+
+* **Context.** Profiled on 2026-11-05 (`MIX_ENV=dev`, `:tprof`), the stream machinery (`Stream` and `Enumerable`) is 4.6% of the time of the daily rule of thirty, 4.4% of the weekday rule of 520 and 9.9% of the hourly rule of 720, and 11.7% of the daily rule's memory. Asking the zone is 34 to 41% of the time and 34% of the memory of the same rules.
+
+* **Decision (2026-11-05, the user).** Declined. A loop would recover at most a tenth, for a second way of making occurrences beside the lazy one an endless rule needs. The zone is asked first (`TODO.md`, "The zone asked in the engine").
+
+* **State.** Declined; the stream is unchanged.

@@ -54,8 +54,6 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 
 * [ ] **Every calendar question goes through the adapter.** `Tempo.Calendar` dispatches each to the calendar's module (decisions 6 and 8); the default calendar's day numbers are answered by `Calendar.ISO` directly, and a month's labels are asked once a month (decision 75), so the calendar modules are 4 to 5% of a rule's profiled time. Gregorian day-number arithmetic held inline in the walk would remove most of what is left in a date's extent.
 
-* [ ] **Lazy streams of structs.** Occurrences are made one at a time by `Stream.unfold/2`, each a new struct with keyword lists, and memory is 2 to 8 times 1.6.4's on the rule cases. Most callers take a bounded list, which could be made by a loop.
-
 ### Ideas, not committed to
 
 * [ ] **Revisit the calendar adapter.** Every calendar question goes through `Tempo.Calendar`, and `test/tempo/calendar_surface_test.exs` holds the library to it; what the adapter itself still knows (the `Calendar.ISO` table, the Gregorian for a solar term, Easter and the registry lookup by name) is left as it is for now (2026-10-14).
@@ -65,6 +63,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **Lazy streams of structs** — measured and declined: the stream is 4 to 10% of a rule's time, where asking the zone is 34 to 41% (decision 94). 2026-11-05.
 
 * [x] **Comparing two values** — two ISO values on one line are ordered by their written units, 136 ns where placing them took 2.1 µs (decision 93). 2026-11-05.
 
