@@ -31,10 +31,13 @@ defmodule Tempo.NotAnExpressionTest do
   ]
 
   # Functions that answer anything they are given: `explain/1` describes
-  # what it is given.
+  # what it is given, and the supervision tree's entry points take a
+  # supervisor's options, which are no expression.
   @answer_anything [
     {Tempo, :explain, 1},
-    {Tempo.Explain, :lines, 1}
+    {Tempo.Explain, :lines, 1},
+    {Tempo.Supervisor, :child_spec, 1},
+    {Tempo.Supervisor, :start_link, 1}
   ]
 
   # A first argument of each kind the public functions take.

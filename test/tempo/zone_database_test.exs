@@ -2,9 +2,12 @@ defmodule Tempo.ZoneDatabaseTest do
   # Tempo asks the time zone database the application configures, and `tz`,
   # which comes with it, where none is configured (decision 77). A database
   # configured that knows only UTC gives a named zone no rules to read a
-  # time by, and it is refused where it is given. The tests set the database
-  # Tempo asks, so they run alone.
+  # time by, and it is refused where it is given. The database is read as
+  # Tempo starts and is Tempo's while it runs (decision 96), so each test sets
+  # the database and restarts Tempo, and they run alone.
   use ExUnit.Case, async: false
+
+  @moduletag :capture_log
 
   import Tempo.Sigils
 
@@ -16,12 +19,15 @@ defmodule Tempo.ZoneDatabaseTest do
       elixirs = Application.fetch_env(:elixir, :time_zone_database)
       Application.delete_env(:elixir, :time_zone_database)
       Application.delete_env(:ex_tempo, :time_zone_database)
+      restart_tempo()
 
       on_exit(fn ->
         case elixirs do
           {:ok, database} -> Application.put_env(:elixir, :time_zone_database, database)
           :error -> :ok
         end
+
+        restart_tempo()
       end)
 
       :ok
@@ -71,13 +77,26 @@ defmodule Tempo.ZoneDatabaseTest do
     built = ~o"2026-06-15T09:00:00[Europe/Paris]"
 
     Application.put_env(:ex_tempo, :time_zone_database, Calendar.UTCOnlyTimeZoneDatabase)
-    on_exit(fn -> Application.delete_env(:ex_tempo, :time_zone_database) end)
+    restart_tempo()
+
+    on_exit(fn ->
+      Application.delete_env(:ex_tempo, :time_zone_database)
+      restart_tempo()
+    end)
 
     %{paris: paris, built: built}
   end
 
   test "the database Tempo asks is the one configured for it" do
     assert Tempo.time_zone_database() == Calendar.UTCOnlyTimeZoneDatabase
+  end
+
+  test "a database configured while Tempo runs is Tempo's once it is restarted" do
+    Application.put_env(:ex_tempo, :time_zone_database, Tz.TimeZoneDatabase)
+    assert Tempo.time_zone_database() == Calendar.UTCOnlyTimeZoneDatabase
+
+    restart_tempo()
+    assert Tempo.time_zone_database() == Tz.TimeZoneDatabase
   end
 
   test "a named zone given with no database is refused, saying what to configure" do
@@ -112,5 +131,10 @@ defmodule Tempo.ZoneDatabaseTest do
     assert_raise Tempo.ZoneError, ~r/needs a time zone database/, fn ->
       Tempo.shift(built, year: 30)
     end
+  end
+
+  defp restart_tempo do
+    :ok = Application.stop(:ex_tempo)
+    {:ok, _apps} = Application.ensure_all_started(:ex_tempo)
   end
 end

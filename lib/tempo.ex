@@ -2659,6 +2659,10 @@ defmodule Tempo do
   default, which knows only UTC, else the `tz` package's, which comes with
   Tempo. A library built on Tempo asks this to read a zone as Tempo reads it.
 
+  The configuration is read once, as Tempo starts, when the tables of each
+  zone's changes are built from the database; a database configured or
+  updated afterwards is Tempo's once Tempo is restarted.
+
   ### Returns
 
   * The module of the `Calendar.TimeZoneDatabase` behaviour that Tempo asks.

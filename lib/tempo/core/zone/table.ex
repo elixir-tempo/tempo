@@ -3,9 +3,11 @@ defmodule Tempo.Zone.Table do
 
   # The changes of a named zone's offset as one table: the UTC ticks at which
   # the offset changes, ascending, with the offset in force from each. A
-  # table is built once for a zone and kept in `:persistent_term`, where
-  # every process reads it, and every question `Tempo.Zone` asks of a named
-  # zone is a binary search in it (decision 73).
+  # table is built once for a zone and kept in the store `Tempo.Supervisor`
+  # runs (`Tempo.Zone.Store`), where every process reads it, and every
+  # question `Tempo.Zone` asks of a named zone is a binary search in it
+  # (decisions 73 and 95). Where the store is not running, a table is built
+  # for each question.
   #
   # The table is exact where the database lists its periods
   # (`Tempo.Zone.Transitions`). Where it does not, the changes are sampled:
@@ -17,6 +19,9 @@ defmodule Tempo.Zone.Table do
   # assumption, from 1800, before any zone's standard time. A table grows
   # forward as questions reach past what it knows, ten years at a time.
 
+  alias Localize.DateTime.Timezone
+  alias Tempo.Zone
+  alias Tempo.Zone.Store
   alias Tempo.Zone.Transitions
   alias Tempo.ZoneError
 
@@ -47,34 +52,142 @@ defmodule Tempo.Zone.Table do
   @growth 10 * 366 * @day
   @sampled_from :calendar.datetime_to_gregorian_seconds({{1800, 1, 1}, {0, 0, 0}}) * @second
 
+  # Where the static tables are kept, written once as Tempo starts.
+  @static {__MODULE__, :static}
+
+  # ── The static tables ─────────────────────────────────────────────────
+
+  @doc """
+  Builds the table of every zone the database lists the changes of, by the
+  names Localize knows, through the end of the database's list, and keeps
+  them where every question reads them. Run once as Tempo's supervision tree
+  starts (`Tempo.Supervisor`): the database is read here and is Tempo's for
+  as long as it runs, so a database changed afterwards is Tempo's once it is
+  restarted.
+  """
+  @spec start_link(keyword()) :: :ignore
+  def start_link(_options) do
+    database = Zone.configured_database()
+    :persistent_term.put(@static, %{database: database, tables: listed_tables(database)})
+    :ignore
+  end
+
+  @doc false
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  def child_spec(options) do
+    %{id: __MODULE__, start: {__MODULE__, :start_link, [options]}, restart: :transient}
+  end
+
+  @doc "The database the static tables were built from, or nil where Tempo has not started."
+  @spec database() :: module() | nil
+  def database do
+    case :persistent_term.get(@static, nil) do
+      %{database: database} -> database
+      nil -> nil
+    end
+  end
+
+  defp listed_tables(database) do
+    case Transitions.for_database(database) do
+      nil -> %{}
+      module -> Map.new(listed(module, database, zone_names()))
+    end
+  end
+
+  defp listed(module, database, names) do
+    for name <- names, {:ok, changes, listed_until} <- [module.changes(name)] do
+      {name, from_changes(name, database, changes, listed_until)}
+    end
+  end
+
+  # Every name Localize knows a zone by, its canonical name and its aliases.
+  defp zone_names do
+    Timezone.timezones()
+    |> Map.values()
+    |> Enum.flat_map(&aliases/1)
+    |> Enum.uniq()
+  end
+
+  defp aliases(%{aliases: aliases}) when is_list(aliases) do
+    aliases
+  end
+
+  defp aliases(_zone) do
+    []
+  end
+
   # ── A zone's table ────────────────────────────────────────────────────
 
   @doc """
-  The table of a zone from a database, known through a tick: built on the
-  first question of the zone, grown where a question reaches past what it
-  knows. A zone the database does not have raises the `Tempo.ZoneError` it
-  would have been refused with.
+  The table of a zone from a database, known through a tick: the static
+  table where the tick is within it, else the one kept in the store
+  (`Tempo.Zone.Store`), built on the first question of the zone past the
+  static tables and grown where a question reaches past what it knows. A
+  zone the database does not have raises the `Tempo.ZoneError` it would have
+  been refused with.
   """
   @spec of(String.t(), module(), tick()) :: t()
   def of(name, database, until) do
-    key = {__MODULE__, database, version(database), name}
+    case static_table(:persistent_term.get(@static, nil), name, database, until) do
+      nil -> stored(name, database, until)
+      table -> table
+    end
+  end
+
+  @doc """
+  The table of a zone from the database Tempo asks, known through a tick:
+  `of/3` with the database the static tables were built from, read with
+  them, or the one configured where Tempo has not started.
+  """
+  @spec of(String.t(), tick()) :: t()
+  def of(name, until) do
+    case :persistent_term.get(@static, nil) do
+      %{database: database} = static -> of_static(static, name, database, until)
+      nil -> stored(name, Zone.configured_database(), until)
+    end
+  end
+
+  defp of_static(static, name, database, until) do
+    case static_table(static, name, database, until) do
+      nil -> stored(name, database, until)
+      table -> table
+    end
+  end
+
+  defp static_table(%{database: database, tables: tables}, name, database, until) do
+    within(Map.get(tables, name), until)
+  end
+
+  defp static_table(_static, _name, _database, _until) do
+    nil
+  end
+
+  defp within(nil, _until) do
+    nil
+  end
+
+  defp within(table, until) do
+    if known?(table, until) do
+      table
+    else
+      nil
+    end
+  end
+
+  defp stored(name, database, until) do
+    key = {database, version(database), name}
 
     table =
-      case :persistent_term.get(key, nil) do
-        %__MODULE__{} = table -> table
-        nil -> kept(key, built(name, database))
+      case Store.fetch(key) do
+        {:ok, table} -> table
+        :error -> Store.keep(key, built(name, database))
       end
 
-    if known?(table, until), do: table, else: kept(key, grown(table, until + @growth))
+    if known?(table, until), do: table, else: Store.keep(key, grown(table, until + @growth))
   end
 
   defp known?(%__MODULE__{known_until: :infinity}, _until), do: true
   defp known?(%__MODULE__{known_until: known_until}, until), do: until < known_until
-
-  defp kept(key, table) do
-    :persistent_term.put(key, table)
-    table
-  end
 
   defp version(database) do
     case Transitions.for_database(database) do

@@ -99,7 +99,7 @@
                Calendar Inspect Date Time DateTime NaiveDateTime Range Stream
                Map List Set Keyword Tuple Atom Integer Float String Process
                Task Agent Node Port System IO File Path URI Version Regex
-               Module Macro Code Enum Access Base Exception Kernel
+               Module Macro Code Enum Access Base Exception Kernel Supervisor
                ICal JSCalendar
              )
              ]},

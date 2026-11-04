@@ -1014,3 +1014,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-05, the user).** "We can assume that the timezone database is stable for any given operation", and "Go with option 1, threading": an operation resolves its zone's table (and its calendar's first weekday) once and hands them on with a resolved frame, beside the values, through the engine, which decisions 57 and 63 had declined for a value's position. "Dynamic use of persistent_term is not permitted": no runtime `put` or `erase` (the global rule 14); the two writes are removed. `plans/resolved-frame.md` sets out the work.
 
 * **State.** Planned 2026-11-05.
+
+## 96. The time zone database is Tempo's for as long as it runs
+
+* **Question.** Where the tables of each zone's offset changes are kept, now that `:persistent_term` may not be written at runtime (decision 95), and whether the engine must carry a resolved frame to stop paying for a zone's table on every question.
+
+* **Context.** Every zone name Localize knows (601, canonical and aliases) is listed by `tz` but four; reading all their changes and building their tables takes about 20 ms and 764 KB. The tables reach the end of `tz`'s list, September 2032 at the earliest; past it `tz` makes a zone's periods from its rules at about 32 µs a question, and a table grown by sampling takes about 42 ms a decade a zone, too long to build for every zone at startup. An ETS read copies a table out (787 ns for America/Chicago).
+
+* **Decision (2026-11-05, the user).** "Lets consider the time zone database stable for the life of Tempo. Therefore we can build a static lookup table and put it in persistent_term", and "if, for some reason, a user needs to change tz database they will have to restart Tempo and thats ok". `Tempo.Supervisor`, Tempo's supervision tree, reads the configured database as it starts and builds the table of every zone it lists, by Localize's names, once, in `:persistent_term`; a question takes the static table where its tick is within it. A question past a table, of a zone with no listed changes, or of a database that lists none, is answered by a table built and grown in an ETS table owned by `Tempo.Zone.Store`, the tree's one process. A host supervises the tree itself with `runtime: false` (rule 12). This supersedes decision 95's resolved frame, which the static tables make unneeded for most of its gain.
+
+* **State.** Implemented 2026-11-05. A zone question is 139 ns, from 220; the daily, weekday and hourly rules are 16 to 20% faster. A database configured, or a zone update to the database package, after Tempo starts is Tempo's once it restarts.

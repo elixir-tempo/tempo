@@ -126,7 +126,7 @@ iex> Tempo.to_iso8601(event)
 {:ok, "2030Y3M1DT8H0M0S[Europe/Paris]"}
 ```
 
-No UTC is stored on the value. Comparison and conversion consult the configured time zone database at call time, so re-evaluating after a data update reflects any rule change. Serialise with `Tempo.to_iso8601/1`; the round-trip is faithful.
+No UTC is stored on the value. Comparison and conversion consult the time zone database's rules as the call is made, so re-evaluating after a data update, once Tempo has restarted to read it, reflects any rule change. Serialise with `Tempo.to_iso8601/1`; the round-trip is faithful.
 
 ---
 

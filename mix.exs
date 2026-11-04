@@ -118,6 +118,7 @@ defmodule Tempo.MixProject do
       "Relations and selection": ~r/^Tempo\.(Allen|Workdays|Territory|Event|Event\.Resolver)$/,
       "Recurrence rules and calendar formats": ~r/^Tempo\.(RRule|Cron|DateRule|ICal|JSCalendar)$/,
       "Clock and explanation": ~r/^Tempo\.(Clock|Clock\.System|Explain)$/,
+      Supervision: ~r/^Tempo\.Supervisor$/,
       Exceptions: ~r/^Tempo\.\w+Error$/
     ]
   end
@@ -177,6 +178,7 @@ defmodule Tempo.MixProject do
 
   def application do
     [
+      mod: {Tempo.Application, []},
       extra_applications: [:logger, :localize]
     ]
   end

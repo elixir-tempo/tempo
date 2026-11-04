@@ -667,6 +667,8 @@ Some decisions concern the project rather than the meaning of a date, and are re
 
 * `tz` is a dependency, and Tempo asks it for a zone's rules where the application configures no time zone database (decision 77). A database configured under `:ex_tempo` or `:elixir` is asked instead, Elixir's own UTC-only default aside, so an application that prefers another keeps it; Tempo sets no global database of its own. `Tempo.time_zone_database/0` names the one it asks, so a companion reads a zone as Tempo does rather than repeating the rule (decision 82).
 
+* The time zone database is read once, as Tempo's supervision tree starts, and each zone's changes are built into a table then; a database configured, or a zone update to the database package, afterwards is Tempo's once Tempo restarts. A host that supervises Tempo itself lists `Tempo.Supervisor` and sets `runtime: false` (decision 96).
+
 ## Related reading
 
 * [ISO 8601 conformance](iso8601-conformance.md) says what Tempo reads of ISO 8601-1, ISO 8601-2 and RFC 9557, and lists Tempo's own extensions.

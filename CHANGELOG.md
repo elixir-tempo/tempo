@@ -1,8 +1,16 @@
 # Changelog
 
-## [v2.4.1] — Unreleased
+## [v2.5.0] — Unreleased
+
+### Added
+
+* `Tempo.Supervisor`, Tempo's supervision tree, started by its application; a host that sets `runtime: false` lists it in its own tree.
 
 ### Changed
+
+* The time zone database is read once as Tempo starts, when every zone's table is built; a database configured or updated afterwards is Tempo's once it restarts (decision 96).
+
+* Nothing writes `:persistent_term` at runtime: zone tables past the static ones are kept in an ETS table Tempo's supervisor owns, and a calendar's first weekday is asked of it.
 
 * `Tempo.compare/3`, and so `Enum.sort(values, Tempo)`, orders two ISO values with no zone by their written units, about 15 times faster than placing them (decision 93).
 

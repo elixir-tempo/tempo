@@ -85,7 +85,7 @@ iex> Tempo.to_iso8601!(event)
 "2030Y3M1DT8H0M0S[Europe/Paris]"
 ```
 
-No UTC seconds are cached on the value. When you ask for the UTC projection, Tempo consults the configured time zone database at the time of the call, and the result reflects whatever zone rules it currently knows about 2030. Re-run the same call after a data update and the number may change — that's the correct behaviour for future dates.
+No UTC seconds are cached on the value. When you ask for the UTC projection, Tempo consults the time zone database's rules at the time of the call, and the result reflects whatever zone rules it knows about 2030. Re-run the same call after a data update, once Tempo has restarted to read it, and the number may change — that's the correct behaviour for future dates.
 
 ### Principle
 
