@@ -984,3 +984,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-01).** `bengali-revised` names `Calendrical.Bangla.Revised1987`, written `[u-ca=bangla-1987]`: the rules are dates of the calendar their dataset writes them in, and each national day falls on the Gregorian day it is kept on in every year.
 
 * **State.** Implemented in v2.4.0, on Calendrical 2.5.
+
+## 93. Two ISO values ordered by their written units
+
+* **Question.** Whether `Tempo.compare/3` must place both values on the line to order them, at 2.1 µs a comparison where 1.6.4 took about 0.2 µs by comparing fields.
+
+* **Context.** A profile of comparing a month and a day (`bench/against_1_6_bench.exs`) found the cost spread thin over placing each operand (`Spans.placed/2`, about 1 µs each), agreeing their frames and sorting their spans, with no single place to make cheaper. Two values of `Calendar.ISO` on one line, each written from its year down, are ordered by their units: a unit one writes and the other does not is read at its first (month 1, day 1, hour 0), so `2026-06` begins with `2026-06-01T00` and ends after it.
+
+* **Decision (2026-11-05).** `Tempo.compare/3` asks `Tempo.Order` first. It orders two values of `Calendar.ISO` with no zone, no qualification and one time shift (or none), each written in units from the year to the second, by those units; anything else (a zone, another calendar, a week or ordinal date, a mask, a fraction of a second, a span or a set) is placed as before. A property test holds the two to the same answer for every pair it draws, by start and by start and end. The order of a calendar's months is the calendar's to answer, and is assumed only of `Calendar.ISO`; every other calendar is placed through its own module.
+
+* **State.** Implemented. Comparing a month and a day is 136 ns, from 2.1 µs; two zoned days are placed, about 5.3 µs.

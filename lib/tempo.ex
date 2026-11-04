@@ -44,6 +44,7 @@ defmodule Tempo do
   alias Tempo.Limit
   alias Tempo.Measure
   alias Tempo.Options
+  alias Tempo.Order
   alias Tempo.Parts
   alias Tempo.Reader
   alias Tempo.Scale
@@ -1898,7 +1899,16 @@ defmodule Tempo do
   def compare(a, b, options \\ []) do
     Options.check!(options, [:within, :by], "Tempo.compare/3")
     by = compared_by!(Keyword.get(options, :by, :start_and_end))
+    order = Order.compare(a, b, by)
 
+    if order == :unordered do
+      compare_placed(a, b, by, options)
+    else
+      order
+    end
+  end
+
+  defp compare_placed(a, b, by, options) do
     case Algebra.aligned(a, b, Keyword.take(options, [:within])) do
       {:ok, _frame, [pa | _], [pb | _]} ->
         compare_positions(by, {pa.start, pa.stop}, {pb.start, pb.stop})

@@ -36,8 +36,6 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 
 * [ ] **Lazy streams of structs.** Occurrences are made one at a time by `Stream.unfold/2`, each a new struct with keyword lists, and memory is 2 to 8 times 1.6.4's on the rule cases. Most callers take a bounded list, which could be made by a loop.
 
-* [ ] **Comparing two values** is 1.5 µs, 7 times 1.6.4, which compared their fields: each is placed on the line first. A comparison of two values of one calendar and frame written to the same units could compare the units.
-
 ### Ideas, not committed to
 
 * [ ] **Revisit the calendar adapter.** Every calendar question goes through `Tempo.Calendar`, and `test/tempo/calendar_surface_test.exs` holds the library to it; what the adapter itself still knows (the `Calendar.ISO` table, the Gregorian for a solar term, Easter and the registry lookup by name) is left as it is for now (2026-10-14).
@@ -47,6 +45,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **Comparing two values** — two ISO values on one line are ordered by their written units, 136 ns where placing them took 2.1 µs (decision 93). 2026-11-05.
 
 * [x] **Text that is no calendar is an error** — `Tempo.ICal.parse/2` and `available/2` read with `ical` 3.2.2's `ICal.from_binary/1`, from [expothecary/ical#56](https://github.com/expothecary/ical/issues/56) and [#57](https://github.com/expothecary/ical/pull/57). 2026-11-02.
 
