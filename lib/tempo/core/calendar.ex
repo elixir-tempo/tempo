@@ -321,16 +321,43 @@ defmodule Tempo.Calendar do
   @doc "The ISO 8601 day of the week, 1 (Monday) to 7, a calendar's weeks begin on."
   @spec first_weekday(module()) :: 1..7
   def first_weekday(calendar) do
-    key = {__MODULE__, :first_weekday, calendar}
-    known = :persistent_term.get(key, nil)
+    calendar
+    |> known_first_weekday()
+    |> first_weekday_or_asked(calendar)
+  end
 
-    if is_nil(known) do
-      first = first_weekday_asked(calendar)
-      :persistent_term.put(key, first)
-      first
-    else
-      known
+  # Weeks written to begin on another day (`week_start/1`) begin on it; a
+  # calendar of Calendrical's behaviour states the day its own begin on
+  # (`info/0`); any other calendar is asked by its numbering of a day.
+  defp known_first_weekday(calendar) do
+    case week_start(calendar) do
+      nil -> stated_first_weekday(impl(calendar))
+      day -> day
     end
+  end
+
+  defp stated_first_weekday(module) do
+    if function_exported?(module, :info, 0) do
+      stated_week_start(module.info())
+    else
+      nil
+    end
+  end
+
+  defp stated_week_start(%{weeks: %{first_day: first_day}}) when first_day in 1..7 do
+    first_day
+  end
+
+  defp stated_week_start(_info) do
+    nil
+  end
+
+  defp first_weekday_or_asked(nil, calendar) do
+    first_weekday_asked(calendar)
+  end
+
+  defp first_weekday_or_asked(first_day, _calendar) do
+    first_day
   end
 
   # The two numberings of one day differ by the same count on every day, a

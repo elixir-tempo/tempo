@@ -1,6 +1,6 @@
 # A resolved frame
 
-**Status:** planning, 2026-11-05
+**Status:** in progress, 2026-11-05
 
 Decision 95: an operation resolves what it asks of its zone and its calendar once, and hands it on with a resolved frame beside the values, through the engine; and nothing writes `:persistent_term` at runtime. This document is the shape of the work.
 
@@ -32,13 +32,13 @@ Two sites write `:persistent_term` at runtime, each write a system-wide GC: `Tem
 
 * **The resolved frame.** Where an operation begins, the engine resolves its frame: the frame it has today (`calendar`, `zone`, `shift`, `frame`) and, for a named zone, the zone's table read once from the store, and the calendar's first weekday. The engine functions on the hot paths take the resolved frame beside the value, where they now rebuild a frame from the value (`Spans.frame_of/1`), and `Tempo.Zone`'s questions take the table from it. A table that does not reach a question's tick is grown through the store and handed on.
 
-* **A calendar's first weekday** is asked of the calendar, not kept: `info().weeks.first_day` where the calendar has `info/0` (every Calendrical calendar, `Localize.Calendar.ISO`), Monday for `Calendar.ISO`, and the probe `first_weekday/1` makes today for any other calendar (Tempo's six week-start calendars, a caller's own). The probe is about 100 ns on a calendar built on the ISO calendar; the resolved frame carries the answer through a walk.
+* **A calendar's first weekday** is asked of the calendar, not kept: the day Tempo's six week-start calendars are written to begin on (`Tempo.Calendar.week_start/1`), else `info().weeks.first_day` of the calendar's implementation where it has `info/0` (every Calendrical calendar, and `Localize.Calendar.ISO` for `Calendar.ISO`), else the probe of a day's two numberings for any other calendar, a caller's own. It is 42 ns for a calendar that states it and 11 ns for a week-start calendar, so the resolved frame need not carry it.
 
 * **The cost to a single question.** An operation that asks its zone once pays the store's read (up to about 0.8 µs) where it paid 220 ns; one that asks fourteen times an occurrence pays it once.
 
 ## Tasks
 
-* [ ] **First weekday asked of the calendar** — `Tempo.Calendar.first_weekday/1` reads `info().weeks.first_day`, Monday for `Calendar.ISO`, and probes any other calendar; the `:persistent_term` write goes. A test holds every calendar Tempo knows to the probe's answer.
+* [x] **First weekday asked of the calendar** — `Tempo.Calendar.first_weekday/1` reads the written week start, else the implementation's `info().weeks.first_day`, else probes; the `:persistent_term` write is gone, and every calendar answers in 42 ns or less. `test/tempo/core/calendar_test.exs` holds every census calendar and the six week-start calendars to the probe's answer. 2026-11-05.
 
 * [ ] **The zone store** — `Tempo.Application` and `Tempo.Zone.Store` (an ETS table owned by a supervised process, with `child_spec/1`), and `Tempo.Zone.Table.of/3` reading and writing it in place of `:persistent_term`. Docs for both forms of supervision; a test of the host-owned form.
 

@@ -10,7 +10,7 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## In progress
 
-* [ ] **The zone asked in the engine, and no `:persistent_term` written at runtime** — a question of a named zone is about 220 ns where the search in a table in hand is 39 ns, 34 to 41% of a rule's time; an operation resolves its zone's table and its calendar's first weekday once and hands them on with a resolved frame, and the tables move to an ETS store owned by a supervised process (decision 95). `Tempo.Zone.Table.of/3` and `Tempo.Calendar.first_weekday/1` write `:persistent_term` at runtime until then. Planned in [plans/resolved-frame.md](plans/resolved-frame.md).
+* [ ] **The zone asked in the engine, and no `:persistent_term` written at runtime** — a question of a named zone is about 220 ns where the search in a table in hand is 39 ns, 34 to 41% of a rule's time; an operation resolves its zone's table and its calendar's first weekday once and hands them on with a resolved frame, and the tables move to an ETS store owned by a supervised process (decision 95). The first weekday is asked of the calendar (done); `Tempo.Zone.Table.of/3` writes `:persistent_term` at runtime until the store lands. Planned in [plans/resolved-frame.md](plans/resolved-frame.md).
 
 ## Blocked
 

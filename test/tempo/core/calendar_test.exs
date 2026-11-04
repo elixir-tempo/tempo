@@ -144,6 +144,29 @@ defmodule Tempo.Core.CalendarTest do
     assert Tempo.Calendar.day_of_year(Calendar.ISO, 2026, 6, 15) == {:ok, 166}
   end
 
+  # A calendar's stated week start (`info().weeks.first_day`) and its own
+  # numbering of a day must agree, since the week start is read from the one
+  # where a calendar has it and asked of the other where it does not.
+  test "a calendar's first weekday is the one its numbering of a day gives" do
+    week_start_calendars = [
+      Tempo.Calendar.WeeksFrom.Tuesday,
+      Tempo.Calendar.WeeksFrom.Wednesday,
+      Tempo.Calendar.WeeksFrom.Thursday,
+      Tempo.Calendar.WeeksFrom.Friday,
+      Tempo.Calendar.WeeksFrom.Saturday,
+      Tempo.Calendar.WeeksFrom.Sunday
+    ]
+
+    for calendar <- @calendars ++ week_start_calendars do
+      {year, month, day} = Tempo.Calendar.date(calendar, 730_485)
+      own = Tempo.Calendar.day_of_week(calendar, year, month, day)
+      iso = Tempo.Calendar.iso_weekday(calendar, year, month, day)
+
+      assert Tempo.Calendar.first_weekday(calendar) == Integer.mod(iso - own, 7) + 1,
+             "#{inspect(calendar)} states a week start its numbering of a day does not give"
+    end
+  end
+
   test "Calendar.ISO is asked through its implementation and answers as itself" do
     assert Tempo.Calendar.calendar?(Calendar.ISO)
     assert Tempo.Calendar.calendar?(Calendrical.Hebrew)
