@@ -8,6 +8,10 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
+## In progress
+
+* [ ] **The zone asked in the engine, and no `:persistent_term` written at runtime** — a question of a named zone is about 220 ns where the search in a table in hand is 39 ns, 34 to 41% of a rule's time; an operation resolves its zone's table and its calendar's first weekday once and hands them on with a resolved frame, and the tables move to an ETS store owned by a supervised process (decision 95). `Tempo.Zone.Table.of/3` and `Tempo.Calendar.first_weekday/1` write `:persistent_term` at runtime until then. Planned in [plans/resolved-frame.md](plans/resolved-frame.md).
+
 ## Blocked
 
 ### Upstream
@@ -49,8 +53,6 @@ Memory is 2 to 7 times 1.6.4's on the set operations and on the rules 2.0 is slo
 The engine's cost is in the placing of values. A `%Tempo{}` holds its units as written, and every question of where a value lies (`Tempo.Spans.extent/1`) reads them again through the calendar, a few hundred nanoseconds a time; a span now carries its place (`Tempo.Placed`, decision 74), but a value does not, and a rule the engine expands places each candidate as it is built, tested and bounded. A second representation of a value through the engine was measured and declined (decisions 57 and 63): about a quarter of an occurrence, for two shapes through every module. What is left is below.
 
 * [ ] **A rule the matcher leaves to the engine.** `Tempo.Matcher` compiles a rule of months, days of the month, weekdays, positions and clock readings whose period is a day or coarser; a rule with a day of the year, a mask, a stepped range, a month counted from the end, a nested selection, a roll, or a period finer than a day is the engine's. Each of those the measures hold the engine to could be compiled the same way, the hourly and yearly rules of the benchmark first; what the matcher takes must stay exact by `rrule_measure_test.exs`, `rfc5545_examples_test.exs` and `cron_test.exs`.
-
-* [ ] **The zone asked in the engine.** A question of `Tempo.Zone.Table` is about 250 ns, a binary search in a `:persistent_term`, where a sample kept in the process was 55 ns; the matcher asks it once a candidate reading and the engine about 45 times an occurrence. A table carried in the frame, or the stretch of one offset a walk is in handed on with the position (as decision 61 does for the walk), would take most of those out of the hourly rule.
 
 * [ ] **Every calendar question goes through the adapter.** `Tempo.Calendar` dispatches each to the calendar's module (decisions 6 and 8); the default calendar's day numbers are answered by `Calendar.ISO` directly, and a month's labels are asked once a month (decision 75), so the calendar modules are 4 to 5% of a rule's profiled time. Gregorian day-number arithmetic held inline in the walk would remove most of what is left in a date's extent.
 

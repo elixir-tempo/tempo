@@ -1004,3 +1004,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-05, the user).** Declined. A loop would recover at most a tenth, for a second way of making occurrences beside the lazy one an endless rule needs. The zone is asked first (`TODO.md`, "The zone asked in the engine").
 
 * **State.** Declined; the stream is unchanged.
+
+## 95. A frame resolved once an operation, and no `:persistent_term` written at runtime
+
+* **Question.** How the engine stops paying for a zone's table on every question of it, about 220 ns where the search in a table in hand is 39 ns and a rule asks 14 times an occurrence (34 to 41% of a rule's time); and where a zone's table and a calendar's first weekday are kept once `:persistent_term` may not be written at runtime.
+
+* **Context.** Each question reads the configured database (two application env reads, 84 ns) and finds the table in `:persistent_term` (86 ns). `Tempo.Zone.Table.of/3` writes a zone's table there on its first question and again each time it grows, and `Tempo.Calendar.first_weekday/1` writes each calendar's answer on first use; every such write is a system-wide GC. A table is built from the database's listed periods in about 25 µs, and grown past their end (2032 for `tz`) by sampling in about 42 ms, so it cannot be built anew for each operation. The engine's frames (`%{calendar, zone, shift, frame}`) are rebuilt from values where they are used (`Spans.frame_of/1`), so a resolved table has no carrier today.
+
+* **Decision (2026-11-05, the user).** "We can assume that the timezone database is stable for any given operation", and "Go with option 1, threading": an operation resolves its zone's table (and its calendar's first weekday) once and hands them on with a resolved frame, beside the values, through the engine, which decisions 57 and 63 had declined for a value's position. "Dynamic use of persistent_term is not permitted": no runtime `put` or `erase` (the global rule 14); the two writes are removed. `plans/resolved-frame.md` sets out the work.
+
+* **State.** Planned 2026-11-05.
