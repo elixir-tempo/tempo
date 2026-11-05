@@ -85,6 +85,37 @@ defmodule Tempo.ZoneTableTest do
     end
   end
 
+  describe "the changes tz makes from a zone's rule" do
+    for zone <- [
+          "America/Chicago",
+          "Europe/Paris",
+          "Africa/Cairo",
+          "Australia/Sydney",
+          "America/Santiago",
+          "Pacific/Chatham"
+        ] do
+      test "are in the table of #{zone}, two a year, through 2100" do
+        table = Table.of(unquote(zone), Tz.TimeZoneDatabase, 0)
+        assert table.known_until == tick(~N[2101-01-01 00:00:00])
+
+        years =
+          table.ticks
+          |> Tuple.to_list()
+          |> Enum.map(&utc(&1).year)
+          |> Enum.frequencies()
+
+        for year <- 2033..2100 do
+          assert {year, Map.get(years, year)} == {year, 2}
+        end
+
+        for year <- 2033..2100, month <- 1..12 do
+          at = tick(NaiveDateTime.new!(year, month, 15, 12, 0, 0))
+          assert Table.offset_at(table, at) == database_offset(unquote(zone), at)
+        end
+      end
+    end
+  end
+
   describe "a table grown past the list by sampling" do
     for zone <- [
           "Europe/Paris",

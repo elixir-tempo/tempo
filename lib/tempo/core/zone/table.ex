@@ -95,7 +95,7 @@ defmodule Tempo.Zone.Table do
   end
 
   defp listed(module, database, names) do
-    for name <- names, {:ok, changes, listed_until} <- [module.changes(name)] do
+    for {name, {:ok, changes, listed_until}} <- module.changes(names) do
       {name, from_changes(name, database, changes, listed_until)}
     end
   end
@@ -206,10 +206,15 @@ defmodule Tempo.Zone.Table do
   defp changes(nil, _name), do: :none
 
   defp changes(module, name) do
-    case module.changes(name) do
-      {:ok, _changes, _listed_until} = listed -> listed
-      {:error, :not_listed} -> :none
-      {:error, reason} -> raise ZoneError.exception(zone: name, reason: error_reason(reason))
+    case module.changes([name]) do
+      [{_name, {:ok, _changes, _listed_until} = listed}] ->
+        listed
+
+      [{_name, {:error, :not_listed}}] ->
+        :none
+
+      [{_name, {:error, reason}}] ->
+        raise ZoneError.exception(zone: name, reason: error_reason(reason))
     end
   end
 

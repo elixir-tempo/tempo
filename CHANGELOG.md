@@ -8,7 +8,7 @@
 
 ### Changed
 
-* The time zone database is read once as Tempo starts, when every zone's table is built; a database configured or updated afterwards is Tempo's once it restarts (decision 96).
+* The time zone database is read once as Tempo starts, when every zone's table is built (through 2100 for `tz`); a database configured or updated afterwards is Tempo's once it restarts (decisions 96 and 98).
 
 * Nothing writes `:persistent_term` at runtime: zone tables past the static ones are kept in an ETS table Tempo's supervisor owns, and a calendar's first weekday is asked of it.
 

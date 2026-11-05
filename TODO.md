@@ -20,7 +20,7 @@ Every item here is upstream: Tempo follows each library as it is, and the item i
 
 * [ ] **`tz` compiles an hour at -02:00 for America/Scoresbysund on 2024-03-31 that the IANA data does not have.** The zone line `-1:00 EU -01/+00 2024 Mar 31` ends at 00:00 local time, which at the standard offset then in force (-01:00) is 01:00Z, the moment the EU rule begins summer time; `zdump -v America/Scoresbysund` shows one change at 01:00Z, of `isdst` alone, with the offset -01:00 before and after. `Tz.PeriodsProvider.periods("America/Scoresbysund")` has three periods for the day: `+00` from 01:00Z (never the answer, listed after the next), `-02` from 00:00Z and `-01` from 01:00Z, so `DateTime.shift_zone(~U[2024-03-31 00:30:00Z], "America/Scoresbysund", Tz.TimeZoneDatabase)` is 22:30-02:00 where it is 23:30-01:00, and `DateTime.from_naive(~N[2024-03-30 22:30:00], ...)` is ambiguous between +00:00 and -02:00, offsets the zone did not have. The end of a zone line looks to be converted with the offset of the period being built (+00, summer time of the old line) rather than the standard offset. `tz` 0.28.4, tzdata 2026d, found 2026-10-15. The cause is `Tz.PeriodsBuilder`'s `filter_rules_for_zone_line/5`, which reads a rule's start at the previous zone line's standard offset; reported with the one-line fix as [mathieuprog/tz#44](https://github.com/mathieuprog/tz/issues/44), 2026-11-01. `Tempo.Zone.Table` drops the dead record and says what the database says for the rest, tick by tick (`zone_table_test.exs`, `change_of_the_clock_test.exs`).
 
-* [ ] **`tz` has no public list of a zone's periods.** `Tempo.Zone.Transitions.Tz` reads `Tz.PeriodsProvider.periods/1`, which `tz` generates and marks `@moduledoc false`, guarded so that a `tz` without it falls back to sampling. A public function in `tz` (and one in `tzdata`, whose `Tzdata.periods/1` is public and could be adapted next) would make the table exact by contract. The same gap in Elixir's `Calendar.TimeZoneDatabase`, which answers at a point and gives no period's bounds, is the reason the table exists at all. Requested as [mathieuprog/tz#45](https://github.com/mathieuprog/tz/issues/45), 2026-11-01.
+* [ ] **`tz` has no public list of a zone's periods.** `Tempo.Zone.Transitions.Tz` reads `Tz.PeriodsProvider.periods/1`, which `tz` generates and marks `@moduledoc false`, guarded so that a `tz` without it falls back to sampling, and extends the list through 2100 with `Tz.TimeZoneDatabase.generate_dynamic_periods/3`, `@doc false` too and guarded the same way (decision 98). A public function in `tz` (and one in `tzdata`, whose `Tzdata.periods/1` is public and could be adapted next) would make the table exact by contract. The same gap in Elixir's `Calendar.TimeZoneDatabase`, which answers at a point and gives no period's bounds, is the reason the table exists at all. Requested as [mathieuprog/tz#45](https://github.com/mathieuprog/tz/issues/45), 2026-11-01.
 
 ## Deferred
 
@@ -41,14 +41,14 @@ The position on 2026-11-05 (Apple M1 Max, Elixir 1.20.5, OTP 29.1.2, JIT), measu
 | union of two sets of 100 | 130 µs | 317 µs | 2.43 |
 | intersection of two sets of 100 | 180 µs | 427 µs | 2.37 |
 | difference of two sets of 100 | 173 µs | 411 µs | 2.37 |
-| expand the last weekday, 240 | 8.6 ms | 6.5 ms | 0.75 |
-| expand weekly MWF, 780 | 3.1 ms | 2.9 ms | 0.94 |
-| expand weekdays, 520 | 1.6 ms | 3.3 ms | 2.07 |
-| expand the yearly 4th Thursday, 50 | 0.32 ms | 3.9 ms | 12.16 |
-| expand daily, 30 | 28 µs | 150 µs | 5.38 |
-| expand hourly, 720 | 0.93 ms | 7.4 ms | 8.02 |
+| expand the last weekday, 240 | 8.6 ms | 3.0 ms | 0.35 |
+| expand weekly MWF, 780 | 3.1 ms | 2.8 ms | 0.91 |
+| expand weekdays, 520 | 1.6 ms | 3.3 ms | 2.03 |
+| expand the yearly 4th Thursday, 50 | 0.32 ms | 1.4 ms | 4.48 |
+| expand daily, 30 | 28 µs | 150 µs | 5.37 |
+| expand hourly, 720 | 0.93 ms | 7.4 ms | 7.96 |
 
-The rules within the static zone tables (through 2032 for `tz`) are 16 to 25% faster than before decision 96; the two that run past 2032, the yearly rule of fifty (to 2072) and the last weekday of 240 months (to 2043), are slower than before it (1.7 and 4.3 ms), each question past the static tables copying the zone's grown table out of the ETS store.
+The static zone tables reach 2100 for `tz` (decision 98), so every rule here is answered from them: the yearly rule of fifty (to 2072) and the last weekday of 240 months (to 2043) take 1.4 and 3.0 ms, where they took 1.7 and 4.3 before decision 96 and 3.9 and 6.5 with tables to 2032.
 
 The engine's cost is in the placing of values. A `%Tempo{}` holds its units as written, and every question of where a value lies (`Tempo.Spans.extent/1`) reads them again through the calendar, a few hundred nanoseconds a time; a span now carries its place (`Tempo.Placed`, decision 74), but a value does not, and a rule the engine expands places each candidate as it is built, tested and bounded. A second representation of a value through the engine was measured and declined (decisions 57 and 63): about a quarter of an occurrence, for two shapes through every module. What is left is below.
 

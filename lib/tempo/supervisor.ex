@@ -4,10 +4,11 @@ defmodule Tempo.Supervisor do
 
   As it starts, it reads the time zone database the application configures
   (`Tempo.time_zone_database/0`) and builds the table of every zone the
-  database lists the changes of, through the end of its list (September 2032
-  for `tz`), once, in `:persistent_term`; it takes about 20 ms for `tz`'s
-  zones. The database is Tempo's for as long as the tree runs: a database
-  configured or updated afterwards is Tempo's once it is restarted.
+  database lists the changes of, once, in `:persistent_term`: through 2100
+  for `tz`, whose rule-made changes are listed with its compiled ones, in
+  about 40 ms. The database is Tempo's for as long as the tree runs: a
+  database configured or updated afterwards is Tempo's once it is
+  restarted.
 
   A question past the end of a zone's table, of a zone the database lists no
   changes for, or of a database that lists none, is answered by a table
@@ -42,7 +43,7 @@ defmodule Tempo.Supervisor do
   answers every question of a zone, reading the zone's changes from the
   database each time: correctly, but tens of microseconds a question, and
   tens of milliseconds for a date past the end of the database's listed
-  changes (2032 for `tz`).
+  changes (2100 for `tz`).
 
   """
 
