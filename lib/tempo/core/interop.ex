@@ -34,13 +34,14 @@ defmodule Tempo.Interop do
 
   defp converted(%DateTime{year: y, month: m, day: d, calendar: calendar} = datetime) do
     with {:ok, zone, shift} <- zone_of(datetime) do
-      {:ok,
-       %Tempo{
-         form: {:value, [year: y, month: m, day: d] ++ clock(datetime)},
-         calendar: calendar,
-         zone: zone,
-         shift: shift
-       }}
+      value = %Tempo{
+        form: {:value, [year: y, month: m, day: d] ++ clock(datetime)},
+        calendar: calendar,
+        zone: zone,
+        shift: shift
+      }
+
+      {:ok, at_its_showing(value, datetime)}
     end
   end
 
@@ -85,6 +86,16 @@ defmodule Tempo.Interop do
 
   defp own_shift(%DateTime{utc_offset: utc_offset, std_offset: std_offset}),
     do: Zone.shift_of((utc_offset + std_offset) * 1_000_000)
+
+  # A `DateTime` at the second showing of a reading its zone's clock shows
+  # twice carries the shift of that showing, as a reading with no shift is
+  # read at its first.
+  defp at_its_showing(%Tempo{zone: %Zone{} = zone, shift: nil} = value, datetime) do
+    {seconds, microseconds} = DateTime.to_gregorian_seconds(datetime)
+    Zone.at_showing(value, zone, seconds * 1_000_000 + microseconds)
+  end
+
+  defp at_its_showing(value, _datetime), do: value
 
   # ── To Elixir ─────────────────────────────────────────────────────────
 

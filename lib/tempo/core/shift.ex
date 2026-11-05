@@ -750,8 +750,10 @@ defmodule Tempo.Shift do
          {:ok, frame, origin, positioned} <- Algebra.aligned(value, busy, []),
          {:ok, {start, _}} <- Algebra.single(origin, value, busy) do
       free_from = covered(positioned, frame)
-      landed = landed(start, total, free_from, extended, by, Spans.frame_of(value))
-      {:ok, %{value | form: {:value, rewritten(landed, extended, Spans.frame_of(value))}}}
+      frame = Spans.frame_of(value)
+      landed = landed(start, total, free_from, extended, by, frame)
+      moved = %{value | form: {:value, rewritten(landed, extended, frame)}}
+      {:ok, rezoned(moved, value, landed)}
     end
   end
 
@@ -1184,7 +1186,10 @@ defmodule Tempo.Shift do
     |> Enum.max_by(fn unit -> Unit.rank(unit) end)
   end
 
-  # A value in a named zone written with a time shift takes the zone's shift where it lands.
+  # A value in a named zone written with a time shift takes the zone's shift
+  # where it lands. One written with none that lands on the second showing of
+  # a reading the clock shows twice takes the shift of that showing, as a
+  # reading with no shift is read at its first.
   defp rezoned(%Tempo{zone: %Zone{} = zone} = moved, %Tempo{shift: shift}, position)
        when not is_nil(shift) do
     offset = Zone.offset_at_utc(zone, position)
@@ -1193,7 +1198,20 @@ defmodule Tempo.Shift do
     %{moved | shift: [hour: hours, minute: minutes]}
   end
 
+  defp rezoned(%Tempo{zone: %Zone{} = zone, form: {:value, units}} = moved, _original, position) do
+    if clock_resolution?(units) do
+      Zone.at_showing(moved, zone, position)
+    else
+      moved
+    end
+  end
+
   defp rezoned(moved, _original, _position), do: moved
+
+  defp clock_resolution?(units) do
+    {unit, _value} = List.last(units)
+    Unit.clock?(unit)
+  end
 
   defp conversion(expression, reason),
     do: ConversionError.exception(value: expression, reason: reason)

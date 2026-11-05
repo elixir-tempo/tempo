@@ -53,6 +53,8 @@ iex> Tempo.shift(~o"2024-03-09T12[America/New_York]", hour: 24)
 {:ok, ~o"2024Y3M10DT13H[America/New_York]"}
 ```
 
+Elixir's `DateTime.shift/3` counts a day as twenty-four hours, so `DateTime.shift(datetime, day: 1)` gives the second of these, an hour away from the same time tomorrow whenever the clocks change in between. A day that lands on a reading the clock skips is read by the offset before the change, and one that lands on a reading shown twice is its first showing, as a value written to that reading is.
+
 ---
 
 ## 2. "Every wall-clock time exists once and only once"

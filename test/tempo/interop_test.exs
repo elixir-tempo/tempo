@@ -108,6 +108,16 @@ defmodule Tempo.InteropTest do
       assert {:ok, value} = Tempo.from_elixir(datetime)
       assert Tempo.to_datetime(value) == {:ok, datetime}
     end
+
+    test "a DateTime at either showing of a reading the clock shows twice returns as itself" do
+      {:ambiguous, first, second} =
+        DateTime.from_naive(~N[2026-10-25 02:30:00], "Europe/Amsterdam", Tz.TimeZoneDatabase)
+
+      for datetime <- [first, second] do
+        assert {:ok, value} = Tempo.from_elixir(datetime)
+        assert Tempo.to_datetime(value) == {:ok, datetime}
+      end
+    end
   end
 
   describe "an interval of two dates" do

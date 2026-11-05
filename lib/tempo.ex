@@ -2929,10 +2929,21 @@ defmodule Tempo do
   and months are counted first, through the calendar, with the day clamped
   to the month landed in as `Date.shift/2` clamps it; then weeks and days;
   then the units of the clock as elapsed time, so an hour across a change
-  of the clocks is an hour. A value stays on its own axis: a week date a day
-  on is a week date. An interval is moved end by end, and keeps its length
-  when the duration has a month or a year; a set is moved member by member;
-  a recurrence by its first span and its end.
+  of the clocks is an hour.
+
+  In a zone, a day on is the same reading of the clock the next day,
+  however many hours that is, and twenty-four hours on is the reading the
+  clock shows once they have passed. A calendar step that lands on a
+  reading the clock skips is read by the offset before the change, so half
+  past two on the morning the clocks go forward is half past three; one
+  that lands on a reading the clock shows twice is its first showing.
+  Elixir's `DateTime.shift/3` counts a day as twenty-four hours, so the two
+  differ by the hour a change of the clock adds or removes.
+
+  A value stays on its own axis: a week date a day on is a week date. An
+  interval is moved end by end, and keeps its length when the duration has
+  a month or a year; a set is moved member by member; a recurrence by its
+  first span and its end.
 
   A value with no year is shifted when the answer is the same in every
   year: the thirty-first of January a day on is the first of February, but a
@@ -2986,6 +2997,12 @@ defmodule Tempo do
 
       iex> Tempo.shift(~o"2026-W25", day: 1)
       {:ok, ~o"2026Y25W2K"}
+
+      iex> evening = ~o"2026-10-25T21:30[Europe/Amsterdam]"
+      iex> Tempo.shift(evening, day: -1)
+      {:ok, ~o"2026Y10M24DT21H30M[Europe/Amsterdam]"}
+      iex> Tempo.shift(evening, hour: -24)
+      {:ok, ~o"2026Y10M24DT22H30M[Europe/Amsterdam]"}
 
       iex> Tempo.shift(~o"2026Y6M{1,15}D", day: 1)
       {:ok, ~o"2026Y6M{2,16}D"}
@@ -4390,7 +4407,9 @@ defmodule Tempo do
   A `Date` is a day, a `Time` a second, a `NaiveDateTime` a floating
   second, a `DateTime` a second in its zone (UTC as `Z`), each in the
   struct's calendar; a `Date.Range` is the span of its days; an Elixir
-  `Duration` a `t:Tempo.Duration.t/0`.
+  `Duration` a `t:Tempo.Duration.t/0`. A `DateTime` at the second showing
+  of a reading its zone's clock shows twice keeps its offset, which says
+  which showing it is.
 
   ### Arguments
 

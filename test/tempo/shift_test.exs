@@ -13,6 +13,14 @@ defmodule Tempo.ShiftTest do
   defp shifted(value, by), do: Tempo.shift(value, by) |> ok()
   defp ok({:ok, value}), do: value
 
+  # One showing of a reading in Amsterdam, named by the zone's abbreviation then.
+  defp amsterdam(naive, abbreviation) do
+    case DateTime.from_naive(naive, "Europe/Amsterdam", Tz.TimeZoneDatabase) do
+      {:ok, datetime} -> datetime
+      {:ambiguous, first, second} -> Enum.find([first, second], &(&1.zone_abbr == abbreviation))
+    end
+  end
+
   describe "a value" do
     test "is moved at its resolution, extended to the duration's finest unit" do
       assert shifted(~o"2026-06-15", day: 1) == ~o"2026-06-16"
@@ -317,6 +325,52 @@ defmodule Tempo.ShiftTest do
 
       assert Tempo.shift(~o"2024-11-02T12:00[America/New_York]", ~o"PT24H") ==
                {:ok, ~o"2024-11-03T11:00[America/New_York]"}
+    end
+
+    test "a day back across the clock going back is the same time yesterday (elixir#16051)" do
+      evening = ~o"2026-10-25T21:30[Europe/Amsterdam]"
+
+      assert Tempo.shift(evening, day: -1) == {:ok, ~o"2026-10-24T21:30[Europe/Amsterdam]"}
+      assert Tempo.shift(evening, hour: -24) == {:ok, ~o"2026-10-24T22:30[Europe/Amsterdam]"}
+      assert Tempo.shift(evening, hour: -25) == {:ok, ~o"2026-10-24T21:30[Europe/Amsterdam]"}
+    end
+
+    test "a day onto a reading the clock skips is read by the offset before it" do
+      assert Tempo.shift(~o"2026-03-28T02:30[Europe/Amsterdam]", day: 1) ==
+               {:ok, ~o"2026-03-29T03:30[Europe/Amsterdam]"}
+    end
+
+    test "a day onto a reading the clock shows twice is its first showing" do
+      assert {:ok, landed} = Tempo.shift(~o"2026-10-24T02:30[Europe/Amsterdam]", day: 1)
+      assert Tempo.to_datetime(landed) == {:ok, amsterdam(~N[2026-10-25 02:30:00], "CEST")}
+    end
+
+    test "elapsed time onto the second showing of a reading is that showing" do
+      second = amsterdam(~N[2026-10-25 02:30:00], "CET")
+
+      for {from, by} <- [
+            {~o"2026-10-25T02:30[Europe/Amsterdam]", [hour: 1]},
+            {~o"2026-10-25T01:30[Europe/Amsterdam]", [minute: 120]},
+            {~o"2026-10-25T03:30[Europe/Amsterdam]", [hour: -1]},
+            {~o"2026-10-26T02:30[Europe/Amsterdam]", [day: -1, hour: 1]}
+          ] do
+        assert {:ok, landed} = Tempo.shift(from, by)
+        assert Tempo.to_datetime(landed) == {:ok, second}
+      end
+
+      busy = ~o"2026-10-26/2026-10-27[Europe/Amsterdam]"
+
+      assert {:ok, landed} =
+               Tempo.shift(~o"2026-10-25T02:30[Europe/Amsterdam]", ~o"PT1H", skipping: busy)
+
+      assert Tempo.to_datetime(landed) == {:ok, second}
+    end
+
+    test "an interval moved onto the second showing keeps its length" do
+      hour = ~o"2026-10-25T01:30/2026-10-25T02:30[Europe/Amsterdam]"
+
+      assert {:ok, moved} = Tempo.shift(hour, hour: 1)
+      assert Tempo.duration(moved) == ~o"PT60M"
     end
 
     test "a floating value has no change of the clock to cross" do
