@@ -291,6 +291,29 @@ iex> Enum.map(hourly, &Tempo.to_iso8601!/1)
 
 **Why.** It is how Tempo already reads a value written to that time, and it is what RFC 5545 §3.3.5 says of a local time that occurs twice. Having a selection answer one way and the same selection inside a rule another would make one written form mean two things. On a time that does not occur RFC 5545 contradicts itself: §3.3.10 says such instances "MUST be ignored", and later that they are read by the offset before the gap. Tempo follows the first, which needs no invented time.
 
+### Where a day's step lands on a change of the clock (decision 97)
+
+**The question.** A day after 02:30 on 28 March 2026 in Amsterdam is 02:30 on the 29th, a reading the clock skips as it goes forward. A day after 02:30 on 24 October is 02:30 on the 25th, which the clock shows twice. Which moments are they?
+
+**The alternatives.**
+
+* Read the landed reading by the offset before the change: half past two becomes half past three, and a reading shown twice is its first showing.
+
+* Refuse the step onto a skipped reading.
+
+* Land on the moment the clock goes forward, three o'clock.
+
+**Tempo's choice.** The first. Years, months, weeks and days step the calendar and keep the reading of the clock; hours, minutes and seconds are elapsed time.
+
+```elixir
+iex> Tempo.shift(~o"2026-03-28T02:30[Europe/Amsterdam]", day: 1)
+{:ok, ~o"2026Y3M29DT3H30M[Europe/Amsterdam]"}
+iex> Tempo.shift(~o"2026-10-25T21:30[Europe/Amsterdam]", day: -1)
+{:ok, ~o"2026Y10M24DT21H30M[Europe/Amsterdam]"}
+```
+
+**Why.** A selection asks which moments have a reading, and of a skipped reading the answer is none (decision 36). A shift asks where a value moves to, and refusing it would fail a valid value and a valid duration twice a year. Java's `ZonedDateTime.plusDays` and JavaScript Temporal's default disambiguation answer the same way, as RFC 5545 §3.3.5 reads a local time that does not occur. Elixir's `DateTime.shift/3` counts a day as twenty-four hours instead, so a day back from 21:30 on 25 October is 22:30 there.
+
 ### A time shift that disagrees with its zone (decision 33)
 
 **The question.** RFC 9557 §3.4 gives `2022-07-08T00:14:07+00:00[!Europe/London]` as its example: London was at +01:00 that day, so the offset and the zone disagree. With the critical flag `!` an application MUST act on that; without it, it MAY. `Z` in place of the offset asserts no local time, so `…Z[Europe/London]` never disagrees. What does Tempo do?
