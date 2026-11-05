@@ -42,7 +42,7 @@ Two sites write `:persistent_term` at runtime, each write a system-wide GC: `Tem
 
 * [x] **Static zone tables and the store** — `Tempo.Supervisor` (public, with `child_spec/1`), `Tempo.Zone.Table` built once as it starts, `Tempo.Zone.Store` for tables past the static ones, the database read once; README, moduledocs, tests of the host-owned form and of no tree running. 2026-11-05.
 
-* [ ] **Measured against 1.6.4** — the rule cases of `bench/against_1_6_bench.exs` side by side, and the table in `TODO.md` brought up to date.
+* [x] **Measured against 1.6.4** — the rule cases side by side, and the table in `TODO.md` brought up to date: the rules within the static tables 16 to 25% faster, the two past 2032 slower (the ETS store copies a grown table at each question). 2026-11-05.
 
 ### Deferred
 

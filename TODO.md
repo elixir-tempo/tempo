@@ -28,27 +28,27 @@ Every item here is upstream: Tempo follows each library as it is, and the item i
 
 Where 2.0 stands against 1.6.4 after the work of 2026-10-15 (decisions 56 to 63 and 73 to 76) and decision 93, and where it could still be faster. Nothing here is needed for the release (decision 37); each item is a measurement first, against `bench/against_1_6_bench.exs`, profiled by layer, and records what it bought in its decision (`plans/reference-architecture-review.md`, section 4, has the profiles the work was ordered by).
 
-The position on 2026-11-05 (Apple M1 Max, Elixir 1.20.5, OTP 29.1.2, JIT), measured side by side: 1.6.4 built with the Calendrical (1.3.0) and Astro (2.5.0) current at its release, and `main` at `e0c7c4c1`. The 2.0 times match those of 2026-10-15; the 1.6.4 times are faster than the ratios recorded then implied (its weekly rule was put at 15 to 20 ms), so the rule cases that were ahead or close are now behind.
+The position on 2026-11-05 (Apple M1 Max, Elixir 1.20.5, OTP 29.1.2, JIT), measured side by side: 1.6.4 built with the Calendrical (1.3.0) and Astro (2.5.0) current at its release, and `main` at `791dc2da`, after decisions 93 and 96.
 
 | Case | 1.6.4 | 2.0 | 2.0 / 1.6.4 |
 |---|---|---|---|
 | compare a month and a day | 0.2 µs | 0.1 µs | 0.40 |
 | relate a month and a day | 1.3 µs | 1.4 µs | 1.06 |
-| read ten texts | 3,960 µs | 105 µs | 0.03 |
-| write ten values | 14.2 µs | 10.5 µs | 0.74 |
-| walk the days of a year | 215 µs | 110 µs | 0.51 |
-| walk the hours of a spring-forward day | 1.3 µs | 2.9 µs | 2.23 |
-| union of two sets of 100 | 130 µs | 320 µs | 2.46 |
-| intersection of two sets of 100 | 180 µs | 428 µs | 2.38 |
-| difference of two sets of 100 | 173 µs | 432 µs | 2.49 |
-| expand the last weekday, 240 | 8.6 ms | 4.3 ms | 0.49 |
-| expand weekly MWF, 780 | 3.1 ms | 3.4 ms | 1.12 |
-| expand weekdays, 520 | 1.6 ms | 4.1 ms | 2.56 |
-| expand the yearly 4th Thursday, 50 | 0.32 ms | 1.7 ms | 5.42 |
-| expand daily, 30 | 28 µs | 199 µs | 7.12 |
-| expand hourly, 720 | 0.93 ms | 9.1 ms | 9.83 |
+| read ten texts | 3,960 µs | 104 µs | 0.03 |
+| write ten values | 14.2 µs | 10.3 µs | 0.73 |
+| walk the days of a year | 215 µs | 109 µs | 0.51 |
+| walk the hours of a spring-forward day | 1.3 µs | 1.8 µs | 1.42 |
+| union of two sets of 100 | 130 µs | 317 µs | 2.43 |
+| intersection of two sets of 100 | 180 µs | 427 µs | 2.37 |
+| difference of two sets of 100 | 173 µs | 411 µs | 2.37 |
+| expand the last weekday, 240 | 8.6 ms | 6.5 ms | 0.75 |
+| expand weekly MWF, 780 | 3.1 ms | 2.9 ms | 0.94 |
+| expand weekdays, 520 | 1.6 ms | 3.3 ms | 2.07 |
+| expand the yearly 4th Thursday, 50 | 0.32 ms | 3.9 ms | 12.16 |
+| expand daily, 30 | 28 µs | 150 µs | 5.38 |
+| expand hourly, 720 | 0.93 ms | 7.4 ms | 8.02 |
 
-Memory is 2 to 7 times 1.6.4's on the set operations and on the rules 2.0 is slower at. The weekly, monthly and weekday rules are the matcher's; the yearly and hourly rules go to the engine, and the hourly one asks the zone at each of its occurrences.
+The rules within the static zone tables (through 2032 for `tz`) are 16 to 25% faster than before decision 96; the two that run past 2032, the yearly rule of fifty (to 2072) and the last weekday of 240 months (to 2043), are slower than before it (1.7 and 4.3 ms), each question past the static tables copying the zone's grown table out of the ETS store.
 
 The engine's cost is in the placing of values. A `%Tempo{}` holds its units as written, and every question of where a value lies (`Tempo.Spans.extent/1`) reads them again through the calendar, a few hundred nanoseconds a time; a span now carries its place (`Tempo.Placed`, decision 74), but a value does not, and a rule the engine expands places each candidate as it is built, tested and bounded. A second representation of a value through the engine was measured and declined (decisions 57 and 63): about a quarter of an occurrence, for two shapes through every module. What is left is below.
 
