@@ -37,7 +37,7 @@ Tempo supports **Elixir 1.17** and later on **Erlang/OTP 27** and later; OTP 26 
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 2.4"},
+    {:ex_tempo, "~> 2.5"},
     # Optional but recommended - needed for iCalendar import.
     {:ical, "~> 3.2"}
   ]
@@ -191,6 +191,8 @@ iex> case today do
 
 More in the [Pattern matching with sigils](https://hexdocs.pm/ex_tempo/pattern-matching-with-sigils.html) guide.
 
+* [Dating under uncertainty](https://hexdocs.pm/ex_tempo/uncertain-dates.html) — margins of error such as `1200±60`, and relations between uncertain dates answered as certain, possible or impossible.
+
 ## Why intervals, not instants
 
 Every mainstream language treats `date`, `time`, and `datetime` as distinct scalar types. That fragmentation creates three classes of common bugs that Tempo eliminates by construction:
@@ -220,11 +222,15 @@ A database configured under `:ex_tempo` that knows only UTC (`Calendar.UTCOnlyTi
 
 ### Supervision
 
-Tempo's application starts its supervision tree, [`Tempo.Supervisor`](https://hexdocs.pm/ex_tempo/Tempo.Supervisor.html), which builds the zone tables as it starts and keeps those it grows for dates past the database's list. An application that supervises Tempo itself sets `runtime: false` and lists the supervisor in its own tree:
+Tempo's application starts its supervision tree, [`Tempo.Supervisor`](https://hexdocs.pm/ex_tempo/Tempo.Supervisor.html), which builds the zone tables as it starts and keeps those it grows for dates past the database's list. An application that supervises Tempo itself sets `runtime: false`, lists the supervisor in its own tree, and starts the applications Tempo's application would have started for it: listing `:calendrical` starts Localize and Astro before it, as Calendrical's calendars read the ephemeris Astro loads.
 
 ```elixir
 def deps do
   [{:ex_tempo, "~> 2.5", runtime: false}]
+end
+
+def application do
+  [extra_applications: [:logger, :calendrical]]
 end
 
 children = [
@@ -232,7 +238,7 @@ children = [
 ]
 ```
 
-Tempo's processes need no other application started before them. Where they are not running, every zone question is still answered, from the database directly and more slowly.
+Without them Tempo cannot format (Localize's locale loader is not running) or place a day that begins at sunset (Astro's ephemeris is not loaded). Tempo's own processes need no other application started before them, and where they are not running every zone question is still answered, from the database directly and more slowly.
 
 ### The most values at once
 
@@ -325,15 +331,23 @@ Further reading:
 
 * [When to use Tempo](https://hexdocs.pm/ex_tempo/when-to-use-tempo.html) — where the interval model earns its keep (and where it doesn't).
 
+* [Using Tempo with an AI assistant](https://hexdocs.pm/ex_tempo/ai-assistance.html) — a skill that lets an AI assistant turn a question about time into a Tempo expression and solve it.
+
+* [Falsehoods programmers believe about time](https://hexdocs.pm/ex_tempo/falsehoods.html) — the assumptions that hold for most inputs and fail in production, and how Tempo answers each.
+
 * [Building expressions](https://hexdocs.pm/ex_tempo/building-expressions.html) — rules and values built a step at a time, each step an expression.
 
 * [Set operations](https://hexdocs.pm/ex_tempo/set-operations.html) — union, intersection, complement, difference, predicates.
+
+* [Selection](https://hexdocs.pm/ex_tempo/selection.html) — picking values out of a period: the second Monday of a month, the last weekday, nine o'clock on each.
 
 * [Scheduling](https://hexdocs.pm/ex_tempo/scheduling.html) — recurrence, free-busy availability, and dependency (critical-path) scheduling.
 
 * [Workdays and weekends](https://hexdocs.pm/ex_tempo/workdays-and-weekends.html) — territory-aware business-day arithmetic.
 
 * [Holidays](https://hexdocs.pm/ex_tempo/holidays.html) — composing a real holiday calendar with workday logic.
+
+* [Holiday cookbook](https://hexdocs.pm/ex_tempo/holiday-cookbook.html) — each rule family a holiday calendar uses, written in Tempo: fixed dates, nth weekdays, computed feasts, other calendars, observed days.
 
 * [iCalendar integration](https://hexdocs.pm/ex_tempo/ical-integration.html) — importing `.ics` schedules with metadata preserved.
 
@@ -345,9 +359,13 @@ Further reading:
 
 * [Interop](https://hexdocs.pm/ex_tempo/interop.html) — anchored and unanchored values, and bridging native Elixir types.
 
+* [Custom calendars](https://hexdocs.pm/ex_tempo/custom-calendars.html) — fiscal years, retail weeks and academic years as calendars beside the Gregorian.
+
 * [Pattern matching with sigils](https://hexdocs.pm/ex_tempo/pattern-matching-with-sigils.html) — destructuring Tempo values in function heads.
 
 * [ISO 8601 conformance](https://hexdocs.pm/ex_tempo/iso8601-conformance.html) — what's supported from the standards.
+
+* [The grammar Tempo reads](https://hexdocs.pm/ex_tempo/iso8601-grammar.html) — the ABNF of every text Tempo reads and writes, clause by clause from the standards.
 
 * [Glossary](https://hexdocs.pm/ex_tempo/glossary.html) — every word Tempo's API and documentation use, with the one meaning each has.
 
@@ -359,8 +377,10 @@ Further reading:
 
 * [Architecture](https://hexdocs.pm/ex_tempo/architecture.html) — the model as types, each algorithm in pseudo-code, the calendar and zone contracts, the errors and the cost of each operation, written for a reader porting or assessing the design.
 
+* [Design decisions](https://hexdocs.pm/ex_tempo/design-decisions.html) — the questions the laws did not settle, the alternatives, and what Tempo chose and why.
+
 The full documentation, every module and function with the guides above, is on [HexDocs](https://hexdocs.pm/ex_tempo).
 
 ## License
 
-Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.4.0/LICENSE.md). Copyright © Kip Cole.
+Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.5.0/LICENSE.md). Copyright © Kip Cole.

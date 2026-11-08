@@ -322,7 +322,7 @@ Tempo marks the designators it adds with a lowercase letter, so that they are se
 | A computed event, `e` | `L(easter)eN`, `L(march-equinox@+09:00)eN` | a day a rule computes |
 | A traditional month, `m` | `8m15D`, `6+m` | a lunisolar calendar's named month, and its leap month |
 | A quarter, `q`, and a half, `h` | `2026Y2q`, `2026Y1h` | the second quarter, the first half: ISO 8601-2's `2026Y34M` and `2026Y40M`, as which they are held and written back |
-| An exclusion, `^` | `{2020Y..2024Y,^2022Y}` | a member left out |
+| An exclusion, `^` | `{2020Y..2024Y,^2022Y}` | the time it covers taken out of the members |
 | A recurrence's domain | `R/{2020Y..2024Y}/P1Y/F…` | the periods a rule recurs in |
 | A domain filter | `{2020Y..2026Y}e`, `o`, `l`, `c` | even, odd, leap or common years |
 | A year in a rule | `FL{2026,2028}Y1M1DN` | the years an occurrence may fall in |
@@ -365,7 +365,7 @@ iex> Enum.map(Enum.take(~o"R/5786Y7m15D/P1Y[u-ca=hebrew]", 2), &Tempo.Interval.f
 
 ### Exclusions, domains and filters
 
-A member of a set written with `^` is left out of it. A set in the place of a recurrence's start is its **domain**, the periods it recurs in, so a rule that lapsed for a year, or holds in even years only, is one expression:
+A member of a set written with `^` is an exclusion: the set is its other members less the time it covers, so `{2026-06,^2026-06-15}` is June without the 15th, the 1st to the 14th and the 16th to the 30th. A set in the place of a recurrence's start is its **domain**, the periods it recurs in, so a rule that lapsed for a year, or holds in even years only, is one expression:
 
 ```elixir
 iex> Tempo.to_interval(~o"{2024Y,2026Y,2028Y,^2026Y}")

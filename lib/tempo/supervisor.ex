@@ -28,17 +28,28 @@ defmodule Tempo.Supervisor do
 
   An application that supervises Tempo itself sets `runtime: false`, so that
   Tempo's application does not start, and lists `Tempo.Supervisor` in its own
-  supervision tree:
+  supervision tree. Tempo's application would have started Localize,
+  Calendrical and Astro, so the host starts them: listing `:calendrical`
+  starts Localize and Astro before it, as Calendrical's calendars read the
+  ephemeris Astro loads.
 
       def deps do
         [{:ex_tempo, "~> 2.5", runtime: false}]
+      end
+
+      def application do
+        [extra_applications: [:logger, :calendrical]]
       end
 
       children = [
         Tempo.Supervisor
       ]
 
-  The supervisor takes no options. Tempo's processes depend on no other
+  Without them, formatting fails because Localize's locale loader is not
+  running, and a day that begins at sunset cannot be placed because Astro's
+  ephemeris is not loaded.
+
+  The supervisor takes no options. Tempo's own processes depend on no other
   application having been started. Where they are not running, Tempo still
   answers every question of a zone, reading the zone's changes from the
   database each time: correctly, but tens of microseconds a question, and
@@ -50,6 +61,29 @@ defmodule Tempo.Supervisor do
   use Supervisor
 
   alias Tempo.Zone.Store
+
+  @doc """
+  The child specification by which a host lists Tempo's supervision tree in
+  its own, as `Tempo.Supervisor` or `{Tempo.Supervisor, []}`.
+
+  ### Arguments
+
+  * `options` is a keyword list, unused: the supervisor takes no options.
+
+  ### Returns
+
+  * A `t:Supervisor.child_spec/0` that starts the tree with `start_link/1`.
+
+  ### Examples
+
+      iex> Tempo.Supervisor.child_spec([])
+      %{id: Tempo.Supervisor, start: {Tempo.Supervisor, :start_link, [[]]}, type: :supervisor}
+
+  """
+  @spec child_spec(keyword()) :: Supervisor.child_spec()
+  def child_spec(options) do
+    super(options)
+  end
 
   @doc """
   Starts Tempo's supervision tree.

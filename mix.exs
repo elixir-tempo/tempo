@@ -6,7 +6,7 @@ defmodule Tempo.MixProject do
     Mix.raise("ex_tempo requires Erlang/OTP 27 or later: OTP #{System.otp_release()} detected.")
   end
 
-  @version "2.4.0"
+  @version "2.5.0"
 
   def project do
     [
@@ -59,7 +59,7 @@ defmodule Tempo.MixProject do
   def package do
     [
       maintainers: ["Kip Cole"],
-      licenses: ["Apache-2.0"],
+      licenses: ["Apache-2.0", "ISC"],
       links: links(),
       files: [
         "lib",
@@ -118,7 +118,7 @@ defmodule Tempo.MixProject do
       "Relations and selection":
         ~r/^Tempo\.(Allen|Intervallic|Workdays|Territory|Event|Event\.Resolver)$/,
       "Recurrence rules and calendar formats": ~r/^Tempo\.(RRule|Cron|DateRule|ICal|JSCalendar)$/,
-      "Clock and explanation": ~r/^Tempo\.(Clock|Clock\.System|Explain)$/,
+      "Clock and explanation": ~r/^Tempo\.(Clock|Clock\.System|Clock\.Test|Explain)$/,
       Supervision: ~r/^Tempo\.Supervisor$/,
       Exceptions: ~r/^Tempo\.\w+Error$/
     ]

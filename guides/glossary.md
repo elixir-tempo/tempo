@@ -49,6 +49,7 @@ The tables are grouped by subject, and within a table the terms a later one buil
 | set | Several values written as one: all of them (`{…}`), or one of them (`[…]`). | ISO 8601-2 §6 |
 | member | One value of a set, or one span of an interval set. | `Tempo.IntervalSet.members/1` |
 | range | The values from one to another within a set (`{1..5}`). | ISO 8601-2 §6 |
+| exclusion | A member written with `^`: the time it covers is taken out of the set's other members, so `{2026-06,^2026-06-15}` is June without the 15th. | `Tempo.Builder.except/2` |
 | interval set | A set of all its members, each a span: what the set operations and `to_interval/2` of several spans answer. | `Tempo.IntervalSet` |
 | singular, plural | An expression that names one span, or several: a value with a set or a mask in a unit, a set, a recurrence. | `Tempo.members/1` |
 | covered | The time at least one member of an interval set holds. | `Tempo.duration/1`, `Tempo.IntervalSet.covered/2` |
