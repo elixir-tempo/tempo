@@ -8,7 +8,7 @@ This conceptual shift — *time as interval, not instant* — removes a surprisi
 
 ## Features
 
-* **One type.** No more `Date` for days, `Time` for hours, `DateTime` for both, `NaiveDateTime` for "I don't know what I have" — one `%Tempo{}` holds a value at any resolution, an interval, a recurrence, a set of them or a choice among them. `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.RecurrenceSet` are constructors of that one struct, not types of their own; the one distinct companion is `Tempo.Duration`, a length with no place on the time line. Conversion from Elixir's types is `Tempo.from_elixir/2`.
+* **One type.** No more `Date` for days, `Time` for hours, `DateTime` for both, `NaiveDateTime` for "I don't know what I have" — one `%Tempo{}` holds a value at any resolution, an interval, a recurrence, a set of them or a choice among them. `Tempo.Interval`, `Tempo.IntervalSet` and `Tempo.RecurrenceSet` are constructors of that one struct, not types of their own; the one distinct companion is `Tempo.Duration`, a length with no place on the time line. Conversion from Elixir's types is `Tempo.from_elixir/2`, and Elixir's structs and your own (through the [`Tempo.Intervallic`](https://hexdocs.pm/ex_tempo/Tempo.Intervallic.html) protocol) are related and combined with Tempo's as they are.
 
 * **Correctness by construction.** Every value denotes half-open spans `[from, to)` on the time line, so adjacent spans join cleanly (`[a, b)` and `[b, c)` are `[a, c)`). An interval is read as it is written: one written to a date runs through that date (`2026/2028` is three years), and one written to a time of day runs to that reading. "End of day" ambiguity, midnight off-by-ones and DST-hour confusion vanish at the type level.
 

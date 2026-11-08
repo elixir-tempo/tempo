@@ -144,6 +144,8 @@ The analyses, options and decisions that used to live inline in `TODO.md`, kept 
 
 ## A `Tempo.Intervallic` protocol
 
+Implemented 2026-11-08 as decisions 101 to 104 (`plans/decisions.md`): one `to_tempo/1` giving any expression, accepted where two expressions are compared or combined, the caller's struct found again through metadata, and Elixir's structs implementing it. The note below is the 1.x proposal it replaced.
+
 * Define a `Tempo.Intervallic` protocol so user-defined types can
   participate in Allen-algebra comparisons and set operations without
   being copied into `%Tempo.Interval{}`.

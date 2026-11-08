@@ -16,6 +16,7 @@ defmodule Tempo.Allen do
 
   alias Tempo.Allen.Classifier
   alias Tempo.ConversionError
+  alias Tempo.Operand
 
   @relations [
     :precedes,
@@ -158,7 +159,17 @@ defmodule Tempo.Allen do
 
   def relation({_, _} = a, {_, _} = b), do: Classifier.relation(a, b)
 
+  # A value that implements `Tempo.Intervallic` is related as the expression it stands for.
   def relation(a, b) do
+    case Operand.expressions(a, b) do
+      {:ok, %Tempo{} = a, %Tempo{} = b} -> relation(a, b)
+      {:error, %ConversionError{reason: :not_an_expression}} -> not_spans!(a, b)
+      {:error, exception} -> raise exception
+      {:ok, _a, _b} -> not_spans!(a, b)
+    end
+  end
+
+  defp not_spans!(a, b) do
     neither = if span_or_expression?(a), do: b, else: a
     raise ConversionError.exception(value: neither, reason: :not_an_expression)
   end

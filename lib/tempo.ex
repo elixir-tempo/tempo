@@ -43,6 +43,7 @@ defmodule Tempo do
   alias Tempo.InvalidCalendarError
   alias Tempo.Limit
   alias Tempo.Measure
+  alias Tempo.Operand
   alias Tempo.Options
   alias Tempo.Order
   alias Tempo.Parts
@@ -1350,7 +1351,8 @@ defmodule Tempo do
     do: each_operand(&union/3, a, operands, options, "Tempo.union/3")
 
   def union(a, b, options) do
-    with :ok <- Options.check(options, @set_options, "Tempo.union/3") do
+    with :ok <- Options.check(options, @set_options, "Tempo.union/3"),
+         {:ok, a, b} <- Operand.expressions(a, b) do
       united(Algebra.streamed(:union, a, b, options), a, b, options)
     end
   end
@@ -1691,6 +1693,7 @@ defmodule Tempo do
   @spec members_in_exactly_one(t(), t(), keyword()) :: {:ok, t()} | {:error, error()}
   def members_in_exactly_one(a, b, options \\ []) do
     with :ok <- Options.check(options, @set_options, "Tempo.members_in_exactly_one/3"),
+         {:ok, a, b} <- Operand.expressions(a, b),
          {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
       members =
         (Algebra.members_outside(pa, pb) ++ Algebra.members_outside(pb, pa))
@@ -1703,7 +1706,8 @@ defmodule Tempo do
   end
 
   defp operate(operation, a, b, options, function) do
-    with :ok <- Options.check(options, @set_options, function) do
+    with :ok <- Options.check(options, @set_options, function),
+         {:ok, a, b} <- Operand.expressions(a, b) do
       options = Algebra.with_placing_window(operation, a, b, options)
       operated(Algebra.streamed(operation, a, b, options), operation, a, b, options)
     end
@@ -1735,6 +1739,7 @@ defmodule Tempo do
 
   defp members_where(filter, a, b, options, function) do
     with :ok <- Options.check(options, @set_options, function),
+         {:ok, a, b} <- Operand.expressions(a, b),
          {:ok, frame, pa, pb} <- Algebra.aligned(a, b, options) do
       members = pa |> filter.(pb) |> Algebra.whole() |> Enum.map(&in_frame(&1.span, frame))
       {:ok, set_of(members, %{a | calendar: frame.calendar, zone: frame.zone})}
@@ -1772,7 +1777,8 @@ defmodule Tempo do
   """
   @spec relation(t(), t()) :: Allen.relation() | {:error, error()}
   def relation(a, b) do
-    with {:ok, _frame, pa, pb} <- Algebra.aligned(a, b, []),
+    with {:ok, a, b} <- Operand.expressions(a, b),
+         {:ok, _frame, pa, pb} <- Algebra.aligned(a, b, []),
          {:ok, sa} <- Algebra.single(pa, a, b),
          {:ok, sb} <- Algebra.single(pb, a, b) do
       Allen.relation(sa, sb)
@@ -1834,12 +1840,22 @@ defmodule Tempo do
     @spec unquote(name)(t(), t(), keyword()) :: boolean()
     def unquote(name)(a, b, options \\ []) do
       Options.check!(options, [:within], "Tempo.#{unquote(name)}/3")
+      {a, b} = operands!(a, b)
 
       case Algebra.decided(unquote(predicate), a, b, options) do
         {:ok, answer} -> answer
         :compare -> compared(unquote(predicate), a, b, options)
         {:error, exception} -> raise exception
       end
+    end
+  end
+
+  # Two operands as expressions, for a function that answers a bare value
+  # and so raises what reading them returned.
+  defp operands!(a, b) do
+    case Operand.expressions(a, b) do
+      {:ok, a, b} -> {a, b}
+      {:error, exception} -> raise exception
     end
   end
 
@@ -1899,6 +1915,7 @@ defmodule Tempo do
   def compare(a, b, options \\ []) do
     Options.check!(options, [:within, :by], "Tempo.compare/3")
     by = compared_by!(Keyword.get(options, :by, :start_and_end))
+    {a, b} = operands!(a, b)
     order = Order.compare(a, b, by)
 
     if order == :unordered do

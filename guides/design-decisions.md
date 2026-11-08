@@ -533,6 +533,29 @@ iex> Tempo.to_relative_string(~o"2026", from: ~o"2026-06-15")
 
 **Why.** It says what a person would say. A year is asked about as a year, so the year a day is in is "this year", which follows from the law that a value's resolution is its meaning. A year, a quarter, a month, a week and a day are counted by the calendar's own periods, and an hour, a minute and a second by those that pass, so that the hours across a change of the clock are the hours that elapse.
 
+### A struct of the caller's as an operand (decisions 101 to 104)
+
+**The question.** A caller holds a `%Booking{check_in, check_out}`, or Elixir's own `Date` and `DateTime`. Must they copy it into a `%Tempo{}` before relating it to a schedule, and how do they find it again in an answer?
+
+**The alternatives.**
+
+* A protocol of one function, `Tempo.Intervallic.to_tempo/1`, giving any expression, read wherever two expressions are compared or combined; the caller's struct put in the expression's metadata, which the operations that keep members keep.
+
+* A protocol of two ends, `from/1` and `to/1`, which can say only a span.
+
+* Every public function accepting the protocol, so that a booking shifted by a day comes back a `%Tempo{}`.
+
+**Tempo's choice.** The first, with Elixir's `Date`, `Time`, `NaiveDateTime`, `DateTime` and `Date.Range` implementing it as `Tempo.from_elixir/2` reads them.
+
+```elixir
+iex> Tempo.overlaps?(~D[2026-06-15], ~o"2026-06")
+true
+iex> Tempo.relation(~D[2026-06-15], ~D[2026-06-16])
+:meets
+```
+
+**Why.** A booking may be a day, a span or a set, and one function says each. Relations, predicates, sorting and set operations take two things the caller already holds, where conversion is friction; a function that transforms a value answers a `%Tempo{}` whatever it is given, so there the caller converts with `to_tempo/1` and knows what comes back. The metadata the set operations already keep carries the booking through without a second mechanism.
+
 ### An interval of dates as an Elixir value (decision 12)
 
 **The question.** `Tempo.from_elixir/2` reads a `Date.Range`. Does `Tempo.to_elixir/1` give one back?

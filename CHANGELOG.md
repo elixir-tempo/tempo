@@ -4,6 +4,8 @@
 
 ### Added
 
+* `Tempo.Intervallic`, a protocol by which a struct of the caller's, and Elixir's `Date`, `DateTime`, `Date.Range` and the rest, are related, compared and combined with Tempo's expressions as they are (decisions 101 to 104).
+
 * `Tempo.Supervisor`, Tempo's supervision tree, started by its application; a host that sets `runtime: false` lists it in its own tree.
 
 ### Changed

@@ -229,7 +229,46 @@ true
 iex> {:error, %Tempo.InvalidDateError{}} = Tempo.from_iso8601("2026-02-30", profile: :date)
 ```
 
-## 7. Where to convert
+## 7. Comparing without converting
+
+Elixir's date and time structs, and any struct of yours that implements `Tempo.Intervallic`, are related, compared and combined as they are. A relation, a predicate, `Tempo.compare/3` or a set operation reads each once as the expression it stands for, as `from_elixir/2` would:
+
+```elixir
+iex> stay = Date.range(~D[2026-06-15], ~D[2026-06-18])
+iex> Tempo.overlaps?(stay, ~o"2026-06-17")
+true
+iex> Tempo.intersection(~o"2026-06-17/2026-06-30", stay)
+{:ok, ~o"{2026Y6M17D/18D}"}
+```
+
+> *"The stay **overlaps** the 17th, and the part of the rest of June it **shares** is the 17th **through** the 18th."*
+
+A struct of your own implements the protocol with one function, giving the expression it stands for. Putting itself in that expression's metadata lets it be found again in an answer, since the operations that keep members keep their metadata:
+
+<!-- guides:skip -->
+```elixir
+defimpl Tempo.Intervallic, for: Booking do
+  def to_tempo(%Booking{check_in: from, check_out: to} = booking) do
+    Tempo.Interval.new(from: from, to: to, metadata: %{booking: booking})
+  end
+end
+
+{:ok, bookings} = Tempo.IntervalSet.new(all_bookings)
+{:ok, staying} = Tempo.members_overlapping(bookings, ~o"2026-06-17/2026-06-21")
+
+guests =
+  staying
+  |> Tempo.IntervalSet.members()
+  |> Enum.map(&Tempo.metadata(&1).booking)
+
+Enum.sort(all_bookings, Tempo)
+```
+
+> *"The guests **staying** are the bookings that **overlap** the 17th through the 21st. Bookings **sort** by when they begin, as dates do."*
+
+Other functions take a Tempo expression; `Tempo.Intervallic.to_tempo/1` gives one.
+
+## 8. Where to convert
 
 Convert at the **edges**, compute in the **middle**:
 

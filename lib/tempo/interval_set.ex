@@ -20,6 +20,7 @@ defmodule Tempo.IntervalSet do
   alias Tempo.ConversionError
   alias Tempo.Duration
   alias Tempo.Limit
+  alias Tempo.Operand
   alias Tempo.Options
   alias Tempo.Shift
   alias Tempo.Spans
@@ -81,7 +82,7 @@ defmodule Tempo.IntervalSet do
 
   def new(members, options) when is_list(members) do
     with :ok <- Options.check(options, [:metadata, :except], "Tempo.IntervalSet.new/2"),
-         :ok <- expressions(members),
+         {:ok, members} <- expressions(members),
          {:ok, excluded} <- excluded(Keyword.get(options, :except, [])),
          {:ok, set} <-
            Algebra.gathered(members ++ excluded, metadata: Keyword.get(options, :metadata, %{})) do
@@ -93,10 +94,27 @@ defmodule Tempo.IntervalSet do
   def new(other, _options),
     do: {:error, ArgumentError.exception("a set has a list of members, not #{inspect(other)}")}
 
+  # Each member as an expression: a value that implements
+  # `Tempo.Intervallic` as the one it stands for (decision 102).
   defp expressions(members) do
-    case Enum.reject(members, &is_struct(&1, Tempo)) do
-      [] -> :ok
-      [other | _] -> {:error, ConversionError.exception(value: other, reason: :not_an_expression)}
+    read = Enum.map(members, &member_expression/1)
+
+    case Enum.find(read, &match?({:error, _}, &1)) do
+      nil -> {:ok, Enum.map(read, fn {:ok, expression} -> expression end)}
+      error -> error
+    end
+  end
+
+  defp member_expression(member) do
+    case Operand.expression(member) do
+      {:ok, %Tempo{}} = read ->
+        read
+
+      {:ok, other} ->
+        {:error, ConversionError.exception(value: other, reason: :not_an_expression)}
+
+      {:error, _exception} = error ->
+        error
     end
   end
 
@@ -488,7 +506,8 @@ defmodule Tempo.IntervalSet do
   @spec relation_matrix(Tempo.t(), Tempo.t()) ::
           {:ok, [[Allen.relation()]]} | {:error, Exception.t()}
   def relation_matrix(a, b) do
-    with {:ok, _frame, pa, pb} <- Algebra.aligned(a, b, []) do
+    with {:ok, a, b} <- Operand.expressions(a, b),
+         {:ok, _frame, pa, pb} <- Algebra.aligned(a, b, []) do
       {:ok,
        for(
          x <- pa,

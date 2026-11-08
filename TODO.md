@@ -60,11 +60,11 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 
 * [ ] **Revisit the calendar adapter.** Every calendar question goes through `Tempo.Calendar`, and `test/tempo/calendar_surface_test.exs` holds the library to it; what the adapter itself still knows (the `Calendar.ISO` table, the Gregorian for a solar term, Easter and the registry lookup by name) is left as it is for now (2026-10-14).
 
-* [ ] **A `Tempo.Intervallic` protocol**, so that a struct of the caller's (`%Booking{check_in, check_out}`) takes part in relations and set operations without being copied into a `%Tempo{}`.
-
 * [ ] **`Table.Reader` for a set**, so that Livebook shows a set's members and their metadata as rows. The dependency was dropped with the struct it was written for.
 
 ## Done
+
+* [x] **A `Tempo.Intervallic` protocol** — a caller's struct, and Elixir's date and time structs, are related, compared and combined as they are, through one `to_tempo/1` (decisions 101 to 104). 2026-11-08.
 
 * [x] **Lazy streams of structs** — measured and declined: the stream is 4 to 10% of a rule's time, where asking the zone is 34 to 41% (decision 94). 2026-11-05.
 

@@ -1064,3 +1064,43 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-08).** Option 1. The units up to the period's are tests (`BYHOUR` in an hourly rule), the finer ones the readings, named from the next unit down without a gap and one at least. A period that does not begin on its unit of the wall clock, or is not written as a date of months and days, is the engine's, as are positions, days and a period of a second.
 
 * **State.** Implemented 2026-11-08 in `Tempo.Matcher`: one question of the zone a period, and each reading placed by elapsed ticks. `matcher_test.exs` holds four rules of hours in every hour of eight days (Chicago, Lord Howe's half-hour change, Kathmandu, a floating and a fixed-offset day) and three of minutes in the minutes of four hours about a change, the second showing among them, to the engine, extents and written spans both. The benchmark's hourly rule is 2.7 ms and 3.9 MB, from 7.4 ms and 11.9 MB, 3.0 times 1.6.4. The comparison found that the engine selected nothing in a span at a fixed shift of an hour or more ahead of UTC, its containers made from the span without the shift its ends carry; `Tempo.Select.container_at/4` now gives them the frame's shift (`fixed_offset_test.exs`).
+
+## 101. The `Tempo.Intervallic` protocol is one function giving an expression
+
+* **Question.** What shape has a protocol by which a caller's struct stands for the time it covers? The 1.x note proposed `from/1` and `to/1`, the ends of an interval.
+
+* **Context.** 2.0 has one struct whose form is a value, a span or a set; a booking may be a day, an interval or a set of nights. The options were (1) one `to_tempo/1` returning `{:ok, expression}` or `{:error, exception}`, as the library's functions return; (2) the two ends, which say only a span.
+
+* **Decision (2026-11-08, the user).** Option 1. The protocol falls back to `Any`, whose implementation returns a `Tempo.ConversionError` with reason `:not_an_expression`, so that `to_tempo/1` never raises; an implementation that returns anything but an expression or an exception is refused with the same error.
+
+* **State.** Implemented in `lib/tempo/protocol/intervallic.ex`; the API reads an operand through `Tempo.Operand`, a `%Tempo{}` passing with no dispatch.
+
+## 102. The protocol is accepted where two expressions are compared or combined
+
+* **Question.** Which functions take a value that implements `Tempo.Intervallic`?
+
+* **Context.** Relations and set operations take two things a caller already holds, where a copy is friction; a function that transforms a value answers a `%Tempo{}` whatever it is given. The options were (1) where two expressions are compared or combined; (2) every public function.
+
+* **Decision (2026-11-08, the user).** Option 1: `Tempo.relation/2`, the eight predicates, `Tempo.compare/3` (so `Enum.sort(bookings, Tempo)`), `union/3`, `intersection/3`, `difference/3`, `symmetric_difference/3`, `members_overlapping/3`, `members_outside/3`, `members_in_exactly_one/3`, `Tempo.Allen`, and `Tempo.IntervalSet.new/2` and `relation_matrix/2`. Other functions take a `t:Tempo.t/0`, which `to_tempo/1` gives.
+
+* **State.** Implemented; `test/tempo/intervallic_test.exs`.
+
+## 103. A caller's struct is found again through metadata
+
+* **Question.** How does a caller get their own struct back from an answer, the bookings that overlap a slot?
+
+* **Context.** The operations that keep members keep each member's metadata. The options were (1) the implementation puts what it likes in the expression's metadata; (2) Tempo stores the original value under a fixed key; (3) nothing is carried.
+
+* **Decision (2026-11-08, the user).** Option 1, with no new mechanism. A set operation's result carries its first operand's metadata, as for any expression.
+
+* **State.** Implemented; the moduledoc and `guides/interop.md` show a booking that puts itself in the metadata.
+
+## 104. Elixir's date and time structs implement the protocol
+
+* **Question.** Should `Tempo.overlaps?(~D[2026-06-15], ~o"2026-06")` work, where it returned `:not_an_expression`?
+
+* **Context.** `Tempo.from_elixir/2` already reads each of Elixir's structs as one expression. The options were (1) `Date`, `Time`, `NaiveDateTime`, `DateTime` and `Date.Range` implement it as `from_elixir/2` reads them; (2) only `%Tempo{}` and the caller's structs.
+
+* **Decision (2026-11-08, the user).** Option 1. Elixir's `Duration` does not: a length is no span of time.
+
+* **State.** Implemented. A struct is read in its own calendar, `Calendar.ISO` for Elixir's, and a set operation answers in its first operand's.

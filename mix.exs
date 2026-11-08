@@ -115,7 +115,8 @@ defmodule Tempo.MixProject do
   def groups_for_modules do
     [
       Core: ~r/^Tempo(?:\.(Interval|IntervalSet|RecurrenceSet|Duration|Sigils|Builder))?$/,
-      "Relations and selection": ~r/^Tempo\.(Allen|Workdays|Territory|Event|Event\.Resolver)$/,
+      "Relations and selection":
+        ~r/^Tempo\.(Allen|Intervallic|Workdays|Territory|Event|Event\.Resolver)$/,
       "Recurrence rules and calendar formats": ~r/^Tempo\.(RRule|Cron|DateRule|ICal|JSCalendar)$/,
       "Clock and explanation": ~r/^Tempo\.(Clock|Clock\.System|Explain)$/,
       Supervision: ~r/^Tempo\.Supervisor$/,
