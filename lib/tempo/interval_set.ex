@@ -13,6 +13,28 @@ defmodule Tempo.IntervalSet do
   value lies within them, and `slots/3` cuts free time into lengths.
   `from_stream/2` makes one from a stream of expressions.
 
+  ## As a table
+
+  When the `table` package is present (Livebook's Kino brings it), a set is
+  tabular data through `Table.Reader`, so `Kino.DataTable.new/1` shows a
+  year of holidays with their names. Each member as `Tempo.members/2` gives
+  it is a row: its `from` and its `to`, the ends of its interval as the
+  reader reads them (an end written to a day is read through it), then a
+  column for each metadata key the members carry, in the order they first
+  appear, `nil` where a member has none. A key named `:from` or `:to` is
+  left out. A one-of set, a recurrence with an end and a value with a list
+  are tables of their members too; a single value or span, and an
+  expression with no end, are not.
+
+      iex> ~o"{2026-06,2026-07,^2026-06-15}"
+      ...> |> Table.to_rows()
+      ...> |> Enum.map(&{&1.from, &1.to})
+      [
+        {~o"2026Y6M1D", ~o"2026Y6M14D"},
+        {~o"2026Y6M16D", ~o"2026Y6M30D"},
+        {~o"2026Y7M", ~o"2026Y7M"}
+      ]
+
   """
 
   alias Tempo.Algebra

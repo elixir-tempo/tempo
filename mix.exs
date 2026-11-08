@@ -191,6 +191,7 @@ defmodule Tempo.MixProject do
       {:astro, "~> 2.10"},
       {:ical, "~> 3.2 and >= 3.2.2", optional: true},
       {:jscalendar, "~> 0.1", optional: true},
+      {:table, "~> 0.1", optional: true},
       {:ex_doc, "~> 0.38", only: [:dev, :test, :release], optional: true, runtime: false},
       {:benchee, "~> 1.3", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},

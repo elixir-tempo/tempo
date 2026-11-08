@@ -6,6 +6,8 @@
 
 * `Tempo.Intervallic`, a protocol by which a struct of the caller's, and Elixir's `Date`, `DateTime`, `Date.Range` and the rest, are related, compared and combined with Tempo's expressions as they are (decisions 101 to 104).
 
+* `Table.Reader` for a bounded plural expression, so that Livebook shows a set's members as rows of `from`, `to` and their metadata (decision 107). Needs the optional `table` package.
+
 * `Tempo.Supervisor`, Tempo's supervision tree, started by its application; a host that sets `runtime: false` lists it in its own tree.
 
 ### Changed

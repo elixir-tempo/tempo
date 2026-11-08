@@ -554,6 +554,22 @@ iex> Tempo.shift(~o"{2026-06-01/2026-06-30,^2026-06-15}", ~o"P1Y")
 
 **Why.** A member is the time it stands for, and the set does not stand for the 15th: counting June whole would make the members, their count and a table of them disagree with the time the set covers. Truncating the exclusion with the members would turn June less a day into nothing at all.
 
+### A set as a table (decision 107)
+
+**The question.** Livebook shows tabular data as a table. Which expressions are tables, and what are their columns?
+
+**The alternatives.**
+
+* Sets alone, the `{...}` form.
+
+* Every expression whose `Enum` yields members, when it has an end: a set, a one-of set, a recurrence with a count or an end, a value with a list.
+
+* Every expression, a single value as a table of one row.
+
+**Tempo's choice.** The second. Each member is a row of its `from`, its `to` and a column for each key of the members' metadata, so a year of holidays shows each holiday's dates and name.
+
+**Why.** Those expressions are all read as their members, and a table of them is a table of those members. A single value is one thing rather than a list of one, and an expression with no end has no last row.
+
 ### A struct of the caller's as an operand (decisions 101 to 104)
 
 **The question.** A caller holds a `%Booking{check_in, check_out}`, or Elixir's own `Date` and `DateTime`. Must they copy it into a `%Tempo{}` before relating it to a schedule, and how do they find it again in an answer?

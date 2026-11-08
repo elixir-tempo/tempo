@@ -1124,3 +1124,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-08, the user).** Option 1.
 
 * **State.** Implemented in `Tempo.Shift` (`shifted_entry/2`, `rewritten_entry/2`); `set_exclusion_test.exs`.
+
+## 107. A bounded plural expression is a table of its members
+
+* **Question.** Which expressions does `Table.Reader` read as a table, and what are its columns?
+
+* **Context.** The 2.x implementation was for the `Tempo.IntervalSet` struct, dropped in the redesign; every expression is now a `%Tempo{}`, so the protocol is implemented for `Tempo` and must say which forms are tabular. Kino calls `Table.Reader.init/1` on what it is asked to show, so an expression that answers rows is offered as a table. The options were (1) the `{:all, members}` form alone; (2) every plural expression (law 6: one whose `Enum` yields members, not children) that is bounded; (3) every expression, a singular one as a table of one row.
+
+* **Decision (2026-11-08, Claude, for the user's review).** Option 2. A set, a one-of set, a recurrence with an end and a value with a list are each read by `Tempo.members/2`, so the line law 6 draws is the one that gives them all; a single value or span is one thing, not a table, and one with no end has rows that never end. The columns are `:from` and `:to`, a member's interval ends as the reader reads them (law 9), then each metadata key the members carry in the order it first appears, `nil` where a member has none; a key named `:from` or `:to` is left out.
+
+* **State.** Implemented 2026-11-08 in `lib/tempo/protocol/table_reader.ex`, on the optional `table` package; `test/tempo/table_reader_test.exs`.
