@@ -1,6 +1,6 @@
 # Zone tables read once, and no runtime `:persistent_term`
 
-**Status:** implemented (v2.5.0), 2026-11-06
+**Status:** implemented (v2.5.0), 2026-11-08
 
 Decisions 95 and 96: nothing writes `:persistent_term` at runtime, and the time zone database is Tempo's for as long as it runs, so each zone's table is built once as Tempo starts. Decision 95 planned a resolved frame carried through the engine; decision 96 replaced it with static tables, which give most of its gain. The file keeps its first name so that links to it hold.
 
@@ -45,6 +45,8 @@ Two sites write `:persistent_term` at runtime, each write a system-wide GC: `Tem
 * [x] **Measured against 1.6.4** — the rule cases side by side, and the table in `TODO.md` brought up to date: the rules within the static tables 16 to 25% faster, the two past 2032 slower (the ETS store copies a grown table at each question). 2026-11-05.
 
 * [x] **Static tables through 2100** — `tz`'s rule-made changes listed with its compiled ones through 2100, generated once for each rule, start and offset the zones share (decision 98): the build is 40 ms and 1.17 MB, and the yearly and last-weekday rules 1.4 and 3.0 ms. 2026-11-06.
+
+* [x] **Measured again** — the whole of `bench/against_1_6_bench.exs` side by side at `e0a76e92`, after decisions 98 to 100, run twice within 5%, and the table in `TODO.md` brought up to date. 2026-11-08.
 
 ### Deferred
 

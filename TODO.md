@@ -8,10 +8,6 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
-## In progress
-
-* [ ] **The zone asked in the engine, and no `:persistent_term` written at runtime** — every zone's table is built once as `Tempo.Supervisor` starts and the database is Tempo's while it runs (decision 96): a zone question is 139 ns, from 220, and nothing writes `:persistent_term` at runtime. Left: the rule cases measured against 1.6.4. Planned in [plans/resolved-frame.md](plans/resolved-frame.md).
-
 ## Blocked
 
 ### Upstream
@@ -26,29 +22,29 @@ Every item here is upstream: Tempo follows each library as it is, and the item i
 
 ### Performance
 
-Where 2.0 stands against 1.6.4 after the work of 2026-10-15 (decisions 56 to 63 and 73 to 76) and decision 93, and where it could still be faster. Nothing here is needed for the release (decision 37); each item is a measurement first, against `bench/against_1_6_bench.exs`, profiled by layer, and records what it bought in its decision (`plans/reference-architecture-review.md`, section 4, has the profiles the work was ordered by).
+Where 2.0 stands against 1.6.4 after the work of 2026-10-15 (decisions 56 to 63 and 73 to 76) and decisions 93 and 96 to 100, and where it could still be faster. Nothing here is needed for the release (decision 37); each item is a measurement first, against `bench/against_1_6_bench.exs`, profiled by layer, and records what it bought in its decision (`plans/reference-architecture-review.md`, section 4, has the profiles the work was ordered by).
 
-The position on 2026-11-05 (Apple M1 Max, Elixir 1.20.5, OTP 29.1.2, JIT), measured side by side: 1.6.4 built with the Calendrical (1.3.0) and Astro (2.5.0) current at its release, and `main` at `791dc2da`, after decisions 93 and 96.
+The position on 2026-11-08 (Apple M1 Max, Elixir 1.20.5, OTP 29.1.2, JIT), measured side by side and repeated, the two runs within 5% of each other: 1.6.4 built with the Calendrical (1.3.0) and Astro (2.5.0) current at its release, and `main` at `e0a76e92`, after decisions 93 and 96 to 100.
 
 | Case | 1.6.4 | 2.0 | 2.0 / 1.6.4 |
 |---|---|---|---|
 | compare a month and a day | 0.2 µs | 0.1 µs | 0.40 |
-| relate a month and a day | 1.3 µs | 1.4 µs | 1.06 |
-| read ten texts | 3,960 µs | 104 µs | 0.03 |
-| write ten values | 14.2 µs | 10.3 µs | 0.73 |
-| walk the days of a year | 215 µs | 109 µs | 0.51 |
-| walk the hours of a spring-forward day | 1.3 µs | 1.8 µs | 1.42 |
-| union of two sets of 100 | 130 µs | 317 µs | 2.43 |
-| intersection of two sets of 100 | 180 µs | 427 µs | 2.37 |
-| difference of two sets of 100 | 173 µs | 411 µs | 2.37 |
-| expand the last weekday, 240 | 8.6 ms | 3.0 ms | 0.35 |
-| expand weekly MWF, 780 | 3.1 ms | 2.8 ms | 0.91 |
-| expand weekdays, 520 | 1.6 ms | 3.3 ms | 2.03 |
-| expand the yearly 4th Thursday, 50 | 0.32 ms | 0.61 ms | 1.92 |
-| expand daily, 30 | 28 µs | 150 µs | 5.37 |
-| expand hourly, 720 | 0.93 ms | 2.7 ms | 2.96 |
+| relate a month and a day | 1.3 µs | 1.4 µs | 1.10 |
+| read ten texts | 3,931 µs | 96 µs | 0.02 |
+| write ten values | 13.9 µs | 10.4 µs | 0.75 |
+| walk the days of a year | 138 µs | 111 µs | 0.80 |
+| walk the hours of a spring-forward day | 1.3 µs | 1.9 µs | 1.50 |
+| union of two sets of 100 | 126 µs | 316 µs | 2.51 |
+| intersection of two sets of 100 | 174 µs | 421 µs | 2.42 |
+| difference of two sets of 100 | 172 µs | 422 µs | 2.45 |
+| expand the last weekday, 240 | 8.6 ms | 3.2 ms | 0.37 |
+| expand weekly MWF, 780 | 3.0 ms | 2.9 ms | 0.98 |
+| expand weekdays, 520 | 1.7 ms | 3.4 ms | 2.08 |
+| expand the yearly 4th Thursday, 50 | 0.31 ms | 0.58 ms | 1.87 |
+| expand daily, 30 | 28 µs | 151 µs | 5.45 |
+| expand hourly, 720 | 0.93 ms | 2.6 ms | 2.81 |
 
-The static zone tables reach 2100 for `tz` (decision 98), so every rule here is answered from them: the yearly rule of fifty (to 2072) and the last weekday of 240 months (to 2043) take 1.4 and 3.0 ms, where they took 1.7 and 4.3 before decision 96 and 3.9 and 6.5 with tables to 2032.
+The static zone tables reach 2100 for `tz` (decision 98), so every rule here is answered from them: the yearly rule of fifty (to 2072) and the last weekday of 240 months (to 2043) took 1.7 and 4.3 ms before decision 96 and 3.9 and 6.5 with tables to 2032. The matcher's yearly (decision 99) and hourly (decision 100) cases took the yearly rule to 0.58 ms and the hourly to 2.6. The walk of a year's days was 0.51 of 1.6.4 in the table of 2026-11-05 because 1.6.4 measured 215 µs that run; it measures 138 µs on both runs of 2026-11-08.
 
 The engine's cost is in the placing of values. A `%Tempo{}` holds its units as written, and every question of where a value lies (`Tempo.Spans.extent/1`) reads them again through the calendar, a few hundred nanoseconds a time; a span now carries its place (`Tempo.Placed`, decision 74), but a value does not, and a rule the engine expands places each candidate as it is built, tested and bounded. A second representation of a value through the engine was measured and declined (decisions 57 and 63): about a quarter of an occurrence, for two shapes through every module. What is left is below.
 
@@ -61,6 +57,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **Revisit the calendar adapter.** Every calendar question goes through `Tempo.Calendar`, and `test/tempo/calendar_surface_test.exs` holds the library to it; what the adapter itself still knows (the `Calendar.ISO` table, the Gregorian for a solar term, Easter and the registry lookup by name) is left as it is for now (2026-10-14).
 
 ## Done
+
+* [x] **The zone asked in the engine, and no `:persistent_term` written at runtime** — every zone's table built once as `Tempo.Supervisor` starts, through 2100 for `tz` (decisions 96 and 98): a zone question is 139 ns, from 220; measured against 1.6.4 again at `e0a76e92`. Planned in [plans/resolved-frame.md](plans/resolved-frame.md). 2026-11-08.
 
 * [x] **`Table.Reader` for a set** — a bounded plural expression is a table of its members, their ends and their metadata, for Livebook (decision 107). 2026-11-08.
 
