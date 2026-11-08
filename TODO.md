@@ -46,13 +46,13 @@ The position on 2026-11-05 (Apple M1 Max, Elixir 1.20.5, OTP 29.1.2, JIT), measu
 | expand weekdays, 520 | 1.6 ms | 3.3 ms | 2.03 |
 | expand the yearly 4th Thursday, 50 | 0.32 ms | 0.61 ms | 1.92 |
 | expand daily, 30 | 28 µs | 150 µs | 5.37 |
-| expand hourly, 720 | 0.93 ms | 7.4 ms | 7.96 |
+| expand hourly, 720 | 0.93 ms | 2.7 ms | 2.96 |
 
 The static zone tables reach 2100 for `tz` (decision 98), so every rule here is answered from them: the yearly rule of fifty (to 2072) and the last weekday of 240 months (to 2043) take 1.4 and 3.0 ms, where they took 1.7 and 4.3 before decision 96 and 3.9 and 6.5 with tables to 2032.
 
 The engine's cost is in the placing of values. A `%Tempo{}` holds its units as written, and every question of where a value lies (`Tempo.Spans.extent/1`) reads them again through the calendar, a few hundred nanoseconds a time; a span now carries its place (`Tempo.Placed`, decision 74), but a value does not, and a rule the engine expands places each candidate as it is built, tested and bounded. A second representation of a value through the engine was measured and declined (decisions 57 and 63): about a quarter of an occurrence, for two shapes through every module. What is left is below.
 
-* [ ] **A rule the matcher leaves to the engine.** `Tempo.Matcher` compiles a rule of months, days of the month, weekdays, positions and clock readings whose period is a day or coarser, and since decision 99 months followed by nested selections of days in a period of a month or a year (the yearly rule of the benchmark); a rule with a day of the year, a mask, a stepped range, a month counted from the end, a roll, or a period finer than a day is the engine's. Each could be compiled the same way, the hourly rule of the benchmark next; what the matcher takes must stay exact by `rrule_measure_test.exs`, `rfc5545_examples_test.exs` and `cron_test.exs`.
+* [ ] **A rule the matcher leaves to the engine.** `Tempo.Matcher` compiles a rule of months, days of the month, weekdays, positions and clock readings whose period is a day or coarser, since decision 99 months followed by nested selections of days in a period of a month or a year (the yearly rule of the benchmark), and since decision 100 readings of the clock alone in a period of an hour or a minute (the hourly rule); a rule with a day of the year, a mask, a stepped range, a month counted from the end, a roll, a test of days in a period finer than a day, or a period of a second is the engine's. Each could be compiled the same way; what the matcher takes must stay exact by `rrule_measure_test.exs`, `rfc5545_examples_test.exs` and `cron_test.exs`.
 
 * [ ] **Every calendar question goes through the adapter.** `Tempo.Calendar` dispatches each to the calendar's module (decisions 6 and 8); the default calendar's day numbers are answered by `Calendar.ISO` directly, and a month's labels are asked once a month (decision 75), so the calendar modules are 4 to 5% of a rule's profiled time. Gregorian day-number arithmetic held inline in the walk would remove most of what is left in a date's extent.
 

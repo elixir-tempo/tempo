@@ -15,6 +15,30 @@ defmodule Tempo.MatcherTest do
     extent
   end
 
+  defp walked(value, unit) do
+    {:ok, walk} = Tempo.walk(value, unit)
+    Enum.to_list(walk)
+  end
+
+  # What the matcher picks in a period, held to what the engine picks: the
+  # place of each occurrence and the span written, a shift and all.
+  defp compared(:engine, _placed, _parts), do: :engine
+
+  defp compared({:ok, picked}, placed, parts) do
+    {:ok, engine} = Select.in_period(placed, parts, [])
+
+    expected =
+      Enum.map(engine, fn value ->
+        {start, stop} = extent(value)
+        {{start, stop}, Spans.span_of(value, stop)}
+      end)
+
+    assert {parts, placed.span, Enum.map(picked, &{Placed.extent(&1), &1.span})} ==
+             {parts, placed.span, expected}
+
+    :matcher
+  end
+
   describe "compile/3" do
     test "compiles the plain parts of a rule whose period is a day or coarser" do
       assert %Matcher{weekdays: [1, 3, 5], clock: [hour: [23], minute: [59], second: [0]]} =
@@ -33,6 +57,14 @@ defmodule Tempo.MatcherTest do
 
       assert %Matcher{days: {[1, 2, 3, 4, 5], []}} =
                Matcher.compile([day: [1..5]], :month, Calendar.ISO)
+    end
+
+    test "compiles readings of the clock in an hour or a minute, the coarser units as tests" do
+      assert %Matcher{cycle: :hour, tests: [], clock: [minute: [59]]} =
+               Matcher.compile([minute: 59], :hour, Calendar.ISO)
+
+      assert %Matcher{cycle: :minute, tests: [hour: [9], minute: [0, 20]], clock: [second: [0]]} =
+               Matcher.compile([hour: 9, minute: [0, 20], second: 0], :minute, Calendar.ISO)
     end
 
     test "counts a day of the week from the end of the week as the calendar's week is long" do
@@ -93,7 +125,11 @@ defmodule Tempo.MatcherTest do
              )
 
       assert is_nil(Matcher.compile([day_of_year: [1, 100, -1]], :year, Calendar.ISO))
-      assert is_nil(Matcher.compile([minute: 59], :hour, Calendar.ISO))
+      assert is_nil(Matcher.compile([], :hour, Calendar.ISO))
+      assert is_nil(Matcher.compile([second: 30], :hour, Calendar.ISO))
+      assert is_nil(Matcher.compile([minute: 59, instance: 1], :hour, Calendar.ISO))
+      assert is_nil(Matcher.compile([day_of_week: 1, minute: 0], :hour, Calendar.ISO))
+      assert is_nil(Matcher.compile([second: 0], :second, Calendar.ISO))
       assert is_nil(Matcher.compile([day: {:mask, [1, :x]}], :month, Calendar.ISO))
       assert is_nil(Matcher.compile([day: [1..-1//2]], :month, Calendar.ISO))
       assert is_nil(Matcher.compile([month: [-1]], :year, Calendar.ISO))
@@ -163,6 +199,58 @@ defmodule Tempo.MatcherTest do
 
       assert Enum.count(compared) == 64
       assert Enum.sum(compared) >= 100
+    end
+
+    @hour_parts [
+      [minute: 59],
+      [minute: [0, 30], second: [0, 30]],
+      [hour: [1, 2, 3], minute: 30],
+      [minute: [15, 45]]
+    ]
+
+    @minute_parts [
+      [second: [0, 30]],
+      [hour: 1, minute: [0, 15, 30, 45], second: 0],
+      [second: 59]
+    ]
+
+    @days [
+      ~o"2026-01-22[America/Chicago]",
+      ~o"2026-03-08[America/Chicago]",
+      ~o"2026-11-01[America/Chicago]",
+      ~o"2026-04-05[Australia/Lord_Howe]",
+      ~o"2026-10-04[Australia/Lord_Howe]",
+      ~o"2026-06-15[Asia/Kathmandu]",
+      ~o"2026-06-15",
+      ~o"2026-06-15T00+05:30"
+    ]
+
+    @hours [
+      ~o"2026-11-01T01[America/Chicago]",
+      ~o"2026-11-01T01-06:00[America/Chicago]",
+      ~o"2026-04-05T01[Australia/Lord_Howe]",
+      ~o"2026-03-08T01[America/Chicago]"
+    ]
+
+    test "picks in an hour or a minute what the engine picks for readings of the clock" do
+      hours = Enum.flat_map(@days, &walked(&1, :hour))
+      minutes = Enum.flat_map(@hours, &walked(&1, :minute))
+
+      answered =
+        for {periods, unit, all_parts} <- [
+              {hours, :hour, @hour_parts},
+              {minutes, :minute, @minute_parts}
+            ],
+            parts <- all_parts,
+            period <- periods do
+          assert {:ok, [placed]} = Spans.placed(period)
+          matcher = Matcher.compile(parts, unit, Calendar.ISO)
+          compared(Matcher.in_period(matcher, placed), placed, parts)
+        end
+
+      # Every period of an ordinary day is the matcher's; those about a change of the clock are the engine's.
+      assert Enum.count(answered, &(&1 == :matcher)) > 400
+      assert Enum.count(answered, &(&1 == :engine)) > 50
     end
 
     test "leaves a period that cuts a month to the engine" do

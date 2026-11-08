@@ -12,6 +12,7 @@ defmodule Tempo.FixedOffsetTest do
 
   import Tempo.Sigils
 
+  alias Tempo.IntervalSet
   alias Tempo.Zone
 
   # A `DateTime` at each offset, as Localize reads one: its time zone is the
@@ -211,6 +212,20 @@ defmodule Tempo.FixedOffsetTest do
 
     test "is still an error for a value with no offset at all" do
       assert {:error, %Tempo.ConversionError{}} = Tempo.to_datetime(~o"2026-05-23T14:30:00")
+    end
+  end
+
+  describe "a selection in a value at a shift" do
+    test "finds what it names however far the shift is from UTC" do
+      {:ok, last_minute} = Tempo.selection(minute: 59)
+
+      for shift <- [[hour: 5, minute: 30], [hour: 14], [hour: 0, minute: 30], [hour: -8]] do
+        hour = Tempo.new!(year: 2026, month: 6, day: 15, hour: 0, shift: shift)
+        expected = Tempo.new!(year: 2026, month: 6, day: 15, hour: 0, minute: 59, shift: shift)
+
+        assert {:ok, picked} = Tempo.select(hour, last_minute)
+        assert IntervalSet.members(picked) == [expected]
+      end
     end
   end
 end

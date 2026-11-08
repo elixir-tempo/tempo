@@ -20,6 +20,13 @@ defmodule Tempo.Matcher do
   # the parts before it name, or in the period where they name none, and
   # its positions are counted there, before the readings of the clock.
   #
+  # A rule of readings of the clock alone whose period is an hour or a
+  # minute (an hourly rule at minute 59) is compiled too: the units up to
+  # the period's test which periods it picks in, and the finer ones are the
+  # readings, each that many ticks into its unit. A period is taken where
+  # the zone's offset holds through it and the two days before, so that no
+  # reading in it is skipped or shown twice; any other is the engine's.
+  #
   # The engine (`Tempo.Select`) is the meaning of every rule, and the
   # measures hold the matcher to it. A rule the matcher cannot compile goes
   # to the engine, as does a period in which a month does not count its days
@@ -34,9 +41,10 @@ defmodule Tempo.Matcher do
   @plain_keys [:month, :day, :day_of_week, :instance | @clock_units]
   @nested_keys [:day, :day_of_week, :instance]
   @nested_periods [:month, :year]
+  @clock_periods [:hour, :minute]
 
-  @enforce_keys [:months, :days, :weekdays, :instances, :clock, :pickers, :scope]
-  defstruct [:months, :days, :weekdays, :instances, :clock, :pickers, :scope]
+  @enforce_keys [:months, :days, :weekdays, :instances, :clock, :pickers, :scope, :cycle, :tests]
+  defstruct [:months, :days, :weekdays, :instances, :clock, :pickers, :scope, :cycle, :tests]
 
   @typedoc "A nested selection: the days of the month and of the week it tests, and its positions."
   @type picker :: %{
@@ -52,7 +60,9 @@ defmodule Tempo.Matcher do
           instances: [integer()] | nil,
           clock: [{Unit.t(), [non_neg_integer()]}],
           pickers: [picker()] | nil,
-          scope: :month | :period | nil
+          scope: :month | :period | nil,
+          cycle: :hour | :minute | nil,
+          tests: [{Unit.t(), [non_neg_integer()]}]
         }
 
   # ── Compiling ─────────────────────────────────────────────────────────
@@ -69,7 +79,47 @@ defmodule Tempo.Matcher do
     |> compiled_shape(unit, calendar)
   end
 
+  def compile(parts, unit, _calendar) when unit in @clock_periods do
+    {tests, readings} = Enum.split_while(@clock_units, &(&1 != finer_than(unit)))
+    named = for unit <- readings, Keyword.has_key?(parts, unit), do: unit
+
+    if clock_shape?(parts, readings, named) do
+      clock_compiled(Keyword.take(parts, tests), Keyword.take(parts, readings), unit)
+    else
+      nil
+    end
+  end
+
   def compile(_parts, _unit, _calendar), do: nil
+
+  defp finer_than(:hour), do: :minute
+  defp finer_than(:minute), do: :second
+
+  # Readings of the clock alone, the finer units named from the period's
+  # next unit down without a gap, and one at least.
+  defp clock_shape?(parts, readings, [_ | _] = named) do
+    Enum.all?(parts, fn {key, _held} -> key in @clock_units end) and
+      named == Enum.take(readings, length(named))
+  end
+
+  defp clock_shape?(_parts, _readings, []), do: false
+
+  defp clock_compiled(tests, readings, unit) do
+    with {:ok, tests} <- clock(tests),
+         {:ok, readings} <- clock(readings) do
+      %__MODULE__{
+        months: nil,
+        days: nil,
+        weekdays: nil,
+        instances: nil,
+        clock: readings,
+        pickers: nil,
+        scope: nil,
+        cycle: unit,
+        tests: tests
+      }
+    end
+  end
 
   # The parts before a nested selection or a set of them, the selections,
   # and the parts after; or the parts of a rule with none.
@@ -126,7 +176,9 @@ defmodule Tempo.Matcher do
         instances: nil,
         clock: clock,
         pickers: pickers,
-        scope: if(is_nil(months) and unit == :year, do: :period, else: :month)
+        scope: if(is_nil(months) and unit == :year, do: :period, else: :month),
+        cycle: nil,
+        tests: []
       }
     end
   end
@@ -157,7 +209,9 @@ defmodule Tempo.Matcher do
         instances: instances,
         clock: clock,
         pickers: nil,
-        scope: nil
+        scope: nil,
+        cycle: nil,
+        tests: []
       }
     end
   end
@@ -226,16 +280,27 @@ defmodule Tempo.Matcher do
     if frame == :engine do
       :engine
     else
-      first_day = Integer.floor_div(Walk.wall(start, frame), @day)
-      last_day = Integer.floor_div(Walk.wall(stop - 1, frame), @day)
-
-      with {:ok, days} <- days_of(matcher, first_day, last_day, period.calendar) do
-        {:ok, occurrences(matcher, days, period, frame)}
-      end
+      picked_in(matcher, start, stop, period, frame)
     end
   end
 
   def in_period(_matcher, _unplaced), do: :engine
+
+  defp picked_in(%__MODULE__{cycle: nil} = matcher, start, stop, period, frame) do
+    first_day = Integer.floor_div(Walk.wall(start, frame), @day)
+    last_day = Integer.floor_div(Walk.wall(stop - 1, frame), @day)
+
+    with {:ok, days} <- days_of(matcher, first_day, last_day, period.calendar) do
+      {:ok, occurrences(matcher, days, period, frame)}
+    end
+  end
+
+  defp picked_in(matcher, start, stop, period, frame) do
+    case clock_offset(frame, start, stop, Unit.ticks(matcher.cycle), period) do
+      {:ok, offset} -> {:ok, readings_in(matcher, start, stop, offset, period, frame)}
+      :engine -> :engine
+    end
+  end
 
   # A rule of nested selections picks in each month the parts before them
   # name, or in the whole period. A period of one day (a daily rule) asks
@@ -348,6 +413,98 @@ defmodule Tempo.Matcher do
     else
       nil
     end
+  end
+
+  # ── Readings of the clock in an hour or a minute ──────────────────────
+
+  # The offset of a period that begins on its unit of the wall clock, is a
+  # whole number of them and is written as a date: `:engine` for any other.
+  defp clock_offset(frame, start, stop, step, period) do
+    with {:ok, offset} <- steady(frame, start, stop) do
+      if aligned?(start + offset, stop - start, step) and month_day?(period) do
+        {:ok, offset}
+      else
+        :engine
+      end
+    end
+  end
+
+  # The offset a period's clock keeps through it and the two days before,
+  # in which a reading could be shown a second time: in a named zone the
+  # zone's, where it keeps one, and otherwise the frame's own.
+  defp steady(%{zone: %Zone{name: name} = zone}, start, stop) when is_binary(name) do
+    case Zone.steady_offset(zone, nil, start - 2 * @day, stop) do
+      {:ok, offset} -> {:ok, offset}
+      :changes -> :engine
+    end
+  end
+
+  defp steady(frame, start, _stop) do
+    {:ok, Walk.wall(start, frame) - start}
+  end
+
+  # A period that begins on its unit of the wall clock and is a whole number of them.
+  defp aligned?(wall_start, length, step) do
+    Integer.mod(wall_start, step) == 0 and Integer.mod(length, step) == 0
+  end
+
+  # A period written as a date of months and days, as the occurrences are.
+  defp month_day?(%Tempo{form: {:span, %Tempo{form: {:value, units}}, _to}}),
+    do: month_day_units?(units)
+
+  defp month_day?(%Tempo{form: {:value, units}}), do: month_day_units?(units)
+  defp month_day?(_period), do: false
+
+  defp month_day_units?([{:year, _}, {:month, _}, {:day, _} | _]), do: true
+  defp month_day_units?(_units), do: false
+
+  # Each unit of the period the tests pass, at each reading, in order.
+  defp readings_in(matcher, start, stop, offset, period, frame) do
+    step = Unit.ticks(matcher.cycle)
+    readings = readings(matcher.clock)
+    {finest, _values} = List.last(matcher.clock)
+    length = Unit.ticks(finest)
+
+    for boundary <- start..(stop - 1)//step,
+        units = wall_units(boundary + offset, matcher.cycle, period.calendar),
+        tested?(units, matcher.tests),
+        reading <- readings,
+        elapsed = reading_ticks(reading),
+        elapsed < step do
+      at = boundary + elapsed
+
+      value = %{
+        period
+        | form: {:value, units ++ reading},
+          qualifications: nil,
+          shift: frame.shift
+      }
+
+      Placed.new(Spans.span_of(value, at + length), {at, at + length})
+    end
+  end
+
+  # The date and the units of the clock to the period's unit of a wall reading.
+  defp wall_units(wall, cycle, calendar) do
+    day = Integer.floor_div(wall, @day)
+    {year, month, label} = Calendar.date(calendar, day)
+    into_day = wall - day * @day
+    hour = div(into_day, Unit.ticks(:hour))
+    date = [year: year, month: month, day: label, hour: hour]
+
+    if cycle == :minute do
+      date ++ [minute: div(into_day - hour * Unit.ticks(:hour), Unit.ticks(:minute))]
+    else
+      date
+    end
+  end
+
+  defp tested?(units, tests) do
+    Enum.all?(tests, fn {unit, values} -> Keyword.fetch!(units, unit) in values end)
+  end
+
+  defp reading_ticks(reading) do
+    Enum.reduce(reading, 0, fn {unit, n}, sum -> sum + n * Unit.ticks(unit) end)
   end
 
   # ── Plain rules ───────────────────────────────────────────────────────

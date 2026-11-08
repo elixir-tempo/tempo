@@ -12,7 +12,7 @@
 
 * Nothing writes `:persistent_term` at runtime: zone tables past the static ones are kept in an ETS table Tempo's supervisor owns, and a calendar's first weekday is asked of it.
 
-* A rule of months and counted weekdays (`FREQ=YEARLY;BYMONTH=11;BYDAY=4TH`) is matched without the selection engine, about twice as fast (decision 99).
+* A rule of months and counted weekdays (`FREQ=YEARLY;BYMONTH=11;BYDAY=4TH`) is matched without the selection engine, about twice as fast (decision 99); so is an hourly or minutely rule of readings of the clock, about 2.7 times as fast (decision 100).
 
 * `Tempo.compare/3`, and so `Enum.sort(values, Tempo)`, orders two ISO values with no zone by their written units, about 15 times faster than placing them (decision 93).
 
@@ -21,6 +21,8 @@
 * `Tempo.ICal.parse/2`, `parse_file/2` and `available/2` return a `Tempo.ParseError` for text that is not a whole calendar, where they read it as a calendar of no events or fewer. Requires `ical` 3.2.2, whose `ICal.from_binary/1` they read with.
 
 * `Tempo.shift/3` by hours, minutes or seconds onto the second showing of a reading the clock shows twice, and `Tempo.from_elixir/2` of a `DateTime` there, gave the first showing, an hour early. Both now keep the offset of the second showing.
+
+* `Tempo.select/2` in a value at a time shift of an hour or more ahead of UTC (`~o"2026-06-15T00+05:30"`, minute 59) selected nothing; it now selects what it names.
 
 ## [v2.4.0] — 2026-11-01
 

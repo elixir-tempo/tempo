@@ -599,8 +599,11 @@ defmodule Tempo.Select do
     |> Enum.to_list()
   end
 
+  # A container is on the period's frame: a span's ends carry the shift,
+  # and a container made from the span carries it too.
   defp container_at(period, position, unit, frame) do
-    container = %{period | form: {:value, Shift.period_units(position, unit, frame)}}
+    units = Shift.period_units(position, unit, frame)
+    container = %{period | form: {:value, units}, shift: frame.shift}
     at_showing(container, position, unit, frame)
   end
 
