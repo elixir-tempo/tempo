@@ -86,6 +86,9 @@ defmodule Tempo.Spans do
   """
   @spec first_value([Tempo.t() | Duration.t() | :open]) :: Tempo.t()
   def first_value(ends), do: Enum.find(ends, &match?(%Tempo{}, &1)) || %Tempo{form: {:value, []}}
+
+  # An entry of a set as the value it is, an exclusion among them, for
+  # what reads every entry's frame.
   defp member_value({:except, member}), do: member
   defp member_value(member), do: member
 
@@ -1592,8 +1595,16 @@ defmodule Tempo.Spans do
     end
   end
 
-  def members(%Tempo{form: {:all, members}}, _options) when is_list(members),
-    do: {:ok, Enum.map(members, &member_value/1)}
+  # A set with exclusions has its members with what they cover taken out (decision 105).
+  def members(%Tempo{form: {:all, members}} = set, options) when is_list(members) do
+    case Enum.split_with(members, &match?({:except, _}, &1)) do
+      {[], members} ->
+        {:ok, members}
+
+      {excluded, members} ->
+        Exclusions.members(set, members, Enum.map(excluded, &elem(&1, 1)), options)
+    end
+  end
 
   # A set read from a stream: its members as they come, those a window holds when one is given.
   def members(%Tempo{form: {:all, members}}, options), do: {:ok, windowed(members, options)}

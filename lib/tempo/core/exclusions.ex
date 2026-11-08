@@ -10,6 +10,7 @@ defmodule Tempo.Exclusions do
   alias Tempo.Limit
   alias Tempo.Placed
   alias Tempo.Spans
+  alias Tempo.Unit
 
   @doc """
   Whether a set is all exclusions: a domain that names only what a rule
@@ -58,19 +59,117 @@ defmodule Tempo.Exclusions do
   @doc """
   The members' spans with what an excluded member covers taken out: a
   member within one is left out, and one an excluded member falls inside
-  is cut around it, each piece written to the member's own resolution
-  (`{2017Y..,^2020Y}` is 2017 to 2019, and 2021 on).
+  is cut around it, each piece written to the finer of the member's
+  resolution and the exclusions' (`{2017Y..,^2020Y}` is 2017 to 2019, and
+  2021 on; `{2026-06,^2026-06-15}` the 1st to the 14th and the 16th to
+  the 30th).
   """
   @spec excluded_spans(Tempo.t(), [Tempo.t()], [Tempo.t()], keyword()) ::
           {:ok, Enumerable.t()} | {:error, Exception.t()}
   def excluded_spans(set, members, excluded, options) do
     with {:ok, kept} <- Spans.placed(%{set | form: {:all, members}}, options),
-         {:ok, out} <- Spans.placed(%{set | form: {:all, excluded}}, options),
-         {:ok, out} <- Limit.take(out, set) do
-      out = out |> Enum.flat_map(&bounded_extent/1) |> Enum.sort()
+         {:ok, out} <- out_of(set, excluded, options) do
       {:ok, Stream.flat_map(kept, &cut_around(&1, out))}
     end
   end
+
+  @doc """
+  The members of a set with exclusions (decision 105): a member no
+  exclusion touches, as it is written; and of one an exclusion touches,
+  each of its own members (law 6) as it is written, left out where an
+  exclusion covers it and cut into the pieces either side where one falls
+  inside it. `{2017Y..2022Y,^2020Y}` is the five years, and
+  `{2026-06,^2026-06-15}` the 1st to the 14th and the 16th to the 30th.
+  """
+  @spec members(Tempo.t(), [Tempo.t()], [Tempo.t()], keyword()) ::
+          {:ok, [Tempo.t()]} | {:error, Exception.t()}
+  def members(set, members, excluded, options) do
+    with {:ok, out} <- out_of(set, excluded, options) do
+      each_member(members, &member_less(&1, set, out, options))
+    end
+  end
+
+  defp member_less(member, set, out, options) do
+    with {:ok, placed} <- placed_in(member, set, options) do
+      if untouched?(placed, out) do
+        {:ok, [member]}
+      else
+        touched(member, set, out, options)
+      end
+    end
+  end
+
+  defp touched(member, set, out, options) do
+    with {:ok, own} <- Spans.members(member, options),
+         {:ok, own} <- Limit.take(own, set) do
+      each_member(own, &own_member_less(&1, set, out, options))
+    end
+  end
+
+  defp own_member_less(member, set, out, options) do
+    with {:ok, placed} <- placed_in(member, set, options) do
+      if untouched?(placed, out) do
+        {:ok, [member]}
+      else
+        {:ok,
+         Enum.flat_map(placed, &(&1 |> cut_around(out) |> Enum.map(fn piece -> piece.span end)))}
+      end
+    end
+  end
+
+  # A member placed as the set places it, in the set's calendar and zone.
+  defp placed_in(member, set, options) do
+    with {:ok, placed} <- Spans.placed(%{set | form: {:all, [member]}}, options) do
+      Limit.take(placed, set)
+    end
+  end
+
+  defp untouched?(placed, {extents, _finest}) do
+    Enum.all?(placed, fn
+      %Placed{start: start, stop: stop} when is_integer(start) ->
+        left_after({start, stop}, extents) == [{start, stop}]
+
+      _open_start ->
+        true
+    end)
+  end
+
+  defp each_member(members, fun) do
+    Enum.reduce_while(members, {:ok, []}, fn member, {:ok, kept} ->
+      case fun.(member) do
+        {:ok, more} -> {:cont, {:ok, kept ++ more}}
+        {:error, _exception} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  # What the excluded members cover, as sorted extents, with the finest
+  # value they are written to, which a piece cut by them is written to.
+  defp out_of(set, excluded, options) do
+    with {:ok, out} <- Spans.placed(%{set | form: {:all, excluded}}, options),
+         {:ok, out} <- Limit.take(out, set) do
+      extents = out |> Enum.flat_map(&bounded_extent/1) |> Enum.sort()
+      {:ok, {extents, finest_model(out)}}
+    end
+  end
+
+  defp finest_model(placed) do
+    placed
+    |> Enum.map(&model_of(&1.span))
+    |> Enum.max_by(&rank_of/1, fn -> nil end)
+  end
+
+  defp model_of(%Tempo{form: {:span, from, to}}), do: Spans.first_value([from, to])
+  defp model_of(value), do: value
+
+  defp rank_of(%Tempo{form: {:value, [_ | _] = units}}) do
+    units
+    |> Unit.resolution()
+    |> Unit.grain()
+    |> Unit.rank()
+  end
+
+  defp rank_of(_model), do: -1
 
   defp bounded_extent(%Placed{start: start, stop: stop})
        when is_integer(start) and is_integer(stop),
@@ -83,10 +182,10 @@ defmodule Tempo.Exclusions do
 
   defp cut_around(placed, _out), do: [placed]
 
-  defp pieces(%Placed{span: span} = placed, whole, out) do
-    case left_after(whole, out) do
+  defp pieces(%Placed{span: span} = placed, whole, {extents, finest}) do
+    case left_after(whole, extents) do
       [^whole] -> [placed]
-      left -> Enum.map(left, &Placed.new(piece(span, &1), &1))
+      left -> Enum.map(left, &Placed.new(piece(span, &1, finest), &1))
     end
   end
 
@@ -108,8 +207,8 @@ defmodule Tempo.Exclusions do
     end
   end
 
-  defp piece(%Tempo{form: {:span, from, to}} = span, {start, stop}) do
-    model = if match?(%Tempo{form: {:value, _}}, from), do: from, else: to
+  defp piece(%Tempo{form: {:span, from, to}} = span, {start, stop}, finest) do
+    model = finer(if(match?(%Tempo{form: {:value, _}}, from), do: from, else: to), finest)
     first = Spans.at_position(start, model, :start, span.calendar, span.zone)
 
     last =
@@ -120,6 +219,12 @@ defmodule Tempo.Exclusions do
       end
 
     %{span | form: {:span, first, last}}
+  end
+
+  # The finer of a member's model and the exclusions', so that a piece
+  # cut at a day of a month is written to the day.
+  defp finer(model, finest) do
+    if rank_of(finest) > rank_of(model), do: %{finest | metadata: model.metadata}, else: model
   end
 
   defp excluded?({:ok, {start, stop}}, out) when is_integer(start) and is_integer(stop) do

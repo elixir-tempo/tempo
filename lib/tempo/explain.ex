@@ -96,14 +96,25 @@ defmodule Tempo.Explain do
   defp what(%Tempo{form: {:every, first, bound, rule}}),
     do: "A recurrence#{bound_words(bound)}#{rule_words(rule, first)}."
 
-  defp what(%Tempo{form: {:all, members}}),
-    do: "A set of #{length(members)} members, all of which it names."
+  defp what(%Tempo{form: {:all, members}}) do
+    excluded = Enum.count(members, &match?({:except, _}, &1))
+
+    "A set of #{members_words(length(members) - excluded)}, all of which it names#{less(excluded)}."
+  end
 
   defp what(%Tempo{form: {:one, members}}),
     do: "A choice of #{length(members)} alternatives, one of which is meant."
 
   defp what(%Tempo{form: {:when, _, _}}),
     do: "A member of a set whose occurrences depend on the other members'."
+
+  defp members_words(1), do: "one member"
+  defp members_words(count), do: "#{count} members"
+
+  # What a set's exclusions take out of its members.
+  defp less(0), do: ""
+  defp less(1), do: ", less what one exclusion covers"
+  defp less(count), do: ", less what #{count} exclusions cover"
 
   # What a rule selects in each repeat, part by part as it is written.
   defp rule_words(nil, _first), do: ""

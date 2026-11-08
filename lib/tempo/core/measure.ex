@@ -165,6 +165,10 @@ defmodule Tempo.Measure do
   defp resolution(%Tempo{form: {_kind, members}}),
     do: members |> Enum.map(&resolution/1) |> finest()
 
+  # An exclusion's resolution counts: what it cuts from a member is
+  # counted in its unit, June less the 15th in days.
+  defp resolution({:except, member}), do: resolution(member)
+
   defp finest_unit(units) do
     case List.last(units) do
       {:microsecond, {_, precision}} -> {:microsecond, precision}

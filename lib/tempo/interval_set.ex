@@ -40,7 +40,8 @@ defmodule Tempo.IntervalSet do
 
   * `:except` is a list of `t:Tempo.t/0` the set leaves out of its members,
     as `^` writes them: `{2017Y..,^2020Y}` is every year from 2017 but 2020.
-    The default is `[]`.
+    A member an exclusion falls inside is cut into the pieces either side
+    of it. The default is `[]`.
 
   ### Returns
 
@@ -667,8 +668,9 @@ defmodule Tempo.IntervalSet do
   @doc """
   The members of a set, or of any expression: a singular expression is its
   own one member, and a plural one has the members `Enum` gives of it (a
-  recurrence its occurrences). One with no end, or with more members than
-  the application's `:max_values_at_once`, raises a `Tempo.ConversionError`.
+  recurrence its occurrences; a set its members with what its exclusions
+  cover taken out). One with no end, or with more members than the
+  application's `:max_values_at_once`, raises a `Tempo.ConversionError`.
 
   ### Arguments
 
@@ -693,7 +695,14 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec members(Tempo.t()) :: [Tempo.t()]
-  def members(%Tempo{form: {:all, members}}) when is_list(members), do: members
+  # A set with exclusions has its members with what they cover taken out (decision 105).
+  def members(%Tempo{form: {:all, members}} = set) when is_list(members) do
+    if Enum.any?(members, &match?({:except, _}, &1)) do
+      plural_members(set)
+    else
+      members
+    end
+  end
 
   def members(%Tempo{form: {:all, members}} = set) do
     case Limit.take(members, set) do
@@ -765,6 +774,12 @@ defmodule Tempo.IntervalSet do
 
   """
   @spec first(Tempo.t()) :: Tempo.t() | nil
+  def first(%Tempo{form: {:all, members}} = set) when is_list(members) do
+    set
+    |> members()
+    |> List.first()
+  end
+
   def first(%Tempo{form: {:all, members}}), do: members |> Enum.take(1) |> List.first()
 
   def first(%Tempo{} = expression) do

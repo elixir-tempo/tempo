@@ -114,9 +114,10 @@ defmodule Tempo.Shift do
     end
   end
 
+  # A set's exclusions move with its members (decision 106).
   def shift(%Tempo{form: {kind, members}} = set, %Duration{} = by) when kind in [:all, :one] do
     with :ok <- Spans.whole(set),
-         {:ok, shifted} <- each(members, &shift(&1, by)),
+         {:ok, shifted} <- each(members, &shifted_entry(&1, by)),
          do: {:ok, %{set | form: {kind, shifted}}}
   end
 
@@ -672,6 +673,17 @@ defmodule Tempo.Shift do
          do: {:ok, %{expression | form: {:all, shifted}}}
   end
 
+  defp shifted_entry({:except, member}, by) do
+    with {:ok, shifted} <- shift(member, by), do: {:ok, {:except, shifted}}
+  end
+
+  defp shifted_entry(member, by), do: shift(member, by)
+
+  # A rewrite of a set's members leaves its exclusions as they are written
+  # (decision 106): June less the 15th truncated to the month is still that.
+  defp rewritten_entry({:except, _member} = excluded, _fun), do: {:ok, excluded}
+  defp rewritten_entry(member, fun), do: fun.(member)
+
   defp each(members, fun) do
     Enum.reduce_while(members, {:ok, []}, fn member, {:ok, acc} ->
       case fun.(member) do
@@ -1171,7 +1183,7 @@ defmodule Tempo.Shift do
 
   defp each_part(%Tempo{form: {kind, members}} = set, fun) when kind in [:all, :one] do
     with :ok <- Spans.whole(set),
-         {:ok, members} <- each(members, fun),
+         {:ok, members} <- each(members, &rewritten_entry(&1, fun)),
          do: {:ok, %{set | form: {kind, members}}}
   end
 

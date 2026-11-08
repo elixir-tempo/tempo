@@ -24,6 +24,10 @@
 
 * `Tempo.shift/3` by hours, minutes or seconds onto the second showing of a reading the clock shows twice, and `Tempo.from_elixir/2` of a `DateTime` there, gave the first showing, an hour early. Both now keep the offset of the second showing.
 
+* A set written with an exclusion (`{2026-06,^2026-06-15}`) no longer crashes `duration/1`, `count/2`, `shift/2`, `trunc/2` and the rest, and its members, count and walk leave the exclusion out (decisions 105 and 106).
+
+* A member cut by a finer exclusion is written to the exclusion's resolution: June less the 15th is the 1st to the 14th and the 16th to the 30th, where it was written as June twice.
+
 * `Tempo.select/2` in a value at a time shift of an hour or more ahead of UTC (`~o"2026-06-15T00+05:30"`, minute 59) selected nothing; it now selects what it names.
 
 ## [v2.4.0] — 2026-11-01

@@ -1104,3 +1104,23 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-08, the user).** Option 1. Elixir's `Duration` does not: a length is no span of time.
 
 * **State.** Implemented. A struct is read in its own calendar, `Calendar.ISO` for Elixir's, and a set operation answers in its first operand's.
+
+## 105. A set's members are its members with what its exclusions cover taken out
+
+* **Question.** What are the members of a set written with an exclusion (`{2026-06,2026-07,^2026-06-15}`, `{2017Y..2022Y,^2020Y}`), as `Tempo.members/2`, `Tempo.IntervalSet.members/1`, `count/1`, `first/1`, `Enum` and `Tempo.to_string/1` give them?
+
+* **Context.** Reviewing `Table.Reader` for a set (TODO) found that every one of those gave the excluded entry as a member (`{2017Y..2022Y,^2020Y}` had two members, the range and 2020), that `duration/1`, `count/2`, `shift/2`, `trunc/2`, `round/2`, `at_resolution/2`, `extend/1`, `bounded?/1` and `explain/1` raised `FunctionClauseError` on any such set, and that a member cut by a finer exclusion was written to its own resolution, so June less the 15th was written as June twice; the engine's own spans were cut right, and relations answered correctly. The totality corpus had no set with an exclusion. The options were (1) a member no exclusion touches as written, one an exclusion covers left out, and one it falls inside the pieces either side of it, as spans; (2) the entries written without `^`, unchanged, the exclusions applying only to spans.
+
+* **Decision (2026-11-08, the user).** Option 1, which matches the architecture's spans of a set and gives a table of a set true rows. A member an exclusion touches is read as its own members (law 6) first, so `{2017..2022}Y` less 2020 is the five years as written; a piece is written to the finer of the member's resolution and the exclusions' (`Tempo.Exclusions`).
+
+* **State.** Implemented 2026-11-08: `Tempo.Exclusions.members/4` and the finer piece model, `Spans.members/2`, `IntervalSet.members/1` and `first/1`, `Parts.bounded?/1`, `Measure`'s resolution, `Explain`. `test/tempo/set_exclusion_test.exs`; the corpus has a `set_exclusion` class, and every totality group passes with it.
+
+## 106. A shift moves a set's exclusions; a rewrite keeps them as written
+
+* **Question.** When a set with exclusions is shifted, truncated, rounded, extended or written at another resolution, what becomes of its exclusions?
+
+* **Context.** An exclusion says which time the set does not cover. The options were (1) a shift moves every member and every exclusion by the same duration, and a rewrite of the members leaves each exclusion as written; (2) every operation applies to members and exclusions alike, so June less the 15th truncated to the month would leave nothing.
+
+* **Decision (2026-11-08, the user).** Option 1.
+
+* **State.** Implemented in `Tempo.Shift` (`shifted_entry/2`, `rewritten_entry/2`); `set_exclusion_test.exs`.

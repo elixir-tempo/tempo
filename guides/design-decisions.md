@@ -533,6 +533,27 @@ iex> Tempo.to_relative_string(~o"2026", from: ~o"2026-06-15")
 
 **Why.** It says what a person would say. A year is asked about as a year, so the year a day is in is "this year", which follows from the law that a value's resolution is its meaning. A year, a quarter, a month, a week and a day are counted by the calendar's own periods, and an hour, a minute and a second by those that pass, so that the hours across a change of the clock are the hours that elapse.
 
+### The members of a set with exclusions (decisions 105 and 106)
+
+**The question.** `{2026-06,2026-07,^2026-06-15}` is June and July, but not the 15th of June. What are its members, and what becomes of the exclusion when the set is moved or rewritten?
+
+**The alternatives.**
+
+* Its members with what the exclusion covers taken out: a member it falls inside is the pieces either side of it, written to the exclusion's resolution.
+
+* The entries written without `^`, June whole, the exclusion applying only to the time the set covers.
+
+**Tempo's choice.** The first. A shift moves the exclusion with the members; a truncation, a rounding or a change of resolution rewrites the members and leaves the exclusion as written.
+
+```elixir
+iex> Tempo.members(~o"{2026-06,2026-07,^2026-06-15}")
+{:ok, [~o"2026Y6M1D/14D", ~o"2026Y6M16D/30D", ~o"2026Y7M"]}
+iex> Tempo.shift(~o"{2026-06-01/2026-06-30,^2026-06-15}", ~o"P1Y")
+{:ok, ~o"{2027Y6M1D/30D,^2027Y6M15D}"}
+```
+
+**Why.** A member is the time it stands for, and the set does not stand for the 15th: counting June whole would make the members, their count and a table of them disagree with the time the set covers. Truncating the exclusion with the members would turn June less a day into nothing at all.
+
 ### A struct of the caller's as an operand (decisions 101 to 104)
 
 **The question.** A caller holds a `%Booking{check_in, check_out}`, or Elixir's own `Date` and `DateTime`. Must they copy it into a `%Tempo{}` before relating it to a schedule, and how do they find it again in an answer?

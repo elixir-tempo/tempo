@@ -107,6 +107,14 @@ defmodule Tempo.Matrix.Corpus do
     value_set_all: ["{2026-06-15,2026-07-01}", "{2026Y,2027Y}", "{2026,2027}"],
     value_set_one: ["[2026,2027]", "[2026-06-15,2026-07-01]"],
     set_range: ["{2020Y..2022Y}", "[2020Y..2022Y]"],
+    # A set less what its exclusions cover: a finer exclusion cuts a member.
+    set_exclusion: [
+      "{2017Y..2022Y,^2020Y}",
+      "{2026-06,2026-07,^2026-06-15}",
+      "{2026-06-01/2026-06-30,^2026-06-15}",
+      "{2026Y,^2026-06}",
+      "{2017Y..,^2020Y}"
+    ],
     calendar_hebrew: ["5786Y6M15D[u-ca=hebrew]", "5786Y6M[u-ca=hebrew]", "5786Y[u-ca=hebrew]"]
   ]
 

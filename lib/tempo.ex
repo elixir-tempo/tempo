@@ -1106,8 +1106,10 @@ defmodule Tempo do
 
   @doc """
   The members of an expression (law 6): the values a value with a set, a
-  mask or a group in a unit allows; the members of a set; the occurrences
-  of a recurrence; a singular expression itself.
+  mask or a group in a unit allows; the members of a set, with what its
+  exclusions cover taken out (a member cut by one is the pieces either
+  side of it); the occurrences of a recurrence; a singular expression
+  itself.
 
   ### Arguments
 

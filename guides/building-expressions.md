@@ -346,6 +346,16 @@ iex> every(:week) |> starting(~o"2026-06-01") |> except(~o"2026-06-08")
 
 > *"Every week from the 1st of June, but not the 8th."*
 
+A set's members are its members with what its exclusions cover taken out, a member cut by a finer exclusion written to the exclusion's resolution:
+
+```elixir
+iex> {:ok, june} = Tempo.IntervalSet.new([~o"2026-06"], except: [~o"2026-06-15"])
+iex> Tempo.IntervalSet.members(june)
+[~o"2026Y6M1D/14D", ~o"2026Y6M16D/30D"]
+```
+
+> *"June, but not the 15th, is the 1st **through** the 14th and the 16th **through** the 30th."*
+
 `with_metadata/2` gives the expression a map of the caller's, which each occurrence carries:
 
 ```elixir

@@ -267,8 +267,9 @@ defmodule Tempo.Parts do
     true
   end
 
+  # What a set leaves out has no bearing on whether its members end.
   def bounded?(%Tempo{form: {kind, members}}) when kind in [:all, :one] and is_list(members),
-    do: Enum.all?(members, &bounded?/1)
+    do: Enum.all?(members, &(match?({:except, _}, &1) or bounded?(&1)))
 
   # A set whose members are a stream has no end that is written.
   def bounded?(%Tempo{form: {kind, _stream}}) when kind in [:all, :one], do: false
