@@ -12,6 +12,14 @@ defmodule Tempo.Matcher do
   # calendar is asked once a month and once a period, not once a candidate,
   # and nothing is expanded, sorted or deduplicated.
   #
+  # A rule that names months and then a nested selection, or a set of them,
+  # of days of the month and of the week with positions among them (the
+  # fourth Thursday of November, the first Sunday and the last of April and
+  # October), with readings of the clock after it, is compiled too where its
+  # period is a month or a year: each nested selection picks in each month
+  # the parts before it name, or in the period where they name none, and
+  # its positions are counted there, before the readings of the clock.
+  #
   # The engine (`Tempo.Select`) is the meaning of every rule, and the
   # measures hold the matcher to it. A rule the matcher cannot compile goes
   # to the engine, as does a period in which a month does not count its days
@@ -24,16 +32,27 @@ defmodule Tempo.Matcher do
   @period_units [:day, :week, :month, :year]
   @clock_units [:hour, :minute, :second]
   @plain_keys [:month, :day, :day_of_week, :instance | @clock_units]
+  @nested_keys [:day, :day_of_week, :instance]
+  @nested_periods [:month, :year]
 
-  @enforce_keys [:months, :days, :weekdays, :instances, :clock]
-  defstruct [:months, :days, :weekdays, :instances, :clock]
+  @enforce_keys [:months, :days, :weekdays, :instances, :clock, :pickers, :scope]
+  defstruct [:months, :days, :weekdays, :instances, :clock, :pickers, :scope]
+
+  @typedoc "A nested selection: the days of the month and of the week it tests, and its positions."
+  @type picker :: %{
+          days: {[pos_integer()], [neg_integer()]} | nil,
+          weekdays: [pos_integer()] | nil,
+          instances: [integer()] | nil
+        }
 
   @type t :: %__MODULE__{
           months: [pos_integer()] | nil,
           days: {[pos_integer()], [neg_integer()]} | nil,
           weekdays: [pos_integer()] | nil,
           instances: [integer()] | nil,
-          clock: [{Unit.t(), [non_neg_integer()]}]
+          clock: [{Unit.t(), [non_neg_integer()]}],
+          pickers: [picker()] | nil,
+          scope: :month | :period | nil
         }
 
   # ── Compiling ─────────────────────────────────────────────────────────
@@ -45,12 +64,85 @@ defmodule Tempo.Matcher do
   """
   @spec compile(Unit.selection(), Unit.t() | nil, module()) :: t() | nil
   def compile(parts, unit, calendar) when unit in @period_units do
-    if Enum.all?(parts, fn {key, _held} -> key in @plain_keys end),
-      do: compiled(parts, calendar),
-      else: nil
+    parts
+    |> around_nested()
+    |> compiled_shape(unit, calendar)
   end
 
   def compile(_parts, _unit, _calendar), do: nil
+
+  # The parts before a nested selection or a set of them, the selections,
+  # and the parts after; or the parts of a rule with none.
+  defp around_nested(parts) do
+    case Enum.split_while(parts, fn {key, _held} -> key not in [:selection, :all] end) do
+      {plain, []} -> {:plain, plain}
+      {before, [{:selection, nested} | later]} -> {:nested, before, [nested], later}
+      {before, [{:all, each} | later]} -> {:nested, before, each, later}
+    end
+  end
+
+  defp compiled_shape({:plain, parts}, _unit, calendar) do
+    if Enum.all?(parts, fn {key, _held} -> key in @plain_keys end) do
+      compiled(parts, calendar)
+    else
+      nil
+    end
+  end
+
+  defp compiled_shape({:nested, before, nested, later}, unit, calendar)
+       when unit in @nested_periods do
+    if nested_shape?(before, nested, later) do
+      compiled_nested(before, nested, later, unit, calendar)
+    else
+      nil
+    end
+  end
+
+  defp compiled_shape(_shape, _unit, _calendar), do: nil
+
+  # Months before, plain days of the month and of the week in each nested
+  # selection, and readings of the clock after: nothing else, a window
+  # among them, is the matcher's.
+  defp nested_shape?(before, nested, later) do
+    Enum.all?(before, &match?({:month, _}, &1)) and Enum.all?(nested, &picker_shape?/1) and
+      Enum.all?(later, fn {key, _held} -> key in @clock_units end)
+  end
+
+  defp picker_shape?([_ | _] = parts) do
+    Enum.all?(parts, fn {key, _held} -> key in @nested_keys end) and
+      (Keyword.has_key?(parts, :day) or Keyword.has_key?(parts, :day_of_week))
+  end
+
+  defp picker_shape?(_parts), do: false
+
+  defp compiled_nested(before, nested, later, unit, calendar) do
+    with {:ok, months} <- numbers(Keyword.get(before, :month), :positive),
+         {:ok, pickers} <- pickers(nested, calendar),
+         {:ok, clock} <- clock(later) do
+      %__MODULE__{
+        months: months,
+        days: nil,
+        weekdays: nil,
+        instances: nil,
+        clock: clock,
+        pickers: pickers,
+        scope: if(is_nil(months) and unit == :year, do: :period, else: :month)
+      }
+    end
+  end
+
+  defp pickers(nested, calendar) do
+    compiled = Enum.map(nested, &picker(&1, calendar))
+    if Enum.all?(compiled, &is_map/1), do: {:ok, compiled}, else: nil
+  end
+
+  defp picker(parts, calendar) do
+    with {:ok, days} <- numbers(Keyword.get(parts, :day), :either_end),
+         {:ok, weekdays} <- weekdays(Keyword.get(parts, :day_of_week), calendar),
+         {:ok, instances} <- numbers(Keyword.get(parts, :instance), :either_end) do
+      %{days: days && Enum.split_with(days, &(&1 > 0)), weekdays: weekdays, instances: instances}
+    end
+  end
 
   defp compiled(parts, calendar) do
     with {:ok, months} <- numbers(Keyword.get(parts, :month), :positive),
@@ -63,7 +155,9 @@ defmodule Tempo.Matcher do
         days: days && Enum.split_with(days, &(&1 > 0)),
         weekdays: weekdays,
         instances: instances,
-        clock: clock
+        clock: clock,
+        pickers: nil,
+        scope: nil
       }
     end
   end
@@ -143,9 +237,23 @@ defmodule Tempo.Matcher do
 
   def in_period(_matcher, _unplaced), do: :engine
 
-  # A period of one day (a daily rule) asks its date once, and the month's
-  # span only for a day counted from the month's end; a longer period
-  # walks its months.
+  # A rule of nested selections picks in each month the parts before them
+  # name, or in the whole period. A period of one day (a daily rule) asks
+  # its date once, and the month's span only for a day counted from the
+  # month's end; a longer period walks its months.
+  defp days_of(%__MODULE__{pickers: [_ | _]} = matcher, first_day, last_day, calendar) do
+    with {:ok, months} <- whole_months(matcher, first_day, last_day, calendar) do
+      week = nested_week(matcher, first_day, calendar)
+
+      picked =
+        matcher
+        |> scopes(months)
+        |> Enum.flat_map(&picked(&1, matcher.pickers, week))
+
+      {:ok, picked}
+    end
+  end
+
   defp days_of(matcher, day, day, calendar) do
     {year, month, label} = Calendar.date(calendar, day)
 
@@ -158,6 +266,91 @@ defmodule Tempo.Matcher do
 
   defp days_of(matcher, first_day, last_day, calendar),
     do: days(matcher, first_day, last_day, calendar, week_from(matcher, first_day, calendar))
+
+  # ── Nested selections ─────────────────────────────────────────────────
+
+  # The months of a period, each with the days of it the parts before the
+  # nested selections leave: `:engine` for a period that does not begin and
+  # end with a month, a month at its edge being cut, or for a month whose
+  # labels do not count its days.
+  defp whole_months(matcher, first_day, last_day, calendar) do
+    month = Calendar.month_of_day(calendar, first_day)
+
+    if month.first == first_day do
+      months_from(matcher, month, last_day, calendar, [])
+    else
+      :engine
+    end
+  end
+
+  defp months_from(_matcher, %{counts?: false}, _last_day, _calendar, _months), do: :engine
+
+  defp months_from(_matcher, %{after_last: after_last}, last_day, _calendar, _months)
+       when after_last - 1 > last_day,
+       do: :engine
+
+  defp months_from(matcher, month, last_day, calendar, months) do
+    months = kept_month(matcher, month, months)
+
+    if month.after_last > last_day do
+      {:ok, Enum.reverse(months)}
+    else
+      next = Calendar.month_of_day(calendar, month.after_last)
+      months_from(matcher, next, last_day, calendar, months)
+    end
+  end
+
+  defp kept_month(matcher, month, months) do
+    if month_wanted?(matcher, month.month) do
+      days =
+        for day <- month.first..(month.after_last - 1)//1,
+            do: {day, month.year, month.month, month.label + day - month.first}
+
+      [{month, days} | months]
+    else
+      months
+    end
+  end
+
+  # Where each nested selection's positions are counted: each month, or the period.
+  defp scopes(%__MODULE__{scope: :month}, months), do: Enum.map(months, &[&1])
+  defp scopes(%__MODULE__{scope: :period}, months), do: [months]
+
+  # What the nested selections pick in a scope, in time order, a day two of
+  # them pick once.
+  defp picked(scope, [picker], week), do: picker_days(scope, picker, week)
+
+  defp picked(scope, pickers, week) do
+    pickers
+    |> Enum.flat_map(&picker_days(scope, &1, week))
+    |> Enum.sort()
+    |> Enum.uniq()
+  end
+
+  defp picker_days(scope, picker, week) do
+    scope
+    |> Enum.flat_map(fn {month, days} -> picker_in_month(picker, month, days, week) end)
+    |> Select.positions(picker.instances)
+  end
+
+  defp picker_in_month(picker, month, days, week) do
+    labels = wanted_labels(picker, month)
+
+    Enum.filter(days, fn {day, _year, _month, label} ->
+      (is_nil(labels) or label in labels) and weekday_wanted?(picker, day, week)
+    end)
+  end
+
+  # The weekday of the period's first day, where a nested selection tests weekdays.
+  defp nested_week(%__MODULE__{pickers: pickers}, first_day, calendar) do
+    if Enum.any?(pickers, &(not is_nil(&1.weekdays))) do
+      week(first_day, calendar)
+    else
+      nil
+    end
+  end
+
+  # ── Plain rules ───────────────────────────────────────────────────────
 
   defp label_wanted?(%__MODULE__{days: nil}, _label, _day, _calendar), do: true
 
@@ -188,7 +381,9 @@ defmodule Tempo.Matcher do
   # The weekday of the period's first day, asked once, where weekdays are tested.
   defp week_from(%__MODULE__{weekdays: nil}, _first_day, _calendar), do: nil
 
-  defp week_from(_matcher, first_day, calendar) do
+  defp week_from(_matcher, first_day, calendar), do: week(first_day, calendar)
+
+  defp week(first_day, calendar) do
     {year, month, day} = Calendar.date(calendar, first_day)
     {first_day, Calendar.day_of_week(calendar, year, month, day), Calendar.days_in_week(calendar)}
   end
@@ -225,16 +420,16 @@ defmodule Tempo.Matcher do
 
   # The labels the rule names in a month: those counted from the start, and
   # those counted from the end as the month's last label and back.
-  defp wanted_labels(%__MODULE__{days: nil}, _month), do: nil
+  defp wanted_labels(%{days: nil}, _month), do: nil
 
-  defp wanted_labels(%__MODULE__{days: {from_start, from_end}}, month) do
+  defp wanted_labels(%{days: {from_start, from_end}}, month) do
     last_label = month.label + (month.after_last - month.first) - 1
     from_start ++ Enum.map(from_end, &(last_label + &1 + 1))
   end
 
-  defp weekday_wanted?(%__MODULE__{weekdays: nil}, _day, _week), do: true
+  defp weekday_wanted?(%{weekdays: nil}, _day, _week), do: true
 
-  defp weekday_wanted?(%__MODULE__{weekdays: weekdays}, day, {first_day, first_weekday, days}),
+  defp weekday_wanted?(%{weekdays: weekdays}, day, {first_day, first_weekday, days}),
     do: (Integer.mod(first_weekday - 1 + day - first_day, days) + 1) in weekdays
 
   # Each day the rule picks at each reading it names, in the order of time,

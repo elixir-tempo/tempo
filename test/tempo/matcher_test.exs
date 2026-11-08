@@ -8,7 +8,12 @@ defmodule Tempo.MatcherTest do
 
   import Tempo.Sigils
 
-  alias Tempo.{Matcher, Placed, Spans}
+  alias Tempo.{Matcher, Placed, Select, Spans}
+
+  defp extent(value) do
+    {:ok, extent} = Spans.extent(value)
+    extent
+  end
 
   describe "compile/3" do
     test "compiles the plain parts of a rule whose period is a day or coarser" do
@@ -35,16 +40,58 @@ defmodule Tempo.MatcherTest do
                Matcher.compile([day_of_week: [-1, 2]], :week, Calendar.ISO)
     end
 
-    test "leaves every other rule to the engine" do
-      assert is_nil(
+    test "compiles nested selections of days after months, with readings of the clock after them" do
+      assert %Matcher{months: [11], scope: :month, pickers: [%{weekdays: [4], instances: [4]}]} =
                Matcher.compile(
                  [month: 11, selection: [day_of_week: 4, instance: 4]],
                  :year,
                  Calendar.ISO
                )
+
+      assert %Matcher{scope: :period, clock: [hour: [9, 17]], pickers: [_, _]} =
+               Matcher.compile(
+                 [
+                   all: [[day_of_week: 1, instance: 2], [day_of_week: 6, instance: -1]],
+                   hour: [9, 17]
+                 ],
+                 :year,
+                 Calendar.ISO
+               )
+    end
+
+    test "leaves every other rule to the engine" do
+      assert is_nil(
+               Matcher.compile(
+                 [month: 11, selection: [day_of_week: 4, instance: 4]],
+                 :week,
+                 Calendar.ISO
+               )
              )
 
-      assert is_nil(Matcher.compile([all: [[day_of_week: 1, instance: 2]]], :month, Calendar.ISO))
+      assert is_nil(
+               Matcher.compile(
+                 [month: 11, selection: [day_of_week: 4], window: ~o"P7D"],
+                 :year,
+                 Calendar.ISO
+               )
+             )
+
+      assert is_nil(
+               Matcher.compile(
+                 [day: 1, selection: [day_of_week: 4, instance: 1]],
+                 :year,
+                 Calendar.ISO
+               )
+             )
+
+      assert is_nil(
+               Matcher.compile(
+                 [month: 11, selection: [day_of_week: 4, instance: 1], instance: 1],
+                 :year,
+                 Calendar.ISO
+               )
+             )
+
       assert is_nil(Matcher.compile([day_of_year: [1, 100, -1]], :year, Calendar.ISO))
       assert is_nil(Matcher.compile([minute: 59], :hour, Calendar.ISO))
       assert is_nil(Matcher.compile([day: {:mask, [1, :x]}], :month, Calendar.ISO))
@@ -79,6 +126,55 @@ defmodule Tempo.MatcherTest do
         Spans.placed(Tempo.new!(year: 1752, month: 9, calendar: Calendrical.Reform.England))
 
       assert Matcher.in_period(matcher, september) == :engine
+    end
+
+    @nested [
+      [month: 11, selection: [day_of_week: 4, instance: 4], hour: 9],
+      [month: [4, 10], all: [[day_of_week: 7, instance: 1], [day_of_week: 7, instance: -1]]],
+      [
+        month: 3,
+        all: [[day_of_week: 1, instance: 2], [day_of_week: 6, instance: -1]],
+        hour: [9, 17]
+      ],
+      [month: [1, 7], selection: [day: [1, 15, -1], day_of_week: [1, 2, 3, 4, 5], instance: -1]],
+      [month: 3, selection: [day_of_week: 7, instance: 2], hour: 2, minute: 30],
+      [month: 11, selection: [day_of_week: 7, instance: 1], hour: 1, minute: 30],
+      [selection: [day_of_week: 1, instance: [1, 20, -1]]],
+      [all: [[day_of_week: 1, instance: 1], [day_of_week: 5, instance: -1]], hour: 12]
+    ]
+
+    test "picks in a year or a month what the engine picks for nested selections" do
+      compared =
+        for parts <- @nested,
+            year <- 2025..2028,
+            {unit, units} <- [year: [year: year], month: [year: year, month: 3]] do
+          assert {:ok, period} = Tempo.in_zone(Tempo.new!(units), "America/Chicago")
+          assert {:ok, [placed]} = Spans.placed(period)
+          matcher = Matcher.compile(parts, unit, Calendar.ISO)
+
+          assert {:ok, picked} = Matcher.in_period(matcher, placed)
+          assert {:ok, engine} = Select.in_period(placed, parts, [])
+
+          assert {parts, period, Enum.map(picked, &Placed.extent/1)} ==
+                   {parts, period, Enum.map(engine, &extent/1)}
+
+          length(picked)
+        end
+
+      assert Enum.count(compared) == 64
+      assert Enum.sum(compared) >= 100
+    end
+
+    test "leaves a period that cuts a month to the engine" do
+      matcher =
+        Matcher.compile(
+          [month: 11, selection: [day_of_week: 4, instance: 4]],
+          :year,
+          Calendar.ISO
+        )
+
+      {:ok, [cut]} = Spans.placed(~o"2026-02-15/2027-02-14")
+      assert Matcher.in_period(matcher, cut) == :engine
     end
 
     test "leaves an unplaced period to the engine" do

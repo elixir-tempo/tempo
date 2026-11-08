@@ -12,6 +12,8 @@
 
 * Nothing writes `:persistent_term` at runtime: zone tables past the static ones are kept in an ETS table Tempo's supervisor owns, and a calendar's first weekday is asked of it.
 
+* A rule of months and counted weekdays (`FREQ=YEARLY;BYMONTH=11;BYDAY=4TH`) is matched without the selection engine, about twice as fast (decision 99).
+
 * `Tempo.compare/3`, and so `Enum.sort(values, Tempo)`, orders two ISO values with no zone by their written units, about 15 times faster than placing them (decision 93).
 
 ### Fixed
