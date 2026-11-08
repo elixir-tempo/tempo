@@ -1918,12 +1918,10 @@ defmodule Tempo do
     Options.check!(options, [:within, :by], "Tempo.compare/3")
     by = compared_by!(Keyword.get(options, :by, :start_and_end))
     {a, b} = operands!(a, b)
-    order = Order.compare(a, b, by)
 
-    if order == :unordered do
-      compare_placed(a, b, by, options)
-    else
-      order
+    case Order.compare(a, b, by) do
+      {:ok, order} -> order
+      :unordered -> compare_placed(a, b, by, options)
     end
   end
 

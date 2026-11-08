@@ -80,7 +80,7 @@ defmodule Tempo.CompareTest do
         a = value(a, shift)
         b = value(b, shift)
 
-        assert Order.compare(a, b, by) == placed_order(a, b, by)
+        assert Order.compare(a, b, by) == {:ok, placed_order(a, b, by)}
         assert Tempo.compare(a, b, by: by) == placed_order(a, b, by)
       end
     end

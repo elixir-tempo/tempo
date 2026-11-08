@@ -6,13 +6,14 @@ defmodule Tempo.Order do
   # written: placing each on the line (`Tempo.Spans.extent/1`) gives the same
   # order at several times the cost. A unit one value writes and the other
   # does not is read at its first, so `2026-06` begins with `2026-06-01T00`
-  # and, beginning together, ends after it. Anything else is `:unordered`,
-  # and is placed.
+  # and, beginning together, ends after it. The order is `{:ok, order}`;
+  # anything else is `:unordered`, and is placed.
 
   @units [:year, :month, :day, :hour, :minute, :second]
   @first %{month: 1, day: 1, hour: 0, minute: 0, second: 0}
 
-  @spec compare(Tempo.t(), Tempo.t(), :start_and_end | :start) :: :lt | :eq | :gt | :unordered
+  @spec compare(Tempo.t(), Tempo.t(), :start_and_end | :start) ::
+          {:ok, :lt | :eq | :gt} | :unordered
   def compare(
         %Tempo{
           form: {:value, a},
@@ -31,7 +32,7 @@ defmodule Tempo.Order do
         by
       ) do
     if written?(a) and written?(b) do
-      units(a, b, by)
+      {:ok, units(a, b, by)}
     else
       :unordered
     end

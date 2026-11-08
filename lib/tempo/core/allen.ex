@@ -169,8 +169,15 @@ defmodule Tempo.Allen do
     end
   end
 
+  @spec not_spans!(term(), term()) :: no_return()
   defp not_spans!(a, b) do
-    neither = if span_or_expression?(a), do: b, else: a
+    neither =
+      if span_or_expression?(a) do
+        b
+      else
+        a
+      end
+
     raise ConversionError.exception(value: neither, reason: :not_an_expression)
   end
 
