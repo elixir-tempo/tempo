@@ -6,6 +6,14 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
+* [ ] **Reject a stale offset by default.** `2020-01-15T12:00-02:00[America/Sao_Paulo]` (Brazil dropped daylight saving in 2019) is read as 14:00 UTC, by its offset, but `Tempo.shift(value, hour: 1)` gives `13:00-03:00`, 16:00 UTC: one hour moves it two. Refuse an offset the zone disagrees with, critical or not, as Jiff and Temporal do (decision 108).
+
+* [ ] **One way to resolve a skipped or repeated reading.** A skipped reading is refused when written, a repeated one silently takes its first showing, and a shift lands Temporal's way (decision 97). Consider one option on the reader, the builders and `Tempo.shift/3` (Jiff's `compatible`, `earlier`, `later`, `reject`), and a `:gap` error that names both offsets.
+
+* [ ] **Round to an increment.** `Tempo.round(value, {:minute, 15})` is refused; only a whole unit rounds. Add an increment ("the nearest quarter hour") and consider a rounding mode, as Jiff truncates a difference and rounds half up elsewhere.
+
+* [ ] **A largest unit for a difference.** `Tempo.duration/2` across New York's 23-hour 8 March gives `PT1380M`, counted in the finest unit written, and takes no options. Consider a `:largest` (and `:smallest`) unit, as Jiff's `since`/`until` take, and a way to balance a duration (`PT1380M` to `PT23H`).
+
 * [ ] **A Rust port.** Decided 2026-10-16 ([plans/translation-assessment.md](plans/translation-assessment.md), section 8): idiomatic Rust, `#![forbid(unsafe_code)]` in its own crates, over ICU4X and `jiff`, with a calendar crate and an astronomy crate beside it, and the Elixir suite run against its core through Rustler while the engine is ported. Its fixtures are written (`census.json`, `guides.json`, beside the five before them).
 
 ## Blocked

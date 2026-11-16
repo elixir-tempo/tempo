@@ -1134,3 +1134,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-08, Claude, for the user's review).** Option 2. A set, a one-of set, a recurrence with an end and a value with a list are each read by `Tempo.members/2`, so the line law 6 draws is the one that gives them all; a single value or span is one thing, not a table, and one with no end has rows that never end. The columns are `:from` and `:to`, a member's interval ends as the reader reads them (law 9), then each metadata key the members carry in the order it first appears, `nil` where a member has none; a key named `:from` or `:to` is left out.
 
 * **State.** Implemented 2026-11-08 in `lib/tempo/protocol/table_reader.ex`, on the optional `table` package; `test/tempo/table_reader_test.exs`.
+
+## 108. An offset its zone disagrees with is refused, critical or not
+
+* **Question.** What does the reader do with an offset that the zone after it gives differently at that reading, as `2020-01-15T12:00-02:00[America/Sao_Paulo]` written before Brazil dropped daylight saving in 2019, where the zone now gives `-03:00`?
+
+* **Context.** Found 2026-11-16 comparing Tempo with Jiff. Tempo refuses the critical form (`[!America/Sao_Paulo]`, `Tempo.ZoneError` `:inconsistent`) and reads the elective form as the instant its offset names (14:00 UTC), but arithmetic reads it again by its reading and the zone, so `Tempo.shift(value, hour: 1)` gives `13:00-03:00`, 16:00 UTC. RFC 9557 section 3.4 says an application MUST act on the inconsistency when the zone is critical and MAY when it is not. Jiff rejects by default; Temporal's `offset` option is `"reject"` by default, with `"use"`, `"prefer"` and `"ignore"`. The options were (1) refuse it, critical or not; (2) an option of Temporal's kind, refusing by default; (3) keep reading it by its offset and make arithmetic hold to that instant.
+
+* **Decision (2026-11-16, the user's).** Refuse it by default, critical or not.
+
+* **State.** Not built; a `TODO.md` Open item.
