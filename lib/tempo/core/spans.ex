@@ -31,6 +31,7 @@ defmodule Tempo.Spans do
   alias Tempo.Unit
   alias Tempo.Walk
   alias Tempo.Zone
+  alias Tempo.ZoneError
 
   @day Scale.ticks_per_day()
 
@@ -310,11 +311,13 @@ defmodule Tempo.Spans do
       else: {:error, conversion(expression, :needs_a_year)}
   end
 
-  def shifted(tick, %Duration{units: units}, frame, _expression) when is_integer(tick) do
+  def shifted(tick, %Duration{units: units}, frame, expression) when is_integer(tick) do
     {date_units, clock_units} =
       Enum.split_with(units, fn {unit, _} -> unit in [:year, :month, :week, :day] end)
 
-    {:ok, date_shifted(tick, date_units, frame) + clock_ticks(clock_units)}
+    with {:ok, moved} <- date_shifted(tick, date_units, frame, expression) do
+      {:ok, moved + clock_ticks(clock_units)}
+    end
   end
 
   def shifted(nil, _duration, _frame, expression), do: {:error, conversion(expression, :open)}
@@ -322,13 +325,46 @@ defmodule Tempo.Spans do
   # The date part moves the day and keeps the reading of the wall clock; the
   # clock part is added to the position, so an hour is an hour of elapsed time
   # across a change of the clock.
-  defp date_shifted(tick, [], _frame), do: tick
+  defp date_shifted(tick, [], _frame, _expression) do
+    {:ok, tick}
+  end
 
-  defp date_shifted(tick, date_units, frame) do
+  defp date_shifted(tick, date_units, frame, expression) do
     wall = Walk.wall(tick, frame)
     day = Integer.floor_div(wall, @day)
     moved = day |> day_shifted(date_units, frame.calendar) |> shown_day(day, frame)
-    on_frame(moved * @day + Integer.mod(wall, @day), frame)
+    landed(moved * @day + Integer.mod(wall, @day), frame, expression)
+  end
+
+  # A reading the step lands on in a named zone, resolved as the caller said
+  # where the clock skips it or shows it twice (decision 109); with nothing
+  # said, as `:compatible` resolves it.
+  defp landed(
+         wall,
+         %{zone: %Zone{name: name} = zone, shift: nil, disambiguation: mode},
+         expression
+       )
+       when is_binary(name) do
+    case Zone.resolved_at_wall(zone, wall, mode) do
+      {:ok, moment} ->
+        {:ok, moment}
+
+      {reason, first, second} ->
+        {:error, unresolved(reason, wall, [first, second], zone, expression)}
+    end
+  end
+
+  defp landed(wall, frame, _expression) do
+    {:ok, on_frame(wall, frame)}
+  end
+
+  # The reading the step landed on, written as the value is, for the error.
+  defp unresolved(reason, wall, offsets, zone, %Tempo{calendar: calendar} = expression) do
+    floating = %{expression | zone: nil, shift: nil}
+    landed = %{at_position(wall, floating, :start, calendar, nil) | zone: zone}
+    shifts = Enum.map(offsets, &Zone.shift_of/1)
+
+    ZoneError.exception(zone: zone.name, reason: reason, value: landed, offsets: shifts)
   end
 
   # A day the zone's clock leaves out is not landed on: the step goes on to

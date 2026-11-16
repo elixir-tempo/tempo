@@ -1204,7 +1204,7 @@ iex> Enum.map(~o"156X", &Tempo.year/1)
 ```elixir
 iex> {:error, error} = Tempo.from_iso8601("2024-03-10T02:30:00[America/New_York]")
 iex> Exception.message(error)
-"~o\"2024Y3M10DT2H30M0S[America/New_York]\" is a reading the clock of \"America/New_York\" skips"
+"~o\"2024Y3M10DT2H30M0S[America/New_York]\" is a reading the clock of \"America/New_York\" skips, going from -05:00 to -04:00; give disambiguation: :compatible or :later to read it after the change, or :earlier to read it before"
 ```
 
 > *"Half past two on the 10th of March is a reading New York's clock **skips**."*

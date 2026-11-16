@@ -6,8 +6,6 @@ An item is a defect to fix, a decision to take, or work of another kind. What an
 
 ## Open
 
-* [ ] **One way to resolve a skipped or repeated reading.** A skipped reading is refused when written, a repeated one silently takes its first showing, and a shift lands Temporal's way (decision 97). Consider one option on the reader, the builders and `Tempo.shift/3` (Jiff's `compatible`, `earlier`, `later`, `reject`), and a `:gap` error that names both offsets.
-
 * [ ] **Round to an increment.** `Tempo.round(value, {:minute, 15})` is refused; only a whole unit rounds. Add an increment ("the nearest quarter hour") and consider a rounding mode, as Jiff truncates a difference and rounds half up elsewhere.
 
 * [ ] **A largest unit for a difference.** `Tempo.duration/2` across New York's 23-hour 8 March gives `PT1380M`, counted in the finest unit written, and takes no options. Consider a `:largest` (and `:smallest`) unit, as Jiff's `since`/`until` take, and a way to balance a duration (`PT1380M` to `PT23H`).
@@ -63,6 +61,8 @@ The engine's cost is in the placing of values. A `%Tempo{}` holds its units as w
 * [ ] **Revisit the calendar adapter.** Every calendar question goes through `Tempo.Calendar`, and `test/tempo/calendar_surface_test.exs` holds the library to it; what the adapter itself still knows (the `Calendar.ISO` table, the Gregorian for a solar term, Easter and the registry lookup by name) is left as it is for now (2026-10-14).
 
 ## Done
+
+* [x] **One way to resolve a skipped or repeated reading.** `disambiguation: :compatible | :earlier | :later | :reject` on reading, `Tempo.new/1`, `Tempo.in_zone/3` and `Tempo.shift/3`, defaults unchanged, and a `:gap` or `:fold` error that names both offsets (decision 109). 2026-11-16.
 
 * [x] **Reject a stale offset by default.** A shift its zone does not have then is refused, critical or not, and `offset: :use`, `:prefer` or `:ignore` resolves it (decision 108). 2026-11-16.
 

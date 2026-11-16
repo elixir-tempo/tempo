@@ -314,6 +314,31 @@ iex> Tempo.shift(~o"2026-10-25T21:30[Europe/Amsterdam]", day: -1)
 
 **Why.** A selection asks which moments have a reading, and of a skipped reading the answer is none (decision 36). A shift asks where a value moves to, and refusing it would fail a valid value and a valid duration twice a year. Java's `ZonedDateTime.plusDays` and JavaScript Temporal's default disambiguation answer the same way, as RFC 5545 §3.3.5 reads a local time that does not occur. Elixir's `DateTime.shift/3` counts a day as twenty-four hours instead, so a day back from 21:30 on 25 October is 22:30 there.
 
+### Saying how to read a skipped or repeated reading (decision 109)
+
+**The question.** A value written to a reading the clock skips is refused (decision 36), one written to a reading it shows twice is its first showing, and a shift lands Temporal's way (decision 97). A caller who means half past two on the morning New York springs forward, or the second half past one as it falls back, has no way to say so. Should they?
+
+**The alternatives.**
+
+* Leave it: a skipped reading is an error to correct, and a written shift names a showing.
+
+* Take Temporal's `disambiguation` option, with its `compatible` default, everywhere.
+
+* Take the option on reading, building, placing in a zone and shifting, and keep each one's default as it is.
+
+**Tempo's choice.** The third. `:disambiguation` is `:compatible`, `:earlier`, `:later` or `:reject`, on `Tempo.from_iso8601/2`, `Tempo.new/1`, `Tempo.in_zone/3` and `Tempo.shift/3`. With none, reading and building refuse a skipped reading and take the first showing of a repeated one, and a shift lands as `:compatible` does.
+
+```elixir
+iex> {:error, %Tempo.ZoneError{reason: :gap}} =
+...>   Tempo.from_iso8601("2026-03-08T02:30[America/New_York]")
+iex> Tempo.from_iso8601("2026-03-08T02:30[America/New_York]", disambiguation: :earlier)
+{:ok, ~o"2026Y3M8DT1H30M[America/New_York]"}
+iex> {:error, %Tempo.ZoneError{reason: :fold}} =
+...>   Tempo.from_iso8601("2026-11-01T01:30[America/New_York]", disambiguation: :reject)
+```
+
+**Why.** What cannot be is refused, never silently another value (law 7), so a reading the clock skips stays an error unless the caller says what it means; the option lets them say it, in the words Temporal uses. The error names the two offsets and the option, so the way out is in the message. Rules and selections are not given the option: they ask which moments have a reading, and of a skipped one the answer is none.
+
 ### A time shift that disagrees with its zone (decisions 33 and 108)
 
 **The question.** RFC 9557 §3.4 gives `2022-07-08T00:14:07+00:00[!Europe/London]` as its example: London was at +01:00 that day, so the offset and the zone disagree. With the critical flag `!` an application MUST act on that; without it, it MAY. `Z` in place of the offset asserts no local time, so `…Z[Europe/London]` never disagrees. What does Tempo do?

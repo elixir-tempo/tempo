@@ -9,7 +9,8 @@ defmodule Tempo.Build do
   # back. What `Tempo.new/1`, `Tempo.Interval.new/1`, `Tempo.Duration.new/1`
   # and `Tempo.IntervalSet.new/2` build are the parts these take.
 
-  alias Tempo.{ConversionError, Duration, FrameError, InvalidCalendarError, Options, Spans}
+  alias Tempo.{ConversionError, Disambiguation, Duration, FrameError, InvalidCalendarError}
+  alias Tempo.{Options, Spans}
   alias Tempo.{Select, Unit, Validate, Workdays}
 
   # The units a selection names, coarsest first, as a rule's parts are held.
@@ -674,10 +675,12 @@ defmodule Tempo.Build do
   in it carries the zone, as the reader gives a suffix's zone to each.
   """
   @spec in_zone(Tempo.t(), Tempo.Zone.t()) :: {:ok, Tempo.t()} | {:error, Exception.t()}
-  def in_zone(%Tempo{} = expression, %Tempo.Zone{} = zone) do
+  def in_zone(%Tempo{} = expression, %Tempo.Zone{} = zone, disambiguation \\ nil) do
     with :ok <- Spans.whole(expression),
          :ok <- floating(expression),
-         do: Validate.run(rezoned(expression, zone))
+         {:ok, zoned} <- Disambiguation.resolved(rezoned(expression, zone), disambiguation) do
+      Validate.run(zoned)
+    end
   end
 
   defp floating(%Tempo{} = expression) do

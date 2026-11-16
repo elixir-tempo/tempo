@@ -60,13 +60,21 @@ defmodule Tempo.Shift do
 
   # ── Shifting ──────────────────────────────────────────────────────────
 
-  @doc "An expression moved by a duration: a value, a span end by end, a set member by member."
-  @spec shift(expression(), Duration.t()) :: {:ok, expression()} | {:error, Exception.t()}
+  @doc """
+  An expression moved by a duration: a value, a span end by end, a set
+  member by member. A step of the calendar that lands on a reading the
+  zone's clock skips or shows twice is resolved as `mode` says
+  (`Tempo.Zone.resolved_at_wall/3`); the default is `:compatible`.
+  """
+  @spec shift(expression(), Duration.t(), atom()) :: {:ok, expression()} | {:error, Exception.t()}
+  def shift(expression, by, mode \\ :compatible)
+
   # A season moved by whole years is the season of another year. It has no
   # other move that is a season: a month on from a season is no season.
   def shift(
         %Tempo{form: {:value, [year: year, season: season]}} = value,
-        %Duration{units: units} = by
+        %Duration{units: units} = by,
+        _mode
       )
       when is_integer(year) and is_integer(season) do
     case units do
@@ -75,7 +83,7 @@ defmodule Tempo.Shift do
     end
   end
 
-  def shift(%Tempo{form: {:value, units}} = value, %Duration{} = by) do
+  def shift(%Tempo{form: {:value, units}} = value, %Duration{} = by, mode) do
     cond do
       Keyword.has_key?(units, :selection) ->
         {:error, conversion(value, :selection)}
@@ -84,47 +92,49 @@ defmodule Tempo.Shift do
         {:error, conversion(value, :group)}
 
       Unit.anchored?(units) and Unit.concrete?(units) and Expand.one_span?(units) ->
-        shift_one(value, by)
+        shift_one(value, by, mode)
 
       Unit.anchored?(units) ->
-        shift_each(value, by)
+        shift_each(value, by, mode)
 
       true ->
         shift_unanchored(value, by)
     end
   end
 
-  def shift(%Tempo{form: {:span, from, to}} = span, %Duration{} = by) do
-    case shift_span(span, from, to, by) do
+  def shift(%Tempo{form: {:span, from, to}} = span, %Duration{} = by, mode) do
+    case shift_span(span, from, to, by, mode) do
       {:ok, %Tempo{form: {:span, %Tempo{form: {kind, _}}, _}}} when kind != :value ->
-        shift_spans(span, by)
+        shift_spans(span, by, mode)
 
       {:ok, %Tempo{form: {:span, _, %Tempo{form: {kind, _}}}}} when kind != :value ->
-        shift_spans(span, by)
+        shift_spans(span, by, mode)
 
       result ->
         result
     end
   end
 
-  def shift(%Tempo{form: {:every, first, bound, rule}} = recurrence, %Duration{} = by) do
-    with {:ok, first} <- shift(first, by),
-         {:ok, bound} <- shift_bound(bound, by) do
+  def shift(%Tempo{form: {:every, first, bound, rule}} = recurrence, %Duration{} = by, mode) do
+    with {:ok, first} <- shift(first, by, mode),
+         {:ok, bound} <- shift_bound(bound, by, mode) do
       {:ok, %{recurrence | form: {:every, first, bound, rule}}}
     end
   end
 
   # A set's exclusions move with its members (decision 106).
-  def shift(%Tempo{form: {kind, members}} = set, %Duration{} = by) when kind in [:all, :one] do
+  def shift(%Tempo{form: {kind, members}} = set, %Duration{} = by, mode)
+      when kind in [:all, :one] do
     with :ok <- Spans.whole(set),
-         {:ok, shifted} <- each(members, &shifted_entry(&1, by)),
+         {:ok, shifted} <- each(members, &shifted_entry(&1, by, mode)),
          do: {:ok, %{set | form: {kind, shifted}}}
   end
 
-  def shift(%Tempo{} = expression, %Duration{}),
+  def shift(%Tempo{} = expression, %Duration{}, _mode),
     do: {:error, conversion(expression, :conditions)}
 
-  def shift(%Duration{} = duration, _by), do: {:error, conversion(duration, :bare_duration)}
+  def shift(%Duration{} = duration, _by, _mode),
+    do: {:error, conversion(duration, :bare_duration)}
 
   @doc """
   An expression with each value written with parts out of range carried
@@ -243,31 +253,32 @@ defmodule Tempo.Shift do
     end
   end
 
-  defp shift_bound(%Tempo{} = until, by), do: shift(until, by)
-  defp shift_bound(count_or_infinity, _by), do: {:ok, count_or_infinity}
+  defp shift_bound(%Tempo{} = until, by, mode), do: shift(until, by, mode)
+  defp shift_bound(count_or_infinity, _by, _mode), do: {:ok, count_or_infinity}
 
   # A span whose ends shift to no one value is each span it names shifted.
-  defp shift_spans(span, by) do
-    with {:ok, spans} <- Spans.spans(span), do: shift_members(span, Enum.to_list(spans), by)
+  defp shift_spans(span, by, mode) do
+    with {:ok, spans} <- Spans.spans(span),
+         do: shift_members(span, Enum.to_list(spans), by, mode)
   end
 
   # ── One value with a year ─────────────────────────────────────────────
 
   # The value extended to the duration's finest unit, its start moved, and
   # the result written back on the value's own axis at that resolution.
-  defp shift_one(%Tempo{form: {:value, units}} = value, %Duration{units: by_units} = by) do
+  defp shift_one(%Tempo{form: {:value, units}} = value, %Duration{units: by_units} = by, mode) do
     case {Keyword.has_key?(units, :week), Keyword.pop(by_units, :year)} do
       {true, {years, rest}} when is_integer(years) ->
         with {:ok, value} <- week_years_on(value, years),
-             do: shift_rest(value, %Duration{units: rest})
+             do: shift_rest(value, %Duration{units: rest}, mode)
 
       _ ->
-        shift_at(value, by)
+        shift_at(value, by, mode)
     end
   end
 
-  defp shift_rest(value, %Duration{units: []}), do: {:ok, value}
-  defp shift_rest(value, by), do: shift_one(value, by)
+  defp shift_rest(value, %Duration{units: []}, _mode), do: {:ok, value}
+  defp shift_rest(value, by, mode), do: shift_one(value, by, mode)
 
   # A week date a year on keeps its week and weekday, the week clamped to the year's last.
   defp week_years_on(%Tempo{form: {:value, units}, calendar: calendar} = value, years) do
@@ -284,8 +295,8 @@ defmodule Tempo.Shift do
     end
   end
 
-  defp shift_at(%Tempo{form: {:value, units}} = value, by) do
-    frame = Spans.frame_of(value)
+  defp shift_at(%Tempo{form: {:value, units}} = value, by, mode) do
+    frame = Map.put(Spans.frame_of(value), :disambiguation, mode)
     extended = extended(units, by, value.calendar)
 
     with {:ok, {start, _stop}} <- extent(plain(extended), frame, value),
@@ -513,10 +524,10 @@ defmodule Tempo.Shift do
   # Each value a plural value names shifted, gathered into one value where its
   # units can hold them all: the held units kept where the shift passes them
   # by, one unit of a list where only one differs, else a set of the values.
-  defp shift_each(%Tempo{form: {:value, units}} = value, by) do
+  defp shift_each(%Tempo{form: {:value, units}} = value, by, mode) do
     with {:ok, members} <- Spans.members(%{value | form: {:value, plain(units)}}),
          members = Enum.map(members, &plain_member/1),
-         {:ok, shifted} <- each(members, &shift(&1, by)) do
+         {:ok, shifted} <- each(members, &shift(&1, by, mode)) do
       {:ok, gathered(value, units, members, Enum.map(shifted, &reannotated(&1, units)))}
     end
   end
@@ -668,16 +679,16 @@ defmodule Tempo.Shift do
 
   defp run(value, acc), do: {:cont, Enum.reverse(acc), [value]}
 
-  defp shift_members(expression, members, by) do
-    with {:ok, shifted} <- each(members, &shift(&1, by)),
+  defp shift_members(expression, members, by, mode) do
+    with {:ok, shifted} <- each(members, &shift(&1, by, mode)),
          do: {:ok, %{expression | form: {:all, shifted}}}
   end
 
-  defp shifted_entry({:except, member}, by) do
-    with {:ok, shifted} <- shift(member, by), do: {:ok, {:except, shifted}}
+  defp shifted_entry({:except, member}, by, mode) do
+    with {:ok, shifted} <- shift(member, by, mode), do: {:ok, {:except, shifted}}
   end
 
-  defp shifted_entry(member, by), do: shift(member, by)
+  defp shifted_entry(member, by, mode), do: shift(member, by, mode)
 
   # A rewrite of a set's members leaves its exclusions as they are written
   # (decision 106): June less the 15th truncated to the month is still that.
@@ -697,16 +708,16 @@ defmodule Tempo.Shift do
 
   # Each written end moved; a duration end and an open end stay. With a month
   # or a year in the duration the span keeps its length, its end moved by it.
-  defp shift_span(span, from, to, by) do
-    with {:ok, from_moved} <- shift_end(from, by),
-         {:ok, to_moved} <- shift_end(to, by),
+  defp shift_span(span, from, to, by, mode) do
+    with {:ok, from_moved} <- shift_end(from, by, mode),
+         {:ok, to_moved} <- shift_end(to, by, mode),
          {:ok, to_moved} <- kept_length(span, from, to, from_moved, to_moved, by) do
       {:ok, %{span | form: {:span, from_moved, to_moved}}}
     end
   end
 
-  defp shift_end(%Tempo{} = value, by), do: shift(value, by)
-  defp shift_end(other, _by), do: {:ok, other}
+  defp shift_end(%Tempo{} = value, by, mode), do: shift(value, by, mode)
+  defp shift_end(other, _by, _mode), do: {:ok, other}
 
   defp kept_length(span, %Tempo{} = from, %Tempo{} = to, from_moved, to_moved, by) do
     if Duration.exact?(by) or Unit.compare(finer_resolution(from, to), :day) == :lt do

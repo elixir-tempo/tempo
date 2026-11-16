@@ -9,6 +9,7 @@ defmodule Tempo.Reader do
   # before validation: `Tempo.Validate` runs once over what is built.
 
   alias Tempo.Build
+  alias Tempo.Disambiguation
   alias Tempo.Duration
   alias Tempo.InvalidCalendarError
   alias Tempo.Offset
@@ -30,7 +31,9 @@ defmodule Tempo.Reader do
   Reads a text. Options: `:calendar`, the calendar a text that names none is
   in (the default is `Calendar.ISO`); `:territory`, where a season is
   placed; `:overflow`, `:carry` to carry a value's parts out of range into
-  range rather than refuse them.
+  range rather than refuse them; `:offset`, how a time shift its zone does
+  not have then is resolved (`Tempo.Offset`); `:disambiguation`, how a
+  reading its zone's clock skips or shows twice is (`Tempo.Disambiguation`).
   """
   @spec read(String.t(), keyword()) ::
           {:ok, Tempo.t() | Duration.t()} | {:error, ParseError.t() | Exception.t()}
@@ -40,9 +43,10 @@ defmodule Tempo.Reader do
          {:ok, calendar} <- week_start(suffix, calendar, text),
          {:ok, expression} <- body |> normalised() |> expression(text) |> suffix_inside(),
          framed = in_frame(expression, calendar, suffix),
-         {:ok, expression} <- overflow(framed, options[:overflow]) do
+         {:ok, expression} <- overflow(framed, options[:overflow]),
+         offsets_resolved = Offset.resolved(expression, Keyword.get(options, :offset, :reject)),
+         {:ok, expression} <- Disambiguation.resolved(offsets_resolved, options[:disambiguation]) do
       expression
-      |> Offset.resolved(Keyword.get(options, :offset, :reject))
       |> seasons_placed(options[:territory])
       |> validated()
     end

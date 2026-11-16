@@ -72,10 +72,17 @@ Libraries that read `"02:30 America/New_York"` on a spring-forward date and retu
 ```elixir
 iex> {:error, error} = Tempo.from_iso8601("2024-03-10T02:30:00[America/New_York]")
 iex> Exception.message(error)
-"~o\"2024Y3M10DT2H30M0S[America/New_York]\" is a reading the clock of \"America/New_York\" skips"
+"~o\"2024Y3M10DT2H30M0S[America/New_York]\" is a reading the clock of \"America/New_York\" skips, going from -05:00 to -04:00; give disambiguation: :compatible or :later to read it after the change, or :earlier to read it before"
 ```
 
-The error surfaces at the boundary — where the value is read or built — not hours later in a downstream calculation. `Tempo.new/1` and `Tempo.in_zone/2` return the same `Tempo.ZoneError`.
+The error surfaces at the boundary — where the value is read or built — not hours later in a downstream calculation. `Tempo.new/1` and `Tempo.in_zone/2` return the same `Tempo.ZoneError`. A caller who means a time anyway says how to read it with `:disambiguation`, as JavaScript's Temporal takes it:
+
+```elixir
+iex> Tempo.from_iso8601("2024-03-10T02:30:00[America/New_York]", disambiguation: :compatible)
+{:ok, ~o"2024Y3M10DT3H30M0S[America/New_York]"}
+```
+
+> *"Half past two is skipped; read **compatibly**, it is half past three, an hour on past the change."*
 
 An expression that names several times names the ones the clock shows. Half past two on the 9th and the 10th of March is, in New York, one time:
 
@@ -208,7 +215,7 @@ Samoa skipped 30 December 2011 entirely when it moved across the International D
 ```elixir
 iex> {:error, error} = Tempo.from_iso8601("2011-12-30[Pacific/Apia]")
 iex> Exception.message(error)
-"~o\"2011Y12M30D[Pacific/Apia]\" is a reading the clock of \"Pacific/Apia\" skips"
+"~o\"2011Y12M30D[Pacific/Apia]\" is a reading the clock of \"Pacific/Apia\" skips, going from -10:00 to +14:00; give disambiguation: :compatible or :later to read it after the change, or :earlier to read it before"
 
 iex> {:error, %Tempo.ZoneError{reason: :gap}} = Tempo.from_iso8601("2011-12-30T12:00:00[Pacific/Apia]")
 ```

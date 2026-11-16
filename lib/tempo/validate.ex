@@ -160,12 +160,19 @@ defmodule Tempo.Validate do
 
   defp wall_shown({:ok, {start, stop}}, zone, expression)
        when is_integer(start) and is_integer(stop) do
-    if Zone.skipped?(zone, start) and Zone.skipped?(zone, stop - 1),
-      do: {:error, ZoneError.exception(zone: zone.name, reason: :gap, value: expression)},
-      else: :ok
+    if Zone.skipped?(zone, start) and Zone.skipped?(zone, stop - 1) do
+      {:error, gap(Zone.offsets_at_wall(zone, start), zone, expression)}
+    else
+      :ok
+    end
   end
 
   defp wall_shown(_no_position, _zone, _expression), do: :ok
+
+  defp gap({:gap, before, later}, zone, expression) do
+    offsets = [Zone.shift_of(before), Zone.shift_of(later)]
+    ZoneError.exception(zone: zone.name, reason: :gap, value: expression, offsets: offsets)
+  end
 
   # An event a selection names is one Tempo, or a resolver registered with
   # it, knows how to find: an unknown name would select nothing, and say so

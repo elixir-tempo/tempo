@@ -6,6 +6,8 @@
 
 * An `:offset` option on `Tempo.from_iso8601/2` and `Tempo.new/1` that says what a time shift its zone does not have then means: `:reject` (the default), `:use`, `:prefer` or `:ignore`, as Temporal's (decision 108).
 
+* A `:disambiguation` option on `Tempo.from_iso8601/2`, `Tempo.new/1`, `Tempo.in_zone/3` and `Tempo.shift/3` that says how to read a time the zone's clock skips or shows twice: `:compatible`, `:earlier`, `:later` or `:reject`, as Temporal's (decision 109). A `Tempo.ZoneError` for such a time names the offsets either side of the change.
+
 ### Changed
 
 * A time shift its zone does not have then (`2020-01-15T12:00-02:00[America/Sao_Paulo]`) is a `Tempo.ZoneError` whether the zone is critical or not, where only a critical zone was before; such a value moved two hours when an hour was added.

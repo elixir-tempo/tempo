@@ -1146,3 +1146,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Found while building.** Tempo's own writer gives the end of an hour a shift the zone does not show there: Paris's summer hour on the night its clock goes back is `02:00+02:00/03:00+02:00`. An end written to a clock unit is a boundary, so it agrees with its zone where the zone has the shift just before it, as well as where a value at that reading would.
 
 * **State.** Built 2026-11-16 in `Tempo.Offset` (the check and the resolution), called by `Tempo.Validate` and before validation by the reader and `Tempo.new/1`; `test/tempo/zone_validation_test.exs`. A builder of intervals or sets takes values already built, so a caller resolves each with `Tempo.new/1`.
+
+## 109. A reading the clock skips or shows twice, resolved as the caller says
+
+* **Question.** Should a caller be able to say what a reading means that its zone's clock skips (02:30 as New York springs forward) or shows twice (01:30 as it falls back), and with what default?
+
+* **Context.** Found 2026-11-16 comparing Tempo with Jiff. Reading, `Tempo.new/1` and `Tempo.in_zone/2` refused a skipped reading and took the first showing of a repeated one; `Tempo.shift/3` landed as Temporal's `compatible` does (decision 97); rules and selections leave a skipped reading out and take the first showing (decision 36). Jiff and Temporal take one option, `compatible` by default, with `earlier`, `later` and `reject`. The options were (1) the option with today's defaults, (2) the option with `compatible` as the default everywhere, which reads a mistyped time in a gap as another time (law 7).
+
+* **Decision (2026-11-16, the user's).** Option 1, named `:disambiguation` after Temporal's, with `:compatible`, `:earlier`, `:later` and `:reject`, on `Tempo.from_iso8601/2`, `Tempo.new/1`, `Tempo.in_zone/3` and `Tempo.shift/3`. With none, reading and building refuse a skipped reading and take a repeated one's first showing; a shift lands as `:compatible`. Rules and selections are left as decision 36 has them. `Tempo.shift/3` refuses `:disambiguation` with `:skipping`, whose walk through free time lands as `:compatible` does.
+
+* **State.** Built 2026-11-16: `Tempo.Zone.resolved_at_wall/3` resolves a reading by a mode; `Tempo.Disambiguation` resolves an expression's readings before validation for the reader, `Tempo.new/1` and `Tempo.in_zone/3`, after `:offset`; the shift engine carries the mode in its frame to where a calendar step lands (`Tempo.Spans`). A `:gap` error and the new `:fold` error carry the two offsets either side of the change and name the option. A day, or an hour only part of which is skipped, is a period and is left as it is. `test/tempo/disambiguation_test.exs`.

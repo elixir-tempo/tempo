@@ -305,7 +305,7 @@ iex> Tempo.shift_zone(stated, "Etc/UTC")
 
 `Z`, `+00:00` and `-00:00` are one time. A time shift is each end's own in an interval, and one written on the start is the end's too where the end has none (ISO 8601-1 §5.5.1).
 
-**A reading a zone's clock skips is no value**: an hour of a spring change, a day a territory left out. One it shows twice is the first, or the one a written shift names. See [Falsehoods](falsehoods.md).
+**A reading a zone's clock skips is no value**: an hour of a spring change, a day a territory left out. One it shows twice is the first, or the one a written shift names. `disambiguation:` reads either as the caller says. See [Falsehoods](falsehoods.md).
 
 **Calendars.** `u-ca` takes CLDR's calendar names (`hebrew`, `islamic-umalqura`, `persian`, `chinese`, `buddhist`, with `gregory` for the Gregorian) and Calendrical's own for the calendars CLDR does not name (`iso-week`, `julian`, `nrf`, `reform-england`). A calendar no name reads back to, such as a fiscal calendar, has no suffix, and a value in it has no text: `Tempo.to_iso8601/1` returns an error rather than a date another calendar would read.
 

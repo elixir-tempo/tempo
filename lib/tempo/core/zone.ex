@@ -268,6 +268,48 @@ defmodule Tempo.Zone do
     end
   end
 
+  @doc """
+  The UTC tick of a wall reading with no shift, by a way of resolving one
+  the zone's clock skips or shows twice (decision 109). `:compatible` and
+  `:later` read a skipped reading by the offset before the change, so it
+  lands after the gap by its length, and `:earlier` by the offset after it,
+  so it lands before; `:later` takes the second showing of a reading shown
+  twice, and the rest the first. `:reject` refuses both, and `nil`, how a
+  reading is read when no way is given, refuses a skipped one.
+  """
+  @spec resolved_at_wall(t(), tick(), :compatible | :earlier | :later | :reject | nil) ::
+          {:ok, tick()} | {:gap, tick(), tick()} | {:fold, tick(), tick()}
+  def resolved_at_wall(%__MODULE__{} = zone, wall, mode) do
+    zone
+    |> offsets_at_wall(wall)
+    |> resolved_offsets(wall, mode)
+  end
+
+  defp resolved_offsets([first, second], _wall, :reject) do
+    {:fold, first, second}
+  end
+
+  defp resolved_offsets([_first, second], wall, :later) do
+    {:ok, wall - second}
+  end
+
+  defp resolved_offsets([offset | _], wall, _mode) do
+    {:ok, wall - offset}
+  end
+
+  defp resolved_offsets({:gap, _before, after_change}, wall, :earlier) do
+    {:ok, wall - after_change}
+  end
+
+  defp resolved_offsets({:gap, before, _after_change}, wall, mode)
+       when mode in [:compatible, :later] do
+    {:ok, wall - before}
+  end
+
+  defp resolved_offsets({:gap, before, after_change}, _wall, _refused) do
+    {:gap, before, after_change}
+  end
+
   @doc "The UTC tick of a wall reading in a zone, placed as `offset_at_wall/3` places it."
   @spec utc_of_wall(t() | nil, shift() | nil, tick()) :: tick()
   def utc_of_wall(zone, shift, wall), do: wall - offset_at_wall(zone, shift, wall)

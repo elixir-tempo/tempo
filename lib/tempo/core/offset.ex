@@ -21,6 +21,7 @@ defmodule Tempo.Offset do
   # `Z` asserts no local time and is never at odds with a zone.
 
   alias Tempo.Expand
+  alias Tempo.Scale
   alias Tempo.Season
   alias Tempo.Spans
   alias Tempo.Unit
@@ -164,9 +165,14 @@ defmodule Tempo.Offset do
     end
   end
 
-  # The span a value's reading covers on no zone's clock: what its shift
-  # and its zone are each held to.
-  defp wall(units, %Tempo{calendar: calendar}) do
+  @doc """
+  The span a value's reading covers on no zone's clock, what its shift and
+  its zone are each held to; `:skip` for a value coarser than a day, or with
+  no year, which is a period the clock runs through.
+  """
+  @spec wall(Unit.units(), Tempo.t()) ::
+          {:ok, {Scale.position(), Scale.position()}} | {:error, term()} | :skip
+  def wall(units, %Tempo{calendar: calendar}) do
     if checkable?(units) do
       Expand.extent(units, %{calendar: calendar, zone: nil, shift: nil})
     else

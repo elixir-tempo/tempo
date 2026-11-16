@@ -34,6 +34,7 @@ defmodule Tempo do
   alias Tempo.Children
   alias Tempo.ConversionError
   alias Tempo.DayStart
+  alias Tempo.Disambiguation
   alias Tempo.Duration
   alias Tempo.Expand
   alias Tempo.Explain
@@ -255,6 +256,17 @@ defmodule Tempo do
     is read by the zone (`12:00`). With `:ignore` every shift beside a named
     zone is dropped, so a reading shown twice is its first showing.
 
+  * `:disambiguation` says what a reading with no time shift means where
+    the zone's clock skips it or shows it twice. With none, a skipped
+    reading (`02:30` as New York springs forward) is a `Tempo.ZoneError`
+    and a repeated one (`01:30` as it falls back) is its first showing.
+    `:compatible` reads a skipped reading after the change by its length
+    (`03:30`) and a repeated one at its first showing; `:earlier` reads a
+    skipped reading before the change (`01:30`); `:later` reads a skipped
+    reading after it and a repeated one at its second showing; `:reject`
+    refuses both. A day, or an hour only part of which is skipped, is a
+    period the clock runs through and is read as it is.
+
   ### Returns
 
   * `{:ok, expression}`, a `t:t/0`, or a `t:Tempo.Duration.t/0` for a
@@ -293,6 +305,12 @@ defmodule Tempo do
       iex> Tempo.from_iso8601("2020-01-15T12:00-02:00[America/Sao_Paulo]", offset: :use)
       {:ok, ~o"2020Y1M15DT11H0MZ-3H0M[America/Sao_Paulo]"}
 
+      iex> {:error, %Tempo.ZoneError{reason: :gap}} =
+      ...>   Tempo.from_iso8601("2026-03-08T02:30[America/New_York]")
+
+      iex> Tempo.from_iso8601("2026-03-08T02:30[America/New_York]", disambiguation: :compatible)
+      {:ok, ~o"2026Y3M8DT3H30M[America/New_York]"}
+
       iex> {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("tomorrow")
 
   """
@@ -316,13 +334,16 @@ defmodule Tempo do
     with :ok <-
            Options.check(
              options,
-             [:calendar, :profile, :territory, :locale, :overflow, :offset],
+             [:calendar, :profile, :territory, :locale, :overflow, :offset, :disambiguation],
              "Tempo.from_iso8601/2"
            ),
          :ok <- overflow_named(Keyword.get(options, :overflow, :refuse)),
          :ok <- offset_named(Keyword.get(options, :offset, :reject), "Tempo.from_iso8601/2"),
+         :ok <- disambiguation_named(options[:disambiguation], "Tempo.from_iso8601/2"),
          {:ok, territory} <- territory_named(options) do
-      read_options = Keyword.take(options, [:calendar, :profile, :overflow, :offset])
+      read_options =
+        Keyword.take(options, [:calendar, :profile, :overflow, :offset, :disambiguation])
+
       Text.read(text, [territory: territory] ++ read_options)
     end
   end
@@ -336,6 +357,18 @@ defmodule Tempo do
      ArgumentError.exception(
        "Tempo.from_iso8601/2 takes overflow: :refuse or :carry, not #{inspect(other)}"
      )}
+  end
+
+  defp disambiguation_named(disambiguation, function) do
+    if is_nil(disambiguation) or disambiguation in Disambiguation.modes() do
+      :ok
+    else
+      {:error,
+       ArgumentError.exception(
+         "#{function} takes disambiguation: :compatible, :earlier, :later or :reject, " <>
+           "not #{inspect(disambiguation)}"
+       )}
+    end
   end
 
   defp offset_named(offset, function) do
@@ -594,6 +627,9 @@ defmodule Tempo do
     * `:offset` says what a `:shift` the `:zone` does not have then means, as
       `from_iso8601/2` takes it. The default, `:reject`, refuses it.
 
+    * `:disambiguation` says what a reading means that the `:zone`'s clock
+      skips or shows twice, as `from_iso8601/2` takes it.
+
     * `:qualifications` marks units of the value as ISO 8601-2's `?`, `~`
       and `%` do: a map of the unit to `:uncertain`, `:approximate` or
       `:both`, so `%{year: :uncertain}` is `2026?Y`.
@@ -656,11 +692,21 @@ defmodule Tempo do
 
   def new(components) when is_list(components) do
     {frame, units} =
-      Keyword.split(components, [:calendar, :zone, :shift, :offset, :qualifications, :metadata])
+      Keyword.split(components, [
+        :calendar,
+        :zone,
+        :shift,
+        :offset,
+        :disambiguation,
+        :qualifications,
+        :metadata
+      ])
 
     offset = Keyword.get(frame, :offset, :reject)
+    disambiguation = Keyword.get(frame, :disambiguation)
 
     with :ok <- offset_named(offset, "Tempo.new/1"),
+         :ok <- disambiguation_named(disambiguation, "Tempo.new/1"),
          {:ok, units} <- units |> Enum.map(&held_as_written/1) |> Unit.ordered(),
          {:ok, calendar} <- calendar_of(Keyword.get(frame, :calendar, Tempo.Calendar.default())),
          units = Select.weekdays_named(units, calendar),
@@ -677,7 +723,8 @@ defmodule Tempo do
 
       value
       |> Offset.resolved(offset)
-      |> Validate.run()
+      |> Disambiguation.resolved(disambiguation)
+      |> resolved_validated()
     end
   end
 
@@ -686,6 +733,14 @@ defmodule Tempo do
      ArgumentError.exception(
        "a value is built from a keyword list or a map of units, not #{inspect(other)}"
      )}
+  end
+
+  defp resolved_validated({:ok, value}) do
+    Validate.run(value)
+  end
+
+  defp resolved_validated({:error, _exception} = error) do
+    error
   end
 
   # A range alone is held as a list of it, as `{2020..2024}Y` is read.
@@ -2480,6 +2535,14 @@ defmodule Tempo do
   * `zone` is a time zone name the database knows, or a fixed offset as
     IXDTF writes one (`"+02:00"`).
 
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:disambiguation` says what a reading means that the zone's clock skips
+    or shows twice, as `from_iso8601/2` takes it. With none, a skipped
+    reading is a `Tempo.ZoneError` and a repeated one its first showing.
+
   ### Returns
 
   * `{:ok, zoned}`.
@@ -2498,13 +2561,29 @@ defmodule Tempo do
 
       iex> {:error, %Tempo.FrameError{}} = Tempo.in_zone(~o"2026-06-15T10Z", "Europe/Paris")
 
-  """
-  @spec in_zone(t(), String.t()) :: {:ok, t()} | {:error, error()}
-  def in_zone(other, _zone) when not is_struct(other, __MODULE__), do: not_an_expression(other)
-  def in_zone(_expression, zone) when not is_binary(zone), do: not_a_zone(zone)
+      iex> Tempo.in_zone(~o"2026-03-08T02:30", "America/New_York", disambiguation: :compatible)
+      {:ok, ~o"2026Y3M8DT3H30M[America/New_York]"}
 
-  def in_zone(%__MODULE__{} = expression, zone) do
-    with {:ok, zone} <- Zone.written(zone), do: Build.in_zone(expression, zone)
+  """
+  @spec in_zone(t(), String.t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def in_zone(expression, zone, options \\ [])
+
+  def in_zone(other, _zone, _options) when not is_struct(other, __MODULE__) do
+    not_an_expression(other)
+  end
+
+  def in_zone(_expression, zone, _options) when not is_binary(zone) do
+    not_a_zone(zone)
+  end
+
+  def in_zone(%__MODULE__{} = expression, zone, options) do
+    disambiguation = options[:disambiguation]
+
+    with :ok <- Options.check(options, [:disambiguation], "Tempo.in_zone/3"),
+         :ok <- disambiguation_named(disambiguation, "Tempo.in_zone/3"),
+         {:ok, zone} <- Zone.written(zone) do
+      Build.in_zone(expression, zone, disambiguation)
+    end
   end
 
   @doc """
@@ -3030,6 +3109,15 @@ defmodule Tempo do
     clock); a month or a year of free time has no fixed length. A date
     shifted by days or weeks steps from free day to free day.
 
+  * `:disambiguation` says what a step of the calendar means that lands on
+    a reading the zone's clock skips or shows twice: `:compatible`, the
+    default, reads a skipped reading after the change by its length (a day
+    on from 02:30 the day before New York springs forward is 03:30) and a
+    repeated one at its first showing; `:earlier` reads a skipped reading
+    before the change (01:30); `:later` takes a repeated reading's second
+    showing; `:reject` refuses either with a `Tempo.ZoneError`. It is not
+    taken with `:skipping`.
+
   ### Returns
 
   * `{:ok, expression}`, the expression moved.
@@ -3078,8 +3166,10 @@ defmodule Tempo do
   def shift(expression, by, options \\ [])
 
   def shift(expression, by, options) when is_expression(expression) do
-    with :ok <- Options.check(options, [:skipping], "Tempo.shift/3"),
-         do: shift_by(expression, by, options)
+    with :ok <- Options.check(options, [:skipping, :disambiguation], "Tempo.shift/3"),
+         :ok <- disambiguation_named(options[:disambiguation], "Tempo.shift/3") do
+      shift_by(expression, by, options)
+    end
   end
 
   def shift(other, _by, _options), do: not_an_expression(other)
@@ -3100,14 +3190,23 @@ defmodule Tempo do
   end
 
   defp shift_by(expression, %Duration{} = by, options) do
-    case Keyword.get(options, :skipping) do
-      nil -> Shift.shift(expression, by)
-      busy -> Shift.skipping(expression, by, busy_set(busy))
+    case {options[:skipping], options[:disambiguation]} do
+      {nil, mode} -> Shift.shift(expression, by, mode || :compatible)
+      {busy, nil} -> Shift.skipping(expression, by, busy_set(busy))
+      {_busy, _mode} -> skipping_disambiguated()
     end
   end
 
   defp shift_by(_expression, by, _options),
     do: {:error, ConversionError.exception(value: by, reason: :not_a_duration)}
+
+  defp skipping_disambiguated do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.shift/3 takes :skipping or :disambiguation, not both: a shift through " <>
+         "free time steps over the busy spans and lands as :compatible does"
+     )}
+  end
 
   defp busy_set(%__MODULE__{} = busy), do: busy
 

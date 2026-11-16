@@ -36,8 +36,8 @@ The tables are grouped by subject, and within a table the terms a later one buil
 | zone | A named time zone, written as an RFC 9557 suffix (`[Europe/Paris]`). | `Tempo.shift_zone/2` |
 | shift | A fixed offset from UTC written with a value (`+02:00`). Also the verb: to move a value by a duration. | `Tempo.shift/3` |
 | reading | What a zone's clock shows. | `Tempo.ZoneError` |
-| a reading the clock skips | A reading no moment has, on the day the clock goes forward. It is refused. | `Tempo.ZoneError` |
-| a reading the clock shows twice | A reading two moments have, on the day the clock goes back. It is the first unless a shift is written with it. | `Tempo.in_zone/2` |
+| a reading the clock skips | A reading no moment has, on the day the clock goes forward. It is refused unless `:disambiguation` says how to read it. | `Tempo.ZoneError` |
+| a reading the clock shows twice | A reading two moments have, on the day the clock goes back. It is the first unless a shift, or `disambiguation: :later`, says otherwise. | `Tempo.in_zone/3` |
 | calendar | A module that implements `Calendar`, in which a value's units are counted. Never a CLDR calendar type. | `Tempo.to_calendar/2` |
 | calendar of weeks | A calendar whose year is a whole number of weeks and whose months are four or five of them. Its dates are a year, a month and a day, as any calendar's are, and a week date written for it is placed in its own weeks. | `Calendrical.ISOWeek` |
 | territory | A CLDR territory code (`:AU`, `:SA`), which decides the weekend and the first day of the week. Never "region". | `Tempo.Territory` |
@@ -122,7 +122,7 @@ A function that can fail returns `{:error, exception}`, and its `!` form, a pred
 |---|---|---|
 | `Tempo.ParseError` | A text that is not ISO 8601 as Tempo reads it. It says where the reading stopped. | |
 | `Tempo.InvalidDateError` | A text that is well formed and names no date or time: a thirteenth month, the 30th of February, an event no resolver knows. | `:unit` names the unit at fault |
-| `Tempo.ZoneError` | A zone Tempo cannot use. | `:unknown`, a name the database lacks; `:gap`, a reading the zone's clock skips |
+| `Tempo.ZoneError` | A zone Tempo cannot use. | `:unknown`, a name the database lacks; `:gap`, a reading the zone's clock skips; `:fold`, one it shows twice where `disambiguation: :reject` refuses it |
 | `Tempo.FrameError` | Two expressions that share no frame to be related or combined on, or one in the wrong frame for what was asked. | `:floating_and_zoned`, `:needs_a_year`, `:cycles`, `:open`, `:several`, `:zoned`, `:floating` |
 | `Tempo.IntervalEndpointsError` | Ends that make no interval. | `:order`, `:calendars`, `:zones`, `:not_values` |
 | `Tempo.ConversionError` | An expression that has no form in what was asked for. | `:unbounded`, a recurrence with no end and no window; `:needs_a_year`; `:open`; `:one_of`; `:too_many_values`; `:season`; `{:no_rrule, why}`; `:not_an_elixir_value` |
