@@ -256,7 +256,7 @@ Tempo holds an hour, a minute or a day in a named zone as the time that zone's c
 
 * A walk of the day yields an interval for a partial showing, so that a walk of hours gives values and intervals.
 
-**Tempo's choice.** The part the clock shows. A shift the zone never has within the unit is still the moment the shift gives.
+**Tempo's choice.** The part the clock shows. A shift the zone never has within the unit is refused, unless `offset: :use` takes the moment it gives (decision 108).
 
 ```elixir
 iex> {:ok, second_showing} = Tempo.from_iso8601("2026-04-05T02+12:45[Pacific/Chatham]")

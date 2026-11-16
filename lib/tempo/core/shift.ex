@@ -297,11 +297,11 @@ defmodule Tempo.Shift do
   end
 
   defp shift_at(%Tempo{form: {:value, units}} = value, by, mode) do
-    frame = Map.put(Spans.frame_of(value), :disambiguation, mode)
+    frame = Spans.frame_of(value)
     extended = extended(units, by, value.calendar)
 
     with {:ok, {start, _stop}} <- extent(plain(extended), frame, value),
-         {:ok, moved} <- Spans.shifted(start, by, frame, value) do
+         {:ok, moved} <- Spans.shifted(start, by, frame, value, mode) do
       {:ok, rezoned(%{value | form: {:value, rewritten(moved, extended, frame)}}, value, moved)}
     end
   end

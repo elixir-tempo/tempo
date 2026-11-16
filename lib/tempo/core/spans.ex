@@ -302,49 +302,54 @@ defmodule Tempo.Spans do
   read on the wall clock of the frame; then the clock part in ticks, which is
   elapsed time.
   """
-  @spec shifted(Scale.position(), Duration.t(), frame(), Tempo.t()) ::
-          {:ok, Scale.position()} | {:error, Exception.t()}
-  def shifted(tick, %Duration{units: units}, %{frame: {:cycle, _}}, expression)
+  @spec shifted(
+          Scale.position(),
+          Duration.t(),
+          frame(),
+          Tempo.t(),
+          :compatible | :earlier | :later | :reject | nil
+        ) :: {:ok, Scale.position()} | {:error, Exception.t()}
+  def shifted(tick, duration, frame, expression, disambiguation \\ nil)
+
+  def shifted(tick, %Duration{units: units}, %{frame: {:cycle, _}}, expression, _disambiguation)
       when is_integer(tick) do
     if Enum.all?(units, fn {unit, _} -> Unit.clock?(unit) end),
       do: {:ok, tick + clock_ticks(units)},
       else: {:error, conversion(expression, :needs_a_year)}
   end
 
-  def shifted(tick, %Duration{units: units}, frame, expression) when is_integer(tick) do
+  def shifted(tick, %Duration{units: units}, frame, expression, disambiguation)
+      when is_integer(tick) do
     {date_units, clock_units} =
       Enum.split_with(units, fn {unit, _} -> unit in [:year, :month, :week, :day] end)
 
-    with {:ok, moved} <- date_shifted(tick, date_units, frame, expression) do
+    with {:ok, moved} <- date_shifted(tick, date_units, frame, {expression, disambiguation}) do
       {:ok, moved + clock_ticks(clock_units)}
     end
   end
 
-  def shifted(nil, _duration, _frame, expression), do: {:error, conversion(expression, :open)}
+  def shifted(nil, _duration, _frame, expression, _disambiguation),
+    do: {:error, conversion(expression, :open)}
 
   # The date part moves the day and keeps the reading of the wall clock; the
   # clock part is added to the position, so an hour is an hour of elapsed time
   # across a change of the clock.
-  defp date_shifted(tick, [], _frame, _expression) do
+  defp date_shifted(tick, [], _frame, _landing) do
     {:ok, tick}
   end
 
-  defp date_shifted(tick, date_units, frame, expression) do
+  defp date_shifted(tick, date_units, frame, landing) do
     wall = Walk.wall(tick, frame)
     day = Integer.floor_div(wall, @day)
     moved = day |> day_shifted(date_units, frame.calendar) |> shown_day(day, frame)
-    landed(moved * @day + Integer.mod(wall, @day), frame, expression)
+    landed(moved * @day + Integer.mod(wall, @day), frame, landing)
   end
 
   # A reading the step lands on in a named zone, resolved as the caller said
   # where the clock skips it or shows it twice (decision 109); with nothing
   # said, as `:compatible` resolves it.
-  defp landed(
-         wall,
-         %{zone: %Zone{name: name} = zone, shift: nil, disambiguation: mode},
-         expression
-       )
-       when is_binary(name) do
+  defp landed(wall, %{zone: %Zone{name: name} = zone, shift: nil}, {expression, mode})
+       when is_binary(name) and not is_nil(mode) do
     case Zone.resolved_at_wall(zone, wall, mode) do
       {:ok, moment} ->
         {:ok, moment}
@@ -354,7 +359,7 @@ defmodule Tempo.Spans do
     end
   end
 
-  defp landed(wall, frame, _expression) do
+  defp landed(wall, frame, _landing) do
     {:ok, on_frame(wall, frame)}
   end
 

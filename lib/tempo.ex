@@ -2548,9 +2548,14 @@ defmodule Tempo do
 
   * `{:ok, zoned}`.
 
-  * `{:error, %Tempo.ZoneError{}}` when the zone is not known or its clock
-    skips the reading, or `{:error, %Tempo.FrameError{}}` when the expression
-    is already zoned or shifted (`shift_zone/2` moves one).
+  * `{:error, %Tempo.ZoneError{}}` when the zone is not known, its clock
+    skips the reading and no `:disambiguation` reads it, or shows it twice
+    where `disambiguation: :reject` refuses it, or
+
+  * `{:error, %Tempo.FrameError{}}` when the expression is already zoned or
+    shifted (`shift_zone/2` moves one), or
+
+  * `{:error, %ArgumentError{}}` for an option the function does not take.
 
   ### Examples
 
@@ -3127,6 +3132,14 @@ defmodule Tempo do
     ends in a group, `{:inexact, unit}` when `:skipping` is given a month or
     a year, and `:selection` when the value holds a selection; and
     `{:error, exception}` when `by` is not a duration.
+
+  * `{:error, %Tempo.ZoneError{}}` with reason `:gap` or `:fold` when a step
+    lands on a reading the clock skips or shows twice and
+    `disambiguation: :reject` refuses it.
+
+  * `{:error, %ArgumentError{}}` for an option the function does not take,
+    a `:disambiguation` that is not one of the four, or `:disambiguation`
+    given with `:skipping`.
 
   ### Examples
 

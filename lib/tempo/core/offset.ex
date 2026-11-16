@@ -30,7 +30,7 @@ defmodule Tempo.Offset do
   @modes [:reject, :use, :prefer, :ignore]
 
   @doc "The ways a caller may resolve a shift at odds with its zone."
-  @spec modes() :: [atom(), ...]
+  @spec modes() :: [:reject | :use | :prefer | :ignore, ...]
   def modes do
     @modes
   end

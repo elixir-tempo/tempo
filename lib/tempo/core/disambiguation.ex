@@ -30,7 +30,7 @@ defmodule Tempo.Disambiguation do
   @modes [:compatible, :earlier, :later, :reject]
 
   @doc "The ways a caller may resolve a reading its zone's clock skips or shows twice."
-  @spec modes() :: [atom(), ...]
+  @spec modes() :: [:compatible | :earlier | :later | :reject, ...]
   def modes do
     @modes
   end

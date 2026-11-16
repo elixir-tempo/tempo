@@ -12,6 +12,8 @@ This conceptual shift — *time as interval, not instant* — removes a surprisi
 
 * **Correctness by construction.** Every value denotes half-open spans `[from, to)` on the time line, so adjacent spans join cleanly (`[a, b)` and `[b, c)` are `[a, c)`). An interval is read as it is written: one written to a date runs through that date (`2026/2028` is three years), and one written to a time of day runs to that reading. "End of day" ambiguity, midnight off-by-ones and DST-hour confusion vanish at the type level.
 
+* **Zones that never guess.** A time a zone's clock skips, or an offset the zone no longer has, is an error that names the offsets until `disambiguation:` or `offset:` says what was meant, in the words JavaScript's Temporal uses; a time it shows twice is its first showing unless a shift or `disambiguation: :later` says otherwise. A day of the calendar counts as a day however long its clock runs: noon to noon across a spring change is `P1D`, or `PT23H` when hours are asked for.
+
 * **Full support for the time standards that matter.** ISO 8601 Parts 1 and 2, EDTF Levels 0–2, IXDTF. 100% of the `unt-libraries/edtf-validate` corpus passes. Long years (`Y17E8`), significant-digits notation, mask syntax, open-ended intervals, per-endpoint qualifications — all parsed and queryable.
 
 * **First-class set algebra on time.** Union, intersection, complement, difference, symmetric difference — plus the predicate set (`disjoint?`, `overlaps?`, `within?`, `contains?`, `equal?`) — all defined over any Tempo value. Cross-zone, cross-calendar, across resolutions.
@@ -37,7 +39,7 @@ Tempo supports **Elixir 1.17** and later on **Erlang/OTP 27** and later; OTP 26 
 ```elixir
 def deps do
   [
-    {:ex_tempo, "~> 2.5"},
+    {:ex_tempo, "~> 2.6"},
     # Optional but recommended - needed for iCalendar import.
     {:ical, "~> 3.2"}
   ]
@@ -226,7 +228,7 @@ Tempo's application starts its supervision tree, [`Tempo.Supervisor`](https://he
 
 ```elixir
 def deps do
-  [{:ex_tempo, "~> 2.5", runtime: false}]
+  [{:ex_tempo, "~> 2.6", runtime: false}]
 end
 
 def application do
@@ -383,4 +385,4 @@ The full documentation, every module and function with the guides above, is on [
 
 ## License
 
-Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.5.0/LICENSE.md). Copyright © Kip Cole.
+Tempo is licensed under the Apache License 2.0; see [LICENSE.md](https://github.com/elixir-tempo/tempo/blob/v2.6.0/LICENSE.md). Copyright © Kip Cole.
