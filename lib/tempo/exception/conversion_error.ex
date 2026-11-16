@@ -34,6 +34,7 @@ defmodule Tempo.ConversionError do
           | {:no_walk, atom()}
           | :not_an_interval
           | {:not_written_in, :season | :traditional_month}
+          | {:no_increment_of, atom()}
           | :not_days
           | term()
 
@@ -113,6 +114,9 @@ defmodule Tempo.ConversionError do
   defp describe({:no_rrule, :month_end}),
     do:
       "steps to the last day of a month that lacks its start's day, where RFC 5545 would pass the month over"
+
+  defp describe({:no_increment_of, unit}),
+    do: "is not written to #{unit}s, so it has no multiple of them to round to"
 
   defp describe({:not_written_in, :season}),
     do:

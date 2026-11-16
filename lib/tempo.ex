@@ -2577,9 +2577,8 @@ defmodule Tempo do
   end
 
   def in_zone(%__MODULE__{} = expression, zone, options) do
-    disambiguation = options[:disambiguation]
-
     with :ok <- Options.check(options, [:disambiguation], "Tempo.in_zone/3"),
+         disambiguation = options[:disambiguation],
          :ok <- disambiguation_named(disambiguation, "Tempo.in_zone/3"),
          {:ok, zone} <- Zone.written(zone) do
       Build.in_zone(expression, zone, disambiguation)
@@ -3224,11 +3223,19 @@ defmodule Tempo do
   date. The ends of an interval and the members of a set are truncated
   each. A unit finer than the value is written to leaves it as it is.
 
+  A duration of one unit truncates to a multiple of it, counted from the
+  start of the next coarser unit: `~o"PT15M"` is the quarter hour the value
+  starts in, `~o"P3M"` its quarter of the year from January, and `~o"P5Y"`
+  its five years from year 0.
+
   ### Arguments
 
   * `expression` is a `t:t/0`.
 
-  * `unit` is a unit; the default is `:day`.
+  * `unit` is a unit, or a duration of one unit that divides the next
+    coarser one: seconds and minutes by a divisor of 60, hours by one of
+    24, months by one of 12, years by any number, and days and weeks by
+    one. The default is `:day`.
 
   ### Returns
 
@@ -3240,7 +3247,8 @@ defmodule Tempo do
     traditional month the value is not written in, which a date names
     none of.
 
-  * `{:error, %ArgumentError{}}` for a unit that is not one.
+  * `{:error, %ArgumentError{}}` for a unit that is not one, or a
+    duration that is not an increment.
 
   ### Examples
 
@@ -3256,12 +3264,20 @@ defmodule Tempo do
       iex> Tempo.trunc(~o"2026Y6M{1,15}D", :month)
       {:ok, ~o"2026-06"}
 
+      iex> Tempo.trunc(~o"2026-06-15T10:37", ~o"PT15M")
+      {:ok, ~o"2026-06-15T10:30"}
+
+      iex> Tempo.trunc(~o"2026-08-16", ~o"P3M")
+      {:ok, ~o"2026-07"}
+
   """
-  @spec trunc(t(), unit()) :: {:ok, t()} | {:error, error()}
+  @spec trunc(t(), unit() | Duration.t()) :: {:ok, t()} | {:error, error()}
   def trunc(expression, unit \\ :day)
 
   def trunc(expression, unit) when is_expression(expression) do
-    with :ok <- a_unit(unit), do: Shift.trunc(expression, unit)
+    with {:ok, period} <- period_of(unit, "Tempo.trunc/2") do
+      Shift.trunc(expression, period)
+    end
   end
 
   def trunc(other, _unit), do: not_an_expression(other)
@@ -3271,13 +3287,28 @@ defmodule Tempo do
   or the next when its start is past the midpoint, measured in elapsed
   time. Half way rounds up, as `Kernel.round/1` does.
 
+  A duration of one unit rounds to a multiple of it, counted as `trunc/2`
+  counts one: `~o"PT15M"` rounds to the nearest quarter hour. In a named
+  zone the multiples are readings of its clock.
+
   ### Arguments
 
   * `expression` is a `t:t/0` that is one value, or an interval or set of
     them, rounded end by end and member by member.
 
-  * `unit` is a unit no finer than the value is written to; the default is
-    `:day`.
+  * `unit` is a unit no finer than the value is written to, or a duration
+    of one such unit that divides the next coarser one, as `trunc/2` takes
+    it. The default is `:day`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:rounding` is `:nearest`, the default, which takes the next period
+    when the value starts at or past the midpoint; `:later`, which takes
+    the next unless the value starts where its period does, as a bill is
+    rounded up to the next quarter hour; or `:earlier`, which takes the
+    period it starts in, as `trunc/2` does.
 
   ### Returns
 
@@ -3286,6 +3317,9 @@ defmodule Tempo do
   * `{:error, %Tempo.ConversionError{}}` with reason
     `{:finer_than_written, unit}` when the unit is finer than the value,
     and `:several` when the value names several.
+
+  * `{:error, %ArgumentError{}}` for a unit that is not one, a duration
+    that is not an increment, or a `:rounding` that is not one of the three.
 
   ### Examples
 
@@ -3301,15 +3335,88 @@ defmodule Tempo do
       iex> Tempo.round(~o"T23:45", :hour)
       {:ok, ~o"T0H"}
 
-  """
-  @spec round(t(), unit()) :: {:ok, t()} | {:error, error()}
-  def round(expression, unit \\ :day)
+      iex> Tempo.round(~o"2026-06-15T10:37", ~o"PT15M")
+      {:ok, ~o"2026Y6M15DT10H30M"}
 
-  def round(expression, unit) when is_expression(expression) do
-    with :ok <- a_unit(unit), do: Shift.round(expression, unit)
+      iex> Tempo.round(~o"2026-06-15T10:31", ~o"PT15M", rounding: :later)
+      {:ok, ~o"2026Y6M15DT10H45M"}
+
+  """
+  @spec round(t(), unit() | Duration.t(), keyword()) :: {:ok, t()} | {:error, error()}
+  def round(expression, unit \\ :day, options \\ [])
+
+  def round(expression, unit, options) when is_expression(expression) do
+    with :ok <- Options.check(options, [:rounding], "Tempo.round/3"),
+         rounding = Keyword.get(options, :rounding, :nearest),
+         :ok <- rounding_named(rounding),
+         {:ok, period} <- period_of(unit, "Tempo.round/3") do
+      Shift.round(expression, period, rounding)
+    end
   end
 
-  def round(other, _unit), do: not_an_expression(other)
+  def round(other, _unit, _options), do: not_an_expression(other)
+
+  defp rounding_named(rounding) when rounding in [:nearest, :later, :earlier] do
+    :ok
+  end
+
+  defp rounding_named(other) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.round/3 takes rounding: :nearest, :later or :earlier, not #{inspect(other)}"
+     )}
+  end
+
+  # A unit, or a duration of one unit that divides the next coarser one.
+  defp period_of(%Duration{units: [{unit, increment}]} = duration, function)
+       when is_integer(increment) do
+    if increment > 0 and divides?(unit, increment) do
+      {:ok, {unit, increment}}
+    else
+      not_an_increment(duration, function)
+    end
+  end
+
+  defp period_of(%Duration{} = duration, function) do
+    not_an_increment(duration, function)
+  end
+
+  defp period_of(unit, _function) do
+    with :ok <- a_unit(unit), do: {:ok, unit}
+  end
+
+  defp divides?(unit, increment) when unit in [:second, :minute] do
+    rem(60, increment) == 0
+  end
+
+  defp divides?(:hour, increment) do
+    rem(24, increment) == 0
+  end
+
+  defp divides?(:month, increment) do
+    rem(12, increment) == 0
+  end
+
+  defp divides?(:year, _increment) do
+    true
+  end
+
+  defp divides?(unit, increment) when unit in [:week, :day] do
+    increment == 1
+  end
+
+  defp divides?(_unit, _increment) do
+    false
+  end
+
+  defp not_an_increment(duration, function) do
+    {:error,
+     ArgumentError.exception(
+       "#{function} takes a unit, or a duration of one unit that divides the next coarser " <>
+         "one (seconds and minutes by a divisor of 60, hours of 24, months of 12, years by " <>
+         "any number, days and weeks by one), not #{inspect(duration)}"
+     )}
+  end
 
   @doc """
   A value with its next finer unit written as the values that unit takes:

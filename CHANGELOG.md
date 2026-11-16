@@ -8,6 +8,8 @@
 
 * A `:disambiguation` option on `Tempo.from_iso8601/2`, `Tempo.new/1`, `Tempo.in_zone/3` and `Tempo.shift/3` that says how to read a time the zone's clock skips or shows twice: `:compatible`, `:earlier`, `:later` or `:reject`, as Temporal's (decision 109). A `Tempo.ZoneError` for such a time names the offsets either side of the change.
 
+* `Tempo.round/3` and `Tempo.trunc/2` take a duration of one unit to round to a multiple of it (`~o"PT15M"`, `~o"P3M"`), and `Tempo.round/3` takes `rounding: :nearest`, `:later` or `:earlier` (decision 110).
+
 ### Changed
 
 * A time shift its zone does not have then (`2020-01-15T12:00-02:00[America/Sao_Paulo]`) is a `Tempo.ZoneError` whether the zone is critical or not, where only a critical zone was before; such a value moved two hours when an hour was added.

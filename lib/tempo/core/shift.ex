@@ -18,6 +18,7 @@ defmodule Tempo.Shift do
     Algebra,
     Calendar,
     ConversionError,
+    Disambiguation,
     Duration,
     Expand,
     InvalidDateError,
@@ -896,8 +897,25 @@ defmodule Tempo.Shift do
 
   # ── Truncating, rounding, extending ───────────────────────────────────
 
-  @doc "An expression written to a coarser unit: its units through that one, or the period of it the value starts in."
-  @spec trunc(expression(), Unit.t()) :: {:ok, expression()} | {:error, Exception.t()}
+  @doc """
+  An expression written to a coarser unit: its units through that one, or
+  the period of it the value starts in. Given `{unit, increment}`, the
+  period is a multiple of the unit counted from the start of the next
+  coarser one: every fifteen minutes from the hour, every three months from
+  January, every five years from year 0.
+  """
+  @spec trunc(expression(), Unit.t() | {Unit.t(), pos_integer()}) ::
+          {:ok, expression()} | {:error, Exception.t()}
+  def trunc(%Tempo{} = value, {unit, 1}) do
+    trunc(value, unit)
+  end
+
+  def trunc(%Tempo{form: {:value, _units}} = value, {unit, increment}) do
+    with {:ok, floor} <- trunc(value, unit) do
+      to_multiple(floor, unit, increment, value)
+    end
+  end
+
   def trunc(%Tempo{form: {:value, units}} = value, unit) do
     cond do
       Keyword.has_key?(units, unit) ->
@@ -927,6 +945,40 @@ defmodule Tempo.Shift do
 
   def trunc(%Tempo{} = expression, unit), do: each_part(expression, &trunc(&1, unit))
   def trunc(%Duration{} = duration, _unit), do: {:error, conversion(duration, :bare_duration)}
+
+  defp to_multiple(%Tempo{form: {:value, units}} = floor, unit, increment, original) do
+    case List.last(units) do
+      {^unit, count} when is_integer(count) ->
+        floored = List.replace_at(units, -1, {unit, multiple(unit, count, increment)})
+        on_the_clock(%{floor | form: {:value, floored}})
+
+      _other ->
+        {:error, conversion(original, {:no_increment_of, unit})}
+    end
+  end
+
+  defp multiple(:month, month, increment) do
+    month - rem(month - 1, increment)
+  end
+
+  defp multiple(:year, year, increment) do
+    year - Integer.mod(year, increment)
+  end
+
+  defp multiple(_unit, count, increment) do
+    count - rem(count, increment)
+  end
+
+  # A reading moved on a named zone's clock is read there afresh, at its
+  # first showing, and after a change of the clock that skips it, as a shift
+  # lands (decision 97).
+  defp on_the_clock(%Tempo{zone: %Zone{name: name}} = value) when is_binary(name) do
+    Disambiguation.resolved(%{value | shift: nil}, :compatible)
+  end
+
+  defp on_the_clock(value) do
+    {:ok, value}
+  end
 
   defp through(units, unit) do
     {before, [at | _]} = Enum.split_while(units, fn {u, _} -> u != unit end)
@@ -959,9 +1011,24 @@ defmodule Tempo.Shift do
   defp weekday(:day_of_week), do: [day_of_week: 1]
   defp weekday(_week), do: []
 
-  @doc "A value rounded to the nearest period of a unit: truncated, and moved on one unit when its start is past the midpoint."
-  @spec round(expression(), Unit.t()) :: {:ok, expression()} | {:error, Exception.t()}
-  def round(%Tempo{form: {:value, units}} = value, unit) do
+  @doc """
+  A value rounded to a period of a unit, or of `{unit, increment}` as
+  `trunc/2` counts one: the period it starts in or the next. `:nearest`
+  takes the next when its start is at or past the midpoint, measured in
+  elapsed time; `:later` takes the next unless it starts where its period
+  does; `:earlier` takes the period it starts in.
+  """
+  @spec round(expression(), Unit.t() | {Unit.t(), pos_integer()}, :nearest | :later | :earlier) ::
+          {:ok, expression()} | {:error, Exception.t()}
+  def round(expression, period, rounding \\ :nearest)
+
+  def round(%Tempo{} = value, {unit, 1}, rounding) do
+    round(value, unit, rounding)
+  end
+
+  def round(%Tempo{form: {:value, units}} = value, period, rounding) do
+    unit = unit_of(period)
+
     cond do
       not Unit.concrete?(units) ->
         {:error, conversion(value, :several)}
@@ -970,21 +1037,92 @@ defmodule Tempo.Shift do
         {:error, conversion(value, {:finer_than_written, unit})}
 
       true ->
-        rounded(value, units, unit)
+        rounded(value, units, period, rounding)
     end
   end
 
-  def round(%Tempo{} = expression, unit), do: each_part(expression, &round(&1, unit))
-  def round(%Duration{} = duration, _unit), do: {:error, conversion(duration, :bare_duration)}
+  def round(%Tempo{} = expression, period, rounding) do
+    each_part(expression, &round(&1, period, rounding))
+  end
 
-  defp rounded(value, units, unit) do
+  def round(%Duration{} = duration, _period, _rounding) do
+    {:error, conversion(duration, :bare_duration)}
+  end
+
+  defp unit_of({unit, _increment}) do
+    unit
+  end
+
+  defp unit_of(unit) do
+    unit
+  end
+
+  defp rounded(value, units, period, rounding) do
     frame = Spans.frame_of(value)
 
-    with {:ok, %Tempo{form: {:value, floor_units}} = floor} <- trunc(value, unit),
-         {:ok, {start, _}} <- extent(plain(units), frame, value),
-         {:ok, {first, last}} <- extent(plain(floor_units), frame, floor) do
-      if 2 * start >= first + last, do: shift(floor, one(unit)), else: {:ok, floor}
+    with {:ok, floor} <- trunc(value, period),
+         {:ok, {start, _}} <- extent(plain(units), frame, value) do
+      rounded_from(floor, start, period, rounding)
     end
+  end
+
+  defp rounded_from(floor, _start, _period, :earlier) do
+    {:ok, floor}
+  end
+
+  defp rounded_from(%Tempo{form: {:value, floor_units}} = floor, start, period, rounding) do
+    with {:ok, {first, last}} <- extent(plain(floor_units), Spans.frame_of(floor), floor),
+         {:ok, next} <- next_period(floor, period),
+         {:ok, boundary} <- boundary(next, period, last) do
+      {:ok, chosen(floor, next, {start, first, boundary}, rounding)}
+    end
+  end
+
+  defp chosen(floor, next, {start, first, boundary}, :nearest) do
+    if 2 * start >= first + boundary do
+      next
+    else
+      floor
+    end
+  end
+
+  defp chosen(floor, next, {start, first, _boundary}, :later) do
+    if start == first do
+      floor
+    else
+      next
+    end
+  end
+
+  # The period after: one unit on, or the next multiple of an increment on
+  # the clock of a named zone, read there as `trunc/2` reads one.
+  defp next_period(%Tempo{zone: %Zone{name: name}} = floor, {unit, increment})
+       when is_binary(name) do
+    floating = %{floor | zone: nil, shift: nil}
+
+    with {:ok, moved} <- shift(floating, %Duration{units: [{unit, increment}]}) do
+      on_the_clock(%{moved | zone: floor.zone})
+    end
+  end
+
+  defp next_period(floor, {unit, increment}) do
+    shift(floor, %Duration{units: [{unit, increment}]})
+  end
+
+  defp next_period(floor, unit) do
+    shift(floor, one(unit))
+  end
+
+  # Where the period after begins: the end of a unit's period, or the start
+  # of the next multiple of an increment.
+  defp boundary(%Tempo{form: {:value, next_units}} = next, {_unit, _increment}, _last) do
+    with {:ok, {boundary, _}} <- extent(plain(next_units), Spans.frame_of(next), next) do
+      {:ok, boundary}
+    end
+  end
+
+  defp boundary(_next, _unit, last) do
+    {:ok, last}
   end
 
   # One unit, as a duration.

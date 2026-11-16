@@ -339,6 +339,29 @@ iex> {:error, %Tempo.ZoneError{reason: :fold}} =
 
 **Why.** What cannot be is refused, never silently another value (law 7), so a reading the clock skips stays an error unless the caller says what it means; the option lets them say it, in the words Temporal uses. The error names the two offsets and the option, so the way out is in the message. Rules and selections are not given the option: they ask which moments have a reading, and of a skipped one the answer is none.
 
+### Rounding to an increment (decision 110)
+
+**The question.** `Tempo.round/2` rounds to the nearest whole unit, and `Tempo.trunc/2` takes the unit a value starts in. "The nearest quarter hour" and "bill to the next quarter hour" had no expression. How is an increment written, and which are allowed?
+
+**The alternatives.**
+
+* An `:increment` option beside the unit, as Temporal's `roundingIncrement`.
+
+* A duration of one unit in place of the unit: `~o"PT15M"`.
+
+**Tempo's choice.** The duration, with a `:rounding` option on `Tempo.round/3`: `:nearest` (the default), `:later` or `:earlier`. An increment divides the next coarser unit and is counted from its start: seconds and minutes by a divisor of 60, hours of 24, months of 12, and years by any number, counted from year 0. Days and weeks have no fixed count in a month or a year, so they round by one.
+
+```elixir
+iex> Tempo.round(~o"2026-06-15T10:37", ~o"PT15M")
+{:ok, ~o"2026Y6M15DT10H30M"}
+iex> Tempo.round(~o"2026-06-15T10:31", ~o"PT15M", rounding: :later)
+{:ok, ~o"2026Y6M15DT10H45M"}
+iex> Tempo.trunc(~o"2026-08-16", ~o"P3M")
+{:ok, ~o"2026Y7M"}
+```
+
+**Why.** A duration reads as what it is, fifteen minutes, where a bare 15 beside `:minute` is a number to decode, and it keeps magic numbers out of examples. In a named zone the multiples are readings of its clock, so a two-hourly boundary on the night the clock goes back is two o'clock, three hours after midnight, and one the clock skips is read after the change, as a shift lands (decision 97). The rounding words are the ones `:disambiguation` uses for the same directions.
+
 ### A time shift that disagrees with its zone (decisions 33 and 108)
 
 **The question.** RFC 9557 §3.4 gives `2022-07-08T00:14:07+00:00[!Europe/London]` as its example: London was at +01:00 that day, so the offset and the zone disagree. With the critical flag `!` an application MUST act on that; without it, it MAY. `Z` in place of the offset asserts no local time, so `…Z[Europe/London]` never disagrees. What does Tempo do?

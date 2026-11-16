@@ -1020,6 +1020,21 @@ iex> Tempo.round(~o"2026-06-15T10:37:42", :hour)
 
 > *"**Truncated** to the hour it is ten o'clock; **rounded**, eleven."*
 
+### How do I round to the nearest quarter hour, or bill to the next one?
+
+```elixir
+iex> arrival = ~o"2026-06-15T10:37"
+iex> Tempo.round(arrival, ~o"PT15M")
+{:ok, ~o"2026Y6M15DT10H30M"}
+
+iex> Tempo.round(arrival, ~o"PT15M", rounding: :later)
+{:ok, ~o"2026Y6M15DT10H45M"}
+```
+
+> *"Rounded to the nearest **fifteen minutes**, the arrival is half past ten; billed to the **next** quarter hour, a quarter to eleven."*
+
+The increment divides the next coarser unit and is counted from its start: quarter hours from the hour, `~o"P3M"` quarters of the year from January. `rounding: :earlier` is truncating, as `Tempo.trunc/2` does with the same duration.
+
 `Tempo.at_resolution/2` is the one to use when the target may be coarser or finer than the value: coarser it truncates, finer it fills with the first of each unit.
 
 ### How do I generate a list of business days in a month?
