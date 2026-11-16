@@ -362,6 +362,33 @@ iex> Tempo.trunc(~o"2026-08-16", ~o"P3M")
 
 **Why.** A duration reads as what it is, fifteen minutes, where a bare 15 beside `:minute` is a number to decode, and it keeps magic numbers out of examples. In a named zone the multiples are readings of its clock, so a two-hourly boundary on the night the clock goes back is two o'clock, three hours after midnight, and one the clock skips is read after the change, as a shift lands (decision 97). The rounding words are the ones `:disambiguation` uses for the same directions.
 
+### The units a difference is written in (decision 111)
+
+**The question.** `Tempo.duration/2` counts the time between two values in one unit, the finer of the two they are written to, so noon to noon across New York's spring change is `PT1380M`. How does a caller ask for hours, or for days, and rebalance a duration in hand?
+
+**The alternatives.**
+
+* `:largest` and `:smallest` options, as Temporal and Jiff take them.
+
+* A `:units` list naming every unit the result may hold.
+
+**Tempo's choice.** `:largest` and `:smallest` on `Tempo.duration/3`, what is left below the smallest dropped, and `:largest` on `Tempo.Duration.canonical/2`. With no options both are as they were.
+
+```elixir
+iex> noon = ~o"2026-03-07T12:00[America/New_York]"
+iex> next_noon = ~o"2026-03-08T12:00[America/New_York]"
+iex> Tempo.duration(noon, next_noon, largest: :hour)
+{:ok, ~o"PT23H"}
+iex> Tempo.duration(noon, next_noon, largest: :day)
+{:ok, ~o"P1D"}
+iex> Tempo.duration(~o"2026-01-31", ~o"2026-03-15", largest: :month)
+{:ok, ~o"P1M15D"}
+iex> Tempo.Duration.canonical(~o"PT1500M", largest: :hour)
+{:ok, ~o"PT25H"}
+```
+
+**Why.** Years, months, weeks and days are the calendar's and are counted by stepping the calendar from the start, as a shift steps it, so a day is a day however long its clock runs and a month on from 31 January is 28 February; hours, minutes and seconds are the elapsed time left. Weeks are counted only when asked for, as Temporal counts them. Truncating below the smallest is what Temporal and Jiff do for a difference by default; rounding one can be added with the words `Tempo.round/3` uses.
+
 ### A time shift that disagrees with its zone (decisions 33 and 108)
 
 **The question.** RFC 9557 §3.4 gives `2022-07-08T00:14:07+00:00[!Europe/London]` as its example: London was at +01:00 that day, so the offset and the zone disagree. With the critical flag `!` an application MUST act on that; without it, it MAY. `Z` in place of the offset asserts no local time, so `…Z[Europe/London]` never disagrees. What does Tempo do?

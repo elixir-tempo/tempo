@@ -26,6 +26,21 @@ defmodule Tempo.Measure do
   @type measure ::
           {:ok, :infinity | {integer(), integer(), Algebra.frame()}} | {:error, Exception.t()}
 
+  # The units a difference is counted in from a largest to a smallest, the
+  # calendar's counted by stepping from the start and the clock's as the
+  # elapsed time left.
+  @difference_units [:year, :month, :week, :day, :hour, :minute, :second]
+  @calendar_units [:year, :month, :week, :day]
+
+  # The average length of each calendar unit in ticks, a first guess at how
+  # many fit before the count is stepped to the exact one.
+  @average_ticks [
+    year: 31_556_952_000_000,
+    month: 2_629_746_000_000,
+    week: 604_800_000_000,
+    day: 86_400_000_000
+  ]
+
   # ── Duration ──────────────────────────────────────────────────────────
 
   @doc "The duration an expression covers, in its own unit."
@@ -186,21 +201,205 @@ defmodule Tempo.Measure do
   defp index({:microsecond, precision}), do: 100 + precision
   defp index(unit), do: Unit.rank(Unit.grain(unit)) || 0
 
-  @doc "The duration from the start of one value to the start of another, in their finer unit."
-  @spec between(Tempo.t(), Tempo.t()) :: {:ok, Duration.t()} | {:error, Exception.t()}
-  def between(%Tempo{} = from, %Tempo{} = to) do
+  @doc """
+  The duration from the start of one value to the start of another: in
+  their finer unit, or in `smallest` alone, or from `largest` down to
+  `smallest`, the finer of their resolution and `largest` where none is
+  given. Years, months, weeks and days are counted on the calendar from
+  the start, so a day is a day of the calendar however long its clock
+  runs; hours, minutes and seconds are the elapsed time left, and what is
+  left below the smallest is dropped.
+  """
+  @spec between(Tempo.t(), Tempo.t(), {Unit.t() | nil, Unit.t() | nil}) ::
+          {:ok, Duration.t()} | {:error, Exception.t()}
+  def between(from, to, units \\ {nil, nil})
+
+  def between(%Tempo{} = from, %Tempo{} = to, units) do
     with {:ok, _frame, pa, pb} <- Algebra.aligned(from, to, []),
          {:ok, {start, _}} <- Algebra.single(pa, from, to),
          {:ok, {stop, _}} <- Algebra.single(pb, from, to),
-         :ok <- ordered(start, stop, from, to),
-         unit = finest([resolution(from), resolution(to)]),
-         {:ok, count} <- count({start, stop}, unit, Spans.frame_of(from), from) do
+         :ok <- ordered(start, stop, from, to) do
+      resolution = finest([resolution(from), resolution(to)])
+      counted_between(from, {start, stop}, resolution, units)
+    end
+  end
+
+  def between(from, to, _units) do
+    {:error, IntervalEndpointsError.exception(from: from, to: to, reason: :not_values)}
+  end
+
+  defp counted_between(from, span, resolution, {nil, nil}) do
+    counted_whole(from, span, resolution)
+  end
+
+  defp counted_between(from, span, resolution, {nil, smallest}) do
+    counted_between(from, span, resolution, {smallest, smallest})
+  end
+
+  defp counted_between(from, span, resolution, {largest, nil}) do
+    counted_between(from, span, resolution, {largest, finer(resolution, largest)})
+  end
+
+  # One unit that is the resolution is counted as a difference always was.
+  defp counted_between(from, span, resolution, {resolution, resolution}) do
+    counted_whole(from, span, resolution)
+  end
+
+  defp counted_between(from, {start, stop}, _resolution, {largest, smallest}) do
+    {calendar, clock} =
+      largest
+      |> units_down_to(smallest)
+      |> Enum.split_with(&(&1 in @calendar_units))
+
+    with :ok <- placed_by_a_year(from, calendar),
+         {:ok, parts, reached} <- calendar_parts(from, start, stop, calendar) do
+      {:ok, difference(parts ++ clock_parts(stop - reached, clock), smallest)}
+    end
+  end
+
+  # A value with no year has no calendar to count days or months on.
+  defp placed_by_a_year(_from, []) do
+    :ok
+  end
+
+  defp placed_by_a_year(from, [_ | _]) do
+    case Spans.frame_of(from) do
+      %{frame: {:cycle, _}} -> {:error, conversion(from, :needs_a_year)}
+      _placed -> :ok
+    end
+  end
+
+  defp counted_whole(from, span, unit) do
+    with {:ok, count} <- count(span, unit, Spans.frame_of(from), from) do
       {:ok, counted_in(unit, count)}
     end
   end
 
-  def between(from, to) do
-    {:error, IntervalEndpointsError.exception(from: from, to: to, reason: :not_values)}
+  # The finer of a resolution and a unit; a fraction of a second is finer
+  # than any.
+  defp finer({:microsecond, _precision} = fraction, _largest) do
+    fraction
+  end
+
+  defp finer(resolution, largest) do
+    finest([Unit.grain(resolution), largest])
+  end
+
+  # Weeks are counted only where one end is a week, as Temporal counts them:
+  # from 31 January to 15 March is a month and 15 days.
+  defp units_down_to(largest, {:microsecond, _precision} = fraction) do
+    units_down_to(largest, :second) ++ [fraction]
+  end
+
+  defp units_down_to(largest, smallest) do
+    @difference_units
+    |> Enum.drop_while(&(&1 != largest))
+    |> Enum.take_while(&(&1 != smallest))
+    |> Kernel.++([smallest])
+    |> Enum.reject(&(&1 == :week and :week not in [largest, smallest]))
+  end
+
+  # Each calendar unit as many times as it fits, stepped from where the
+  # coarser ones reached, and the position the last step reached.
+  defp calendar_parts(from, start, stop, units) do
+    Enum.reduce_while(units, {:ok, [], from, start}, fn unit, {:ok, parts, cursor, reached} ->
+      case stepped(cursor, reached, unit, stop) do
+        {:ok, count, cursor, reached} -> {:cont, {:ok, parts ++ [{unit, count}], cursor, reached}}
+        {:error, _exception} = error -> {:halt, error}
+      end
+    end)
+    |> calendar_reached()
+  end
+
+  defp calendar_reached({:ok, parts, _cursor, reached}) do
+    {:ok, parts, reached}
+  end
+
+  defp calendar_reached({:error, _exception} = error) do
+    error
+  end
+
+  # The most whole units that fit between a value and a position: a guess
+  # from their average length, then stepped down while it passes the
+  # position and up while one more fits.
+  defp stepped(cursor, reached, unit, stop) do
+    guess = div(stop - reached, Keyword.fetch!(@average_ticks, unit))
+
+    with {:ok, count, moved, position} <- fewer(cursor, unit, guess, stop) do
+      more(cursor, unit, {count, moved, position}, stop)
+    end
+  end
+
+  defp fewer(cursor, _unit, count, _stop) when count <= 0 do
+    with {:ok, {position, _}} <- Spans.extent(cursor), do: {:ok, 0, cursor, position}
+  end
+
+  defp fewer(cursor, unit, count, stop) do
+    with {:ok, moved, position} <- moved(cursor, unit, count) do
+      if position > stop do
+        fewer(cursor, unit, count - 1, stop)
+      else
+        {:ok, count, moved, position}
+      end
+    end
+  end
+
+  # A step that does not move on ends the count, so that no step is taken
+  # without end.
+  defp more(cursor, unit, {count, moved, position}, stop) do
+    with {:ok, next, next_position} <- moved(cursor, unit, count + 1) do
+      if next_position > stop or next_position <= position do
+        {:ok, count, moved, position}
+      else
+        more(cursor, unit, {count + 1, next, next_position}, stop)
+      end
+    end
+  end
+
+  defp moved(cursor, unit, count) do
+    with {:ok, moved} <- Shift.shift(cursor, %Duration{units: [{unit, count}]}),
+         {:ok, {position, _}} <- Spans.extent(moved) do
+      {:ok, moved, position}
+    end
+  end
+
+  # The elapsed time left in each clock unit, what is below the last dropped.
+  defp clock_parts(ticks, units) do
+    {parts, _left} = Enum.map_reduce(units, ticks, &clock_part/2)
+    parts
+  end
+
+  # A fraction of a second is what is left, to its precision.
+  defp clock_part({:microsecond, precision}, left) do
+    step = Integer.pow(10, 6 - precision)
+    {{:microsecond, {left - rem(left, step), precision}}, 0}
+  end
+
+  defp clock_part(unit, left) do
+    {{unit, div(left, Unit.ticks(unit))}, rem(left, Unit.ticks(unit))}
+  end
+
+  defp difference(parts, smallest) do
+    case Enum.reject(parts, &nothing?/1) do
+      [] -> %Duration{units: [nothing(smallest)]}
+      units -> %Duration{units: units}
+    end
+  end
+
+  defp nothing?({:microsecond, {microseconds, _precision}}) do
+    microseconds == 0
+  end
+
+  defp nothing?({_unit, count}) do
+    count == 0
+  end
+
+  defp nothing({:microsecond, precision}) do
+    {:microsecond, {0, precision}}
+  end
+
+  defp nothing(unit) do
+    {unit, 0}
   end
 
   defp ordered(start, stop, _from, _to) when start < stop, do: :ok

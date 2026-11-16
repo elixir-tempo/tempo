@@ -10,6 +10,8 @@
 
 * `Tempo.round/3` and `Tempo.trunc/2` take a duration of one unit to round to a multiple of it (`~o"PT15M"`, `~o"P3M"`), and `Tempo.round/3` takes `rounding: :nearest`, `:later` or `:earlier` (decision 110).
 
+* `Tempo.duration/3` takes `:largest` and `:smallest`, so noon to noon across a spring change is `PT23H` or `P1D`, and `Tempo.Duration.canonical/2` takes `:largest` (decision 111).
+
 ### Changed
 
 * A time shift its zone does not have then (`2020-01-15T12:00-02:00[America/Sao_Paulo]`) is a `Tempo.ZoneError` whether the zone is critical or not, where only a critical zone was before; such a value moved two hours when an hour was added.

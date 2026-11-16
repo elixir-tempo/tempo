@@ -69,6 +69,7 @@ defmodule Tempo do
   @relative_options [:from, :unit, :format, :locale, :numeric]
   # No unit asked is the largest of which a whole one lies between the two.
   @relative_units [nil, :year, :quarter, :month, :week, :day, :hour, :minute, :second]
+  @difference_units [:year, :month, :week, :day, :hour, :minute, :second]
   # The days a week can be counted from by `day_of_week/2`.
   @week_starts [:default, :monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday]
 
@@ -3589,17 +3590,39 @@ defmodule Tempo do
   times. Unlike an interval written between them, which runs through its
   last date, this measures start to start.
 
+  With `:largest` the duration is written from that unit down. Years,
+  months, weeks and days are counted on the calendar from `from`, in its
+  zone, so a day is a day of the calendar however long its clock runs;
+  hours, minutes and seconds are the elapsed time left. Weeks are counted
+  only when `:largest` or `:smallest` is a week.
+
   ### Arguments
 
   * `from` and `to` are each a `t:t/0` with one span, on one frame, `to`
     after `from`.
+
+  * `options` is a keyword list of options.
+
+  ### Options
+
+  * `:largest` is the coarsest unit the duration is written in: `:year`,
+    `:month`, `:week`, `:day`, `:hour`, `:minute` or `:second`. With none,
+    the duration is in one unit.
+
+  * `:smallest` is the finest unit, what is left below it dropped. The
+    default is the finer unit the two values are written to, or `:largest`
+    where that is finer.
 
   ### Returns
 
   * `{:ok, duration}`, a `t:Tempo.Duration.t/0`.
 
   * `{:error, %Tempo.IntervalEndpointsError{}}` when `to` is not after
-    `from`, and `{:error, %Tempo.FrameError{}}` when the two share no frame.
+    `from`, `{:error, %Tempo.FrameError{}}` when the two share no frame,
+    `{:error, %Tempo.ConversionError{}}` with reason `:needs_a_year` for a
+    calendar unit between values with no year, and `{:error,
+    %ArgumentError{}}` for a unit that is not one of the seven or a
+    `:largest` finer than `:smallest`.
 
   ### Examples
 
@@ -3609,9 +3632,59 @@ defmodule Tempo do
       iex> Tempo.duration(~o"2026-09-28T10", ~o"2026-09-29")
       {:ok, ~o"PT14H"}
 
+      iex> Tempo.duration(~o"2026-01-31", ~o"2026-03-15", largest: :month)
+      {:ok, ~o"P1M15D"}
+
+      iex> noon = ~o"2026-03-07T12:00[America/New_York]"
+      iex> next_noon = ~o"2026-03-08T12:00[America/New_York]"
+      iex> Tempo.duration(noon, next_noon, largest: :hour)
+      {:ok, ~o"PT23H"}
+      iex> Tempo.duration(noon, next_noon, largest: :day)
+      {:ok, ~o"P1D"}
+
   """
-  @spec duration(t(), t()) :: {:ok, Duration.t()} | {:error, error()}
-  def duration(from, to), do: Measure.between(from, to)
+  @spec duration(t(), t(), keyword()) :: {:ok, Duration.t()} | {:error, error()}
+  def duration(from, to, options \\ []) do
+    with :ok <- Options.check(options, [:largest, :smallest], "Tempo.duration/3"),
+         {:ok, units} <- difference_units(options[:largest], options[:smallest]) do
+      Measure.between(from, to, units)
+    end
+  end
+
+  defp difference_units(largest, smallest) do
+    cond do
+      not difference_unit?(largest) -> not_a_difference_unit(largest)
+      not difference_unit?(smallest) -> not_a_difference_unit(smallest)
+      finer_than?(largest, smallest) -> largest_finer(largest, smallest)
+      true -> {:ok, {largest, smallest}}
+    end
+  end
+
+  defp difference_unit?(unit) do
+    is_nil(unit) or unit in @difference_units
+  end
+
+  defp finer_than?(largest, smallest) do
+    not is_nil(largest) and not is_nil(smallest) and
+      Enum.find_index(@difference_units, &(&1 == largest)) >
+        Enum.find_index(@difference_units, &(&1 == smallest))
+  end
+
+  defp not_a_difference_unit(unit) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.duration/3 counts in :year, :month, :week, :day, :hour, :minute or :second, " <>
+         "not #{inspect(unit)}"
+     )}
+  end
+
+  defp largest_finer(largest, smallest) do
+    {:error,
+     ArgumentError.exception(
+       "Tempo.duration/3 takes a :largest no finer than its :smallest, not " <>
+         "largest: #{inspect(largest)} with smallest: #{inspect(smallest)}"
+     )}
+  end
 
   for {name, comparison, phrase} <- [
         {:at_least?, :at_least, "at least as long as"},

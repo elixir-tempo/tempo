@@ -1166,3 +1166,13 @@ Each entry has the same parts: the question, the context it arose in (with what 
 * **Decision (2026-11-16, the user's).** Options 1, (a) and (i). `Tempo.round/3` and `Tempo.trunc/2` take a unit or a duration of one unit (`~o"PT15M"`, `~o"P3M"`, `~o"P5Y"`); `Tempo.round/3` takes `rounding: :nearest | :later | :earlier`, `:nearest` the default and as before.
 
 * **State.** Built 2026-11-16 in `Tempo.Shift.trunc/2` and `round/3`, which take `{unit, increment}`; the API checks the increment (`ArgumentError` naming the ones allowed). In a named zone the multiples are readings of its clock: the next is stepped on the zone's clock without the zone and read there as `:compatible` reads one, so a two-hourly boundary on the night the clock goes back is 02:00, and one the clock skips is read after the change. `test/tempo/round_increment_test.exs`.
+
+## 111. The units a difference is written in
+
+* **Question.** How does a caller ask for the time between two values in hours, days or months together, and rebalance a duration in hand, as `PT1380M` to `PT23H`?
+
+* **Context.** Found 2026-11-16 comparing Tempo with Jiff, whose `since` and `until` take a largest and a smallest unit. `Tempo.duration/2` counted in one unit, the finer of the two values' resolutions; `Tempo.Duration.canonical/2` rebalanced every chain to its top (`PT1500M` to `P1DT1H`, `P36D` to `P5W1D`). The options were (1) `:largest` and `:smallest`, or (2) a `:units` list; for what is below the smallest, (a) truncate, or (b) take `:rounding` now; for a duration in hand, (i) `:largest` on `canonical/2`, or (ii) a new `balance/2`.
+
+* **Decision (2026-11-16, the user's).** Options 1, (a) and (i). With no options both functions are as they were.
+
+* **State.** Built 2026-11-16. `Tempo.Measure.between/3` counts the calendar's units by stepping `Tempo.Shift.shift/3` from the start (a guess from each unit's average length, adjusted until one more would pass the end), in the start's zone, and the clock's as the elapsed time left, a fraction of a second kept to its precision; weeks only where `:largest` or `:smallest` is a week, as Temporal counts them; a calendar unit between values with no year is `:needs_a_year`. `canonical/2` stops each chain at `:largest`, and refuses one finer than a month for a duration with months. `test/tempo/difference_units_test.exs`.

@@ -245,6 +245,19 @@ iex> Tempo.duration(~o"2026-03-29T00:00/2026-03-30T00:00[Europe/Paris]")
 
 > *"The 29th of March 2026 in Paris, midnight to midnight, is **twenty-three hours** long."*
 
+The length is counted in the unit the ends are written to, here minutes. Between two values, `:largest` says the coarsest unit to write it in: hours give the elapsed time, and days count the calendar's days, however long their clocks run.
+
+```elixir
+iex> midnight = ~o"2026-03-29T00:00[Europe/Paris]"
+iex> next_midnight = ~o"2026-03-30T00:00[Europe/Paris]"
+iex> Tempo.duration(midnight, next_midnight, largest: :hour)
+{:ok, ~o"PT23H"}
+iex> Tempo.duration(midnight, next_midnight, largest: :day)
+{:ok, ~o"P1D"}
+```
+
+> *"Midnight to midnight is **twenty-three hours**, and **one day**."*
+
 ### When to freeze
 
 There are cases where you **want** the UTC instant frozen — a CI build that must run "at exactly 03:00 UTC on 15 March 2030" regardless of how zones shift. Store those as UTC (`~o"2030-03-15T03:00:00Z"`). The `Z` suffix is the explicit promise: "this is a UTC instant, don't recompute."

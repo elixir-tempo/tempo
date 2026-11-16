@@ -560,6 +560,9 @@ defmodule Tempo.Duration do
   carries its sign on the coarsest unit written in it, the rest positive:
   `P-1Y-15M` is `P-3Y9M`.
 
+  With `:largest` the chains stop at that unit: `PT1500M` is `PT25H` with
+  `largest: :hour`, and `P36D` stays `P36D` with `largest: :day`.
+
   The canonical form is for comparing and for writing. A shift by it can
   land elsewhere in a zone across a change of the clock, where a day is a
   day of the calendar and 24 hours are elapsed time.
@@ -575,12 +578,18 @@ defmodule Tempo.Duration do
   * `:calendar` is the calendar whose years and weeks count the months and
     days. The default is `Calendar.ISO`.
 
+  * `:largest` is the coarsest unit the duration is written in: `:year`,
+    `:month`, `:week`, `:day`, `:hour`, `:minute` or `:second`. With none,
+    each chain is written from the coarsest unit it reaches.
+
   ### Returns
 
   * `{:ok, duration}` in canonical form, or
 
   * `{:error, exception}` for a value that is no duration, an option the
-    function does not take, or a calendar Tempo does not know.
+    function does not take, a calendar Tempo does not know, or a `:largest`
+    finer than a month for a duration with months or years, which have no
+    fixed length in days.
 
   ### Examples
 
@@ -593,14 +602,18 @@ defmodule Tempo.Duration do
       iex> Tempo.Duration.canonical(~o"P3DT-10M")
       {:ok, ~o"P2DT23H50M"}
 
+      iex> Tempo.Duration.canonical(~o"PT1500M", largest: :hour)
+      {:ok, ~o"PT25H"}
+
   """
   @spec canonical(t(), keyword()) :: {:ok, t()} | {:error, Exception.t()}
   def canonical(duration, options \\ [])
 
-  def canonical(%__MODULE__{units: units}, options) do
-    with :ok <- Options.check(options, [:calendar], "Tempo.Duration.canonical/2"),
-         {:ok, calendar} <- calendar_named(options) do
-      {:ok, %__MODULE__{units: canonical_units(units, calendar)}}
+  def canonical(%__MODULE__{units: units} = duration, options) do
+    with :ok <- Options.check(options, [:calendar, :largest], "Tempo.Duration.canonical/2"),
+         {:ok, calendar} <- calendar_named(options),
+         {:ok, tops} <- tops(options[:largest], duration) do
+      {:ok, %__MODULE__{units: canonical_units(units, calendar, tops)}}
     end
   end
 
@@ -644,13 +657,47 @@ defmodule Tempo.Duration do
     end
   end
 
-  defp canonical_units([], _calendar) do
+  # The coarsest unit each chain is written from: the year and the week, or
+  # a `:largest` below them.
+  defp tops(nil, _duration) do
+    {:ok, {:year, :week}}
+  end
+
+  defp tops(largest, _duration) when largest in [:year, :month] do
+    {:ok, {largest, :week}}
+  end
+
+  defp tops(largest, %__MODULE__{units: units} = duration)
+       when largest in [:week, :day, :hour, :minute, :second] do
+    if Enum.any?(units, fn {unit, n} -> unit in [:year, :month] and n != 0 end) do
+      {:error,
+       argument(
+         "#{inspect(duration)} has months or years, which have no fixed length to write " <>
+           "in #{largest}s; give largest: :month or :year"
+       )}
+    else
+      {:ok, {:month, largest}}
+    end
+  end
+
+  defp tops(largest, _duration) do
+    {:error,
+     argument(
+       "Tempo.Duration.canonical/2 takes largest: :year, :month, :week, :day, :hour, " <>
+         ":minute or :second, not #{inspect(largest)}"
+     )}
+  end
+
+  defp canonical_units([], _calendar, _tops) do
     []
   end
 
-  defp canonical_units(units, calendar) do
+  defp canonical_units(units, calendar, {year_top, week_top}) do
     {years_and_months, rest} = Enum.split_with(units, fn {unit, _} -> unit in [:year, :month] end)
-    canonical = years_and_months(years_and_months, calendar) ++ weeks_and_less(rest, calendar)
+
+    canonical =
+      years_and_months(years_and_months, calendar, year_top) ++
+        weeks_and_less(rest, calendar, week_top)
 
     case canonical do
       [] -> [zero(List.last(units))]
@@ -667,23 +714,23 @@ defmodule Tempo.Duration do
   end
 
   # Years and months are one chain where every year has as many months.
-  defp years_and_months([], _calendar) do
+  defp years_and_months([], _calendar, _top) do
     []
   end
 
-  defp years_and_months(parts, calendar) do
+  defp years_and_months(parts, calendar, top) do
     case Tempo.Calendar.months_in_year_bounds(calendar) do
-      {months, months} -> chained(parts, [year: months, month: 1], :year)
+      {months, months} -> chained(parts, [year: months, month: 1], top)
       _varying -> parts
     end
   end
 
-  defp weeks_and_less([], _calendar) do
+  defp weeks_and_less([], _calendar, _top) do
     []
   end
 
-  defp weeks_and_less(parts, calendar) do
-    chained(parts, week_sizes(calendar), :week)
+  defp weeks_and_less(parts, calendar, top) do
+    chained(parts, week_sizes(calendar), top)
   end
 
   # The microseconds in each unit from a week down, a week the calendar's.
@@ -707,14 +754,35 @@ defmodule Tempo.Duration do
   # positive length, from the coarsest unit written for a negative one.
   defp chained(parts, sizes, top) do
     length = chain_length(parts, sizes)
-    {coarsest, _} = List.first(parts)
     {finest, _} = List.last(sizes)
     precision = precision(parts)
 
     cond do
-      length == 0 -> []
-      length > 0 -> written(length, units_between(sizes, top, finest), sizes, precision)
-      true -> written(length, units_between(sizes, coarsest, finest), sizes, precision)
+      length == 0 ->
+        []
+
+      length > 0 ->
+        written(length, units_between(sizes, top, finest), sizes, precision)
+
+      true ->
+        written(
+          length,
+          units_between(sizes, negative_top(parts, sizes, top), finest),
+          sizes,
+          precision
+        )
+    end
+  end
+
+  # A negative chain carries its sign on the coarsest unit written in it, or
+  # on the chain's top where that is finer.
+  defp negative_top([{coarsest, _} | _], sizes, top) do
+    units = Keyword.keys(sizes)
+
+    if Enum.find_index(units, &(&1 == coarsest)) >= Enum.find_index(units, &(&1 == top)) do
+      coarsest
+    else
+      top
     end
   end
 
