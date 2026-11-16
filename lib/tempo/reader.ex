@@ -11,6 +11,7 @@ defmodule Tempo.Reader do
   alias Tempo.Build
   alias Tempo.Duration
   alias Tempo.InvalidCalendarError
+  alias Tempo.Offset
   alias Tempo.ParseError
   alias Tempo.Reader.Implied
   alias Tempo.Reader.Number
@@ -41,6 +42,7 @@ defmodule Tempo.Reader do
          framed = in_frame(expression, calendar, suffix),
          {:ok, expression} <- overflow(framed, options[:overflow]) do
       expression
+      |> Offset.resolved(Keyword.get(options, :offset, :reject))
       |> seasons_placed(options[:territory])
       |> validated()
     end

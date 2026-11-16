@@ -12,12 +12,14 @@ defmodule Tempo.InteropTest do
       assert DateTime.to_naive(datetime) == ~N[2030-03-01 08:00:00]
     end
 
-    test "a shift written beside a zone gives the moment, shown on the zone's clock" do
-      assert {:ok, datetime} = Tempo.to_datetime(~o"2030-03-01T08:00:00+03:00[Europe/Paris]")
+    test "a shift the zone does not have, read with offset: :use, gives the moment on the zone's clock" do
+      value = Tempo.from_iso8601!("2030-03-01T08:00:00+03:00[Europe/Paris]", offset: :use)
+
+      assert {:ok, datetime} = Tempo.to_datetime(value)
       assert DateTime.compare(datetime, ~U[2030-03-01 05:00:00Z]) == :eq
       assert DateTime.to_naive(datetime) == ~N[2030-03-01 06:00:00]
 
-      {:ok, utc} = Tempo.shift_zone(~o"2030-03-01T08:00:00+03:00[Europe/Paris]", "Etc/UTC")
+      {:ok, utc} = Tempo.shift_zone(value, "Etc/UTC")
       assert Tempo.to_naive_datetime(utc) == {:ok, ~N[2030-03-01 05:00:00]}
     end
 

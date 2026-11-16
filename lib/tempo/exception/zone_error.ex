@@ -8,7 +8,8 @@ defmodule Tempo.ZoneError do
     `:no_database` for a name given where the time zone database
     configured knows only UTC, `:gap` for a reading the zone's clock skips, `:mixed` for an expression whose parts
     are in two zones, `:critical` for a critical suffix Tempo cannot act on, or
-    `:inconsistent` for a time shift a critical zone does not have then.
+    `:inconsistent` for a time shift the zone does not have then, critical
+    or not (decision 108), which the reader's `:offset` option resolves.
 
   """
 
@@ -41,8 +42,9 @@ defmodule Tempo.ZoneError do
     do: "#{inspect(value)} has parts in two zones; an expression is in one zone"
 
   def message(%__MODULE__{zone: zone, reason: :inconsistent, value: value}) do
-    "#{inspect(value)} has a time shift the clock of #{inspect(zone)} does not have then, " <>
-      "and the zone is critical"
+    "#{inspect(value)} has a time shift the clock of #{inspect(zone)} does not have then; " <>
+      "give offset: :use to take the moment the shift gives, or offset: :prefer to take " <>
+      "the reading on the zone's clock"
   end
 
   def message(%__MODULE__{zone: zone, reason: :critical}),

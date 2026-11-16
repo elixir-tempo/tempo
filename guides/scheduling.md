@@ -249,15 +249,18 @@ iex> Tempo.duration(~o"2026-03-29T00:00/2026-03-30T00:00[Europe/Paris]")
 
 There are cases where you **want** the UTC instant frozen — a CI build that must run "at exactly 03:00 UTC on 15 March 2030" regardless of how zones shift. Store those as UTC (`~o"2030-03-15T03:00:00Z"`). The `Z` suffix is the explicit promise: "this is a UTC instant, don't recompute."
 
-A time shift written beside the zone freezes the instant too. `2030-03-01T08:00:00+01:00[Europe/Paris]` states both, and the shift gives the moment (RFC 9557 §3.4): should Paris be at another offset by then, the value is still seven o'clock UTC, and no longer eight on Paris's clock.
+A time shift written beside the zone states both. `2030-03-01T08:00:00+01:00[Europe/Paris]` is eight on Paris's clock and seven o'clock UTC, so long as Paris keeps that offset. Should its rules change before then, the text says two moments, and Tempo refuses it rather than choose (RFC 9557 §3.4): give `offset: :use` to keep the moment the shift gives, or `offset: :prefer` to keep the reading on Paris's clock.
 
 ```elixir
-iex> {:ok, datetime} = Tempo.to_datetime(~o"2030-03-01T08:00:00+03:00[Europe/Paris]")
-iex> DateTime.to_naive(datetime)
-~N[2030-03-01 06:00:00]
+iex> {:error, %Tempo.ZoneError{reason: :inconsistent}} =
+...>   Tempo.from_iso8601("2030-03-01T08:00:00+03:00[Europe/Paris]")
+iex> Tempo.from_iso8601("2030-03-01T08:00:00+03:00[Europe/Paris]", offset: :use)
+{:ok, ~o"2030Y3M1DT6H0M0SZ1H0M[Europe/Paris]"}
+iex> Tempo.from_iso8601("2030-03-01T08:00:00+03:00[Europe/Paris]", offset: :prefer)
+{:ok, ~o"2030Y3M1DT8H0M0S[Europe/Paris]"}
 ```
 
-> *"Eight o'clock at three hours ahead of UTC is five o'clock UTC, and that moment is **six** on Paris's clock."*
+> *"Eight o'clock at three hours ahead of UTC is not a time Paris will show. **Used** as written, it is five o'clock UTC, which is **six** on Paris's clock; with Paris's clock **preferred**, it is eight there."*
 
 An event that is meant to stay at 8am on Paris's clock is stored with its zone and no shift.
 

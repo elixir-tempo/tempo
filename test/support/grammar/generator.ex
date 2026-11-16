@@ -269,7 +269,9 @@ defmodule Tempo.Grammar.Generator do
     case pick(1..4) do
       1 -> text(:datetime_extended) <> "[#{pick(@zones)}]"
       2 -> text(:date_extended) <> "[u-ca=hebrew]"
-      3 -> text(:datetime_shift) <> "[#{pick(@zones)}][u-ca=hebrew]"
+      # A shift beside a zone is one the zone has then (decision 108), so a
+      # zone follows `Z`, which asserts no local time.
+      3 -> text(:datetime_extended) <> "Z[#{pick(@zones)}][u-ca=hebrew]"
       4 -> text(:interval_start_end) <> "[#{pick(@zones)}]"
     end
   end

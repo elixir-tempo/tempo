@@ -314,7 +314,7 @@ iex> Tempo.shift(~o"2026-10-25T21:30[Europe/Amsterdam]", day: -1)
 
 **Why.** A selection asks which moments have a reading, and of a skipped reading the answer is none (decision 36). A shift asks where a value moves to, and refusing it would fail a valid value and a valid duration twice a year. Java's `ZonedDateTime.plusDays` and JavaScript Temporal's default disambiguation answer the same way, as RFC 5545 §3.3.5 reads a local time that does not occur. Elixir's `DateTime.shift/3` counts a day as twenty-four hours instead, so a day back from 21:30 on 25 October is 22:30 there.
 
-### A time shift that disagrees with its zone (decision 33)
+### A time shift that disagrees with its zone (decisions 33 and 108)
 
 **The question.** RFC 9557 §3.4 gives `2022-07-08T00:14:07+00:00[!Europe/London]` as its example: London was at +01:00 that day, so the offset and the zone disagree. With the critical flag `!` an application MUST act on that; without it, it MAY. `Z` in place of the offset asserts no local time, so `…Z[Europe/London]` never disagrees. What does Tempo do?
 
@@ -322,20 +322,21 @@ iex> Tempo.shift(~o"2026-10-25T21:30[Europe/Amsterdam]", day: -1)
 
 * Refuse the critical case, and take the moment the shift gives otherwise.
 
-* Refuse every disagreement, critical or not, as JavaScript's Temporal does by default.
+* Refuse every disagreement, critical or not, and let the caller say which moment to take, as JavaScript's Temporal does with its `offset` option.
 
 * Take the moment the shift gives always, and record that the critical case is not acted on.
 
-**Tempo's choice.** Refuse the critical case alone, and hold `+00:00` apart from `Z` so that the two can be told apart.
+**Tempo's choice.** Refuse every disagreement by default, with an `:offset` option on `Tempo.from_iso8601/2` and `Tempo.new/1` to resolve one: `:use` takes the moment the shift gives, `:prefer` takes the reading on the zone's clock where the zone does not have the shift, and `:ignore` reads every reading by the zone. `+00:00` is held apart from `Z` so that the two can be told apart. Tempo took the first alternative until decision 108 (2026-11-16).
 
 ```elixir
 iex> {:error, %Tempo.ZoneError{reason: :inconsistent}} =
-...>   Tempo.from_iso8601("2022-07-08T00:14:07+00:00[!Europe/London]")
-iex> {:ok, _moment} = Tempo.from_iso8601("2022-07-08T00:14:07+00:00[Europe/London]")
+...>   Tempo.from_iso8601("2022-07-08T00:14:07+00:00[Europe/London]")
+iex> Tempo.from_iso8601("2022-07-08T00:14:07+00:00[Europe/London]", offset: :use)
+{:ok, ~o"2022Y7M8DT1H14M7SZ1H0M[Europe/London]"}
 iex> {:ok, _moment} = Tempo.from_iso8601("2022-07-08T00:14:07Z[!Europe/London]")
 ```
 
-**Why.** It is what the RFC requires, and no more. Refusing every disagreement makes a stored future meeting unreadable once a zone's rules change, which is the RFC's own example of why it permits leniency. `+00:00` says "the local time is UTC's" and `Z` says "no local time is asserted"; they are the same moment, but only one of them can disagree with a zone, so Tempo keeps them apart and writes each back as it was read.
+**Why.** A value that kept the shift's moment was read again by its reading and its zone wherever it was moved, so an hour added to a stored meeting at `12:00-02:00[America/Sao_Paulo]`, written before Brazil dropped daylight saving, moved it two hours. A text that says two moments is refused rather than read as one of them; a caller holding stored text whose zone has changed says which it meant. The end of an interval written to a clock unit is a boundary, and may carry the offset of the clock that ran up to it: `02:00+02:00/03:00+02:00[Europe/Paris]` is Paris's summer hour on the night its clock goes back. `+00:00` says "the local time is UTC's" and `Z` says "no local time is asserted"; they are the same moment, but only one of them can disagree with a zone, so Tempo keeps them apart and writes each back as it was read.
 
 ### Relative words for a floating value beside a zoned one (decision 32)
 

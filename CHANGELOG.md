@@ -1,5 +1,15 @@
 # Changelog
 
+## [v2.6.0] — Unreleased
+
+### Added
+
+* An `:offset` option on `Tempo.from_iso8601/2` and `Tempo.new/1` that says what a time shift its zone does not have then means: `:reject` (the default), `:use`, `:prefer` or `:ignore`, as Temporal's (decision 108).
+
+### Changed
+
+* A time shift its zone does not have then (`2020-01-15T12:00-02:00[America/Sao_Paulo]`) is a `Tempo.ZoneError` whether the zone is critical or not, where only a critical zone was before; such a value moved two hours when an hour was added.
+
 ## [v2.5.0] — 2026-11-08
 
 ### Added

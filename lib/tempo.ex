@@ -43,6 +43,7 @@ defmodule Tempo do
   alias Tempo.InvalidCalendarError
   alias Tempo.Limit
   alias Tempo.Measure
+  alias Tempo.Offset
   alias Tempo.Operand
   alias Tempo.Options
   alias Tempo.Order
@@ -245,6 +246,15 @@ defmodule Tempo do
     `Tempo.InvalidDateError`, so that a mistyped date is not read as another.
     A negative day counts back from the end of its month either way.
 
+  * `:offset` says what a time shift means beside a zone that does not have
+    it at that reading, such as `2020-01-15T12:00-02:00[America/Sao_Paulo]`
+    written before Brazil dropped daylight saving (RFC 9557 §3.4). With
+    `:reject`, the default, it is a `Tempo.ZoneError`. With `:use` it is
+    the moment the shift gives, shown on the zone's clock (`11:00-03:00`).
+    With `:prefer` a shift the zone does not have is dropped and the reading
+    is read by the zone (`12:00`). With `:ignore` every shift beside a named
+    zone is dropped, so a reading shown twice is its first showing.
+
   ### Returns
 
   * `{:ok, expression}`, a `t:t/0`, or a `t:Tempo.Duration.t/0` for a
@@ -252,8 +262,9 @@ defmodule Tempo do
 
   * `{:error, exception}` when the text cannot be read (`Tempo.ParseError`),
     names a date the calendar does not have (`Tempo.InvalidDateError`), a zone
-    the database does not know (`Tempo.ZoneError`), or an interval whose
-    ends are out of order (`Tempo.IntervalEndpointsError`).
+    the database does not know or a time shift the zone does not have then
+    (`Tempo.ZoneError`), or an interval whose ends are out of order
+    (`Tempo.IntervalEndpointsError`).
 
   ### Examples
 
@@ -275,6 +286,12 @@ defmodule Tempo do
 
       iex> Tempo.from_iso8601("2026-02-30", overflow: :carry)
       {:ok, ~o"2026-03-02"}
+
+      iex> {:error, %Tempo.ZoneError{reason: :inconsistent}} =
+      ...>   Tempo.from_iso8601("2020-01-15T12:00-02:00[America/Sao_Paulo]")
+
+      iex> Tempo.from_iso8601("2020-01-15T12:00-02:00[America/Sao_Paulo]", offset: :use)
+      {:ok, ~o"2020Y1M15DT11H0MZ-3H0M[America/Sao_Paulo]"}
 
       iex> {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("tomorrow")
 
@@ -299,12 +316,13 @@ defmodule Tempo do
     with :ok <-
            Options.check(
              options,
-             [:calendar, :profile, :territory, :locale, :overflow],
+             [:calendar, :profile, :territory, :locale, :overflow, :offset],
              "Tempo.from_iso8601/2"
            ),
          :ok <- overflow_named(Keyword.get(options, :overflow, :refuse)),
+         :ok <- offset_named(Keyword.get(options, :offset, :reject), "Tempo.from_iso8601/2"),
          {:ok, territory} <- territory_named(options) do
-      read_options = Keyword.take(options, [:calendar, :profile, :overflow])
+      read_options = Keyword.take(options, [:calendar, :profile, :overflow, :offset])
       Text.read(text, [territory: territory] ++ read_options)
     end
   end
@@ -318,6 +336,17 @@ defmodule Tempo do
      ArgumentError.exception(
        "Tempo.from_iso8601/2 takes overflow: :refuse or :carry, not #{inspect(other)}"
      )}
+  end
+
+  defp offset_named(offset, function) do
+    if offset in Offset.modes() do
+      :ok
+    else
+      {:error,
+       ArgumentError.exception(
+         "#{function} takes offset: :reject, :use, :prefer or :ignore, not #{inspect(offset)}"
+       )}
+    end
   end
 
   @doc """
@@ -562,6 +591,9 @@ defmodule Tempo do
     * `:shift` is the time shift, `[hour: 2]` for `Z2H`, `[hour: 0]` for `Z`,
       and `[hour: 0, minute: 0]` for `+00:00`, a local time at no offset.
 
+    * `:offset` says what a `:shift` the `:zone` does not have then means, as
+      `from_iso8601/2` takes it. The default, `:reject`, refuses it.
+
     * `:qualifications` marks units of the value as ISO 8601-2's `?`, `~`
       and `%` do: a map of the unit to `:uncertain`, `:approximate` or
       `:both`, so `%{year: :uncertain}` is `2026?Y`.
@@ -624,21 +656,28 @@ defmodule Tempo do
 
   def new(components) when is_list(components) do
     {frame, units} =
-      Keyword.split(components, [:calendar, :zone, :shift, :qualifications, :metadata])
+      Keyword.split(components, [:calendar, :zone, :shift, :offset, :qualifications, :metadata])
 
-    with {:ok, units} <- units |> Enum.map(&held_as_written/1) |> Unit.ordered(),
+    offset = Keyword.get(frame, :offset, :reject)
+
+    with :ok <- offset_named(offset, "Tempo.new/1"),
+         {:ok, units} <- units |> Enum.map(&held_as_written/1) |> Unit.ordered(),
          {:ok, calendar} <- calendar_of(Keyword.get(frame, :calendar, Tempo.Calendar.default())),
          units = Select.weekdays_named(units, calendar),
          {:ok, zone} <- zone_of(Keyword.get(frame, :zone)),
          {:ok, qualifications} <- qualifications_of(Keyword.get(frame, :qualifications), units) do
-      Validate.run(%__MODULE__{
+      value = %__MODULE__{
         form: {:value, units},
         calendar: calendar,
         zone: zone,
         shift: Keyword.get(frame, :shift),
         qualifications: qualifications,
         metadata: Keyword.get(frame, :metadata, %{})
-      })
+      }
+
+      value
+      |> Offset.resolved(offset)
+      |> Validate.run()
     end
   end
 

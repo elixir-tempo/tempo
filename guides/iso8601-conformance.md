@@ -293,10 +293,12 @@ iex> {:error, %Tempo.ParseError{}} = Tempo.from_iso8601("2030-03-01T08:00[Europe
 
 A zone is the first suffix or there is none (RFC 9557 §4.1), and its name is checked against the time zone database. A tag marked critical (`[!…]`) that Tempo cannot act on is an error; an elective one is kept as metadata.
 
-**A time shift beside a zone gives the moment** (RFC 9557 §3.4), and the zone the clock it is to be shown on. Both are held and written back. A shift that the zone does not have at that reading is read too, as the moment the shift says.
+**A time shift beside a zone gives the moment** (RFC 9557 §3.4), and the zone the clock it is to be shown on. Both are held and written back. A shift that the zone does not have at that reading is refused, whether the zone is critical or not, unless `offset:` says which to take: `:use` the moment the shift gives, `:prefer` or `:ignore` the reading on the zone's clock.
 
 ```elixir
-iex> stated = ~o"2022-07-08T00:14:07+01:00[Europe/Paris]"
+iex> {:error, %Tempo.ZoneError{reason: :inconsistent}} =
+...>   Tempo.from_iso8601("2022-07-08T00:14:07+01:00[Europe/Paris]")
+iex> stated = Tempo.from_iso8601!("2022-07-08T00:14:07+01:00[Europe/Paris]", offset: :use)
 iex> Tempo.shift_zone(stated, "Etc/UTC")
 {:ok, ~o"2022Y7M7DT23H14M7S[Etc/UTC]"}
 ```

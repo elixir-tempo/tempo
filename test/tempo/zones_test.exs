@@ -48,8 +48,10 @@ defmodule Tempo.ZonesTest do
       end
     end
 
-    test "a shift beside the zone gives the moment, whatever the clock showed" do
-      assert {:ok, value} = Tempo.from_iso8601("2024-03-10T02:30:00-05:00[America/New_York]")
+    test "a shift beside the zone, read with offset: :use, gives the moment" do
+      assert {:ok, value} =
+               Tempo.from_iso8601("2024-03-10T02:30:00-05:00[America/New_York]", offset: :use)
+
       assert {:ok, datetime} = Tempo.to_datetime(value)
       assert DateTime.to_naive(datetime) == ~N[2024-03-10 03:30:00]
     end

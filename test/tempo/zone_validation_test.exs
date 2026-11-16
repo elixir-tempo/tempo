@@ -13,8 +13,18 @@ defmodule Tempo.ZoneValidationTest do
 
   # The instant a text names, in seconds since 1970.
   defp unix(text) do
-    {:ok, date_time} = Tempo.to_datetime(Tempo.from_iso8601!(text))
+    text
+    |> Tempo.from_iso8601!()
+    |> instant()
+  end
+
+  defp instant(value) do
+    {:ok, date_time} = Tempo.to_datetime(value)
     DateTime.to_unix(date_time)
+  end
+
+  defp read(text, options \\ []) do
+    Tempo.from_iso8601(text, options)
   end
 
   describe "a reading the clock shows twice" do
@@ -34,11 +44,15 @@ defmodule Tempo.ZoneValidationTest do
     end
 
     # RFC 9557 section 3.4: an offset that is neither of the two disagrees
-    # with the zone, and gives the moment.
-    test "with a shift that is neither showing's is the moment the shift gives" do
+    # with the zone, and is refused unless `offset: :use` takes the moment it
+    # gives (decision 108).
+    test "with a shift that is neither showing's is refused, or with :use is its moment" do
+      text = "2024-11-03T01:30:00+00:00[America/New_York]"
       moment = DateTime.new!(~D[2024-11-03], ~T[01:30:00], "Etc/UTC")
 
-      assert unix("2024-11-03T01:30:00+00:00[America/New_York]") == DateTime.to_unix(moment)
+      assert {:error, %Tempo.ZoneError{reason: :inconsistent}} = read(text)
+      assert {:ok, value} = read(text, offset: :use)
+      assert instant(value) == DateTime.to_unix(moment)
     end
   end
 
@@ -167,10 +181,9 @@ defmodule Tempo.ZoneValidationTest do
   # RFC 9557 section 3.4, and its figures 1 and 2. London's clock is an hour
   # ahead of UTC in July, so `+00:00` beside it says a local time it does not
   # show. With the critical flag an application must act on that; without
-  # it, it may. `Z` says no local time, and is never at odds with a zone.
+  # it, it may, and Tempo does (decision 108). `Z` says no local time, and is
+  # never at odds with a zone.
   describe "a time shift a zone does not have then" do
-    defp read(text), do: Tempo.from_iso8601(text)
-
     test "is refused where the zone is critical" do
       assert {:error, %Tempo.ZoneError{reason: :inconsistent, zone: "Europe/London"} = error} =
                read("2022-07-08T00:14:07+00:00[!Europe/London]")
@@ -178,9 +191,12 @@ defmodule Tempo.ZoneValidationTest do
       assert Exception.message(error) =~ "does not have then"
     end
 
-    test "is the moment the shift gives where the zone is not critical" do
-      assert {:ok, _} = read("2022-07-08T00:14:07+00:00[Europe/London]")
-      assert unix("2022-07-08T00:14:07+00:00[Europe/London]") == unix("2022-07-08T00:14:07Z")
+    test "is refused where the zone is not critical" do
+      assert {:error, %Tempo.ZoneError{reason: :inconsistent, zone: "Europe/London"} = error} =
+               read("2022-07-08T00:14:07+00:00[Europe/London]")
+
+      assert Exception.message(error) =~ "does not have then"
+      assert Exception.message(error) =~ "offset: :use"
     end
 
     test "is no matter where the shift is Z, critical or not" do
@@ -226,7 +242,117 @@ defmodule Tempo.ZoneValidationTest do
       assert {:error, %Tempo.ZoneError{reason: :inconsistent, zone: "+08:00"}} =
                read("2022-07-08T00:14:07+08:45[!+08:00]")
 
-      assert {:ok, _} = read("2022-07-08T00:14:07+08:45[+08:00]")
+      assert {:error, %Tempo.ZoneError{reason: :inconsistent, zone: "+08:00"}} =
+               read("2022-07-08T00:14:07+08:45[+08:00]")
+    end
+  end
+
+  # A meeting stored in 2018 at noon in Sao Paulo, when its clock was two
+  # hours behind UTC in January. Brazil dropped daylight saving in 2019, so
+  # the zone now has -03:00 then, and the text says two moments: 14:00 UTC by
+  # its offset, 15:00 UTC by its zone. The `:offset` option says which.
+  describe "the :offset option" do
+    @stale "2020-01-15T12:00-02:00[America/Sao_Paulo]"
+
+    test "refuses a shift its zone does not have by default, and with :reject" do
+      assert {:error, %Tempo.ZoneError{reason: :inconsistent}} = read(@stale)
+      assert {:error, %Tempo.ZoneError{reason: :inconsistent}} = read(@stale, offset: :reject)
+    end
+
+    test "with :use, takes the moment the shift gives, on the zone's clock" do
+      assert {:ok, value} = read(@stale, offset: :use)
+      assert value == Tempo.from_iso8601!("2020-01-15T11:00-03:00[America/Sao_Paulo]")
+      assert instant(value) == DateTime.to_unix(~U[2020-01-15 14:00:00Z])
+
+      # An hour later is an hour later: the shift and the zone agree.
+      {:ok, later} = Tempo.shift(value, hour: 1)
+      assert instant(later) == DateTime.to_unix(~U[2020-01-15 15:00:00Z])
+    end
+
+    test "with :prefer or :ignore, takes the reading on the zone's clock" do
+      for mode <- [:prefer, :ignore] do
+        assert {:ok, value} = read(@stale, offset: mode)
+        assert value == Tempo.from_iso8601!("2020-01-15T12:00[America/Sao_Paulo]")
+        assert instant(value) == DateTime.to_unix(~U[2020-01-15 15:00:00Z])
+      end
+    end
+
+    test "keeps a shift the zone has, except with :ignore" do
+      second = "2024-11-03T01:30-05:00[America/New_York]"
+      {:ambiguous, first, later} = DateTime.new(~D[2024-11-03], ~T[01:30:00], "America/New_York")
+
+      for mode <- [:reject, :use, :prefer] do
+        assert {:ok, value} = read(second, offset: mode)
+        assert instant(value) == DateTime.to_unix(later)
+      end
+
+      assert {:ok, value} = read(second, offset: :ignore)
+      assert instant(value) == DateTime.to_unix(first)
+    end
+
+    test "reads a reading the zone skips by its shift with :use, and refuses it otherwise" do
+      # New York's clock goes from 02:00 to 03:00 on 10 March 2024.
+      text = "2024-03-10T02:30-05:00[America/New_York]"
+
+      assert {:ok, value} = read(text, offset: :use)
+      assert value == Tempo.from_iso8601!("2024-03-10T03:30-04:00[America/New_York]")
+      assert {:error, %Tempo.ZoneError{reason: :gap}} = read(text, offset: :prefer)
+    end
+
+    test "resolves a critical zone as it does one that is not" do
+      assert {:ok, value} = read("2022-07-08T00:14:07+00:00[!Europe/London]", offset: :use)
+      assert instant(value) == DateTime.to_unix(~U[2022-07-08 00:14:07Z])
+    end
+
+    test "resolves an offset written as the zone" do
+      assert {:ok, value} = read("2022-07-08T00:14:07+08:45[+08:00]", offset: :use)
+      assert value == Tempo.from_iso8601!("2022-07-07T23:29:07+08:00[+08:00]")
+    end
+
+    test "resolves the ends of an interval, the members of a set and a recurrence's start" do
+      assert {:ok, interval} =
+               read("2022-07-08T00:14+00:00/2022-07-08T02:14+01:00[Europe/London]", offset: :use)
+
+      assert interval ==
+               Tempo.from_iso8601!("2022-07-08T01:14+01:00/2022-07-08T02:14+01:00[Europe/London]")
+
+      assert {:ok, set} =
+               read("{2022-07-08T00:14+00:00,2022-07-09T00:14+01:00}[Europe/London]",
+                 offset: :prefer
+               )
+
+      assert set ==
+               Tempo.from_iso8601!("{2022-07-08T00:14,2022-07-09T00:14+01:00}[Europe/London]")
+
+      assert {:ok, _recurrence} =
+               read("R3/2022-07-08T00:14+00:00/P1D[Europe/London]", offset: :use)
+    end
+
+    test "leaves Z, and a value coarser than a day, as they are" do
+      assert read("2022-07-08T00:14:07Z[Europe/London]", offset: :ignore) ==
+               read("2022-07-08T00:14:07Z[Europe/London]")
+
+      assert {:ok, _} = read("2022-07[Europe/London]", offset: :use)
+    end
+
+    test "is taken by Tempo.new/1 as by the reader" do
+      parts = [
+        year: 2020,
+        month: 1,
+        day: 15,
+        hour: 12,
+        minute: 0,
+        shift: [hour: -2, minute: 0],
+        zone: "America/Sao_Paulo"
+      ]
+
+      assert {:error, %Tempo.ZoneError{reason: :inconsistent}} = Tempo.new(parts)
+      assert Tempo.new(parts ++ [offset: :use]) == read(@stale, offset: :use)
+    end
+
+    test "is one of :reject, :use, :prefer and :ignore" do
+      assert {:error, %ArgumentError{}} = read(@stale, offset: :maybe)
+      assert {:error, %ArgumentError{}} = Tempo.new(year: 2026, offset: "use")
     end
   end
 

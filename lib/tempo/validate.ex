@@ -15,6 +15,7 @@ defmodule Tempo.Validate do
   alias Tempo.FrameError
   alias Tempo.IntervalEndpointsError
   alias Tempo.InvalidDateError
+  alias Tempo.Offset
   alias Tempo.Scale
   alias Tempo.Season
   alias Tempo.Spans
@@ -56,20 +57,13 @@ defmodule Tempo.Validate do
   defp offset(_zone, _expression), do: :ok
 
   defp form({:value, units}, expression) do
-    with :ok <- value(units, expression),
-         :ok <- parts_within(Keyword.get(units, :selection, []), expression),
-         :ok <- years_named(units, expression),
-         :ok <- shift(expression.shift, expression),
-         :ok <- events(units, expression),
-         :ok <- consistent(units, expression) do
-      shown(units, expression)
-    end
+    value_form(units, expression, :start)
   end
 
   defp form({:span, from, to}, expression) do
     with :ok <- some_length(from, to),
          :ok <- end_of(from, expression),
-         :ok <- end_of(to, expression) do
+         :ok <- upper_end(to, expression) do
       ordered(from, to, expression)
     end
   end
@@ -78,7 +72,7 @@ defmodule Tempo.Validate do
     with :ok <- form(first.form, first),
          :ok <- events(rule || [], expression),
          :ok <- parts_within(rule || [], expression) do
-      end_of(bound, expression)
+      upper_end(bound, expression)
     end
   end
 
@@ -132,32 +126,22 @@ defmodule Tempo.Validate do
 
   defp shown(_units, _expression), do: :ok
 
-  # A time shift beside a critical zone is one the zone has then (RFC 9557
-  # section 3.4): `+00:00[!Europe/London]` in July says a local time London's
-  # clock does not show, and the flag says to act on it. `Z` says no local
-  # time, and a zone that is not critical leaves the moment as the shift
-  # gives it.
-  defp consistent(units, %Tempo{zone: %Zone{critical: true} = zone, shift: shift} = expression) do
-    if Zone.asserted?(shift) and Unit.concrete?(units) and day_or_finer?(units),
-      do: has_shift(position(units, %{expression | zone: nil, shift: nil}), zone, expression),
-      else: :ok
+  # A time shift beside a zone is one the zone has then (RFC 9557 section
+  # 3.4), critical or not (decision 108): `+00:00[Europe/London]` in July
+  # says a local time London's clock does not show. `Z` says no local time.
+  # A caller who holds such text says which moment to take with the reader's
+  # `:offset` option, which resolves it before it comes here.
+  defp consistent(units, %Tempo{zone: %Zone{} = zone} = expression, kind) do
+    if Offset.disagrees?(units, expression, kind) do
+      {:error, ZoneError.exception(zone: name_of(zone), reason: :inconsistent, value: expression)}
+    else
+      :ok
+    end
   end
 
-  defp consistent(_units, _expression), do: :ok
-
-  defp has_shift({:ok, {start, stop}}, zone, %Tempo{shift: shift} = expression)
-       when is_integer(start) and is_integer(stop) do
-    offset = Zone.shift_ticks(shift)
-
-    if Zone.offset_at_utc(zone, start - offset) == offset or
-         Zone.offset_at_utc(zone, stop - 1 - offset) == offset,
-       do: :ok,
-       else:
-         {:error,
-          ZoneError.exception(zone: name_of(zone), reason: :inconsistent, value: expression)}
+  defp consistent(_units, _expression, _kind) do
+    :ok
   end
-
-  defp has_shift(_no_position, _zone, _expression), do: :ok
 
   defp name_of(%Zone{name: name}) when is_binary(name), do: name
 
@@ -213,6 +197,32 @@ defmodule Tempo.Validate do
 
   defp end_of(%Tempo{form: form} = value, _expression), do: form(form, value)
   defp end_of(_duration_or_open_or_count, _expression), do: :ok
+
+  # The end of a span, or the bound of a recurrence, is held to its zone as
+  # an end: one written to a clock unit is the boundary where the span stops,
+  # so it may carry the shift of the clock that ran up to it (decision 108).
+  defp upper_end(%Tempo{form: {:value, [{:hour, 24} | _finer]}} = value, expression) do
+    end_of(value, expression)
+  end
+
+  defp upper_end(%Tempo{form: {:value, units}} = value, _expression) do
+    value_form(units, value, :end)
+  end
+
+  defp upper_end(other, expression) do
+    end_of(other, expression)
+  end
+
+  defp value_form(units, expression, kind) do
+    with :ok <- value(units, expression),
+         :ok <- parts_within(Keyword.get(units, :selection, []), expression),
+         :ok <- years_named(units, expression),
+         :ok <- shift(expression.shift, expression),
+         :ok <- events(units, expression),
+         :ok <- consistent(units, expression, kind) do
+      shown(units, expression)
+    end
+  end
 
   # A time shift is whole hours below a day, with minutes and seconds of the clock (RFC 3339 §5.6).
   defp shift(nil, _expression), do: :ok
